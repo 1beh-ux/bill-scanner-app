@@ -8,6 +8,8 @@ type TranslationsMap = Record<string, { cs: string; en: string }>;
 interface I18nContextValue {
   lang: Lang;
   setLang: (l: Lang) => void;
+  currentEventId: string | null;
+  setCurrentEventId: (id: string | null) => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }
 
@@ -15,6 +17,7 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Lang>("cs");
+  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   const [translations, setTranslations] = useState<TranslationsMap>({});
 
   useEffect(() => {
@@ -42,50 +45,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <I18nContext.Provider value={{ lang, setLang, t }}>
-      <div
-        style={{
-          position: "fixed",
-          top: 12,
-          right: 12,
-          zIndex: 1000,
-          display: "flex",
-          gap: 4,
-          background: "#fff",
-          border: "1px solid #ccc",
-          borderRadius: 6,
-          padding: 4,
-        }}
-      >
-        <button
-          onClick={() => setLang("cs")}
-          style={{
-            padding: "0.25rem 0.5rem",
-            background: lang === "cs" ? "#111" : "transparent",
-            color: lang === "cs" ? "#fff" : "#111",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
-        >
-          CS
-        </button>
-        <button
-          onClick={() => setLang("en")}
-          style={{
-            padding: "0.25rem 0.5rem",
-            background: lang === "en" ? "#111" : "transparent",
-            color: lang === "en" ? "#fff" : "#111",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
-        >
-          EN
-        </button>
-      </div>
+    <I18nContext.Provider value={{ lang, setLang, t, currentEventId, setCurrentEventId }}>
       {children}
     </I18nContext.Provider>
   );

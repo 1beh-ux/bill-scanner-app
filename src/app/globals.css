@@ -34,3 +34,68 @@ body {
   border-radius: 4px;
   text-decoration: none;
 }
+
+.app-header {
+  border-bottom: 1px solid #e5e5e5;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.app-header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.app-header-brand {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.app-header-select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  max-width: 220px;
+}
+.app-header-nav {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+.app-header-link {
+  font-size: 0.85rem;
+  color: #444;
+  text-decoration: none;
+}
+.app-header-link:hover {
+  color: #111;
+  text-decoration: underline;
+}
+.app-header-link.active {
+  color: #111;
+  font-weight: 600;
+}
+.app-header-lang {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+}
+.lang-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  border: 1px solid #ccc;
+  background: #fff;
+  color: #111;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.lang-btn.active {
+  background: #111;
+  color: #fff;
+  border-color: #111;
+}

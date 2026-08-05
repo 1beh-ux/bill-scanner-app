@@ -152,6 +152,8 @@ async function main() {
       { key: "billModal.saveAndStay", cs: "Uložit a zůstat", en: "Save and stay" },
       { key: "billModal.aiReprocess", cs: "Zpracovat AI", en: "Process with AI" },
       { key: "billModal.aiReprocessSoon", cs: "Bude dostupné později", en: "Coming later" },
+      { key: "nav.bills", cs: "Účtenky", en: "Bills" },
+      { key: "nav.eventSetup", cs: "Nastavení akce", en: "Event setup" },
     ],
     skipDuplicates: true,
   });
