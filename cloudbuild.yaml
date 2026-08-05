@@ -20,10 +20,17 @@ steps:
       - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID
       - --region=${_REGION}
       - --platform=managed
-      - --allow-unauthenticated
+      - --no-invoker-iam-check
       - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:bill-scanner-db
       - --set-secrets=DATABASE_URL=db-url-secret:latest
+      - --set-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files
+      - --memory=2Gi
+      - --cpu=1
+      - --timeout=600
+      - --max-instances=3
 substitutions:
   _REGION: europe-west3
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID'
+options:
+  machineType: 'E2_HIGHCPU_8'
