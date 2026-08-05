@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import ImageEditor from "@/components/ImageEditor";
 
 type EventCategory = { id: string; name: string };
 type Author = { id: string; canonicalName: string; active: boolean };
@@ -24,6 +25,8 @@ type BillDetail = {
   currency: string;
   payerAuthorId: string | null;
   notes: string | null;
+  originalGcsObjectPath: string | null;
+  contentHash: string;
   categories: BillCategoryRow[];
 };
 
@@ -71,6 +74,7 @@ export default function BillDetailModal({
   const [payerAuthorId, setPayerAuthorId] = useState("");
   const [notes, setNotes] = useState("");
   const [splits, setSplits] = useState<SplitRow[]>([]);
+  const [editingImage, setEditingImage] = useState(false);
   const isPdf = bill?.originalFilename.toLowerCase().endsWith(".pdf") ?? false;
 
   async function load() {
@@ -359,14 +363,14 @@ export default function BillDetailModal({
               <div style={{ flex: "1 1 320px", minWidth: 300 }}>
                 {isPdf ? (
                   <iframe
-                    src={`/api/bills/${bill.id}/file`}
+                    src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`}
                     title={bill.originalFilename}
                     style={{ width: "100%", height: 480, border: "1px solid #eee", borderRadius: 4 }}
                   />
                 ) : (
                   <a href={`/api/bills/${bill.id}/file`} target="_blank" rel="noreferrer">
                     <img
-                      src={`/api/bills/${bill.id}/file`}
+                      src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`}
                       alt={bill.originalFilename}
                       style={{ width: "100%", border: "1px solid #eee", borderRadius: 4 }}
                       onError={(e) => {
@@ -383,6 +387,14 @@ export default function BillDetailModal({
                 >
                   {t("billModal.openFile")}
                 </a>
+                {!isPdf && !isApproved && (
+                  <button
+                    onClick={() => setEditingImage(true)}
+                    style={{ display: "block", marginTop: "0.4rem", background: "none", border: "none", color: "#0645AD", textDecoration: "underline", cursor: "pointer", fontSize: "0.85rem", padding: 0 }}
+                  >
+                    {t("imageEditor.openButton")}
+                  </button>
+                )}
               </div>
 
               <div style={{ flex: "1 1 320px", minWidth: 300, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -586,6 +598,15 @@ export default function BillDetailModal({
           </>
         )}
       </div>
+      {editingImage && bill && (
+        <ImageEditor
+          billId={bill.id}
+          hasOriginal={!!bill.originalGcsObjectPath}
+          version={bill.contentHash}
+          onClose={() => setEditingImage(false)}
+          onSaved={() => { load(); onSaved(); }}
+        />
+      )}
     </div>
   );
 }

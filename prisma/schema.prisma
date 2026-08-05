@@ -154,6 +154,7 @@ model Bill {
   id                String        @id @default(uuid())
   eventId           String        @map("event_id")
   gcsObjectPath     String        @map("gcs_object_path")
+  originalGcsObjectPath String?   @map("original_gcs_object_path")
   originalFilename  String        @map("original_filename")
   displayFilename   String?       @map("display_filename")
   driveSourceFileId String?       @map("drive_source_file_id")

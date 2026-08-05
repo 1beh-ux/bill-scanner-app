@@ -27,7 +27,8 @@ export async function GET(
     headers: {
       "Content-Type": metadata.contentType || "application/octet-stream",
       "Content-Disposition": `inline; filename="${encodeURIComponent(bill.originalFilename)}"`,
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "private, no-cache, must-revalidate",
+      "ETag": `"${bill.contentHash}"`,
     },
   });
 }
