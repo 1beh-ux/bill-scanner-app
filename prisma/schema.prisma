@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  admin
+  accountant
+}
+
+enum EventStatus {
+  active
+  closed
+}
+
+enum IngestChannel {
+  drive
+  upload
+  camera
+}
+
+enum BillStatus {
+  new
+  queued
+  processing
+  auto_approved
+  to_review
+  failed
+  approved
+}
+
+enum Currency {
+  CZK
+  PLN
+  EUR
+}
+
+enum AuditActionType {
+  edit
+  approve
+  reopen
+}
+
+model User {
+  id          String   @id @default(uuid())
+  email       String   @unique
+  displayName String
+  role        UserRole
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  eventAccess     UserEventAccess[]
+  billsCreated    Bill[]         @relation("BillCreatedBy")
+  billsApproved   Bill[]         @relation("BillApprovedBy")
+  billsPaid       Bill[]         @relation("BillPaidBy")
+  auditLogEntries BillAuditLog[]
+
+  @@map("users")
+}
+
+model UserEventAccess {
+  userId  String @map("user_id")
+  eventId String @map("event_id")
+
+  user  User  @relation(fields: [userId], references: [id])
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@id([userId, eventId])
+  @@map("user_event_access")
+}
+
+model Event {
+  id                  String      @id @default(uuid())
+  name                String
+  startDate           DateTime    @map("start_date") @db.Date
+  endDate             DateTime    @map("end_date") @db.Date
+  status              EventStatus @default(active)
+  driveIngestFolderId String?     @map("drive_ingest_folder_id")
+  driveExportFolderId String?     @map("drive_export_folder_id")
+  createdAt           DateTime    @default(now()) @map("created_at")
+  closedAt            DateTime?   @map("closed_at")
+
+  categories   EventCategory[]
+  userAccess   UserEventAccess[]
+  authorAccess AuthorEventAccess[]
+  bills        Bill[]
+
+  @@map("events")
+}
+
+model CategoryTemplate {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  description String?
+
+  @@map("category_templates")
+}
+
+model EventCategory {
+  id             String  @id @default(uuid())
+  eventId        String  @map("event_id")
+  name           String
+  description    String?
+  budgetAmount   Decimal @map("budget_amount") @db.Decimal(12, 2)
+  isFromTemplate Boolean @default(false) @map("is_from_template")
+
+  event          Event          @relation(fields: [eventId], references: [id])
+  billCategories BillCategory[]
+
+  @@map("event_categories")
+}
+
+model Author {
+  id                 String   @id @default(uuid())
+  canonicalName      String   @map("canonical_name")
+  bankAccountNumber  String?  @map("bank_account_number")
+  bankCode           String?  @map("bank_code")
+  mergedIntoAuthorId String?  @map("merged_into_author_id")
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
+  mergedFrom  Author[]            @relation("AuthorMerge")
+  eventAccess AuthorEventAccess[]
+  bills       Bill[]
+
+  @@map("authors")
+}
+
+model AuthorEventAccess {
+  authorId String @map("author_id")
+  eventId  String @map("event_id")
+
+  author Author @relation(fields: [authorId], references: [id])
+  event  Event  @relation(fields: [eventId], references: [id])
+
+  @@id([authorId, eventId])
+  @@map("author_event_access")
+}
+
+model Translation {
+  key String @id
+  cs  String
+  en  String
+
+  @@map("translations")
+}
+
+model Bill {
+  id                String        @id @default(uuid())
+  eventId           String        @map("event_id")
+  gcsObjectPath     String        @map("gcs_object_path")
+  originalFilename  String        @map("original_filename")
+  displayFilename   String?       @map("display_filename")
+  driveSourceFileId String?       @map("drive_source_file_id")
+  contentHash       String        @map("content_hash")
+  ingestChannel     IngestChannel @map("ingest_channel")
+  merchantName      String?       @map("merchant_name")
+  billDate          DateTime?     @map("bill_date") @db.Date
+  totalAmount       Decimal?      @map("total_amount") @db.Decimal(12, 2)
+  currency          Currency      @default(CZK)
+  amountCzk         Decimal?      @map("amount_czk") @db.Decimal(12, 2)
+  exchangeRateUsed  Decimal?      @map("exchange_rate_used") @db.Decimal(12, 6)
+  exchangeRateDate  DateTime?     @map("exchange_rate_date") @db.Date
+  payerAuthorId     String?       @map("payer_author_id")
+  paidToAuthor      Boolean       @default(false) @map("paid_to_author")
+  paidAt            DateTime?     @map("paid_at")
+  paidByUserId      String?       @map("paid_by_user_id")
+  status            BillStatus    @default(new)
+  notes             String?
+  aiConfidence      Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
+  aiRawResponse     Json?         @map("ai_raw_response")
+  createdByUserId   String        @map("created_by_user_id")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  approvedAt        DateTime?     @map("approved_at")
+  approvedByUserId  String?       @map("approved_by_user_id")
+
+  event       Event          @relation(fields: [eventId], references: [id])
+  payerAuthor Author?        @relation(fields: [payerAuthorId], references: [id])
+  createdBy   User           @relation("BillCreatedBy", fields: [createdByUserId], references: [id])
+  approvedBy  User?          @relation("BillApprovedBy", fields: [approvedByUserId], references: [id])
+  paidBy      User?          @relation("BillPaidBy", fields: [paidByUserId], references: [id])
+  categories  BillCategory[]
+  auditLog    BillAuditLog[]
+
+  @@unique([eventId, contentHash], name: "bills_event_content_hash_unique")
+  @@map("bills")
+}
+
+model BillCategory {
+  id              String   @id @default(uuid())
+  billId          String   @map("bill_id")
+  eventCategoryId String   @map("event_category_id")
+  amount          Decimal  @db.Decimal(12, 2)
+  amountCzk       Decimal? @map("amount_czk") @db.Decimal(12, 2)
+
+  bill          Bill          @relation(fields: [billId], references: [id])
+  eventCategory EventCategory @relation(fields: [eventCategoryId], references: [id])
+
+  @@map("bill_categories")
+}
+
+model BillAuditLog {
+  id         String          @id @default(uuid())
+  billId     String          @map("bill_id")
+  userId     String          @map("user_id")
+  actionType AuditActionType @map("action_type")
+  fieldName  String?         @map("field_name")
+  oldValue   String?         @map("old_value")
+  newValue   String?         @map("new_value")
+  changedAt  DateTime        @default(now()) @map("changed_at")
+
+  bill Bill @relation(fields: [billId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("bill_audit_log")
+}

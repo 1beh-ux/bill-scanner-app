@@ -1,0 +1,29 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_FIREBASE_API_KEY=${_FIREBASE_API_KEY}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${_FIREBASE_AUTH_DOMAIN}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_PROJECT_ID=${_FIREBASE_PROJECT_ID}
+      - --build-arg=NEXT_PUBLIC_FIREBASE_APP_ID=${_FIREBASE_APP_ID}
+      - -t
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID'
+      - .
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - bill-scanner-app
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:bill-scanner-db
+      - --set-secrets=DATABASE_URL=db-url-secret:latest
+substitutions:
+  _REGION: europe-west3
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/bill-scanner-repo/app:$BUILD_ID'
