@@ -5,7 +5,8 @@ export function proxy(req: NextRequest) {
   const session = req.cookies.get("session");
 
   const isPublicPage = pathname.startsWith("/login");
-  const isPublicApi = pathname.startsWith("/api/session");
+  const isPublicApi =
+    pathname.startsWith("/api/session") || pathname.startsWith("/api/cron");
 
   if (session || isPublicPage || isPublicApi) {
     return NextResponse.next();

@@ -21,11 +21,9 @@ export async function PUT(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-
   if (bill.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   }
-
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
@@ -58,6 +56,10 @@ export async function PUT(
     }
   }
 
+  // Splits are stored in the bill's original currency; the CZK column is
+  // derived using the same rate already applied to the bill total.
+  const rate = bill.exchangeRateUsed ? new Prisma.Decimal(bill.exchangeRateUsed) : null;
+
   const created = await prisma.$transaction(async (tx) => {
     await tx.billCategory.deleteMany({ where: { billId: id } });
     await tx.billCategory.createMany({
@@ -65,7 +67,9 @@ export async function PUT(
         billId: id,
         eventCategoryId: s.eventCategoryId,
         amount: new Prisma.Decimal(s.amount),
-        amountCzk: bill.currency === "CZK" ? new Prisma.Decimal(s.amount) : null,
+        amountCzk: rate
+          ? new Prisma.Decimal(s.amount).times(rate).toDecimalPlaces(2)
+          : null,
       })),
     });
     return tx.billCategory.findMany({

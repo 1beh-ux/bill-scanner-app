@@ -46,6 +46,7 @@ export async function approveBill(
   if (bill.totalAmount === null) missing.push("totalAmount");
   if (bill.billDate === null) missing.push("billDate");
   if (bill.categories.length === 0) missing.push("categories");
+  if (bill.amountCzk === null) missing.push("amountCzk");
 
   if (missing.length > 0) {
     return { ok: false, billId, error: "missing_fields", missing };

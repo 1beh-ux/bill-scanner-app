@@ -27,6 +27,9 @@ type BillDetail = {
   notes: string | null;
   originalGcsObjectPath: string | null;
   contentHash: string;
+  amountCzk: string | null;
+  exchangeRateUsed: string | null;
+  exchangeRateDate: string | null;
   categories: BillCategoryRow[];
 };
 
@@ -445,6 +448,18 @@ export default function BillDetailModal({
                     </select>
                   </div>
                 </div>
+
+                {currency !== "CZK" && (
+                  <div style={{ fontSize: "0.85rem", color: bill.amountCzk ? "#065" : "#a60" }}>
+                    {bill.amountCzk && bill.exchangeRateUsed && bill.exchangeRateDate
+                      ? t("billModal.czkEquivalent", {
+                          amount: parseFloat(bill.amountCzk).toLocaleString("cs-CZ"),
+                          rate: parseFloat(bill.exchangeRateUsed).toFixed(3),
+                          date: new Date(bill.exchangeRateDate).toLocaleDateString("cs-CZ"),
+                        })
+                      : t("billModal.czkUnavailable")}
+                  </div>
+                )}
 
                 <div>
                   <label style={labelStyle}>{t("billModal.payer")}</label>

@@ -185,6 +185,11 @@ async function main() {
       { key: "imageEditor.error.no_original", cs: "Původní obrázek není k dispozici.", en: "No original image available." },
       { key: "imageEditor.cornerHint", cs: "Přetáhněte čtyři rohy na okraje účtenky. Obrázek se narovná do obdélníku.", en: "Drag the four corners onto the edges of the receipt. The image will be straightened into a rectangle." },
       { key: "imageEditor.processing", cs: "Zpracovávám obrázek...", en: "Processing image..." },
+      { key: "billsPage.noRate", cs: "kurz není k dispozici", en: "no rate available" },
+      { key: "billsPage.totalExcludes", cs: "nezahrnuje {count} účtenek bez kurzu", en: "excludes {count} bills without a rate" },
+      { key: "billModal.czkEquivalent", cs: "= {amount} Kč (kurz {rate} ze dne {date})", en: "= {amount} CZK (rate {rate} from {date})" },
+      { key: "billModal.czkUnavailable", cs: "Přepočet na Kč není možný — chybí datum účtenky nebo kurz.", en: "CZK conversion unavailable — missing bill date or exchange rate." },
+      { key: "billModal.error.missingFields.amountCzk", cs: "přepočet na Kč", en: "CZK amount" },
     ],
     skipDuplicates: true,
   });

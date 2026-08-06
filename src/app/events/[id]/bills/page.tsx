@@ -16,6 +16,7 @@ type BillItem = {
   merchantName: string | null;
   totalAmount: string | null;
   amountCzk: string | null;
+  currency: string;
   billDate: string | null;
   createdAt: string;
 };
@@ -154,9 +155,15 @@ export default function EventBillsPage({
   const filteredBills = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
 
   const runningTotal = filteredBills.reduce(
-    (sum, b) => sum + parseFloat(b.amountCzk || b.totalAmount || "0"),
+    (sum, b) => sum + parseFloat(b.amountCzk || "0"),
     0
   );
+
+  // Foreign-currency bills without a stored rate can't be included in the CZK
+  // total; surfacing the count is better than silently under-reporting.
+  const unconvertedCount = filteredBills.filter(
+    (b) => b.totalAmount !== null && b.amountCzk === null
+  ).length;
 
   const openIndex = openBillId
     ? filteredBills.findIndex((b) => b.id === openBillId)
@@ -471,11 +478,20 @@ export default function EventBillsPage({
                 <td style={{ padding: "0.5rem" }}>{statusLabels[b.status] || b.status}</td>
                 <td style={{ padding: "0.5rem" }}>{b.merchantName || "—"}</td>
                 <td style={{ padding: "0.5rem" }}>
-                  {b.amountCzk
-                    ? `${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč`
-                    : b.totalAmount
-                      ? `${parseFloat(b.totalAmount).toLocaleString("cs-CZ")}`
-                      : "—"}
+                  {b.totalAmount === null ? (
+                    "—"
+                  ) : (
+                    <>
+                      {parseFloat(b.totalAmount).toLocaleString("cs-CZ")} {b.currency}
+                      {b.currency !== "CZK" && (
+                        <div style={{ fontSize: "0.8rem", color: b.amountCzk ? "#666" : "#a60" }}>
+                          {b.amountCzk
+                            ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč`
+                            : t("billsPage.noRate")}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </td>
                 <td style={{ padding: "0.5rem" }}>
                   {new Date(b.createdAt).toLocaleDateString("cs-CZ")}
@@ -490,6 +506,11 @@ export default function EventBillsPage({
               </td>
               <td style={{ padding: "0.5rem", fontWeight: 600 }}>
                 {runningTotal.toLocaleString("cs-CZ")} Kč
+                {unconvertedCount > 0 && (
+                  <div style={{ fontSize: "0.8rem", color: "#a60", fontWeight: 400 }}>
+                    {t("billsPage.totalExcludes", { count: String(unconvertedCount) })}
+                  </div>
+                )}
               </td>
               <td></td>
             </tr>
