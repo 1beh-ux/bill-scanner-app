@@ -50,3 +50,77 @@ export async function getSheetsClient() {
 export function getDriveServiceAccountEmail(): string {
   return DRIVE_SA_EMAIL ?? "";
 }
+
+// ---- Folder / file listing ----
+
+export interface DriveFolderEntry {
+  id: string;
+  name: string;
+}
+
+export interface DriveFileEntry {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
+const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+const GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps.";
+
+async function listChildren(
+  drive: Awaited<ReturnType<typeof getDriveClient>>,
+  folderId: string
+): Promise<DriveFileEntry[]> {
+  const results: DriveFileEntry[] = [];
+  let pageToken: string | undefined;
+
+  do {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: "nextPageToken, files(id, name, mimeType)",
+      pageSize: 200,
+      pageToken,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    for (const f of res.data.files ?? []) {
+      if (f.id && f.name && f.mimeType) {
+        results.push({ id: f.id, name: f.name, mimeType: f.mimeType });
+      }
+    }
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+
+  return results;
+}
+
+/** Subfolders directly inside the ingest folder — one expected per author. */
+export async function listAuthorSubfolders(folderId: string): Promise<DriveFolderEntry[]> {
+  const drive = await getDriveClient();
+  const entries = await listChildren(drive, folderId);
+  return entries
+    .filter((e) => e.mimeType === FOLDER_MIME_TYPE)
+    .map((e) => ({ id: e.id, name: e.name }));
+}
+
+/** Files directly inside an author subfolder (non-folder entries only). */
+export async function listFilesInSubfolder(folderId: string): Promise<DriveFileEntry[]> {
+  const drive = await getDriveClient();
+  const entries = await listChildren(drive, folderId);
+  return entries.filter((e) => e.mimeType !== FOLDER_MIME_TYPE);
+}
+
+/** True for native Google Docs/Sheets/Slides — not downloadable as raw receipt bytes. */
+export function isGoogleNativeFile(mimeType: string): boolean {
+  return mimeType.startsWith(GOOGLE_NATIVE_MIME_PREFIX);
+}
+
+/** Downloads a file's raw bytes. Check isGoogleNativeFile first — don't call this on a native Google file. */
+export async function downloadFileBuffer(fileId: string): Promise<Buffer> {
+  const drive = await getDriveClient();
+  const res = await drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "arraybuffer" }
+  );
+  return Buffer.from(res.data as ArrayBuffer);
+}

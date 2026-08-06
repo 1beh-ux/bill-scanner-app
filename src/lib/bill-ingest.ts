@@ -13,6 +13,10 @@ export interface RawFileInput {
    * pages) created from this file, so a later import can detect it was already
    * brought in without re-downloading or re-hashing it. */
   driveSourceFileId?: string;
+  /** Set for Drive-sourced files when the source subfolder maps to a known
+   * author. Propagated onto every bill (including split pages) created from
+   * this file. Not used by direct upload/camera capture. */
+  payerAuthorId?: string;
 }
 
 interface WorkItem {
@@ -21,6 +25,7 @@ interface WorkItem {
   contentType: string;
   contentHash: string;
   driveSourceFileId?: string;
+  payerAuthorId?: string;
 }
 
 export interface DuplicateInfo {
@@ -81,11 +86,6 @@ export async function ingestBillFiles(
   const failures: FailureInfo[] = [];
   const items: WorkItem[] = [];
 
-  // Phase 1: flatten uploads into individual work items, splitting multi-page PDFs.
-  // IMPORTANT: for split pages, the dedup hash is derived from the ORIGINAL file's
-  // bytes + page number, NOT from the re-serialized split output. pdf-lib's .save()
-  // is not guaranteed byte-identical across separate calls (e.g. embedded timestamps),
-  // so hashing its output would make dedup unreliable for the same source re-uploaded.
   for (const file of rawFiles) {
     const buffer = file.buffer;
     const isPdf = file.contentType === "application/pdf" || file.filename.toLowerCase().endsWith(".pdf");
@@ -97,6 +97,7 @@ export async function ingestBillFiles(
         contentType: file.contentType || "application/octet-stream",
         contentHash: sha256(buffer),
         driveSourceFileId: file.driveSourceFileId,
+        payerAuthorId: file.payerAuthorId,
       });
       continue;
     }
@@ -118,6 +119,7 @@ export async function ingestBillFiles(
         contentType: "application/pdf",
         contentHash: sha256(buffer),
         driveSourceFileId: file.driveSourceFileId,
+        payerAuthorId: file.payerAuthorId,
       });
       continue;
     }
@@ -138,6 +140,7 @@ export async function ingestBillFiles(
         contentType: "application/pdf",
         contentHash: sha256(`${sourceHash}:page:${i + 1}`),
         driveSourceFileId: file.driveSourceFileId,
+        payerAuthorId: file.payerAuthorId,
       });
     }
   }
@@ -145,7 +148,6 @@ export async function ingestBillFiles(
   const created: Bill[] = [];
   const duplicates: DuplicateInfo[] = [];
 
-  // Phase 2: dedupe within this same batch first — synchronous, so no race is possible.
   const seenInBatch = new Map<string, string>();
   const toCheck: WorkItem[] = [];
 
@@ -163,8 +165,6 @@ export async function ingestBillFiles(
     toCheck.push(item);
   }
 
-  // Phase 3: check against bills already saved for this event — concurrently, since
-  // these are cheap reads, not the expensive part.
   const checkResults = await processInBatches(toCheck, UPLOAD_CONCURRENCY, async (item) => {
     const existing = await prisma.bill.findFirst({
       where: { eventId, contentHash: item.contentHash },
@@ -185,10 +185,6 @@ export async function ingestBillFiles(
     }
   }
 
-  // Phase 4: upload + create concurrently. The unique constraint on
-  // (eventId, contentHash) is the real correctness guarantee here — if two
-  // concurrent requests somehow race past the check above, the database itself
-  // rejects the second insert, and we clean up the orphaned file it already wrote.
   await processInBatches(toUpload, UPLOAD_CONCURRENCY, async (item) => {
     const billId = crypto.randomUUID();
     const objectPath = `events/${eventId}/bills/${billId}-${sanitizeFilename(item.filename)}`;
@@ -205,6 +201,7 @@ export async function ingestBillFiles(
           contentHash: item.contentHash,
           ingestChannel,
           driveSourceFileId: item.driveSourceFileId ?? null,
+          payerAuthorId: item.payerAuthorId ?? null,
           createdByUserId: userId,
         },
       });

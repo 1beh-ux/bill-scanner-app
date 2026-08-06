@@ -27,6 +27,18 @@ type FolderCheckResult = {
   errorCode?: string;
 };
 
+type ImportSummary = {
+  authorsResolved: { subfolderName: string; authorId: string; authorName: string; created: boolean }[];
+  skippedAlreadyImported: number;
+  skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
+  ingest: {
+    created: unknown[];
+    duplicates: { filename: string; existingFilename: string; existingCreatedAt: string }[];
+    splitInfo: { originalFilename: string; pageCount: number }[];
+    failures: { filename: string; error: string }[];
+  };
+};
+
 export default function EventDetailPage({
   params,
 }: {
@@ -55,6 +67,10 @@ export default function EventDetailPage({
     export?: FolderCheckResult;
   } | null>(null);
 
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+
   async function load() {
     setLoading(true);
     const [evRes, catRes, billsRes] = await Promise.all([
@@ -79,9 +95,6 @@ export default function EventDetailPage({
       .catch(() => {});
   }, []);
 
-  // Seed the folder-id inputs only once, when the event first loads —
-  // not on every load() (e.g. after saving a budget), so it doesn't
-  // clobber unsaved edits in these two fields.
   useEffect(() => {
     if (event) {
       setIngestFolderId(event.driveIngestFolderId ?? "");
@@ -178,6 +191,21 @@ export default function EventDetailPage({
     setTestResults(await res.json());
   }
 
+  async function handleImportNow() {
+    setImportError(null);
+    setImportResult(null);
+    setImporting(true);
+    const res = await fetch(`/api/events/${id}/drive-import`, { method: "POST" });
+    setImporting(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setImportError(data.error || "generic");
+      return;
+    }
+    setImportResult(await res.json());
+    load();
+  }
+
   if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
   if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
 
@@ -197,7 +225,7 @@ export default function EventDetailPage({
         {event.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
       </p>
 
-      <a 
+      <a
         href={`/events/${id}/bills`}
         style={{
           display: "inline-block",
@@ -400,6 +428,121 @@ export default function EventDetailPage({
           )}
         </div>
       )}
+
+      <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
+        <button
+          type="button"
+          onClick={handleImportNow}
+          disabled={importing || !event.driveIngestFolderId}
+          style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
+        >
+          {importing ? t("driveSettings.importing") : t("driveSettings.importButton")}
+        </button>
+
+        {!event.driveIngestFolderId && (
+          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
+            {t("driveSettings.importNoFolderSet")}
+          </p>
+        )}
+
+        {importError && (
+          <p style={{ color: "red", marginTop: "0.5rem" }}>
+            {t(`driveSettings.error.${importError}`) || t("driveSettings.error.generic")}
+          </p>
+        )}
+
+        {importResult && (
+          <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
+            <p>
+              {t("driveSettings.importResultSummary", {
+                created: String(importResult.ingest.created.length),
+                duplicates: String(importResult.ingest.duplicates.length),
+              })}
+            </p>
+
+            {importResult.authorsResolved.length > 0 && (
+              <p>
+                {t("driveSettings.importAuthorsSummary", {
+                  matched: String(importResult.authorsResolved.filter((a) => !a.created).length),
+                  created: String(importResult.authorsResolved.filter((a) => a.created).length),
+                })}
+              </p>
+            )}
+
+            {importResult.skippedAlreadyImported > 0 && (
+              <p>
+                {t("driveSettings.importSkippedAlready", {
+                  count: String(importResult.skippedAlreadyImported),
+                })}
+              </p>
+            )}
+
+            {importResult.skippedNativeGoogleFiles.length > 0 && (
+              <div>
+                <p style={{ marginBottom: "0.25rem" }}>{t("driveSettings.importSkippedNativeTitle")}</p>
+                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                  {importResult.skippedNativeGoogleFiles.map((f, i) => (
+                    <li key={i}>
+                      {t("driveSettings.importSkippedNativeItem", {
+                        filename: f.filename,
+                        subfolderName: f.subfolderName,
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importResult.ingest.duplicates.length > 0 && (
+              <div>
+                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.duplicatesTitle")}</p>
+                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                  {importResult.ingest.duplicates.map((d, i) => (
+                    <li key={i}>
+                      {t("eventDetail.duplicateItem", {
+                        filename: d.filename,
+                        existingFilename: d.existingFilename,
+                        existingDate: new Date(d.existingCreatedAt).toLocaleDateString("cs-CZ"),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importResult.ingest.splitInfo.length > 0 && (
+              <div>
+                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.splitInfoTitle")}</p>
+                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                  {importResult.ingest.splitInfo.map((s, i) => (
+                    <li key={i}>
+                      {t("eventDetail.splitInfoItem", {
+                        filename: s.originalFilename,
+                        pageCount: String(s.pageCount),
+                      })}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {importResult.ingest.failures.length > 0 && (
+              <div>
+                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.failuresTitle")}</p>
+                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
+                  {importResult.ingest.failures.map((f, i) => (
+                    <li key={i}>
+                      {f.error === "invalid_pdf"
+                        ? t("eventDetail.failureInvalidPdf", { filename: f.filename })
+                        : `${f.filename} — ${f.error}`}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
