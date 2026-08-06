@@ -89,6 +89,8 @@ async function main() {
       { key: "authors.eventAccessEmpty", cs: "Zatím žádné akce.", en: "No events yet." },
       { key: "authors.errorAddFailed", cs: "Nepodařilo se přidat autora.", en: "Failed to add author." },
       { key: "authors.errorDeleteFailed", cs: "Nepodařilo se smazat autora.", en: "Failed to delete author." },
+      { key: "authors.errorEditFailed", cs: "Nepodařilo se uložit změny.", en: "Failed to save changes." },
+      { key: "authors.errorEditFailed", cs: "Nepodařilo se uložit změny.", en: "Failed to save changes." },
       { key: "authors.confirmDelete", cs: "Opravdu smazat autora \"{name}\"?", en: "Really delete author \"{name}\"?" },
       { key: "eventDetail.billsTitle", cs: "Účtenky", en: "Bills" },
       { key: "eventDetail.uploadFiles", cs: "Nahrát soubory", en: "Upload files" },

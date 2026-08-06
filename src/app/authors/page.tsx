@@ -25,6 +25,11 @@ export default function AuthorsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [authorEvents, setAuthorEvents] = useState<EventItem[]>([]);
 
+  const [editingAuthorId, setEditingAuthorId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editBankAccountNumber, setEditBankAccountNumber] = useState("");
+  const [editBankCode, setEditBankCode] = useState("");
+
   async function load() {
     setLoading(true);
     const [authRes, evRes] = await Promise.all([
@@ -117,6 +122,43 @@ export default function AuthorsPage() {
     if (res.ok) setAuthorEvents(await res.json());
   }
 
+  function startEditAuthor(a: Author) {
+    setError(null);
+    setExpandedId(null);
+    setEditingAuthorId(a.id);
+    setEditName(a.canonicalName);
+    setEditBankAccountNumber(a.bankAccountNumber ?? "");
+    setEditBankCode(a.bankCode ?? "");
+  }
+
+  function cancelEditAuthor() {
+    setEditingAuthorId(null);
+  }
+
+  async function saveAuthorEdit(id: string) {
+    setError(null);
+    if (!editName.trim()) return;
+
+    const res = await fetch(`/api/authors/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        canonicalName: editName.trim(),
+        bankAccountNumber: editBankAccountNumber.trim() || null,
+        bankCode: editBankCode.trim() || null,
+      }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error || t("authors.errorEditFailed"));
+      return;
+    }
+
+    setEditingAuthorId(null);
+    load();
+  }
+
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "1rem" }}>{t("authors.title")}</h1>
@@ -167,42 +209,98 @@ export default function AuthorsPage() {
           <tbody>
             {authors.map((a) => (
               <Fragment key={a.id}>
-                <tr style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.5rem" }}>{a.canonicalName}</td>
-                  <td style={{ padding: "0.5rem" }}>
-                    {a.bankAccountNumber
-                      ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
-                      : "—"}
-                  </td>
-                  <td style={{ padding: "0.5rem" }}>
-                    <button
-                      onClick={() => toggleActive(a)}
-                      style={{
-                        color: a.active ? "#080" : "#999",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        textDecoration: "underline",
-                      }}
-                    >
+                {editingAuthorId === a.id ? (
+                  <tr style={{ borderBottom: "1px solid #eee", background: "#fafafa" }}>
+                    <td style={{ padding: "0.5rem" }}>
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder={t("authors.namePlaceholder")}
+                        style={{ width: "100%", padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
+                        autoFocus
+                      />
+                    </td>
+                    <td style={{ padding: "0.5rem" }}>
+                      <div style={{ display: "flex", gap: "0.25rem" }}>
+                        <input
+                          type="text"
+                          value={editBankAccountNumber}
+                          onChange={(e) => setEditBankAccountNumber(e.target.value)}
+                          placeholder={t("authors.bankAccountPlaceholder")}
+                          style={{ flex: 1, padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
+                        />
+                        <input
+                          type="text"
+                          value={editBankCode}
+                          onChange={(e) => setEditBankCode(e.target.value)}
+                          placeholder={t("authors.bankCodePlaceholder")}
+                          style={{ width: 70, padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
+                        />
+                      </div>
+                    </td>
+                    <td style={{ padding: "0.5rem" }}>
                       {a.active ? t("common.statusActive") : t("authors.statusInactive")}
-                    </button>
-                  </td>
-                  <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                    <button
-                      onClick={() => toggleExpand(a.id)}
-                      style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(a.id, a.canonicalName)}
-                      style={{ color: "#c00", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.delete")}
-                    </button>
-                  </td>
-                </tr>
+                    </td>
+                    <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => saveAuthorEdit(a.id)}
+                        style={{ marginRight: "0.5rem", color: "#080", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        {t("common.save")}
+                      </button>
+                      <button
+                        onClick={cancelEditAuthor}
+                        style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr style={{ borderBottom: "1px solid #eee" }}>
+                    <td style={{ padding: "0.5rem" }}>{a.canonicalName}</td>
+                    <td style={{ padding: "0.5rem" }}>
+                      {a.bankAccountNumber
+                        ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
+                        : "—"}
+                    </td>
+                    <td style={{ padding: "0.5rem" }}>
+                      <button
+                        onClick={() => toggleActive(a)}
+                        style={{
+                          color: a.active ? "#080" : "#999",
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          textDecoration: "underline",
+                        }}
+                      >
+                        {a.active ? t("common.statusActive") : t("authors.statusInactive")}
+                      </button>
+                    </td>
+                    <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
+                      <button
+                        onClick={() => startEditAuthor(a)}
+                        style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        {t("common.edit")}
+                      </button>
+                      <button
+                        onClick={() => toggleExpand(a.id)}
+                        style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(a.id, a.canonicalName)}
+                        style={{ color: "#c00", background: "none", border: "none", cursor: "pointer" }}
+                      >
+                        {t("common.delete")}
+                      </button>
+                    </td>
+                  </tr>
+                )}
                 {expandedId === a.id && (
                   <tr>
                     <td colSpan={4} style={{ padding: "0.75rem", background: "#fafafa" }}>
