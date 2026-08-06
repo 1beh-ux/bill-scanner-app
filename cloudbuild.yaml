@@ -22,7 +22,7 @@ steps:
       - --platform=managed
       - --no-invoker-iam-check
       - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:bill-scanner-db
-      - --set-secrets=DATABASE_URL=db-url-secret:latest
+      - --set-secrets=DATABASE_URL=db-url-secret:latest,CRON_SECRET=cron-secret:latest
       - --set-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files
       - --memory=2Gi
       - --cpu=1
