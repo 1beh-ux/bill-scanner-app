@@ -11,14 +11,11 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-
   const { id } = await params;
   const event = await prisma.event.findUnique({ where: { id } });
-
   if (!event) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-
   return NextResponse.json(event);
 }
 
@@ -30,20 +27,19 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-
   const { id } = await params;
   const body = await req.json();
-  const { name, startDate, endDate } = body;
-
+  const { name, startDate, endDate, driveIngestFolderId, driveExportFolderId } = body;
   const event = await prisma.event.update({
     where: { id },
     data: {
       ...(name !== undefined && { name }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
+      ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),
+      ...(driveExportFolderId !== undefined && { driveExportFolderId }),
     },
   });
-
   return NextResponse.json(event);
 }
 
@@ -55,9 +51,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-
   const { id } = await params;
-
   try {
     await prisma.event.delete({ where: { id } });
     return NextResponse.json({ ok: true });

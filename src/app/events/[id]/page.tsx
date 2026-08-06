@@ -9,6 +9,8 @@ type EventDetail = {
   startDate: string;
   endDate: string;
   status: "active" | "closed";
+  driveIngestFolderId: string | null;
+  driveExportFolderId: string | null;
 };
 
 type Category = {
@@ -17,6 +19,12 @@ type Category = {
   description: string | null;
   budgetAmount: string;
   isFromTemplate: boolean;
+};
+
+type FolderCheckResult = {
+  accessible: boolean;
+  name?: string;
+  errorCode?: string;
 };
 
 export default function EventDetailPage({
@@ -36,6 +44,17 @@ export default function EventDetailPage({
   const [newCategoryName, setNewCategoryName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const [driveAccountEmail, setDriveAccountEmail] = useState("");
+  const [ingestFolderId, setIngestFolderId] = useState("");
+  const [exportFolderId, setExportFolderId] = useState("");
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveSaving, setDriveSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<{
+    ingest?: FolderCheckResult;
+    export?: FolderCheckResult;
+  } | null>(null);
+
   async function load() {
     setLoading(true);
     const [evRes, catRes, billsRes] = await Promise.all([
@@ -52,6 +71,23 @@ export default function EventDetailPage({
   useEffect(() => {
     load();
   }, [id]);
+
+  useEffect(() => {
+    fetch("/api/config/drive-account")
+      .then((r) => r.json())
+      .then((d) => setDriveAccountEmail(d.email || ""))
+      .catch(() => {});
+  }, []);
+
+  // Seed the folder-id inputs only once, when the event first loads —
+  // not on every load() (e.g. after saving a budget), so it doesn't
+  // clobber unsaved edits in these two fields.
+  useEffect(() => {
+    if (event) {
+      setIngestFolderId(event.driveIngestFolderId ?? "");
+      setExportFolderId(event.driveExportFolderId ?? "");
+    }
+  }, [event?.id]);
 
   function startEdit(cat: Category) {
     setEditingId(cat.id);
@@ -101,10 +137,52 @@ export default function EventDetailPage({
     load();
   }
 
+  async function handleSaveDriveFolders(e: React.FormEvent) {
+    e.preventDefault();
+    setDriveError(null);
+    setDriveSaving(true);
+    const res = await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        driveIngestFolderId: ingestFolderId.trim() || null,
+        driveExportFolderId: exportFolderId.trim() || null,
+      }),
+    });
+    setDriveSaving(false);
+    if (!res.ok) {
+      setDriveError(t("driveSettings.errorSaveFailed"));
+      return;
+    }
+    setTestResults(null);
+    load();
+  }
+
+  async function handleTestConnection() {
+    setDriveError(null);
+    setTesting(true);
+    setTestResults(null);
+    const res = await fetch(`/api/events/${id}/drive-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ingestFolderId: ingestFolderId.trim() || null,
+        exportFolderId: exportFolderId.trim() || null,
+      }),
+    });
+    setTesting(false);
+    if (!res.ok) {
+      setDriveError(t("driveSettings.errorSaveFailed"));
+      return;
+    }
+    setTestResults(await res.json());
+  }
+
   if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
   if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
+  const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim());
 
   return (
     <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
@@ -119,7 +197,7 @@ export default function EventDetailPage({
         {event.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
       </p>
 
-      <a
+      <a 
         href={`/events/${id}/bills`}
         style={{
           display: "inline-block",
@@ -217,7 +295,7 @@ export default function EventDetailPage({
         </tfoot>
       </table>
 
-      <form onSubmit={handleAddCategory} style={{ display: "flex", gap: "0.5rem" }}>
+      <form onSubmit={handleAddCategory} style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
         <input
           type="text"
           placeholder={t("eventDetail.newCategoryPlaceholder")}
@@ -229,6 +307,99 @@ export default function EventDetailPage({
           {t("eventDetail.addCategory")}
         </button>
       </form>
+
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
+        {t("driveSettings.title")}
+      </h2>
+
+      <p style={{ fontSize: "0.9rem", color: "#444", marginBottom: "0.25rem" }}>
+        {t("driveSettings.instructionsIntro")}
+      </p>
+      <p
+        style={{
+          fontSize: "0.9rem",
+          fontFamily: "monospace",
+          background: "#f4f4f4",
+          padding: "0.5rem",
+          borderRadius: 4,
+          marginBottom: "0.5rem",
+          wordBreak: "break-all",
+        }}
+      >
+        {driveAccountEmail || "…"}
+      </p>
+      <p style={{ fontSize: "0.85rem", color: "#666", whiteSpace: "pre-line", marginBottom: "1rem" }}>
+        {t("driveSettings.instructionsSteps")}
+      </p>
+
+      <form onSubmit={handleSaveDriveFolders} style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: 500 }}>
+        <label style={{ fontSize: "0.85rem", color: "#444" }}>
+          {t("driveSettings.ingestFolderLabel")}
+          <input
+            type="text"
+            value={ingestFolderId}
+            onChange={(e) => setIngestFolderId(e.target.value)}
+            style={{ display: "block", width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4, marginTop: "0.25rem" }}
+          />
+        </label>
+        <label style={{ fontSize: "0.85rem", color: "#444" }}>
+          {t("driveSettings.exportFolderLabel")}
+          <input
+            type="text"
+            value={exportFolderId}
+            onChange={(e) => setExportFolderId(e.target.value)}
+            style={{ display: "block", width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4, marginTop: "0.25rem" }}
+          />
+        </label>
+        <p style={{ fontSize: "0.8rem", color: "#888", margin: 0 }}>{t("driveSettings.folderIdHint")}</p>
+
+        {driveError && <p style={{ color: "red", margin: 0 }}>{driveError}</p>}
+
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
+          <button
+            type="submit"
+            disabled={driveSaving}
+            style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
+          >
+            {t("driveSettings.saveFolders")}
+          </button>
+          <button
+            type="button"
+            onClick={handleTestConnection}
+            disabled={testing || !hasFolderInput}
+            style={{ padding: "0.5rem 1rem", background: "#fff", color: "#111", border: "1px solid #111", borderRadius: 4, cursor: "pointer" }}
+          >
+            {testing ? t("driveSettings.testing") : t("driveSettings.testConnection")}
+          </button>
+        </div>
+      </form>
+
+      {!hasFolderInput && (
+        <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
+          {t("driveSettings.noFoldersSet")}
+        </p>
+      )}
+
+      {testResults && (
+        <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
+          {testResults.ingest && (
+            <div style={{ color: testResults.ingest.accessible ? "#080" : "#c00" }}>
+              {t("driveSettings.testResultIngestLabel")}{" "}
+              {testResults.ingest.accessible
+                ? t("driveSettings.testResultAccessible", { name: testResults.ingest.name ?? "" })
+                : t(`driveSettings.error.${testResults.ingest.errorCode}`)}
+            </div>
+          )}
+          {testResults.export && (
+            <div style={{ color: testResults.export.accessible ? "#080" : "#c00" }}>
+              {t("driveSettings.testResultExportLabel")}{" "}
+              {testResults.export.accessible
+                ? t("driveSettings.testResultAccessible", { name: testResults.export.name ?? "" })
+                : t(`driveSettings.error.${testResults.export.errorCode}`)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
