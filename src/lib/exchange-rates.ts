@@ -137,14 +137,38 @@ export interface ConversionResult {
 }
 
 /**
+ * ČNB publishes every business day, so the largest legitimate gap between a
+ * bill's date and the rate that applies to it is a long weekend plus holidays.
+ * A larger gap means we simply don't have the right data yet.
+ */
+const MAX_RATE_AGE_DAYS = 7;
+
+function daysBetween(later: Date, earlier: Date): number {
+  return Math.round((later.getTime() - earlier.getTime()) / 86400000);
+}
+
+async function findStoredRate(currency: Currency, billDate: Date) {
+  return prisma.exchangeRate.findFirst({
+    where: { currency, rateDate: { lte: billDate } },
+    orderBy: { rateDate: "desc" },
+  });
+}
+
+/**
  * Per the data schema: use the most recent published rate on or before the
  * bill's own date. That single rule covers weekends and bank holidays.
+ *
+ * If no stored rate is close enough — an old bill entered long after the fact,
+ * or a gap in the daily sync — the rate for that specific date is fetched from
+ * ČNB and stored, so this self-heals instead of leaving the bill unconverted.
  */
 export async function convertToCzk(
   amount: Prisma.Decimal | string | number,
   currency: Currency,
-  billDate: Date
+  billDate: Date,
+  options: { allowFetch?: boolean } = {}
 ): Promise<ConversionResult | null> {
+  const { allowFetch = true } = options;
   const value = new Prisma.Decimal(amount);
 
   if (currency === "CZK") {
@@ -155,10 +179,19 @@ export async function convertToCzk(
     };
   }
 
-  const rate = await prisma.exchangeRate.findFirst({
-    where: { currency, rateDate: { lte: billDate } },
-    orderBy: { rateDate: "desc" },
-  });
+  let rate = await findStoredRate(currency, billDate);
+
+  const tooOld = rate && daysBetween(billDate, rate.rateDate) > MAX_RATE_AGE_DAYS;
+
+  if ((!rate || tooOld) && allowFetch) {
+    try {
+      await syncRatesForDate(billDate);
+      rate = await findStoredRate(currency, billDate);
+    } catch {
+      // ČNB unreachable or no data for that date — fall through and use
+      // whatever was already stored, if anything.
+    }
+  }
 
   if (!rate) return null;
 
