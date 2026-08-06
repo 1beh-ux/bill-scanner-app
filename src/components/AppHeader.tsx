@@ -41,6 +41,7 @@ export default function AppHeader() {
     { href: "/events", label: t("nav.events") },
     { href: "/authors", label: t("nav.authors") },
     { href: "/category-templates", label: t("nav.categoryTemplates") },
+    { href: "/exchange-rates", label: t("nav.exchangeRates") },
   ];
 
   return (
