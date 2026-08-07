@@ -8,8 +8,9 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const authors = await prisma.author.findMany({
+const authors = await prisma.author.findMany({
     orderBy: { canonicalName: "asc" },
+    include: { mergedInto: { select: { canonicalName: true } } },
   });
 
   return NextResponse.json(authors);

@@ -124,3 +124,100 @@ export async function downloadFileBuffer(fileId: string): Promise<Buffer> {
   );
   return Buffer.from(res.data as ArrayBuffer);
 }
+// ---- Export: upload + manifest sheet ----
+
+import { Readable } from "stream";
+
+export async function uploadFileToFolder(
+  folderId: string,
+  name: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<string> {
+  const drive = await getDriveClient();
+  const res = await drive.files.create({
+    requestBody: { name, parents: [folderId] },
+    media: { mimeType, body: Readable.from(buffer) },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!res.data.id) throw new Error("Drive upload returned no file id");
+  return res.data.id;
+}
+
+export async function findFileInFolder(
+  folderId: string,
+  name: string,
+  mimeType?: string
+): Promise<DriveFileEntry | null> {
+  const drive = await getDriveClient();
+  const escapedName = name.replace(/'/g, "\\'");
+  let q = `'${folderId}' in parents and name = '${escapedName}' and trashed = false`;
+  if (mimeType) q += ` and mimeType = '${mimeType}'`;
+
+  const res = await drive.files.list({
+    q,
+    fields: "files(id, name, mimeType)",
+    pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+  const f = res.data.files?.[0];
+  if (!f?.id || !f.name || !f.mimeType) return null;
+  return { id: f.id, name: f.name, mimeType: f.mimeType };
+}
+
+const SHEET_MIME_TYPE = "application/vnd.google-apps.spreadsheet";
+
+/**
+ * Finds an existing manifest Sheet by exact title in the export folder and
+ * overwrites its contents, or creates a new one if none exists. Creation
+ * goes through the Drive API with `parents` set directly — NOT
+ * sheets.spreadsheets.create(), which always creates the file in the
+ * service account's own "My Drive" and fails outright, since service
+ * accounts without a Workspace license have zero storage quota of their
+ * own. Creating with a parent folder set up front inherits quota from the
+ * folder's owner instead — the standard workaround for this limitation.
+ */
+export async function createManifestSheet(
+  exportFolderId: string,
+  title: string,
+  rows: (string | number)[][]
+): Promise<string> {
+  const drive = await getDriveClient();
+  const created = await drive.files.create({
+    requestBody: {
+      name: title,
+      mimeType: SHEET_MIME_TYPE,
+      parents: [exportFolderId],
+    },
+    fields: "id",
+    supportsAllDrives: true,
+  });
+  if (!created.data.id) throw new Error("Drive create returned no file id for manifest sheet");
+  const spreadsheetId = created.data.id;
+
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: "A1",
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: rows },
+  });
+
+  return spreadsheetId;
+}
+
+export async function writeManifestValues(
+  spreadsheetId: string,
+  rows: (string | number)[][]
+): Promise<void> {
+  const sheets = await getSheetsClient();
+  await sheets.spreadsheets.values.clear({ spreadsheetId, range: "A1:Z10000" });
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: "A1",
+    valueInputOption: "USER_ENTERED",
+    requestBody: { values: rows },
+  });
+}

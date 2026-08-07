@@ -81,6 +81,7 @@ model Event {
   status              EventStatus @default(active)
   driveIngestFolderId String?     @map("drive_ingest_folder_id")
   driveExportFolderId String?     @map("drive_export_folder_id")
+  driveManifestSpreadsheetId String? @map("drive_manifest_spreadsheet_id")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -179,6 +180,8 @@ model Bill {
   createdAt         DateTime      @default(now()) @map("created_at")
   approvedAt        DateTime?     @map("approved_at")
   approvedByUserId  String?       @map("approved_by_user_id")
+  exportedAt        DateTime?     @map("exported_at")
+  exportFilename    String?       @map("export_filename")
 
   event       Event          @relation(fields: [eventId], references: [id])
   payerAuthor Author?        @relation(fields: [payerAuthorId], references: [id])

@@ -9,6 +9,7 @@ type EventDetail = {
   startDate: string;
   endDate: string;
   status: "active" | "closed";
+  closedAt: string | null;
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
 };
@@ -37,6 +38,13 @@ type ImportSummary = {
     splitInfo: { originalFilename: string; pageCount: number }[];
     failures: { filename: string; error: string }[];
   };
+};
+
+type ExportSummary = {
+  totalApproved: number;
+  newlyExported: number;
+  alreadyExported: number;
+  manifestSpreadsheetId: string;
 };
 
 export default function EventDetailPage({
@@ -70,6 +78,13 @@ export default function EventDetailPage({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
+
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -206,6 +221,48 @@ export default function EventDetailPage({
     load();
   }
 
+  async function handleExportNow() {
+    setExportError(null);
+    setExportResult(null);
+    setExporting(true);
+    const res = await fetch(`/api/events/${id}/drive-export`, { method: "POST" });
+    setExporting(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: "exportGeneric" }));
+      setExportError(data.error || "exportGeneric");
+      return;
+    }
+    setExportResult(await res.json());
+  }
+
+  async function handleClose() {
+    if (!window.confirm(t("eventDetail.confirmClose"))) return;
+    setLifecycleError(null);
+    setLifecycleBusy(true);
+    const res = await fetch(`/api/events/${id}/close`, { method: "POST" });
+    setLifecycleBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setLifecycleError(data.error || "lifecycleGeneric");
+      return;
+    }
+    load();
+  }
+
+  async function handleReopen() {
+    if (!window.confirm(t("eventDetail.confirmReopen"))) return;
+    setLifecycleError(null);
+    setLifecycleBusy(true);
+    const res = await fetch(`/api/events/${id}/reopen`, { method: "POST" });
+    setLifecycleBusy(false);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setLifecycleError(data.error || "lifecycleGeneric");
+      return;
+    }
+    load();
+  }
+
   if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
   if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
 
@@ -219,11 +276,39 @@ export default function EventDetailPage({
       </a>
 
       <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0.5rem 0" }}>{event.name}</h1>
-      <p style={{ color: "#666", marginBottom: "0.75rem" }}>
+      <p style={{ color: "#666", marginBottom: "0.25rem" }}>
         {new Date(event.startDate).toLocaleDateString("cs-CZ")} –{" "}
         {new Date(event.endDate).toLocaleDateString("cs-CZ")} ·{" "}
         {event.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
+        {event.status === "closed" && event.closedAt && (
+          <> · {t("eventDetail.closedAtLabel", { date: new Date(event.closedAt).toLocaleDateString("cs-CZ") })}</>
+        )}
       </p>
+
+      <div style={{ marginBottom: "0.75rem" }}>
+        {event.status === "active" ? (
+          <button
+            onClick={handleClose}
+            disabled={lifecycleBusy}
+            style={{ padding: "0.4rem 0.8rem", background: "#fff", color: "#c00", border: "1px solid #c00", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
+          >
+            {t("eventDetail.closeButton")}
+          </button>
+        ) : (
+          <button
+            onClick={handleReopen}
+            disabled={lifecycleBusy}
+            style={{ padding: "0.4rem 0.8rem", background: "#fff", color: "#080", border: "1px solid #080", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
+          >
+            {t("eventDetail.reopenButton")}
+          </button>
+        )}
+        {lifecycleError && (
+          <p style={{ color: "red", fontSize: "0.85rem", marginTop: "0.35rem" }}>
+            {t(`eventDetail.error.${lifecycleError}`)}
+          </p>
+        )}
+      </div>
 
       <a
         href={`/events/${id}/bills`}
@@ -239,6 +324,40 @@ export default function EventDetailPage({
       >
         {t("eventDetail.viewBillsLink", { count: String(billCount) })}
       </a>
+
+      <a
+      href={`/events/${id}/budget`}
+        style={{
+          display: "inline-block",
+          marginBottom: "1.5rem",
+          marginLeft: "0.5rem",
+          padding: "0.5rem 1rem",
+          background: "#fff",
+          color: "#111",
+          border: "1px solid #111",
+          borderRadius: 4,
+          textDecoration: "none",
+        }}
+      >
+        {t("eventDetail.viewBudgetLink")}
+      </a>
+<a href={`/events/${id}/payments`}
+        style={{
+          display: "inline-block",
+          marginBottom: "1.5rem",
+          marginLeft: "0.5rem",
+          padding: "0.5rem 1rem",
+          background: "#fff",
+          color: "#111",
+          border: "1px solid #111",
+          borderRadius: 4,
+          textDecoration: "none",
+        }}
+      >
+        {t("eventDetail.viewPaymentsLink")}
+      </a>
+
+
 
       {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
 
@@ -540,6 +659,49 @@ export default function EventDetailPage({
                 </ul>
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
+        <button
+          type="button"
+          onClick={handleExportNow}
+          disabled={exporting || !event.driveExportFolderId}
+          style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
+        >
+          {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
+        </button>
+
+        {!event.driveExportFolderId && (
+          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
+            {t("driveSettings.exportNoFolderSet")}
+          </p>
+        )}
+
+        {exportError && (
+          <p style={{ color: "red", marginTop: "0.5rem" }}>
+            {t(`driveSettings.error.${exportError}`) || t("driveSettings.error.exportGeneric")}
+          </p>
+        )}
+
+        {exportResult && (
+          <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
+            <p>
+              {t("driveSettings.exportResultSummary", {
+                total: String(exportResult.totalApproved),
+                new: String(exportResult.newlyExported),
+                already: String(exportResult.alreadyExported),
+              })}
+            </p>
+            <a
+              href={`https://docs.google.com/spreadsheets/d/${exportResult.manifestSpreadsheetId}/edit`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#0645AD", textDecoration: "underline" }}
+            >
+              {t("driveSettings.exportOpenManifest")}
+            </a>
           </div>
         )}
       </div>

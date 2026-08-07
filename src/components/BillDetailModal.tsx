@@ -30,6 +30,8 @@ type BillDetail = {
   amountCzk: string | null;
   exchangeRateUsed: string | null;
   exchangeRateDate: string | null;
+  paidToAuthor: boolean;
+  paidAt: string | null;
   categories: BillCategoryRow[];
 };
 
@@ -196,9 +198,7 @@ export default function BillDetailModal({
       setSaving(false);
       return false;
     }
-
-    setSaving(false);
-    onSaved();
+setSaving(false);
     return true;
   }
 
@@ -206,6 +206,7 @@ export default function BillDetailModal({
     const ok = await handleSave();
     if (ok) {
       setMessage(t("billModal.saved"));
+      onSaved();
       load();
     }
   }
@@ -213,6 +214,7 @@ export default function BillDetailModal({
   async function handleSaveAndNext() {
     const ok = await handleSave();
     if (!ok) return;
+    onSaved();
     if (hasNext) {
       onNavigate("next");
     } else {
@@ -255,7 +257,7 @@ export default function BillDetailModal({
     }
   }
 
-  async function handleReopen() {
+ async function handleReopen() {
     setSaving(true);
     setError(null);
     const res = await fetch(`/api/bills/${billId}/approve`, { method: "DELETE" });
@@ -267,6 +269,29 @@ export default function BillDetailModal({
       setError(t("billModal.error.reopenFailed"));
     }
   }
+
+  async function handleTogglePaid() {
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    const method = bill?.paidToAuthor ? "DELETE" : "POST";
+    const res = await fetch(`/api/bills/${billId}/paid`, { method });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      const knownCodes = ["event_closed_locked", "no_payer", "not_approved"];
+      if (typeof data.error === "string" && knownCodes.includes(data.error)) {
+        setError(t(`billModal.error.${data.error}`));
+      } else {
+        setError(t(bill?.paidToAuthor ? "billModal.error.unmarkPaidFailed" : "paymentsPage.markPaidFailed"));
+      }
+return;
+    }
+    onSaved();
+    load();
+  }
+
+  
 
   const inputStyle: React.CSSProperties = {
     width: "100%",
@@ -479,6 +504,33 @@ export default function BillDetailModal({
                       ))}
                   </select>
                 </div>
+
+                {bill.payerAuthorId && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                    <span style={{ fontSize: "0.85rem", color: bill.paidToAuthor ? "#080" : "#a60" }}>
+                      {bill.paidToAuthor
+                        ? t("billModal.paidStatusPaid", {
+                            date: bill.paidAt ? new Date(bill.paidAt).toLocaleDateString("cs-CZ") : "",
+                          })
+                        : t("billModal.paidStatusUnpaid")}
+                    </span>
+                    <button
+                      onClick={handleTogglePaid}
+                      disabled={saving}
+                      style={{
+                        padding: "0.3rem 0.7rem",
+                        background: bill.paidToAuthor ? "#fff" : "#111",
+                        color: bill.paidToAuthor ? "#c00" : "#fff",
+                        border: bill.paidToAuthor ? "1px solid #c00" : "none",
+                        borderRadius: 4,
+                        cursor: "pointer",
+                        fontSize: "0.8rem",
+                      }}
+                    >
+                      {bill.paidToAuthor ? t("billModal.unmarkPaidButton") : t("paymentsPage.markPaidButton")}
+                    </button>
+                  </div>
+                )}
 
                 <div>
                   <label style={labelStyle}>{t("billModal.notes")}</label>

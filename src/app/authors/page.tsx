@@ -9,6 +9,7 @@ type Author = {
   bankAccountNumber: string | null;
   bankCode: string | null;
   active: boolean;
+  mergedInto?: { canonicalName: string } | null;
 };
 
 type EventItem = { id: string; name: string };
@@ -29,6 +30,10 @@ export default function AuthorsPage() {
   const [editName, setEditName] = useState("");
   const [editBankAccountNumber, setEditBankAccountNumber] = useState("");
   const [editBankCode, setEditBankCode] = useState("");
+
+  const [mergingAuthorId, setMergingAuthorId] = useState<string | null>(null);
+  const [mergeTargetId, setMergeTargetId] = useState("");
+  const [mergeSaving, setMergeSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -125,6 +130,7 @@ export default function AuthorsPage() {
   function startEditAuthor(a: Author) {
     setError(null);
     setExpandedId(null);
+    setMergingAuthorId(null);
     setEditingAuthorId(a.id);
     setEditName(a.canonicalName);
     setEditBankAccountNumber(a.bankAccountNumber ?? "");
@@ -156,6 +162,51 @@ export default function AuthorsPage() {
     }
 
     setEditingAuthorId(null);
+    load();
+  }
+
+  function startMerge(a: Author) {
+    setError(null);
+    setEditingAuthorId(null);
+    setExpandedId(null);
+    setMergingAuthorId(a.id);
+    setMergeTargetId("");
+  }
+
+  function cancelMerge() {
+    setMergingAuthorId(null);
+    setMergeTargetId("");
+  }
+
+  async function confirmMerge(source: Author) {
+    if (!mergeTargetId) return;
+    const target = authors.find((a) => a.id === mergeTargetId);
+    if (!target) return;
+    if (
+      !window.confirm(
+        t("authors.mergeConfirmDialog", { source: source.canonicalName, target: target.canonicalName })
+      )
+    )
+      return;
+
+    setMergeSaving(true);
+    setError(null);
+    const res = await fetch(`/api/authors/${source.id}/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetAuthorId: mergeTargetId }),
+    });
+    setMergeSaving(false);
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const code = typeof data.error === "string" ? data.error : null;
+      setError(code ? t(`authors.error.${code}`) : t("authors.errorMergeFailed"));
+      return;
+    }
+
+    setMergingAuthorId(null);
+    setMergeTargetId("");
     load();
   }
 
@@ -257,9 +308,53 @@ export default function AuthorsPage() {
                       </button>
                     </td>
                   </tr>
+                ) : mergingAuthorId === a.id ? (
+                  <tr style={{ borderBottom: "1px solid #eee", background: "#fafafa" }}>
+                    <td colSpan={4} style={{ padding: "0.5rem" }}>
+                      <div style={{ fontSize: "0.85rem", marginBottom: "0.4rem" }}>
+                        {t("authors.mergeButton")}: <strong>{a.canonicalName}</strong>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                        <select
+                          value={mergeTargetId}
+                          onChange={(e) => setMergeTargetId(e.target.value)}
+                          style={{ padding: "0.35rem", border: "1px solid #ccc", borderRadius: 4 }}
+                        >
+                          <option value="">{t("authors.mergeTargetPlaceholder")}</option>
+                          {authors
+                            .filter((other) => other.id !== a.id && other.active)
+                            .map((other) => (
+                              <option key={other.id} value={other.id}>
+                                {other.canonicalName}
+                              </option>
+                            ))}
+                        </select>
+                        <button
+                          onClick={() => confirmMerge(a)}
+                          disabled={!mergeTargetId || mergeSaving}
+                          style={{ padding: "0.35rem 0.75rem", background: "#c00", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+                        >
+                          {t("authors.mergeConfirmButton")}
+                        </button>
+                        <button
+                          onClick={cancelMerge}
+                          style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          {t("common.cancel")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 ) : (
                   <tr style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem" }}>{a.canonicalName}</td>
+                    <td style={{ padding: "0.5rem" }}>
+                      {a.canonicalName}
+                      {!a.active && a.mergedInto && (
+                        <div style={{ fontSize: "0.75rem", color: "#888" }}>
+                          {t("authors.mergedBadge", { name: a.mergedInto.canonicalName })}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "0.5rem" }}>
                       {a.bankAccountNumber
                         ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
@@ -286,6 +381,14 @@ export default function AuthorsPage() {
                       >
                         {t("common.edit")}
                       </button>
+                      {a.active && (
+                        <button
+                          onClick={() => startMerge(a)}
+                          style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+                        >
+                          {t("authors.mergeButton")}
+                        </button>
+                      )}
                       <button
                         onClick={() => toggleExpand(a.id)}
                         style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}

@@ -87,7 +87,10 @@ export async function PATCH(
   if (body.payerAuthorId !== undefined) data.payerAuthorId = body.payerAuthorId || null;
   if (body.notes !== undefined) data.notes = body.notes || null;
 
-  if (data.payerAuthorId !== undefined) {
+if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAuthorId) {
+    // Payer is actually changing (including being cleared) — any prior "paid"
+    // mark referred to the old payer and no longer applies. Auto-true when
+    // the new payer is null (paid directly by the event, nothing to reimburse).
     data.paidToAuthor = data.payerAuthorId === null;
   }
 
