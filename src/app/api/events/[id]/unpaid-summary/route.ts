@@ -24,7 +24,18 @@ export async function GET(
     include: { payerAuthor: true },
   });
 
-const byAuthor = new Map<string, { authorId: string; name: string; bankAccountNumber: string | null; bankCode: string | null; total: Prisma.Decimal; count: number }>();
+  const byAuthor = new Map<
+    string,
+    {
+      authorId: string;
+      name: string;
+      bankAccountNumber: string | null;
+      bankCode: string | null;
+      total: Prisma.Decimal;
+      count: number;
+      items: { merchantName: string | null; amountCzk: string | null }[];
+    }
+  >();
 
   for (const bill of bills) {
     if (!bill.payerAuthorId || !bill.payerAuthor) continue;
@@ -35,11 +46,16 @@ const byAuthor = new Map<string, { authorId: string; name: string; bankAccountNu
       bankCode: bill.payerAuthor.bankCode,
       total: new Prisma.Decimal(0),
       count: 0,
+      items: [],
     };
     if (bill.amountCzk !== null) {
       entry.total = entry.total.plus(bill.amountCzk);
     }
     entry.count += 1;
+    entry.items.push({
+      merchantName: bill.merchantName,
+      amountCzk: bill.amountCzk !== null ? bill.amountCzk.toString() : null,
+    });
     byAuthor.set(bill.payerAuthorId, entry);
   }
 
@@ -51,6 +67,7 @@ const byAuthor = new Map<string, { authorId: string; name: string; bankAccountNu
       bankCode: e.bankCode,
       unpaidTotalCzk: e.total.toString(),
       unpaidBillCount: e.count,
+      items: e.items,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 

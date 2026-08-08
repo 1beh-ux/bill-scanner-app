@@ -3,7 +3,7 @@
 import { useEffect, useState, use, useCallback } from "react";
 import QRCode from "qrcode";
 import { useTranslations } from "@/lib/i18n";
-import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
+import { czechAccountToIban, buildSpaydString, buildItemizedMessage } from "@/lib/qr-platba";
 
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
 
@@ -14,6 +14,7 @@ type UnpaidRow = {
   bankCode: string | null;
   unpaidTotalCzk: string;
   unpaidBillCount: number;
+  items: { merchantName: string | null; amountCzk: string | null }[];
 };
 
 export default function EventPaymentsPage({
@@ -72,10 +73,17 @@ export default function EventPaymentsPage({
         newIbans[row.authorId] = iban;
         if (!iban) continue;
 
-        const amount = parseFloat(row.unpaidTotalCzk || "0");
+const amount = parseFloat(row.unpaidTotalCzk || "0");
         if (amount <= 0) continue;
 
-        const spayd = buildSpaydString(iban, amount, `${row.name} ${event?.name ?? ""}`);
+        const itemized = buildItemizedMessage(
+          row.items
+            .filter((it) => it.amountCzk !== null)
+            .map((it) => ({ label: it.merchantName || "Uctenka", amountCzk: parseFloat(it.amountCzk!) })),
+          55
+        );
+        const message = itemized || `${row.name} ${event?.name ?? ""}`;
+        const spayd = buildSpaydString(iban, amount, message);
         try {
           newUrls[row.authorId] = await QRCode.toDataURL(spayd, { margin: 1, width: 180 });
         } catch {

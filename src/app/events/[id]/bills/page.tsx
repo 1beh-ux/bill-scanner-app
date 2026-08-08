@@ -2,11 +2,8 @@
 
 import { useEffect, useState, use, useRef, useMemo } from "react";
 import { useTranslations } from "@/lib/i18n";
-import BillDetailModal from "@/components/BillDetailModal";
 
 type EventDetail = { id: string; name: string };
-type EventCategory = { id: string; name: string };
-type Author = { id: string; canonicalName: string; active: boolean };
 
 type BillItem = {
   id: string;
@@ -19,6 +16,8 @@ type BillItem = {
   currency: string;
   billDate: string | null;
   createdAt: string;
+  payerAuthor: { canonicalName: string } | null;
+  categories: { eventCategory: { name: string } }[];
 };
 
 type DuplicateDetail = { filename: string; existingFilename: string; existingCreatedAt: string };
@@ -54,9 +53,6 @@ export default function EventBillsPage({
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [bills, setBills] = useState<BillItem[]>([]);
-  const [eventCategories, setEventCategories] = useState<EventCategory[]>([]);
-  const [authors, setAuthors] = useState<Author[]>([]);
-  const [openBillId, setOpenBillId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,16 +82,12 @@ export default function EventBillsPage({
 
   async function load() {
     setLoading(true);
-    const [evRes, billsRes, catRes, authRes] = await Promise.all([
+    const [evRes, billsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/bills`),
-      fetch(`/api/events/${id}/categories`),
-      fetch(`/api/authors`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (billsRes.ok) setBills(await billsRes.json());
-    if (catRes.ok) setEventCategories(await catRes.json());
-    if (authRes.ok) setAuthors(await authRes.json());
     setLoading(false);
   }
 
@@ -165,15 +157,8 @@ export default function EventBillsPage({
     (b) => b.totalAmount !== null && b.amountCzk === null
   ).length;
 
-  const openIndex = openBillId
-    ? filteredBills.findIndex((b) => b.id === openBillId)
-    : -1;
-
-  function navigate(direction: "prev" | "next") {
-    const t2 = direction === "next" ? openIndex + 1 : openIndex - 1;
-    if (t2 >= 0 && t2 < filteredBills.length) {
-      setOpenBillId(filteredBills[t2].id);
-    }
+  function billHref(billId: string) {
+    return `/events/${id}/bills/${billId}${statusFilter ? `?status=${statusFilter}` : ""}`;
   }
 
   function toggleSelect(billId: string) {
@@ -455,8 +440,10 @@ export default function EventBillsPage({
               <th style={{ padding: "0.5rem" }}>{t("eventDetail.colFilename")}</th>
               <th style={{ padding: "0.5rem" }}>{t("common.status")}</th>
               <th style={{ padding: "0.5rem" }}>{t("billsPage.colMerchant")}</th>
+              <th style={{ padding: "0.5rem" }}>{t("billModal.payer")}</th>
+              <th style={{ padding: "0.5rem" }}>{t("eventDetail.colCategory")}</th>
               <th style={{ padding: "0.5rem" }}>{t("billsPage.colAmount")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("eventDetail.colCreated")}</th>
+              <th style={{ padding: "0.5rem" }}>{t("billModal.date")}</th>
             </tr>
           </thead>
           <tbody>
@@ -469,14 +456,19 @@ export default function EventBillsPage({
                     onChange={() => toggleSelect(b.id)}
                   />
                 </td>
-                <td
-                  onClick={() => setOpenBillId(b.id)}
-                  style={{ padding: "0.5rem", color: "#0645AD", cursor: "pointer" }}
-                >
-                  {b.originalFilename}
+                <td style={{ padding: "0.5rem" }}>
+                  <a href={billHref(b.id)} style={{ color: "#0645AD", cursor: "pointer" }}>
+                    {b.originalFilename}
+                  </a>
                 </td>
                 <td style={{ padding: "0.5rem" }}>{statusLabels[b.status] || b.status}</td>
                 <td style={{ padding: "0.5rem" }}>{b.merchantName || "—"}</td>
+                <td style={{ padding: "0.5rem" }}>{b.payerAuthor?.canonicalName ?? "Akce"}</td>
+                <td style={{ padding: "0.5rem" }}>
+                  {b.categories.length > 0
+                    ? b.categories.map((c) => c.eventCategory.name).join(", ")
+                    : "—"}
+                </td>
                 <td style={{ padding: "0.5rem" }}>
                   {b.totalAmount === null ? (
                     "—"
@@ -494,14 +486,14 @@ export default function EventBillsPage({
                   )}
                 </td>
                 <td style={{ padding: "0.5rem" }}>
-                  {new Date(b.createdAt).toLocaleDateString("cs-CZ")}
+                  {b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} style={{ padding: "0.5rem", fontWeight: 600 }}>
+              <td colSpan={6} style={{ padding: "0.5rem", fontWeight: 600 }}>
                 {t("billsPage.colTotal")}
               </td>
               <td style={{ padding: "0.5rem", fontWeight: 600 }}>
@@ -516,19 +508,6 @@ export default function EventBillsPage({
             </tr>
           </tfoot>
         </table>
-      )}
-
-      {openBillId && (
-        <BillDetailModal
-          billId={openBillId}
-          eventCategories={eventCategories}
-          authors={authors}
-          onClose={() => setOpenBillId(null)}
-          onSaved={load}
-          onNavigate={navigate}
-          hasPrev={openIndex > 0}
-          hasNext={openIndex >= 0 && openIndex < filteredBills.length - 1}
-        />
       )}
     </div>
   );

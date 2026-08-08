@@ -1,0 +1,219 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
+import {
+  FileText,
+  BarChart3,
+  QrCode,
+  Settings,
+  Calendar,
+  Users,
+  Tags,
+  Landmark,
+  UserCog,
+  Menu,
+  X,
+  Sun,
+  Moon,
+  Receipt,
+} from "lucide-react";
+import { useTranslations } from "@/lib/i18n";
+
+type EventOption = { id: string; name: string; status: string };
+
+export default function AppSidebar() {
+  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme } =
+    useTranslations();
+  const pathname = usePathname();
+  const router = useRouter();
+  const [events, setEvents] = useState<EventOption[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/events")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setEvents)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const match = pathname.match(/^\/events\/([^/]+)/);
+    if (match && match[1] !== currentEventId) {
+      setCurrentEventId(match[1]);
+    }
+  }, [pathname, currentEventId, setCurrentEventId]);
+
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  if (pathname.startsWith("/login")) return null;
+
+  const eventId = currentEventId || events[0]?.id || null;
+
+  function onEventChange(id: string) {
+    setCurrentEventId(id);
+    router.push(`/events/${id}/bills`);
+  }
+
+  const eventNavItems = [
+    { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
+    { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
+    { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
+    { href: eventId ? `/events/${eventId}` : "/events", label: t("nav.eventSetup"), icon: Settings },
+  ];
+
+  const orgNavItems = [
+    { href: "/events", label: t("nav.events"), icon: Calendar },
+    { href: "/authors", label: t("nav.authors"), icon: Users },
+    { href: "/category-templates", label: t("nav.categoryTemplates"), icon: Tags },
+    { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
+    { href: "/users", label: t("nav.users"), icon: UserCog },
+  ];
+
+  function isActive(href: string) {
+    return pathname === href;
+  }
+
+  function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
+    const active = isActive(href);
+    return (
+      <a
+        href={href}
+        className={
+          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors " +
+          (active
+            ? "bg-ember/15 font-medium text-paper"
+            : "text-night-fg hover:bg-night-2 hover:text-paper")
+        }
+      >
+        <Icon size={16} className={active ? "text-ember" : "text-night-muted"} aria-hidden="true" />
+        {label}
+      </a>
+    );
+  }
+
+  const sidebarContent = (
+    <div className="flex h-full flex-col gap-1 px-3 py-4">
+      <div className="flex items-center gap-2 px-1 pb-4">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ember">
+          <Receipt size={16} className="text-night" aria-hidden="true" />
+        </div>
+        <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+      </div>
+
+      {events.length > 0 && (
+        <>
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.currentEvent")}
+          </div>
+          <select
+            value={eventId || ""}
+            onChange={(e) => onEventChange(e.target.value)}
+            className="mb-4 w-full rounded-lg border-0 bg-night-2 px-2.5 py-2 text-[13px] text-paper focus:outline-none focus:ring-1 focus:ring-ember"
+          >
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.name}
+                {ev.status === "closed" ? ` (${t("common.statusClosed")})` : ""}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <nav className="flex flex-col gap-0.5">
+        {eventNavItems.map((item) => (
+          <NavLink key={item.label} {...item} />
+        ))}
+      </nav>
+
+      <div className="my-3 h-px bg-night-border" />
+
+      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+        {t("nav.organization")}
+      </div>
+      <nav className="flex flex-col gap-0.5">
+        {orgNavItems.map((item) => (
+          <NavLink key={item.label} {...item} />
+        ))}
+      </nav>
+
+      <div className="flex-1" />
+
+      <div className="my-3 h-px bg-night-border" />
+
+      <div className="flex items-center justify-between px-1">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setLang("cs")}
+            className={
+              "rounded px-1.5 py-0.5 text-[11px] " +
+              (lang === "cs" ? "bg-night-2 text-paper" : "text-night-muted")
+            }
+          >
+            CS
+          </button>
+          <button
+            onClick={() => setLang("en")}
+            className={
+              "rounded px-1.5 py-0.5 text-[11px] " +
+              (lang === "en" ? "bg-night-2 text-paper" : "text-night-muted")
+            }
+          >
+            EN
+          </button>
+        </div>
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          aria-label={t("nav.toggleTheme")}
+          className="rounded p-1.5 text-night-muted hover:bg-night-2 hover:text-paper"
+        >
+          {theme === "dark" ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      <aside className="hidden w-56 shrink-0 border-r border-night-border bg-night md:flex">
+        {sidebarContent}
+      </aside>
+
+      <header className="flex items-center justify-between border-b border-night-border bg-night px-4 py-3 md:hidden">
+        <button onClick={() => setDrawerOpen(true)} aria-label={t("nav.openMenu")} className="text-paper">
+          <Menu size={20} aria-hidden="true" />
+        </button>
+        <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+        <button
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          aria-label={t("nav.toggleTheme")}
+          className="text-night-muted"
+        >
+          {theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+        </button>
+      </header>
+
+      {drawerOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-64 bg-night shadow-lg">
+            <div className="flex justify-end p-2">
+              <button
+                onClick={() => setDrawerOpen(false)}
+                aria-label={t("common.cancel")}
+                className="p-1.5 text-night-muted"
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            {sidebarContent}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}

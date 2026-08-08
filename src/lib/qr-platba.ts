@@ -57,11 +57,19 @@ export function czechAccountToIban(accountNumber: string, bankCode: string): str
   return isValidIban(iban) ? iban : null;
 }
 
+/**
+ * Sanitizes free text for the SPAYD MSG field. The only character the spec
+ * truly forbids inside a field value is '*' (it's the segment delimiter),
+ * so this keeps common readable punctuation and just strips diacritics
+ * (compatibility with some banking apps), '*' itself, and anything else
+ * unusual (e.g. newlines).
+ */
 function spaydSanitize(input: string, maxLength: number): string {
   return input
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9 ]/g, "")
+    .replace(/\*/g, "")
+    .replace(/[^a-zA-Z0-9 ,.:+/-]/g, "")
     .slice(0, maxLength);
 }
 
@@ -70,4 +78,38 @@ export function buildSpaydString(iban: string, amountCzk: number, message: strin
   const amount = amountCzk.toFixed(2);
   const msg = spaydSanitize(message, 60);
   return `SPD*1.0*ACC:${iban}*AM:${amount}*CC:CZK*MSG:${msg}`;
+}
+
+/**
+ * Fits as many "label amount" pairs as possible into a compact, comma-
+ * separated string within maxLength characters (before final SPAYD
+ * sanitization/truncation). If not everything fits, appends "+N" for the
+ * remaining count. Amounts are rounded to whole CZK to save space — this is
+ * a human-readable note, not a computation.
+ */
+export function buildItemizedMessage(
+  items: { label: string; amountCzk: number }[],
+  maxLength: number
+): string {
+  if (items.length === 0) return "";
+
+  const parts = items.map((it) => `${it.label} ${Math.round(it.amountCzk)}`);
+
+  let included = 0;
+  let current = "";
+  for (let i = 0; i < parts.length; i++) {
+    const candidate = current ? `${current}, ${parts[i]}` : parts[i];
+    // Reserve a little room for a possible trailing " +N" unless this is the last part.
+    const reserve = i < parts.length - 1 ? 4 : 0;
+    if (candidate.length + reserve > maxLength) break;
+    current = candidate;
+    included++;
+  }
+
+  const remaining = items.length - included;
+  if (remaining > 0) {
+    current = current ? `${current} +${remaining}` : `+${remaining}`;
+  }
+
+  return current;
 }

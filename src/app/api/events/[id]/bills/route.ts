@@ -17,6 +17,10 @@ export async function GET(
   const bills = await prisma.bill.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "desc" },
+    include: {
+      payerAuthor: { select: { canonicalName: true } },
+      categories: { include: { eventCategory: { select: { name: true } } } },
+    },
   });
 
   return NextResponse.json(bills);
