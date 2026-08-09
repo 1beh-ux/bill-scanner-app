@@ -14,6 +14,12 @@ type Author = {
 
 type EventItem = { id: string; name: string };
 
+const inputClass =
+  "rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const inputClassSm =
+  "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const linkBtn = "text-[13px] text-ember hover:underline";
+
 export default function AuthorsPage() {
   const { t } = useTranslations();
   const [authors, setAuthors] = useState<Author[]>([]);
@@ -211,233 +217,215 @@ export default function AuthorsPage() {
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "1rem" }}>{t("authors.title")}</h1>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("authors.title")}</h1>
 
-      <form onSubmit={handleCreate} style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem", flexWrap: "wrap" }}>
+      <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input
           type="text"
           placeholder={t("authors.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <input
           type="text"
           placeholder={t("authors.bankAccountPlaceholder")}
           value={bankAccountNumber}
           onChange={(e) => setBankAccountNumber(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <input
           type="text"
           placeholder={t("authors.bankCodePlaceholder")}
           value={bankCode}
           onChange={(e) => setBankCode(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4, width: 100 }}
+          className={inputClass + " w-24"}
         />
-        <button type="submit" style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4 }}>
+        <button
+          type="submit"
+          className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
+        >
           {t("authors.submit")}
         </button>
       </form>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {loading ? (
-        <p>{t("common.loading")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : authors.length === 0 ? (
-        <p>{t("authors.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("authors.empty")}</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: "0.5rem" }}>{t("common.name")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("authors.colAccount")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("common.status")}</th>
-              <th style={{ padding: "0.5rem" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {authors.map((a) => (
-              <Fragment key={a.id}>
-                {editingAuthorId === a.id ? (
-                  <tr style={{ borderBottom: "1px solid #eee", background: "#fafafa" }}>
-                    <td style={{ padding: "0.5rem" }}>
-                      <input
-                        type="text"
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder={t("authors.namePlaceholder")}
-                        style={{ width: "100%", padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
-                        autoFocus
-                      />
-                    </td>
-                    <td style={{ padding: "0.5rem" }}>
-                      <div style={{ display: "flex", gap: "0.25rem" }}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse">
+            <thead>
+              <tr className="border-b border-mist text-left">
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("authors.colAccount")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
+                <th className="p-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {authors.map((a) => (
+                <Fragment key={a.id}>
+                  {editingAuthorId === a.id ? (
+                    <tr className="border-b border-mist/60 bg-paper-2">
+                      <td className="p-2">
                         <input
                           type="text"
-                          value={editBankAccountNumber}
-                          onChange={(e) => setEditBankAccountNumber(e.target.value)}
-                          placeholder={t("authors.bankAccountPlaceholder")}
-                          style={{ flex: 1, padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          placeholder={t("authors.namePlaceholder")}
+                          className={inputClassSm + " w-full"}
+                          autoFocus
                         />
-                        <input
-                          type="text"
-                          value={editBankCode}
-                          onChange={(e) => setEditBankCode(e.target.value)}
-                          placeholder={t("authors.bankCodePlaceholder")}
-                          style={{ width: 70, padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
-                        />
-                      </div>
-                    </td>
-                    <td style={{ padding: "0.5rem" }}>
-                      {a.active ? t("common.statusActive") : t("authors.statusInactive")}
-                    </td>
-                    <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                      <button
-                        onClick={() => saveAuthorEdit(a.id)}
-                        style={{ marginRight: "0.5rem", color: "#080", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        {t("common.save")}
-                      </button>
-                      <button
-                        onClick={cancelEditAuthor}
-                        style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        {t("common.cancel")}
-                      </button>
-                    </td>
-                  </tr>
-                ) : mergingAuthorId === a.id ? (
-                  <tr style={{ borderBottom: "1px solid #eee", background: "#fafafa" }}>
-                    <td colSpan={4} style={{ padding: "0.5rem" }}>
-                      <div style={{ fontSize: "0.85rem", marginBottom: "0.4rem" }}>
-                        {t("authors.mergeButton")}: <strong>{a.canonicalName}</strong>
-                      </div>
-                      <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-                        <select
-                          value={mergeTargetId}
-                          onChange={(e) => setMergeTargetId(e.target.value)}
-                          style={{ padding: "0.35rem", border: "1px solid #ccc", borderRadius: 4 }}
-                        >
-                          <option value="">{t("authors.mergeTargetPlaceholder")}</option>
-                          {authors
-                            .filter((other) => other.id !== a.id && other.active)
-                            .map((other) => (
-                              <option key={other.id} value={other.id}>
-                                {other.canonicalName}
-                              </option>
-                            ))}
-                        </select>
-                        <button
-                          onClick={() => confirmMerge(a)}
-                          disabled={!mergeTargetId || mergeSaving}
-                          style={{ padding: "0.35rem 0.75rem", background: "#c00", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-                        >
-                          {t("authors.mergeConfirmButton")}
+                      </td>
+                      <td className="p-2">
+                        <div className="flex gap-1">
+                          <input
+                            type="text"
+                            value={editBankAccountNumber}
+                            onChange={(e) => setEditBankAccountNumber(e.target.value)}
+                            placeholder={t("authors.bankAccountPlaceholder")}
+                            className={inputClassSm + " flex-1"}
+                          />
+                          <input
+                            type="text"
+                            value={editBankCode}
+                            onChange={(e) => setEditBankCode(e.target.value)}
+                            placeholder={t("authors.bankCodePlaceholder")}
+                            className={inputClassSm + " w-16"}
+                          />
+                        </div>
+                      </td>
+                      <td className="p-2 text-[14px] text-ink-secondary">
+                        {a.active ? t("common.statusActive") : t("authors.statusInactive")}
+                      </td>
+                      <td className="whitespace-nowrap p-2">
+                        <button onClick={() => saveAuthorEdit(a.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                          {t("common.save")}
                         </button>
-                        <button
-                          onClick={cancelMerge}
-                          style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
-                        >
+                        <button onClick={cancelEditAuthor} className="text-[13px] text-ink-secondary hover:underline">
                           {t("common.cancel")}
                         </button>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  <tr style={{ borderBottom: "1px solid #eee" }}>
-                    <td style={{ padding: "0.5rem" }}>
-                      {a.canonicalName}
-                      {!a.active && a.mergedInto && (
-                        <div style={{ fontSize: "0.75rem", color: "#888" }}>
-                          {t("authors.mergedBadge", { name: a.mergedInto.canonicalName })}
+                      </td>
+                    </tr>
+                  ) : mergingAuthorId === a.id ? (
+                    <tr className="border-b border-mist/60 bg-paper-2">
+                      <td colSpan={4} className="p-2">
+                        <div className="mb-1.5 text-[13px] text-ink">
+                          {t("authors.mergeButton")}: <strong>{a.canonicalName}</strong>
                         </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "0.5rem" }}>
-                      {a.bankAccountNumber
-                        ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
-                        : "—"}
-                    </td>
-                    <td style={{ padding: "0.5rem" }}>
-                      <button
-                        onClick={() => toggleActive(a)}
-                        style={{
-                          color: a.active ? "#080" : "#999",
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          textDecoration: "underline",
-                        }}
-                      >
-                        {a.active ? t("common.statusActive") : t("authors.statusInactive")}
-                      </button>
-                    </td>
-                    <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                      <button
-                        onClick={() => startEditAuthor(a)}
-                        style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        {t("common.edit")}
-                      </button>
-                      {a.active && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <select
+                            value={mergeTargetId}
+                            onChange={(e) => setMergeTargetId(e.target.value)}
+                            className={inputClassSm}
+                          >
+                            <option value="">{t("authors.mergeTargetPlaceholder")}</option>
+                            {authors
+                              .filter((other) => other.id !== a.id && other.active)
+                              .map((other) => (
+                                <option key={other.id} value={other.id}>
+                                  {other.canonicalName}
+                                </option>
+                              ))}
+                          </select>
+                          <button
+                            onClick={() => confirmMerge(a)}
+                            disabled={!mergeTargetId || mergeSaving}
+                            className="rounded-lg bg-red-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                          >
+                            {t("authors.mergeConfirmButton")}
+                          </button>
+                          <button onClick={cancelMerge} className="text-[13px] text-ink-secondary hover:underline">
+                            {t("common.cancel")}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr className="border-b border-mist/60">
+                      <td className="p-2 text-[14px] text-ink">
+                        {a.canonicalName}
+                        {!a.active && a.mergedInto && (
+                          <div className="text-[12px] text-ink-secondary">
+                            {t("authors.mergedBadge", { name: a.mergedInto.canonicalName })}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-2 text-[14px] text-ink-secondary">
+                        {a.bankAccountNumber
+                          ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
+                          : "—"}
+                      </td>
+                      <td className="p-2">
                         <button
-                          onClick={() => startMerge(a)}
-                          style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
+                          onClick={() => toggleActive(a)}
+                          className={
+                            "whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] " +
+                            (a.active ? "bg-pine-bg text-pine" : "bg-mist text-ink-secondary")
+                          }
                         >
-                          {t("authors.mergeButton")}
+                          {a.active ? t("common.statusActive") : t("authors.statusInactive")}
                         </button>
-                      )}
-                      <button
-                        onClick={() => toggleExpand(a.id)}
-                        style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
-                      </button>
-                      <button
-                        onClick={() => handleDelete(a.id, a.canonicalName)}
-                        style={{ color: "#c00", background: "none", border: "none", cursor: "pointer" }}
-                      >
-                        {t("common.delete")}
-                      </button>
-                    </td>
-                  </tr>
-                )}
-                {expandedId === a.id && (
-                  <tr>
-                    <td colSpan={4} style={{ padding: "0.75rem", background: "#fafafa" }}>
-                      <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-                        {t("authors.eventAccessShow")}
-                      </div>
-                      {allEvents.length === 0 ? (
-                        <p style={{ fontSize: "0.85rem", color: "#666" }}>{t("authors.eventAccessEmpty")}</p>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                          {allEvents.map((ev) => {
-                            const hasAccess = authorEvents.some((ae) => ae.id === ev.id);
-                            return (
-                              <label key={ev.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem" }}>
-                                <input
-                                  type="checkbox"
-                                  checked={hasAccess}
-                                  onChange={() =>
-                                    hasAccess ? revokeAccess(a.id, ev.id) : grantAccess(a.id, ev.id)
-                                  }
-                                />
-                                {ev.name}
-                              </label>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
-            ))}
-          </tbody>
-        </table>
+                      </td>
+                      <td className="whitespace-nowrap p-2">
+                        <button onClick={() => startEditAuthor(a)} className={linkBtn + " mr-3"}>
+                          {t("common.edit")}
+                        </button>
+                        {a.active && (
+                          <button onClick={() => startMerge(a)} className={linkBtn + " mr-3"}>
+                            {t("authors.mergeButton")}
+                          </button>
+                        )}
+                        <button onClick={() => toggleExpand(a.id)} className={linkBtn + " mr-3"}>
+                          {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(a.id, a.canonicalName)}
+                          className="text-[13px] text-red-600 hover:underline"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </td>
+                    </tr>
+                  )}
+                  {expandedId === a.id && (
+                    <tr>
+                      <td colSpan={4} className="bg-paper-2 p-3">
+                        <div className="mb-2 text-[13px] font-medium text-ink">{t("authors.eventAccessShow")}</div>
+                        {allEvents.length === 0 ? (
+                          <p className="text-[13px] text-ink-secondary">{t("authors.eventAccessEmpty")}</p>
+                        ) : (
+                          <div className="flex flex-col gap-1">
+                            {allEvents.map((ev) => {
+                              const hasAccess = authorEvents.some((ae) => ae.id === ev.id);
+                              return (
+                                <label key={ev.id} className="flex items-center gap-2 text-[14px] text-ink">
+                                  <input
+                                    type="checkbox"
+                                    checked={hasAccess}
+                                    onChange={() =>
+                                      hasAccess ? revokeAccess(a.id, ev.id) : grantAccess(a.id, ev.id)
+                                    }
+                                  />
+                                  {ev.name}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import path from "path";
+import { PDFDocument } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
 import { billsBucket } from "@/lib/gcs";
 import {
@@ -20,6 +21,7 @@ export interface ExportSummary {
   totalApproved: number;
   newlyExported: number;
   alreadyExported: number;
+  exportFailures: { filename: string; error: string }[];
   manifestSpreadsheetId: string;
 }
 
@@ -39,6 +41,26 @@ function mimeTypeForExtension(ext: string): string {
     default:
       return "application/octet-stream";
   }
+}
+
+/**
+ * Wraps a raster image into a single-page PDF, so every export is a PDF
+ * regardless of what format the bill is stored in internally. Only PNG/JPEG
+ * are handled — everything this app actually produces — a HEIC or WEBP
+ * bill would fail here and surface as a reported export failure rather
+ * than silently break or crash the whole run.
+ */
+async function convertImageToPdfBytes(imageBuffer: Buffer, isPng: boolean): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.create();
+  const embeddedImage = isPng
+    ? await pdfDoc.embedPng(imageBuffer)
+    : await pdfDoc.embedJpg(imageBuffer);
+
+  const { width, height } = embeddedImage;
+  const page = pdfDoc.addPage([width, height]);
+  page.drawImage(embeddedImage, { x: 0, y: 0, width, height });
+
+  return Buffer.from(await pdfDoc.save());
 }
 
 function proplacenoLabel(payerAuthorId: string | null, paidToAuthor: boolean): string {
@@ -73,12 +95,14 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
     bills.filter((b) => b.exportFilename).map((b) => b.exportFilename as string)
   );
 
-  function resolveExportFilename(displayFilename: string, originalFilename: string): string {
-    const ext = path.extname(originalFilename);
-    let candidate = `${displayFilename}${ext}`;
+  // Every export is a PDF now, regardless of the source format — images
+  // get wrapped into a single-page PDF below, so the extension is always
+  // .pdf, not whatever the source file happened to be.
+  function resolveExportFilename(displayFilename: string): string {
+    let candidate = `${displayFilename}.pdf`;
     let suffix = 2;
     while (usedNames.has(candidate)) {
-      candidate = `${displayFilename}_${suffix}${ext}`;
+      candidate = `${displayFilename}_${suffix}.pdf`;
       suffix++;
     }
     usedNames.add(candidate);
@@ -87,6 +111,7 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
 
   let newlyExported = 0;
   let alreadyExported = 0;
+  const exportFailures: { filename: string; error: string }[] = [];
 
   for (const bill of bills) {
     if (bill.exportFilename && bill.exportedAt) {
@@ -96,18 +121,29 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
 
     // displayFilename is guaranteed set here — only approved bills reach this
     // query, and approval is what sets displayFilename in the first place.
-    const exportFilename = resolveExportFilename(bill.displayFilename as string, bill.originalFilename);
-    const [buffer] = await billsBucket.file(bill.gcsObjectPath).download();
-    const mimeType = mimeTypeForExtension(path.extname(exportFilename));
+    const exportFilename = resolveExportFilename(bill.displayFilename as string);
 
-    await uploadFileToFolder(event.driveExportFolderId, exportFilename, buffer, mimeType);
+    try {
+      const [buffer] = await billsBucket.file(bill.gcsObjectPath).download();
+      const sourceExt = path.extname(bill.originalFilename).toLowerCase();
+      const uploadBuffer =
+        sourceExt === ".pdf" ? buffer : await convertImageToPdfBytes(buffer, sourceExt === ".png");
 
-    await prisma.bill.update({
-      where: { id: bill.id },
-      data: { exportFilename, exportedAt: new Date() },
-    });
+      await uploadFileToFolder(event.driveExportFolderId, exportFilename, uploadBuffer, "application/pdf");
 
-    newlyExported++;
+      await prisma.bill.update({
+        where: { id: bill.id },
+        data: { exportFilename, exportedAt: new Date() },
+      });
+
+      newlyExported++;
+    } catch (err) {
+      // One bill's upload exhausting all retries no longer aborts export
+      // for every other bill — it's reported and the rest continue. This
+      // bill's exportFilename stays unset, so a future export run will
+      // simply try it again from scratch.
+      exportFailures.push({ filename: bill.originalFilename, error: String(err) });
+    }
   }
 
   // Manifest reflects the full current set of approved bills every run, not
@@ -180,5 +216,5 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
     throw new Error("Failed to resolve a manifest spreadsheet id");
   }
 
-  return { totalApproved: bills.length, newlyExported, alreadyExported, manifestSpreadsheetId };
+  return { totalApproved: bills.length, newlyExported, alreadyExported, exportFailures, manifestSpreadsheetId };
 }

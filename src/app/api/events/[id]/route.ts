@@ -52,15 +52,22 @@ export async function DELETE(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
+
+  // Checked explicitly, not just inferred from a caught constraint error —
+  // this is almost always the actual reason deletion is blocked in
+  // practice, and it deserves a specific, accurate message with a real
+  // count, not a generic "some dependency exists" message.
+  const billCount = await prisma.bill.count({ where: { eventId: id } });
+  if (billCount > 0) {
+    return NextResponse.json({ error: "event_has_bills", billCount }, { status: 409 });
+  }
+
   try {
     await prisma.event.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2003") {
-      return NextResponse.json(
-        { error: "Nelze smazat akci s existujícími kategoriemi nebo přístupy." },
-        { status: 409 }
-      );
+      return NextResponse.json({ error: "event_has_dependencies" }, { status: 409 });
     }
     throw err;
   }

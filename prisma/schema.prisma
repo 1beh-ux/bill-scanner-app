@@ -169,6 +169,7 @@ model Bill {
   exchangeRateUsed  Decimal?      @map("exchange_rate_used") @db.Decimal(12, 6)
   exchangeRateDate  DateTime?     @map("exchange_rate_date") @db.Date
   payerAuthorId     String?       @map("payer_author_id")
+  pendingCategoryId String?  @map("pending_category_id")
   paidToAuthor      Boolean       @default(false) @map("paid_to_author")
   paidAt            DateTime?     @map("paid_at")
   paidByUserId      String?       @map("paid_by_user_id")
@@ -233,4 +234,14 @@ model ExchangeRate {
 
   @@unique([currency, rateDate])
   @@map("exchange_rates")
+}
+
+model MerchantAlias {
+  id            String   @id @default(uuid())
+  rawText       String   @unique @map("raw_text")
+  canonicalName String   @map("canonical_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("merchant_aliases")
 }

@@ -22,30 +22,17 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type FolderCheckResult = {
-  accessible: boolean;
-  name?: string;
-  errorCode?: string;
-};
-
-type ImportSummary = {
-  authorsResolved: { subfolderName: string; authorId: string; authorName: string; created: boolean }[];
-  skippedAlreadyImported: number;
-  skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
-  ingest: {
-    created: unknown[];
-    duplicates: { filename: string; existingFilename: string; existingCreatedAt: string }[];
-    splitInfo: { originalFilename: string; pageCount: number }[];
-    failures: { filename: string; error: string }[];
-  };
-};
-
 type ExportSummary = {
   totalApproved: number;
   newlyExported: number;
   alreadyExported: number;
   manifestSpreadsheetId: string;
 };
+
+const inputClass =
+  "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const btnPrimary =
+  "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
 export default function EventDetailPage({
   params,
@@ -69,15 +56,6 @@ export default function EventDetailPage({
   const [exportFolderId, setExportFolderId] = useState("");
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSaving, setDriveSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [testResults, setTestResults] = useState<{
-    ingest?: FolderCheckResult;
-    export?: FolderCheckResult;
-  } | null>(null);
-
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  const [importResult, setImportResult] = useState<ImportSummary | null>(null);
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -182,42 +160,6 @@ export default function EventDetailPage({
       setDriveError(t("driveSettings.errorSaveFailed"));
       return;
     }
-    setTestResults(null);
-    load();
-  }
-
-  async function handleTestConnection() {
-    setDriveError(null);
-    setTesting(true);
-    setTestResults(null);
-    const res = await fetch(`/api/events/${id}/drive-test`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ingestFolderId: ingestFolderId.trim() || null,
-        exportFolderId: exportFolderId.trim() || null,
-      }),
-    });
-    setTesting(false);
-    if (!res.ok) {
-      setDriveError(t("driveSettings.errorSaveFailed"));
-      return;
-    }
-    setTestResults(await res.json());
-  }
-
-  async function handleImportNow() {
-    setImportError(null);
-    setImportResult(null);
-    setImporting(true);
-    const res = await fetch(`/api/events/${id}/drive-import`, { method: "POST" });
-    setImporting(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setImportError(data.error || "generic");
-      return;
-    }
-    setImportResult(await res.json());
     load();
   }
 
@@ -263,20 +205,20 @@ export default function EventDetailPage({
     load();
   }
 
-  if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
-  if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
+  if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+  if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
   const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim());
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <a href="/events" style={{ color: "#666", textDecoration: "none", fontSize: "0.9rem" }}>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <a href="/events" className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("eventDetail.back")}
       </a>
 
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0.5rem 0" }}>{event.name}</h1>
-      <p style={{ color: "#666", marginBottom: "0.25rem" }}>
+      <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">{event.name}</h1>
+      <p className="mb-3 text-[14px] text-ink-secondary">
         {new Date(event.startDate).toLocaleDateString("cs-CZ")} –{" "}
         {new Date(event.endDate).toLocaleDateString("cs-CZ")} ·{" "}
         {event.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
@@ -285,12 +227,12 @@ export default function EventDetailPage({
         )}
       </p>
 
-      <div style={{ marginBottom: "0.75rem" }}>
+      <div className="mb-4">
         {event.status === "active" ? (
           <button
             onClick={handleClose}
             disabled={lifecycleBusy}
-            style={{ padding: "0.4rem 0.8rem", background: "#fff", color: "#c00", border: "1px solid #c00", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
+            className="rounded-lg border border-red-300 bg-paper-2 px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 disabled:opacity-50"
           >
             {t("eventDetail.closeButton")}
           </button>
@@ -298,395 +240,168 @@ export default function EventDetailPage({
           <button
             onClick={handleReopen}
             disabled={lifecycleBusy}
-            style={{ padding: "0.4rem 0.8rem", background: "#fff", color: "#080", border: "1px solid #080", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
+            className="rounded-lg border border-pine/40 bg-paper-2 px-3 py-1.5 text-[13px] text-pine hover:bg-pine-bg disabled:opacity-50"
           >
             {t("eventDetail.reopenButton")}
           </button>
         )}
-        {lifecycleError && (
-          <p style={{ color: "red", fontSize: "0.85rem", marginTop: "0.35rem" }}>
-            {t(`eventDetail.error.${lifecycleError}`)}
-          </p>
-        )}
+        {lifecycleError && <p className="mt-1.5 text-[13px] text-red-600">{t(`eventDetail.error.${lifecycleError}`)}</p>}
       </div>
 
-      <a
-        href={`/events/${id}/bills`}
-        style={{
-          display: "inline-block",
-          marginBottom: "1.5rem",
-          padding: "0.5rem 1rem",
-          background: "#111",
-          color: "#fff",
-          borderRadius: 4,
-          textDecoration: "none",
-        }}
-      >
-        {t("eventDetail.viewBillsLink", { count: String(billCount) })}
-      </a>
+      <div className="mb-6 flex flex-wrap gap-2">
+        <a href={`/events/${id}/bills`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
+          {t("eventDetail.viewBillsLink", { count: String(billCount) })}
+        </a>
+        <a href={`/events/${id}/budget`} className="rounded-lg border border-mist bg-paper-2 px-4 py-2 text-[14px] text-ink hover:bg-paper">
+          {t("eventDetail.viewBudgetLink")}
+        </a>
+        <a href={`/events/${id}/payments`} className="rounded-lg border border-mist bg-paper-2 px-4 py-2 text-[14px] text-ink hover:bg-paper">
+          {t("eventDetail.viewPaymentsLink")}
+        </a>
+      </div>
 
-      <a
-      href={`/events/${id}/budget`}
-        style={{
-          display: "inline-block",
-          marginBottom: "1.5rem",
-          marginLeft: "0.5rem",
-          padding: "0.5rem 1rem",
-          background: "#fff",
-          color: "#111",
-          border: "1px solid #111",
-          borderRadius: 4,
-          textDecoration: "none",
-        }}
-      >
-        {t("eventDetail.viewBudgetLink")}
-      </a>
-<a href={`/events/${id}/payments`}
-        style={{
-          display: "inline-block",
-          marginBottom: "1.5rem",
-          marginLeft: "0.5rem",
-          padding: "0.5rem 1rem",
-          background: "#fff",
-          color: "#111",
-          border: "1px solid #111",
-          borderRadius: 4,
-          textDecoration: "none",
-        }}
-      >
-        {t("eventDetail.viewPaymentsLink")}
-      </a>
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
+      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("eventDetail.categoriesTitle")}</h2>
 
-
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
-
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
-        {t("eventDetail.categoriesTitle")}
-      </h2>
-
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "1.5rem" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-            <th style={{ padding: "0.5rem" }}>{t("eventDetail.colCategory")}</th>
-            <th style={{ padding: "0.5rem" }}>{t("eventDetail.colBudget")}</th>
-            <th style={{ padding: "0.5rem" }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {categories.map((cat) => (
-            <tr key={cat.id} style={{ borderBottom: "1px solid #eee" }}>
-              <td style={{ padding: "0.5rem" }}>
-                <div>{cat.name}</div>
-                {cat.description && (
-                  <div style={{ fontSize: "0.8rem", color: "#888" }}>{cat.description}</div>
-                )}
-              </td>
-              <td style={{ padding: "0.5rem" }}>
-                {editingId === cat.id ? (
-                  <input
-                    type="number"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    style={{ width: 100, padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
-                    autoFocus
-                  />
-                ) : (
-                  <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
-                )}
-              </td>
-              <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                {editingId === cat.id ? (
-                  <>
-                    <button
-                      onClick={() => saveBudget(cat.id)}
-                      style={{ marginRight: "0.5rem", color: "#080", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.save")}
-                    </button>
-                    <button
-                      onClick={() => setEditingId(null)}
-                      style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.cancel")}
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => startEdit(cat)}
-                      style={{ marginRight: "0.5rem", color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.edit")}
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      style={{ color: "#c00", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.delete")}
-                    </button>
-                  </>
-                )}
-              </td>
+      <div className="mb-6 overflow-x-auto">
+        <table className="w-full min-w-[420px] border-collapse">
+          <thead>
+            <tr className="border-b border-mist text-left">
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
+              <th className="p-2"></th>
             </tr>
-          ))}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ padding: "0.5rem", fontWeight: 600 }}>{t("eventDetail.total")}</td>
-            <td style={{ padding: "0.5rem", fontWeight: 600 }}>
-              {totalBudget.toLocaleString("cs-CZ")} Kč
-            </td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
+          </thead>
+          <tbody>
+            {categories.map((cat) => (
+              <tr key={cat.id} className="border-b border-mist/60">
+                <td className="p-2 text-[14px] text-ink">
+                  <div>{cat.name}</div>
+                  {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
+                </td>
+                <td className="p-2 text-[14px] text-ink">
+                  {editingId === cat.id ? (
+                    <input
+                      type="number"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                      autoFocus
+                    />
+                  ) : (
+                    <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
+                  )}
+                </td>
+                <td className="whitespace-nowrap p-2">
+                  {editingId === cat.id ? (
+                    <>
+                      <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                        {t("common.save")}
+                      </button>
+                      <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                        {t("common.cancel")}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => startEdit(cat)} className="mr-3 text-[13px] text-ember hover:underline">
+                        {t("common.edit")}
+                      </button>
+                      <button onClick={() => handleDeleteCategory(cat.id)} className="text-[13px] text-red-600 hover:underline">
+                        {t("common.delete")}
+                      </button>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
+              <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")} Kč</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
 
-      <form onSubmit={handleAddCategory} style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
+      <form onSubmit={handleAddCategory} className="mb-8 flex gap-2">
         <input
           type="text"
           placeholder={t("eventDetail.newCategoryPlaceholder")}
           value={newCategoryName}
           onChange={(e) => setNewCategoryName(e.target.value)}
-          style={{ flex: 1, padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
         />
-        <button type="submit" style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4 }}>
+        <button type="submit" className={btnPrimary}>
           {t("eventDetail.addCategory")}
         </button>
       </form>
 
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 600, marginBottom: "0.75rem" }}>
-        {t("driveSettings.title")}
-      </h2>
+      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("driveSettings.title")}</h2>
 
-      <p style={{ fontSize: "0.9rem", color: "#444", marginBottom: "0.25rem" }}>
-        {t("driveSettings.instructionsIntro")}
-      </p>
-      <p
-        style={{
-          fontSize: "0.9rem",
-          fontFamily: "monospace",
-          background: "#f4f4f4",
-          padding: "0.5rem",
-          borderRadius: 4,
-          marginBottom: "0.5rem",
-          wordBreak: "break-all",
-        }}
-      >
+      <p className="mb-1 text-[14px] text-ink-secondary">{t("driveSettings.instructionsIntro")}</p>
+      <p className="mb-2 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
         {driveAccountEmail || "…"}
       </p>
-      <p style={{ fontSize: "0.85rem", color: "#666", whiteSpace: "pre-line", marginBottom: "1rem" }}>
-        {t("driveSettings.instructionsSteps")}
-      </p>
+      <p className="mb-4 whitespace-pre-line text-[13px] text-ink-secondary">{t("driveSettings.instructionsSteps")}</p>
 
-      <form onSubmit={handleSaveDriveFolders} style={{ display: "flex", flexDirection: "column", gap: "0.5rem", maxWidth: 500 }}>
-        <label style={{ fontSize: "0.85rem", color: "#444" }}>
+      <form onSubmit={handleSaveDriveFolders} className="mb-1 flex max-w-md flex-col gap-2">
+        <label className="text-[13px] text-ink-secondary">
           {t("driveSettings.ingestFolderLabel")}
           <input
             type="text"
             value={ingestFolderId}
             onChange={(e) => setIngestFolderId(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4, marginTop: "0.25rem" }}
+            className={inputClass + " mt-1"}
           />
         </label>
-        <label style={{ fontSize: "0.85rem", color: "#444" }}>
+        <label className="text-[13px] text-ink-secondary">
           {t("driveSettings.exportFolderLabel")}
           <input
             type="text"
             value={exportFolderId}
             onChange={(e) => setExportFolderId(e.target.value)}
-            style={{ display: "block", width: "100%", padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4, marginTop: "0.25rem" }}
+            className={inputClass + " mt-1"}
           />
         </label>
-        <p style={{ fontSize: "0.8rem", color: "#888", margin: 0 }}>{t("driveSettings.folderIdHint")}</p>
+        <p className="text-[12px] text-ink-secondary">{t("driveSettings.folderIdHint")}</p>
 
-        {driveError && <p style={{ color: "red", margin: 0 }}>{driveError}</p>}
+        {driveError && <p className="text-[13px] text-red-600">{driveError}</p>}
 
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.25rem" }}>
-          <button
-            type="submit"
-            disabled={driveSaving}
-            style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
-          >
+        <div className="mt-1">
+          <button type="submit" disabled={driveSaving} className={btnPrimary}>
             {t("driveSettings.saveFolders")}
-          </button>
-          <button
-            type="button"
-            onClick={handleTestConnection}
-            disabled={testing || !hasFolderInput}
-            style={{ padding: "0.5rem 1rem", background: "#fff", color: "#111", border: "1px solid #111", borderRadius: 4, cursor: "pointer" }}
-          >
-            {testing ? t("driveSettings.testing") : t("driveSettings.testConnection")}
           </button>
         </div>
       </form>
 
-      {!hasFolderInput && (
-        <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
-          {t("driveSettings.noFoldersSet")}
-        </p>
-      )}
+      {!hasFolderInput && <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.noFoldersSet")}</p>}
 
-      {testResults && (
-        <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
-          {testResults.ingest && (
-            <div style={{ color: testResults.ingest.accessible ? "#080" : "#c00" }}>
-              {t("driveSettings.testResultIngestLabel")}{" "}
-              {testResults.ingest.accessible
-                ? t("driveSettings.testResultAccessible", { name: testResults.ingest.name ?? "" })
-                : t(`driveSettings.error.${testResults.ingest.errorCode}`)}
-            </div>
-          )}
-          {testResults.export && (
-            <div style={{ color: testResults.export.accessible ? "#080" : "#c00" }}>
-              {t("driveSettings.testResultExportLabel")}{" "}
-              {testResults.export.accessible
-                ? t("driveSettings.testResultAccessible", { name: testResults.export.name ?? "" })
-                : t(`driveSettings.error.${testResults.export.errorCode}`)}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
-        <button
-          type="button"
-          onClick={handleImportNow}
-          disabled={importing || !event.driveIngestFolderId}
-          style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
-        >
-          {importing ? t("driveSettings.importing") : t("driveSettings.importButton")}
-        </button>
-
-        {!event.driveIngestFolderId && (
-          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
-            {t("driveSettings.importNoFolderSet")}
-          </p>
-        )}
-
-        {importError && (
-          <p style={{ color: "red", marginTop: "0.5rem" }}>
-            {t(`driveSettings.error.${importError}`) || t("driveSettings.error.generic")}
-          </p>
-        )}
-
-        {importResult && (
-          <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
-            <p>
-              {t("driveSettings.importResultSummary", {
-                created: String(importResult.ingest.created.length),
-                duplicates: String(importResult.ingest.duplicates.length),
-              })}
-            </p>
-
-            {importResult.authorsResolved.length > 0 && (
-              <p>
-                {t("driveSettings.importAuthorsSummary", {
-                  matched: String(importResult.authorsResolved.filter((a) => !a.created).length),
-                  created: String(importResult.authorsResolved.filter((a) => a.created).length),
-                })}
-              </p>
-            )}
-
-            {importResult.skippedAlreadyImported > 0 && (
-              <p>
-                {t("driveSettings.importSkippedAlready", {
-                  count: String(importResult.skippedAlreadyImported),
-                })}
-              </p>
-            )}
-
-            {importResult.skippedNativeGoogleFiles.length > 0 && (
-              <div>
-                <p style={{ marginBottom: "0.25rem" }}>{t("driveSettings.importSkippedNativeTitle")}</p>
-                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                  {importResult.skippedNativeGoogleFiles.map((f, i) => (
-                    <li key={i}>
-                      {t("driveSettings.importSkippedNativeItem", {
-                        filename: f.filename,
-                        subfolderName: f.subfolderName,
-                      })}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {importResult.ingest.duplicates.length > 0 && (
-              <div>
-                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.duplicatesTitle")}</p>
-                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                  {importResult.ingest.duplicates.map((d, i) => (
-                    <li key={i}>
-                      {t("eventDetail.duplicateItem", {
-                        filename: d.filename,
-                        existingFilename: d.existingFilename,
-                        existingDate: new Date(d.existingCreatedAt).toLocaleDateString("cs-CZ"),
-                      })}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {importResult.ingest.splitInfo.length > 0 && (
-              <div>
-                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.splitInfoTitle")}</p>
-                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                  {importResult.ingest.splitInfo.map((s, i) => (
-                    <li key={i}>
-                      {t("eventDetail.splitInfoItem", {
-                        filename: s.originalFilename,
-                        pageCount: String(s.pageCount),
-                      })}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {importResult.ingest.failures.length > 0 && (
-              <div>
-                <p style={{ marginBottom: "0.25rem" }}>{t("eventDetail.failuresTitle")}</p>
-                <ul style={{ margin: 0, paddingLeft: "1.25rem" }}>
-                  {importResult.ingest.failures.map((f, i) => (
-                    <li key={i}>
-                      {f.error === "invalid_pdf"
-                        ? t("eventDetail.failureInvalidPdf", { filename: f.filename })
-                        : `${f.filename} — ${f.error}`}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "1px solid #eee" }}>
+      <div className="mt-6 border-t border-mist pt-6">
         <button
           type="button"
           onClick={handleExportNow}
           disabled={exporting || !event.driveExportFolderId}
-          style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, border: "none", cursor: "pointer" }}
+          className={btnPrimary}
         >
           {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
         </button>
 
         {!event.driveExportFolderId && (
-          <p style={{ fontSize: "0.8rem", color: "#888", marginTop: "0.5rem" }}>
-            {t("driveSettings.exportNoFolderSet")}
-          </p>
+          <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.exportNoFolderSet")}</p>
         )}
 
         {exportError && (
-          <p style={{ color: "red", marginTop: "0.5rem" }}>
+          <p className="mt-2 text-[14px] text-red-600">
             {t(`driveSettings.error.${exportError}`) || t("driveSettings.error.exportGeneric")}
           </p>
         )}
 
         {exportResult && (
-          <div style={{ marginTop: "0.75rem", fontSize: "0.9rem" }}>
+          <div className="mt-3 text-[14px] text-ink">
             <p>
               {t("driveSettings.exportResultSummary", {
                 total: String(exportResult.totalApproved),
@@ -698,7 +413,7 @@ export default function EventDetailPage({
               href={`https://docs.google.com/spreadsheets/d/${exportResult.manifestSpreadsheetId}/edit`}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "#0645AD", textDecoration: "underline" }}
+              className="text-ember hover:underline"
             >
               {t("driveSettings.exportOpenManifest")}
             </a>

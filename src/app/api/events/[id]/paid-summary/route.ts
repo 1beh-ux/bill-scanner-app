@@ -12,15 +12,13 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-const { id: eventId } = await params;
-  const { searchParams } = new URL(req.url);
-  const scope = searchParams.get("scope") === "all" ? "all" : "approved";
+  const { id: eventId } = await params;
 
   const bills = await prisma.bill.findMany({
     where: {
       eventId,
-      ...(scope === "approved" ? { status: "approved" } : {}),
-      paidToAuthor: false,
+      status: "approved",
+      paidToAuthor: true,
       payerAuthorId: { not: null },
     },
     include: { payerAuthor: true },
@@ -28,15 +26,7 @@ const { id: eventId } = await params;
 
   const byAuthor = new Map<
     string,
-    {
-      authorId: string;
-      name: string;
-      bankAccountNumber: string | null;
-      bankCode: string | null;
-      total: Prisma.Decimal;
-      count: number;
-      items: { merchantName: string | null; amountCzk: string | null }[];
-    }
+    { authorId: string; name: string; total: Prisma.Decimal; count: number }
   >();
 
   for (const bill of bills) {
@@ -44,20 +34,13 @@ const { id: eventId } = await params;
     const entry = byAuthor.get(bill.payerAuthorId) ?? {
       authorId: bill.payerAuthorId,
       name: bill.payerAuthor.canonicalName,
-      bankAccountNumber: bill.payerAuthor.bankAccountNumber,
-      bankCode: bill.payerAuthor.bankCode,
       total: new Prisma.Decimal(0),
       count: 0,
-      items: [],
     };
     if (bill.amountCzk !== null) {
       entry.total = entry.total.plus(bill.amountCzk);
     }
     entry.count += 1;
-    entry.items.push({
-      merchantName: bill.merchantName,
-      amountCzk: bill.amountCzk !== null ? bill.amountCzk.toString() : null,
-    });
     byAuthor.set(bill.payerAuthorId, entry);
   }
 
@@ -65,11 +48,8 @@ const { id: eventId } = await params;
     .map((e) => ({
       authorId: e.authorId,
       name: e.name,
-      bankAccountNumber: e.bankAccountNumber,
-      bankCode: e.bankCode,
-      unpaidTotalCzk: e.total.toString(),
-      unpaidBillCount: e.count,
-      items: e.items,
+      paidTotalCzk: e.total.toString(),
+      paidBillCount: e.count,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 

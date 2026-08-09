@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   Receipt,
+  Upload,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -58,7 +59,8 @@ export default function AppSidebar() {
     router.push(`/events/${id}/bills`);
   }
 
-  const eventNavItems = [
+const eventNavItems = [
+    { href: eventId ? `/events/${eventId}/import` : "/events", label: t("nav.import"), icon: Upload },
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },

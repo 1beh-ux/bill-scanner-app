@@ -50,58 +50,48 @@ export default function CategoryTemplatesPage() {
   }
 
   return (
-    <div style={{ maxWidth: 700, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-        {t("categoryTemplates.title")}
-      </h1>
-      <p style={{ color: "#666", marginBottom: "1rem" }}>
-        {t("categoryTemplates.subtitle")}
-      </p>
+    <div className="mx-auto max-w-2xl p-4 md:p-8">
+      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("categoryTemplates.title")}</h1>
+      <p className="mb-4 text-[14px] text-ink-secondary">{t("categoryTemplates.subtitle")}</p>
 
-      <form onSubmit={handleAdd} style={{ display: "flex", gap: "0.5rem", marginBottom: "1.5rem" }}>
+      <form onSubmit={handleAdd} className="mb-6 flex gap-2">
         <input
           type="text"
           placeholder={t("categoryTemplates.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ flex: 1, padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
         />
-        <button type="submit" style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4 }}>
+        <button
+          type="submit"
+          className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
+        >
           {t("common.add")}
         </button>
       </form>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {loading ? (
-        <p>{t("common.loading")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : templates.length === 0 ? (
-        <p>{t("categoryTemplates.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("categoryTemplates.empty")}</p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0 }}>
+        <ul className="list-none p-0">
           {templates.map((tpl) => (
             <li
               key={tpl.id}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "flex-start",
-                padding: "0.6rem 0",
-                borderBottom: "1px solid #eee",
-                gap: "1rem",
-              }}
+              className="flex items-start justify-between gap-4 border-b border-mist/60 py-2.5"
             >
               <div>
-                <div style={{ fontWeight: 500 }}>{tpl.name}</div>
+                <div className="text-[14px] font-medium text-ink">{tpl.name}</div>
                 {tpl.description && (
-                  <div style={{ fontSize: "0.85rem", color: "#666", marginTop: "0.15rem" }}>
-                    {tpl.description}
-                  </div>
+                  <div className="mt-0.5 text-[13px] text-ink-secondary">{tpl.description}</div>
                 )}
               </div>
               <button
                 onClick={() => handleDelete(tpl.id)}
-                style={{ color: "#c00", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}
+                className="shrink-0 text-[13px] text-red-600 hover:underline"
               >
                 {t("common.delete")}
               </button>

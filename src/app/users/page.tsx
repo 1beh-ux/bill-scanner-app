@@ -11,6 +11,11 @@ type UserRow = {
   active: boolean;
 };
 
+const inputClass =
+  "rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const inputClassSm =
+  "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+
 export default function UsersPage() {
   const { t } = useTranslations();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -121,130 +126,123 @@ export default function UsersPage() {
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "1rem" }}>{t("usersPage.title")}</h1>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("usersPage.title")}</h1>
 
-      <form onSubmit={handleCreate} style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem", flexWrap: "wrap" }}>
+      <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input
           type="email"
           placeholder={t("usersPage.emailPlaceholder")}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <input
           type="text"
           placeholder={t("usersPage.namePlaceholder")}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as "admin" | "accountant")}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         >
           <option value="accountant">{t("usersPage.roleAccountant")}</option>
           <option value="admin">{t("usersPage.roleAdmin")}</option>
         </select>
-        <button type="submit" style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4 }}>
+        <button
+          type="submit"
+          className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
+        >
           {t("usersPage.submit")}
         </button>
       </form>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {loading ? (
-        <p>{t("common.loading")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : users.length === 0 ? (
-        <p>{t("usersPage.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("usersPage.empty")}</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: "0.5rem" }}>{t("common.name")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("usersPage.colEmail")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("usersPage.colRole")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("common.status")}</th>
-              <th style={{ padding: "0.5rem" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) =>
-              editingId === u.id ? (
-                <tr key={u.id} style={{ borderBottom: "1px solid #eee", background: "#fafafa" }}>
-                  <td style={{ padding: "0.5rem" }}>
-                    <input
-                      type="text"
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      style={{ width: "100%", padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
-                      autoFocus
-                    />
-                  </td>
-                  <td style={{ padding: "0.5rem", color: "#666" }}>{u.email}</td>
-                  <td style={{ padding: "0.5rem" }}>
-                    <select
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as "admin" | "accountant")}
-                      style={{ padding: "0.25rem", border: "1px solid #ccc", borderRadius: 4 }}
-                    >
-                      <option value="accountant">{t("usersPage.roleAccountant")}</option>
-                      <option value="admin">{t("usersPage.roleAdmin")}</option>
-                    </select>
-                  </td>
-                  <td style={{ padding: "0.5rem" }}>
-                    {u.active ? t("common.statusActive") : t("authors.statusInactive")}
-                  </td>
-                  <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                    <button
-                      onClick={() => saveEdit(u.id)}
-                      style={{ marginRight: "0.5rem", color: "#080", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.save")}
-                    </button>
-                    <button
-                      onClick={cancelEdit}
-                      style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.cancel")}
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={u.id} style={{ borderBottom: "1px solid #eee" }}>
-                  <td style={{ padding: "0.5rem" }}>{u.displayName}</td>
-                  <td style={{ padding: "0.5rem", color: "#666" }}>{u.email}</td>
-                  <td style={{ padding: "0.5rem" }}>
-                    {u.role === "admin" ? t("usersPage.roleAdmin") : t("usersPage.roleAccountant")}
-                  </td>
-                  <td style={{ padding: "0.5rem" }}>
-                    <button
-                      onClick={() => toggleActive(u)}
-                      style={{
-                        color: u.active ? "#080" : "#999",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        textDecoration: "underline",
-                      }}
-                    >
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] border-collapse">
+            <thead>
+              <tr className="border-b border-mist text-left">
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("usersPage.colEmail")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("usersPage.colRole")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
+                <th className="p-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) =>
+                editingId === u.id ? (
+                  <tr key={u.id} className="border-b border-mist/60 bg-paper-2">
+                    <td className="p-2">
+                      <input
+                        type="text"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        className={inputClassSm + " w-full"}
+                        autoFocus
+                      />
+                    </td>
+                    <td className="p-2 text-[14px] text-ink-secondary">{u.email}</td>
+                    <td className="p-2">
+                      <select
+                        value={editRole}
+                        onChange={(e) => setEditRole(e.target.value as "admin" | "accountant")}
+                        className={inputClassSm}
+                      >
+                        <option value="accountant">{t("usersPage.roleAccountant")}</option>
+                        <option value="admin">{t("usersPage.roleAdmin")}</option>
+                      </select>
+                    </td>
+                    <td className="p-2 text-[14px] text-ink-secondary">
                       {u.active ? t("common.statusActive") : t("authors.statusInactive")}
-                    </button>
-                  </td>
-                  <td style={{ padding: "0.5rem", whiteSpace: "nowrap" }}>
-                    <button
-                      onClick={() => startEdit(u)}
-                      style={{ color: "#0645AD", textDecoration: "underline", background: "none", border: "none", cursor: "pointer" }}
-                    >
-                      {t("common.edit")}
-                    </button>
-                  </td>
-                </tr>
-              )
-            )}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="whitespace-nowrap p-2">
+                      <button onClick={() => saveEdit(u.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                        {t("common.save")}
+                      </button>
+                      <button onClick={cancelEdit} className="text-[13px] text-ink-secondary hover:underline">
+                        {t("common.cancel")}
+                      </button>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={u.id} className="border-b border-mist/60">
+                    <td className="p-2 text-[14px] text-ink">{u.displayName}</td>
+                    <td className="p-2 text-[14px] text-ink-secondary">{u.email}</td>
+                    <td className="p-2 text-[14px] text-ink">
+                      {u.role === "admin" ? t("usersPage.roleAdmin") : t("usersPage.roleAccountant")}
+                    </td>
+                    <td className="p-2">
+                      <button
+                        onClick={() => toggleActive(u)}
+                        className={
+                          "whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] " +
+                          (u.active ? "bg-pine-bg text-pine" : "bg-mist text-ink-secondary")
+                        }
+                      >
+                        {u.active ? t("common.statusActive") : t("authors.statusInactive")}
+                      </button>
+                    </td>
+                    <td className="whitespace-nowrap p-2">
+                      <button onClick={() => startEdit(u)} className="text-[13px] text-ember hover:underline">
+                        {t("common.edit")}
+                      </button>
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

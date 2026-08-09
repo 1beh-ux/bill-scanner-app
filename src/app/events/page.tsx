@@ -11,6 +11,9 @@ type EventItem = {
   status: "active" | "closed";
 };
 
+const inputClass =
+  "rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+
 export default function EventsPage() {
   const { t } = useTranslations();
   const [events, setEvents] = useState<EventItem[]>([]);
@@ -65,84 +68,106 @@ export default function EventsPage() {
 
     const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error || t("events.errorDeleteFailed"));
+      const data = await res.json().catch(() => ({}));
+      if (data.error === "event_has_bills") {
+        setError(t("events.error.event_has_bills", { count: String(data.billCount) }));
+      } else if (data.error === "event_has_dependencies") {
+        setError(t("events.error.event_has_dependencies"));
+      } else {
+        setError(t("events.errorDeleteFailed"));
+      }
       return;
     }
     loadEvents();
   }
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "1rem" }}>{t("events.title")}</h1>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("events.title")}</h1>
 
-      <form onSubmit={handleCreate} style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem", flexWrap: "wrap" }}>
+      <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input
           type="text"
           placeholder={t("events.namePlaceholder")}
           value={name}
           onChange={(e) => setName(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <input
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
         <input
           type="date"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
-          style={{ padding: "0.5rem", border: "1px solid #ccc", borderRadius: 4 }}
+          className={inputClass}
         />
-        <button type="submit" style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4 }}>
+        <button
+          type="submit"
+          className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
+        >
           {t("events.submit")}
         </button>
       </form>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {loading ? (
-        <p>{t("common.loading")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : events.length === 0 ? (
-        <p>{t("events.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("events.empty")}</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: "0.5rem" }}>{t("events.colName")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("events.colFrom")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("events.colTo")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("common.status")}</th>
-              <th style={{ padding: "0.5rem" }}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {events.map((ev) => (
-              <tr key={ev.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "0.5rem" }}>
-                  <a href={`/events/${ev.id}`} style={{ color: "#111", textDecoration: "underline" }}>
-                    {ev.name}
-                  </a>
-                </td>
-                <td style={{ padding: "0.5rem" }}>{new Date(ev.startDate).toLocaleDateString("cs-CZ")}</td>
-                <td style={{ padding: "0.5rem" }}>{new Date(ev.endDate).toLocaleDateString("cs-CZ")}</td>
-                <td style={{ padding: "0.5rem" }}>
-                  {ev.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  <button
-                    onClick={() => handleDelete(ev.id, ev.name)}
-                    style={{ color: "#c00", background: "none", border: "none", cursor: "pointer" }}
-                  >
-                    {t("common.delete")}
-                  </button>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[480px] border-collapse">
+            <thead>
+              <tr className="border-b border-mist text-left">
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("events.colName")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("events.colFrom")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("events.colTo")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
+                <th className="p-2"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {events.map((ev) => (
+                <tr key={ev.id} className="border-b border-mist/60">
+                  <td className="p-2 text-[14px]">
+                    <a href={`/events/${ev.id}`} className="text-ink underline hover:text-ember">
+                      {ev.name}
+                    </a>
+                  </td>
+                  <td className="p-2 text-[14px] text-ink-secondary">
+                    {new Date(ev.startDate).toLocaleDateString("cs-CZ")}
+                  </td>
+                  <td className="p-2 text-[14px] text-ink-secondary">
+                    {new Date(ev.endDate).toLocaleDateString("cs-CZ")}
+                  </td>
+                  <td className="p-2">
+                    <span
+                      className={
+                        "whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] " +
+                        (ev.status === "active" ? "bg-pine-bg text-pine" : "bg-mist text-ink-secondary")
+                      }
+                    >
+                      {ev.status === "active" ? t("common.statusActive") : t("common.statusClosed")}
+                    </span>
+                  </td>
+                  <td className="p-2 text-right">
+                    <button
+                      onClick={() => handleDelete(ev.id, ev.name)}
+                      className="text-[13px] text-red-600 hover:underline"
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

@@ -29,9 +29,6 @@ export async function POST(
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
-  if (bill.originalFilename.toLowerCase().endsWith(".pdf")) {
-    return NextResponse.json({ error: "pdf_not_editable" }, { status: 400 });
-  }
 
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
@@ -56,6 +53,16 @@ export async function POST(
 
   const previousPath = bill.gcsObjectPath;
 
+  // A PDF being edited always produces a JPEG (see ImageEditor's PDF
+  // pre-render step) — originalFilename's extension has to reflect that
+  // going forward, since it's what drives PDF-vs-image detection
+  // everywhere else in the app (preview rendering, re-opening the editor,
+  // export mime-type selection).
+  const wasPdf = bill.originalFilename.toLowerCase().endsWith(".pdf");
+  const newOriginalFilename = wasPdf
+    ? bill.originalFilename.replace(/\.pdf$/i, ".jpg")
+    : bill.originalFilename;
+
   try {
     await prisma.$transaction(async (tx) => {
       await tx.bill.update({
@@ -64,6 +71,7 @@ export async function POST(
           gcsObjectPath: newPath,
           originalGcsObjectPath: originalPath,
           contentHash,
+          originalFilename: newOriginalFilename,
         },
       });
       await tx.billAuditLog.create({
@@ -124,6 +132,15 @@ export async function DELETE(
   const contentHash = crypto.createHash("sha256").update(buffer).digest("hex");
   const editedPath = bill.gcsObjectPath;
 
+  // The preserved original is a straight copy of whatever was first
+  // uploaded, so its own extension reliably tells us whether the true
+  // original was a PDF — restore originalFilename's extension to match,
+  // so PDF-vs-image detection is correct again after reverting.
+  const originalWasPdf = bill.originalGcsObjectPath.toLowerCase().endsWith(".pdf");
+  const revertedFilename = originalWasPdf
+    ? bill.originalFilename.replace(/\.jpg$/i, ".pdf")
+    : bill.originalFilename;
+
   await prisma.$transaction(async (tx) => {
     await tx.bill.update({
       where: { id },
@@ -131,6 +148,7 @@ export async function DELETE(
         gcsObjectPath: bill.originalGcsObjectPath!,
         originalGcsObjectPath: null,
         contentHash,
+        originalFilename: revertedFilename,
       },
     });
     await tx.billAuditLog.create({

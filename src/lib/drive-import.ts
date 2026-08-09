@@ -27,9 +27,9 @@ export interface ImportSummary {
   authorsResolved: AuthorResolution[];
   skippedAlreadyImported: number;
   skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
+  downloadFailures: { filename: string; error: string }[];
   ingest: IngestResult;
 }
-
 /**
  * Matches a Drive subfolder name to an existing active author (trimmed,
  * case-insensitive) or creates a new one. Case-insensitive matching is
@@ -119,16 +119,24 @@ const fileMeta = new Map<string, { subfolderName: string; authorId: string; name
   const toDownloadIds = candidateFileIds.filter((fid) => !alreadyImportedIds.has(fid));
 
   const rawFiles: RawFileInput[] = [];
+  const downloadFailures: { filename: string; error: string }[] = [];
+
   for (const fileId of toDownloadIds) {
     const meta = fileMeta.get(fileId)!;
-    const buffer = await downloadFileBuffer(fileId);
-    rawFiles.push({
-      filename: meta.name,
-      buffer,
-      contentType: meta.mimeType,
-      driveSourceFileId: fileId,
-      payerAuthorId: meta.authorId,
-    });
+    try {
+      const buffer = await downloadFileBuffer(fileId);
+      rawFiles.push({
+        filename: meta.name,
+        buffer,
+        contentType: meta.mimeType,
+        driveSourceFileId: fileId,
+        payerAuthorId: meta.authorId,
+      });
+    } catch (err) {
+      // One file's download exhausting all retries no longer aborts every
+      // other file in the batch — it's reported and the rest continue.
+      downloadFailures.push({ filename: meta.name, error: String(err) });
+    }
   }
 
   const ingest = await ingestBillFiles(eventId, userId, "drive", rawFiles);
@@ -137,6 +145,7 @@ const fileMeta = new Map<string, { subfolderName: string; authorId: string; name
     authorsResolved,
     skippedAlreadyImported: alreadyImportedIds.size,
     skippedNativeGoogleFiles,
+    downloadFailures,
     ingest,
   };
 }

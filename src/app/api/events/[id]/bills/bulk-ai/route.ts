@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { extractBillWithAi } from "@/lib/ai-extraction";
 import { convertToCzk } from "@/lib/exchange-rates";
+import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
 
 const CONCURRENCY = 3;
 const MAX_BILLS_PER_RUN = 20;
@@ -43,9 +44,16 @@ async function processOneBill(
   }
 
   const data = aiResult.data;
-  const matchedCategory = data.category
+  let matchedCategory = data.category
     ? eventCategories.find((c) => c.name === data.category)
     : undefined;
+  // A category chosen at import time, before AI ever ran, is a deliberate
+  // human decision — it takes precedence over whatever AI guessed.
+  if (bill.pendingCategoryId) {
+    const pending = eventCategories.find((c) => c.id === bill.pendingCategoryId);
+    if (pending) matchedCategory = pending;
+  }
+  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name);
 
   const newStatus =
     aiResult.status === "AUTO_APPROVE"
@@ -83,7 +91,7 @@ async function processOneBill(
     await tx.bill.update({
       where: { id: billId },
       data: {
-        merchantName: data.merchant_name,
+        merchantName: canonicalMerchant ?? data.merchant_name,
         billDate,
         totalAmount,
         currency,
@@ -94,6 +102,7 @@ async function processOneBill(
         aiConfidence: new Prisma.Decimal(data.confidence),
         aiRawResponse: aiResult as unknown as Prisma.InputJsonValue,
         status: newStatus,
+        pendingCategoryId: null,
       },
     });
 

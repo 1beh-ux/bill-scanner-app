@@ -14,6 +14,7 @@ export async function POST(
   const { id: eventId } = await params;
   const body = await req.json().catch(() => ({}));
   const authorId: string | undefined = body.authorId;
+  const action: "pay" | "unpay" = body.action === "unpay" ? "unpay" : "pay";
   if (!authorId) {
     return NextResponse.json({ error: "authorId is required" }, { status: 400 });
   }
@@ -26,18 +27,19 @@ export async function POST(
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
 
+const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
+
   const result = await prisma.bill.updateMany({
     where: {
       eventId,
       payerAuthorId: authorId,
-      status: "approved",
-      paidToAuthor: false,
+      ...(scope === "approved" ? { status: "approved" } : {}),
+      paidToAuthor: action === "pay" ? false : true,
     },
-    data: {
-      paidToAuthor: true,
-      paidAt: new Date(),
-      paidByUserId: user.id,
-    },
+    data:
+      action === "pay"
+        ? { paidToAuthor: true, paidAt: new Date(), paidByUserId: user.id }
+        : { paidToAuthor: false, paidAt: null, paidByUserId: null },
   });
 
   return NextResponse.json({ updated: result.count });

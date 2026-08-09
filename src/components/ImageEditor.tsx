@@ -53,18 +53,23 @@ export default function ImageEditor({
   billId,
   hasOriginal,
   version,
+  isPdf,
   onClose,
   onSaved,
 }: {
   billId: string;
   hasOriginal: boolean;
   version: string;
+  isPdf: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const { t } = useTranslations();
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
 
   const [grayscale, setGrayscale] = useState(false);
   const [contrast, setContrast] = useState(100);
@@ -75,6 +80,53 @@ export default function ImageEditor({
   const [error, setError] = useState<string | null>(null);
 
   const filterCss = `grayscale(${grayscale ? 1 : 0}) contrast(${contrast}%) brightness(${brightness}%)`;
+
+  // Resolves the actual pixel source before any of the crop/filter logic
+  // below ever runs. For a plain image, that's just the file URL, exactly
+  // as before. For a PDF, its first page is rendered to an offscreen
+  // canvas first and handed off as a normal image data URL — everything
+  // downstream stays completely unaware a PDF was ever involved.
+  useEffect(() => {
+    let cancelled = false;
+    setImgSrc(null);
+    setSourceError(null);
+
+    async function loadSource() {
+      if (!isPdf) {
+        setImgSrc(`/api/bills/${billId}/file?v=${version}`);
+        return;
+      }
+
+      try {
+        // Dynamic import — pdfjs-dist touches browser-only APIs and is a
+        // heavy library not worth bundling into every page just for the
+        // rare case someone opens this editor on a PDF.
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+
+        const doc = await pdfjsLib.getDocument({ url: `/api/bills/${billId}/file?v=${version}` }).promise;
+        const page = await doc.getPage(1);
+        const viewport = page.getViewport({ scale: 2 });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("canvas");
+
+        await page.render({ canvasContext: ctx, viewport, canvas }).promise;
+
+        if (!cancelled) setImgSrc(canvas.toDataURL("image/png"));
+      } catch {
+        if (!cancelled) setSourceError(t("imageEditor.errorPdfRender"));
+      }
+    }
+loadSource();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billId, version, isPdf]);
 
   function resetCorners() {
     const img = imgRef.current;
@@ -320,138 +372,146 @@ export default function ImageEditor({
 
         {error && <p style={{ color: "#c00", marginBottom: "0.75rem" }}>{error}</p>}
 
-        <p style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>
-          {t("imageEditor.cornerHint")}
-        </p>
+        {sourceError ? (
+          <p style={{ color: "#c00" }}>{sourceError}</p>
+        ) : !imgSrc ? (
+          <p style={{ color: "#666" }}>{isPdf ? t("imageEditor.loadingPdf") : t("common.loading")}</p>
+        ) : (
+          <>
+            <p style={{ fontSize: "0.85rem", color: "#666", marginBottom: "0.5rem" }}>
+              {t("imageEditor.cornerHint")}
+            </p>
 
-        <div
-          ref={containerRef}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          style={{
-            position: "relative",
-            display: "inline-block",
-            maxWidth: "100%",
-            touchAction: "none",
-            userSelect: "none",
-          }}
-        >
-          <img
-            ref={imgRef}
-            src={`/api/bills/${billId}/file?v=${version}`}
-            alt=""
-            draggable={false}
-            onLoad={resetCorners}
-            style={{ maxWidth: "100%", display: "block", filter: filterCss }}
-          />
-
-          {corners && (
-            <svg
+            <div
+              ref={containerRef}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
               style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                pointerEvents: "none",
+                position: "relative",
+                display: "inline-block",
+                maxWidth: "100%",
+                touchAction: "none",
+                userSelect: "none",
               }}
             >
-              <polygon
-                points={polygonPoints}
-                fill="rgba(6,69,173,0.10)"
-                stroke="#0645AD"
-                strokeWidth="2"
-                strokeDasharray="6 4"
+              <img
+                ref={imgRef}
+                src={imgSrc}
+                alt=""
+                draggable={false}
+                onLoad={resetCorners}
+                style={{ maxWidth: "100%", display: "block", filter: filterCss }}
               />
-            </svg>
-          )}
 
-          {corners &&
-            corners.map((c, i) => (
-              <div
-                key={i}
-                onPointerDown={(e) => onCornerDown(i, e)}
-                style={{
-                  position: "absolute",
-                  left: c.x - 14,
-                  top: c.y - 14,
-                  width: 28,
-                  height: 28,
-                  borderRadius: "50%",
-                  border: "2px solid #0645AD",
-                  background: activeCorner === i ? "#0645AD" : "rgba(255,255,255,0.85)",
-                  cursor: "grab",
-                  touchAction: "none",
-                }}
-              />
-            ))}
-        </div>
+              {corners && (
+                <svg
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <polygon
+                    points={polygonPoints}
+                    fill="rgba(6,69,173,0.10)"
+                    stroke="#0645AD"
+                    strokeWidth="2"
+                    strokeDasharray="6 4"
+                  />
+                </svg>
+              )}
 
-        <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem" }}>
-            <input
-              type="checkbox"
-              checked={grayscale}
-              onChange={(e) => setGrayscale(e.target.checked)}
-            />
-            {t("imageEditor.blackWhite")}
-          </label>
+              {corners &&
+                corners.map((c, i) => (
+                  <div
+                    key={i}
+                    onPointerDown={(e) => onCornerDown(i, e)}
+                    style={{
+                      position: "absolute",
+                      left: c.x - 14,
+                      top: c.y - 14,
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      border: "2px solid #0645AD",
+                      background: activeCorner === i ? "#0645AD" : "rgba(255,255,255,0.85)",
+                      cursor: "grab",
+                      touchAction: "none",
+                    }}
+                  />
+                ))}
+            </div>
 
-          <label style={{ fontSize: "0.9rem" }}>
-            {t("imageEditor.contrast")}: {contrast}%
-            <input
-              type="range"
-              min={50}
-              max={250}
-              value={contrast}
-              onChange={(e) => setContrast(Number(e.target.value))}
-              style={{ width: "100%" }}
-            />
-          </label>
+            <div style={{ marginTop: "1rem", display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.9rem" }}>
+                <input
+                  type="checkbox"
+                  checked={grayscale}
+                  onChange={(e) => setGrayscale(e.target.checked)}
+                />
+                {t("imageEditor.blackWhite")}
+              </label>
 
-          <label style={{ fontSize: "0.9rem" }}>
-            {t("imageEditor.brightness")}: {brightness}%
-            <input
-              type="range"
-              min={50}
-              max={180}
-              value={brightness}
-              onChange={(e) => setBrightness(Number(e.target.value))}
-              style={{ width: "100%" }}
-            />
-          </label>
-        </div>
+              <label style={{ fontSize: "0.9rem" }}>
+                {t("imageEditor.contrast")}: {contrast}%
+                <input
+                  type="range"
+                  min={50}
+                  max={250}
+                  value={contrast}
+                  onChange={(e) => setContrast(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </label>
 
-        <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
-          >
-            {t("imageEditor.apply")}
-          </button>
-          <button
-            onClick={reset}
-            disabled={saving}
-            style={{ padding: "0.5rem 1rem", background: "#fff", color: "#111", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }}
-          >
-            {t("imageEditor.reset")}
-          </button>
-          {hasOriginal && (
-            <button
-              onClick={handleRevert}
-              disabled={saving}
-              style={{ padding: "0.5rem 1rem", background: "#fff", color: "#a60", border: "1px solid #a60", borderRadius: 4, cursor: "pointer" }}
-            >
-              {t("imageEditor.revert")}
-            </button>
-          )}
-          {saving && (
-            <span style={{ alignSelf: "center", color: "#666", fontSize: "0.85rem" }}>
-              {t("imageEditor.processing")}
-            </span>
-          )}
-        </div>
+              <label style={{ fontSize: "0.9rem" }}>
+                {t("imageEditor.brightness")}: {brightness}%
+                <input
+                  type="range"
+                  min={50}
+                  max={180}
+                  value={brightness}
+                  onChange={(e) => setBrightness(Number(e.target.value))}
+                  style={{ width: "100%" }}
+                />
+              </label>
+            </div>
+
+            <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer" }}
+              >
+                {t("imageEditor.apply")}
+              </button>
+              <button
+                onClick={reset}
+                disabled={saving}
+                style={{ padding: "0.5rem 1rem", background: "#fff", color: "#111", border: "1px solid #ccc", borderRadius: 4, cursor: "pointer" }}
+              >
+                {t("imageEditor.reset")}
+              </button>
+              {hasOriginal && (
+                <button
+                  onClick={handleRevert}
+                  disabled={saving}
+                  style={{ padding: "0.5rem 1rem", background: "#fff", color: "#a60", border: "1px solid #a60", borderRadius: 4, cursor: "pointer" }}
+                >
+                  {t("imageEditor.revert")}
+                </button>
+              )}
+              {saving && (
+                <span style={{ alignSelf: "center", color: "#666", fontSize: "0.85rem" }}>
+                  {t("imageEditor.processing")}
+                </span>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

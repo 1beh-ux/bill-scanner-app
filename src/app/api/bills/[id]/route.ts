@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { billsBucket } from "@/lib/gcs";
 import { convertToCzk } from "@/lib/exchange-rates";
+import { recordMerchantCorrection } from "@/lib/merchant-aliases";
+import { applyPendingCategoryIfNeeded } from "@/lib/pending-category";
 
 const AUDITED_FIELDS = [
   "merchantName",
@@ -19,6 +21,16 @@ function normalize(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) return value.toISOString().slice(0, 10);
   return String(value);
+}
+
+function getAiExtractedMerchantName(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const data = r.data as Record<string, unknown> | undefined;
+  if (data && typeof data.merchant_name === "string" && data.merchant_name) {
+    return data.merchant_name;
+  }
+  return null;
 }
 
 export async function GET(
@@ -89,12 +101,28 @@ export async function PATCH(
   if (body.currency !== undefined) data.currency = body.currency;
   if (body.payerAuthorId !== undefined) data.payerAuthorId = body.payerAuthorId || null;
   if (body.notes !== undefined) data.notes = body.notes || null;
+  if (body.pendingCategoryId !== undefined) data.pendingCategoryId = body.pendingCategoryId || null;
 
 if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAuthorId) {
     // Payer is actually changing (including being cleared) — any prior "paid"
     // mark referred to the old payer and no longer applies. Auto-true when
     // the new payer is null (paid directly by the event, nothing to reimburse).
     data.paidToAuthor = data.payerAuthorId === null;
+  }
+
+  // Learn from this correction if it's a genuine edit to a name AI actually
+  // extracted — future AI runs that see the same raw text will then use
+  // this corrected name automatically, instead of needing the same fix
+  // repeated on every future receipt from this merchant.
+  if (
+    typeof data.merchantName === "string" &&
+    data.merchantName.length > 0 &&
+    data.merchantName !== existing.merchantName
+  ) {
+    const rawExtracted = getAiExtractedMerchantName(existing.aiRawResponse);
+    if (rawExtracted) {
+      await recordMerchantCorrection(rawExtracted, data.merchantName);
+    }
   }
 
   // Recompute the CZK equivalent from whichever values will be in effect after
@@ -192,6 +220,8 @@ if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAut
 
     return bill;
   });
+
+  await applyPendingCategoryIfNeeded(id, updated.totalAmount, updated.amountCzk);
 
   return NextResponse.json({ ...updated, conversionWarning });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use, useRef, useMemo } from "react";
+import { useEffect, useState, use, useMemo, useRef } from "react";
 import { useTranslations } from "@/lib/i18n";
 
 type EventDetail = { id: string; name: string };
@@ -19,10 +19,6 @@ type BillItem = {
   payerAuthor: { canonicalName: string } | null;
   categories: { eventCategory: { name: string } }[];
 };
-
-type DuplicateDetail = { filename: string; existingFilename: string; existingCreatedAt: string };
-type SplitDetail = { originalFilename: string; pageCount: number };
-type FailureDetail = { filename: string; error: string };
 
 type BulkFailure = {
   billId: string;
@@ -43,6 +39,33 @@ const STATUSES = [
   "approved",
 ] as const;
 
+function statusStyle(status: string): string {
+  switch (status) {
+    case "approved":
+      return "bg-pine-bg text-pine";
+    case "failed":
+      return "bg-red-50 text-red-600";
+    case "queued":
+    case "processing":
+      return "bg-amber-50 text-amber-700";
+    case "to_review":
+      return "bg-ember/10 text-ember";
+    default:
+      return "bg-mist text-ink-secondary";
+  }
+}
+
+const pillBase = "rounded-full px-3 py-1.5 text-[13px] border transition-colors";
+const pillActive = "bg-ember text-white border-ember";
+const pillInactive = "bg-paper-2 text-ink-secondary border-mist hover:bg-paper";
+
+const btnPrimary =
+  "rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50 disabled:cursor-not-allowed";
+const btnSecondary =
+  "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-paper disabled:opacity-50 disabled:cursor-not-allowed";
+const btnDanger =
+  "rounded-lg border border-red-300 bg-paper-2 px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed";
+
 export default function EventBillsPage({
   params,
 }: {
@@ -56,11 +79,6 @@ export default function EventBillsPage({
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
-  const [duplicateDetails, setDuplicateDetails] = useState<DuplicateDetail[]>([]);
-  const [splitDetails, setSplitDetails] = useState<SplitDetail[]>([]);
-  const [failureDetails, setFailureDetails] = useState<FailureDetail[]>([]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -68,9 +86,9 @@ export default function EventBillsPage({
   const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([]);
 
   const [aiProgressIds, setAiProgressIds] = useState<Set<string> | null>(null);
-
-  const uploadInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [events, setEvents] = useState<{ id: string; name: string }[]>([]);
+  const [showMoveSelect, setShowMoveSelect] = useState(false);
+  const [moveTargetId, setMoveTargetId] = useState("");
 
   // Guards against out-of-order fetch responses: only the response matching
   // the most recently issued request is ever applied to state. Without
@@ -116,8 +134,14 @@ export default function EventBillsPage({
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  useEffect(() => {
+    fetch(`/api/events`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setEvents)
+      .catch(() => {});
+  }, []);
 
   const aiActiveCount = useMemo(
     () => bills.filter((b) => b.status === "queued" || b.status === "processing").length,
@@ -149,48 +173,6 @@ export default function EventBillsPage({
       setAiProgressIds(null);
     }
   }, [bills, aiProgressIds, t]);
-
-  async function handleUpload(fileList: FileList | null, channel: "upload" | "camera") {
-    if (!fileList || fileList.length === 0) return;
-    setUploading(true);
-    setUploadMessage(null);
-    setDuplicateDetails([]);
-    setSplitDetails([]);
-    setFailureDetails([]);
-    setError(null);
-
-    const formData = new FormData();
-    for (const file of Array.from(fileList)) {
-      formData.append("files", file);
-    }
-    formData.append("ingestChannel", channel);
-
-    const res = await fetch(`/api/events/${id}/bills`, {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      setError(t("eventDetail.errorUploadFailed"));
-      setUploading(false);
-      return;
-    }
-
-    const data = await res.json();
-    setUploadMessage(
-      t("eventDetail.uploadResultSummary", {
-        created: String(data.created.length),
-        duplicates: String(data.duplicates.length),
-      })
-    );
-    setDuplicateDetails(data.duplicates);
-    setSplitDetails(data.splitInfo || []);
-    setFailureDetails(data.failures || []);
-    setUploading(false);
-    if (uploadInputRef.current) uploadInputRef.current.value = "";
-    if (cameraInputRef.current) cameraInputRef.current.value = "";
-    load();
-  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -239,7 +221,7 @@ export default function EventBillsPage({
     }
   }
 
-  async function runBulk(action: "approve" | "delete") {
+  async function runBulk(action: "approve" | "delete" | "mark_paid" | "mark_unpaid") {
     if (selected.size === 0) return;
 
     if (action === "delete") {
@@ -275,6 +257,49 @@ export default function EventBillsPage({
     );
     setBulkFailures(data.failed || []);
     setSelected(new Set());
+    setBulkRunning(false);
+    load();
+  }
+
+  async function runBulkMove() {
+    if (selected.size === 0 || !moveTargetId) return;
+    const targetEvent = events.find((ev) => ev.id === moveTargetId);
+    if (!targetEvent) return;
+    if (
+      !window.confirm(
+        t("billsPage.bulkMoveConfirm", { count: String(selected.size), name: targetEvent.name })
+      )
+    )
+      return;
+
+    setBulkRunning(true);
+    setBulkMessage(null);
+    setBulkFailures([]);
+    setError(null);
+
+    const res = await fetch(`/api/events/${id}/bills/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "move", billIds: Array.from(selected), targetEventId: moveTargetId }),
+    });
+
+    if (!res.ok) {
+      setError(t("billsPage.bulkFailed"));
+      setBulkRunning(false);
+      return;
+    }
+
+    const data = await res.json();
+    setBulkMessage(
+      t("billsPage.bulkResult", {
+        succeeded: String(data.succeededCount),
+        failed: String(data.failedCount),
+      })
+    );
+    setBulkFailures(data.failed || []);
+    setSelected(new Set());
+    setShowMoveSelect(false);
+    setMoveTargetId("");
     setBulkRunning(false);
     load();
   }
@@ -336,108 +361,33 @@ export default function EventBillsPage({
     if (f.error === "already_approved") {
       return t("billsPage.bulkErrApproved", { filename: f.filename });
     }
+    if (f.error === "no_payer") {
+      return t("billsPage.bulkErrNoPayer", { filename: f.filename });
+    }
+    if (f.error === "bill_approved_locked") {
+      return t("billsPage.bulkErrApprovedLocked", { filename: f.filename });
+    }
+    if (f.error === "event_closed_locked") {
+      return t("billsPage.bulkErrEventClosed", { filename: f.filename });
+    }
     return `${f.filename}: ${f.error}`;
   }
 
-  if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
-  if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
+  if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+  if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0 0 1.25rem" }}>
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
+      <h1 className="mb-5 text-[22px] font-semibold text-ink">
         {event.name} — {t("billsPage.title")}
       </h1>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
-      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.25rem", flexWrap: "wrap" }}>
-        <label style={{ padding: "0.5rem 1rem", background: "#111", color: "#fff", borderRadius: 4, cursor: "pointer" }}>
-          {t("eventDetail.uploadFiles")}
-          <input
-            ref={uploadInputRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            onChange={(e) => handleUpload(e.target.files, "upload")}
-            style={{ display: "none" }}
-          />
-        </label>
-        <label style={{ padding: "0.5rem 1rem", background: "#fff", color: "#111", border: "1px solid #111", borderRadius: 4, cursor: "pointer" }}>
-          {t("eventDetail.takePhoto")}
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => handleUpload(e.target.files, "camera")}
-            style={{ display: "none" }}
-          />
-        </label>
-        {uploading && <span style={{ alignSelf: "center", color: "#666" }}>{t("common.loading")}</span>}
-      </div>
-
-      {uploadMessage && <p style={{ color: "#080", marginBottom: "0.5rem" }}>{uploadMessage}</p>}
-
-      {splitDetails.length > 0 && (
-        <div style={{ marginBottom: "0.75rem", fontSize: "0.85rem", color: "#065" }}>
-          <div style={{ fontWeight: 600 }}>{t("eventDetail.splitInfoTitle")}</div>
-          <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-            {splitDetails.map((s, i) => (
-              <li key={i}>
-                {t("eventDetail.splitInfoItem", {
-                  filename: s.originalFilename,
-                  pageCount: String(s.pageCount),
-                })}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {duplicateDetails.length > 0 && (
-        <div style={{ marginBottom: "0.75rem", fontSize: "0.85rem", color: "#a60" }}>
-          <div style={{ fontWeight: 600 }}>{t("eventDetail.duplicatesTitle")}</div>
-          <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-            {duplicateDetails.map((d, i) => (
-              <li key={i}>
-                {t("eventDetail.duplicateItem", {
-                  filename: d.filename,
-                  existingFilename: d.existingFilename,
-                  existingDate: new Date(d.existingCreatedAt).toLocaleDateString("cs-CZ"),
-                })}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {failureDetails.length > 0 && (
-        <div style={{ marginBottom: "1rem", fontSize: "0.85rem", color: "#c00" }}>
-          <div style={{ fontWeight: 600 }}>{t("eventDetail.failuresTitle")}</div>
-          <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
-            {failureDetails.map((f, i) => (
-              <li key={i}>
-                {f.error === "invalid_pdf"
-                  ? t("eventDetail.failureInvalidPdf", { filename: f.filename })
-                  : `${f.filename}: ${f.error}`}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+      <div className="mb-4 flex flex-wrap gap-2">
         <button
           onClick={() => setStatusFilter(null)}
-          style={{
-            padding: "0.35rem 0.75rem",
-            borderRadius: 999,
-            border: statusFilter === null ? "1px solid #111" : "1px solid #ccc",
-            background: statusFilter === null ? "#111" : "#fff",
-            color: statusFilter === null ? "#fff" : "#111",
-            cursor: "pointer",
-            fontSize: "0.85rem",
-          }}
+          className={`${pillBase} ${statusFilter === null ? pillActive : pillInactive}`}
         >
           {t("billsPage.filterAll")} ({bills.length})
         </button>
@@ -445,15 +395,7 @@ export default function EventBillsPage({
           <button
             key={s}
             onClick={() => setStatusFilter(statusFilter === s ? null : s)}
-            style={{
-              padding: "0.35rem 0.75rem",
-              borderRadius: 999,
-              border: statusFilter === s ? "1px solid #111" : "1px solid #ccc",
-              background: statusFilter === s ? "#111" : "#fff",
-              color: statusFilter === s ? "#fff" : "#111",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-            }}
+            className={`${pillBase} ${statusFilter === s ? pillActive : pillInactive}`}
           >
             {statusLabels[s]} ({counts[s]})
           </button>
@@ -461,65 +403,72 @@ export default function EventBillsPage({
       </div>
 
       {selected.size > 0 && (
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            alignItems: "center",
-            padding: "0.6rem 0.85rem",
-            marginBottom: "1rem",
-            background: "#f5f7fa",
-            border: "1px solid #dde3ea",
-            borderRadius: 6,
-            flexWrap: "wrap",
-          }}
-        >
-          <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 p-3">
+          <span className="text-[14px] font-medium text-ink">
             {t("billsPage.selectedCount", { count: String(selected.size) })}
           </span>
-          <button
-            onClick={() => runBulk("approve")}
-            disabled={bulkRunning}
-            style={{ padding: "0.4rem 0.85rem", background: "#111", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
-          >
+          <button onClick={() => runBulk("approve")} disabled={bulkRunning} className={btnPrimary}>
             {t("billsPage.bulkApprove")}
           </button>
-          <button
-            onClick={runBulkAi}
-            disabled={hasActiveAiRun}
-            style={{ padding: "0.4rem 0.85rem", background: "#111", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
-          >
+          <button onClick={runBulkAi} disabled={hasActiveAiRun} className={btnPrimary}>
             {hasActiveAiRun ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
           </button>
-          <button
-            onClick={() => runBulk("delete")}
-            disabled={bulkRunning}
-            style={{ padding: "0.4rem 0.85rem", background: "#fff", color: "#c00", border: "1px solid #c00", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
-          >
+          <button onClick={() => runBulk("mark_paid")} disabled={bulkRunning} className={btnSecondary}>
+            {t("billsPage.bulkMarkPaid")}
+          </button>
+          <button onClick={() => runBulk("mark_unpaid")} disabled={bulkRunning} className={btnSecondary}>
+            {t("billsPage.bulkMarkUnpaid")}
+          </button>
+          <button onClick={() => setShowMoveSelect((v) => !v)} disabled={bulkRunning} className={btnSecondary}>
+            {t("billsPage.bulkMoveButton")}
+          </button>
+          <button onClick={() => runBulk("delete")} disabled={bulkRunning} className={btnDanger}>
             {t("billsPage.bulkDelete")}
           </button>
           <button
             onClick={() => setSelected(new Set())}
-            style={{ background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: "0.85rem", textDecoration: "underline" }}
+            className="text-[13px] text-ink-secondary underline hover:text-ink"
           >
             {t("billsPage.clearSelection")}
           </button>
-          {bulkRunning && <span style={{ color: "#666", fontSize: "0.85rem" }}>{t("common.loading")}</span>}
+          {bulkRunning && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
+        </div>
+      )}
+
+      {showMoveSelect && selected.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 p-3">
+          <select
+            value={moveTargetId}
+            onChange={(e) => setMoveTargetId(e.target.value)}
+            className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink"
+          >
+            <option value="">{t("billsPage.bulkMoveSelectPlaceholder")}</option>
+            {events
+              .filter((ev) => ev.id !== id)
+              .map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.name}
+                </option>
+              ))}
+          </select>
+          <button onClick={runBulkMove} disabled={!moveTargetId || bulkRunning} className={btnPrimary}>
+            {t("billsPage.bulkMoveConfirmButton")}
+          </button>
         </div>
       )}
 
       {hasActiveAiRun && (
-        <p style={{ color: "#666", marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+        <p className="mb-2 text-[13px] text-ink-secondary">
           {t("billsPage.bulkAiActive", { count: String(aiActiveCount) })}
         </p>
       )}
 
-      {bulkMessage && <p style={{ color: "#080", marginBottom: "0.5rem" }}>{bulkMessage}</p>}
+      {bulkMessage && <p className="mb-2 text-[13px] text-pine">{bulkMessage}</p>}
 
       {bulkFailures.length > 0 && (
-        <div style={{ marginBottom: "1rem", fontSize: "0.85rem", color: "#a60" }}>
-          <div style={{ fontWeight: 600 }}>{t("billsPage.bulkFailuresTitle")}</div>
-          <ul style={{ margin: "0.25rem 0 0", paddingLeft: "1.25rem" }}>
+        <div className="mb-4 text-[13px] text-amber-700">
+          <div className="font-medium">{t("billsPage.bulkFailuresTitle")}</div>
+          <ul className="mt-1 list-disc pl-5">
             {bulkFailures.map((f) => (
               <li key={f.billId}>{bulkFailureText(f)}</li>
             ))}
@@ -528,94 +477,163 @@ export default function EventBillsPage({
       )}
 
       {filteredBills.length === 0 ? (
-        <p>{t("eventDetail.billsEmpty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("eventDetail.billsEmpty")}</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: "0.5rem", width: 32 }}>
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={toggleSelectAll}
-                />
-              </th>
-              <th style={{ padding: "0.5rem" }}>{t("eventDetail.colFilename")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("common.status")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("billsPage.colMerchant")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("billModal.payer")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("eventDetail.colCategory")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("billsPage.colAmount")}</th>
-              <th style={{ padding: "0.5rem" }}>{t("billModal.date")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredBills.map((b) => (
-              <tr key={b.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "0.5rem" }}>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(b.id)}
-                    onChange={() => toggleSelect(b.id)}
-                    disabled={isAiLocked(b)}
-                  />
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  {isAiLocked(b) ? (
-                    <span style={{ color: "#999" }}>{b.originalFilename}</span>
-                  ) : (
-                    <a href={billHref(b.id)} style={{ color: "#0645AD", cursor: "pointer" }}>
-                      {b.originalFilename}
-                    </a>
-                  )}
-                </td>
-                <td style={{ padding: "0.5rem" }}>{statusLabels[b.status] || b.status}</td>
-                <td style={{ padding: "0.5rem" }}>{b.merchantName || "—"}</td>
-                <td style={{ padding: "0.5rem" }}>{b.payerAuthor?.canonicalName ?? "Akce"}</td>
-                <td style={{ padding: "0.5rem" }}>
-                  {b.categories.length > 0
-                    ? b.categories.map((c) => c.eventCategory.name).join(", ")
-                    : "—"}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  {b.totalAmount === null ? (
-                    "—"
-                  ) : (
-                    <>
-                      {parseFloat(b.totalAmount).toLocaleString("cs-CZ")} {b.currency}
-                      {b.currency !== "CZK" && (
-                        <div style={{ fontSize: "0.8rem", color: b.amountCzk ? "#666" : "#a60" }}>
-                          {b.amountCzk
-                            ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč`
-                            : t("billsPage.noRate")}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  {b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}
-                </td>
+        <>
+          {/* Desktop / tablet: table */}
+          <table className="hidden w-full border-collapse md:table">
+            <thead>
+              <tr className="border-b border-mist text-left">
+                <th className="w-8 p-2">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                </th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colFilename")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billsPage.colMerchant")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billModal.payer")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billsPage.colAmount")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billModal.date")}</th>
               </tr>
+            </thead>
+            <tbody>
+              {filteredBills.map((b) => (
+                <tr key={b.id} className="border-b border-mist/60">
+                  <td className="p-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(b.id)}
+                      onChange={() => toggleSelect(b.id)}
+                      disabled={isAiLocked(b)}
+                    />
+                  </td>
+                  <td className="p-2 text-[14px]">
+                    {isAiLocked(b) ? (
+                      <span className="text-ink-secondary">{b.originalFilename}</span>
+                    ) : (
+                      <a href={billHref(b.id)} className="text-ember hover:underline">
+                        {b.originalFilename}
+                      </a>
+                    )}
+                  </td>
+                  <td className="p-2">
+                    <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] ${statusStyle(b.status)}`}>
+                      {statusLabels[b.status] || b.status}
+                    </span>
+                  </td>
+                  <td className="p-2 text-[14px] text-ink">{b.merchantName || "—"}</td>
+                  <td className="p-2 text-[14px] text-ink">{b.payerAuthor?.canonicalName ?? "Akce"}</td>
+                  <td className="p-2 text-[13px] text-ink-secondary">
+                    {b.categories.length > 0 ? b.categories.map((c) => c.eventCategory.name).join(", ") : "—"}
+                  </td>
+                  <td className="p-2 text-[14px] text-ink">
+                    {b.totalAmount === null ? (
+                      "—"
+                    ) : (
+                      <>
+                        {parseFloat(b.totalAmount).toLocaleString("cs-CZ")} {b.currency}
+                        {b.currency !== "CZK" && (
+                          <div className={`text-[12px] ${b.amountCzk ? "text-ink-secondary" : "text-amber-700"}`}>
+                            {b.amountCzk
+                              ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč`
+                              : t("billsPage.noRate")}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td className="p-2 text-[14px] text-ink-secondary">
+                    {b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={6} className="p-2 text-[14px] font-medium text-ink">
+                  {t("billsPage.colTotal")}
+                </td>
+                <td className="p-2 text-[14px] font-medium text-ink">
+                  {runningTotal.toLocaleString("cs-CZ")} Kč
+                  {unconvertedCount > 0 && (
+                    <div className="text-[12px] font-normal text-amber-700">
+                      {t("billsPage.totalExcludes", { count: String(unconvertedCount) })}
+                    </div>
+                  )}
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+
+          {/* Mobile: cards */}
+          <div className="flex flex-col gap-2 md:hidden">
+            <label className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary">
+              <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+              {t("billsPage.selectedCount", { count: String(selected.size) })}
+            </label>
+
+            {filteredBills.map((b) => (
+              <div key={b.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+                <div className="mb-1.5 flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(b.id)}
+                      onChange={() => toggleSelect(b.id)}
+                      disabled={isAiLocked(b)}
+                      className="mt-1 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      {isAiLocked(b) ? (
+                        <span className="block truncate text-[14px] text-ink-secondary">{b.originalFilename}</span>
+                      ) : (
+                        <a href={billHref(b.id)} className="block truncate text-[14px] text-ember hover:underline">
+                          {b.originalFilename}
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] ${statusStyle(b.status)}`}>
+                    {statusLabels[b.status] || b.status}
+                  </span>
+                </div>
+
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-[14px] font-medium text-ink">{b.merchantName || "—"}</span>
+                  <span className="shrink-0 text-[14px] font-medium text-ink">
+                    {b.totalAmount === null
+                      ? "—"
+                      : `${parseFloat(b.totalAmount).toLocaleString("cs-CZ")} ${b.currency}`}
+                  </span>
+                </div>
+                {b.totalAmount !== null && b.currency !== "CZK" && (
+                  <div className={`text-right text-[12px] ${b.amountCzk ? "text-ink-secondary" : "text-amber-700"}`}>
+                    {b.amountCzk ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč` : t("billsPage.noRate")}
+                  </div>
+                )}
+
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">
+                  <span>{b.payerAuthor?.canonicalName ?? "Akce"}</span>
+                  {b.categories.length > 0 && <span>{b.categories.map((c) => c.eventCategory.name).join(", ")}</span>}
+                  <span>{b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}</span>
+                </div>
+              </div>
             ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colSpan={6} style={{ padding: "0.5rem", fontWeight: 600 }}>
-                {t("billsPage.colTotal")}
-              </td>
-              <td style={{ padding: "0.5rem", fontWeight: 600 }}>
-                {runningTotal.toLocaleString("cs-CZ")} Kč
+
+            <div className="flex items-center justify-between rounded-lg border border-mist bg-paper-2 p-3">
+              <span className="text-[14px] font-medium text-ink">{t("billsPage.colTotal")}</span>
+              <div className="text-right">
+                <span className="text-[14px] font-medium text-ink">{runningTotal.toLocaleString("cs-CZ")} Kč</span>
                 {unconvertedCount > 0 && (
-                  <div style={{ fontSize: "0.8rem", color: "#a60", fontWeight: 400 }}>
+                  <div className="text-[12px] text-amber-700">
                     {t("billsPage.totalExcludes", { count: String(unconvertedCount) })}
                   </div>
                 )}
-              </td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );

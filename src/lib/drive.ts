@@ -1,5 +1,6 @@
 import { GoogleAuth, Impersonated } from "google-auth-library";
 import { google } from "googleapis";
+import { Readable } from "stream";
 
 const DRIVE_SA_EMAIL = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL;
 
@@ -7,6 +8,42 @@ const SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/spreadsheets",
 ];
+
+const DRIVE_TIMEOUT_MS = 60_000;
+const MAX_ATTEMPTS = 3;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Retries a Drive/Sheets operation up to MAX_ATTEMPTS times, each with its
+ * own fresh timeout. `fn` is called fresh on every attempt — critical for
+ * anything involving a stream body (see uploadFileToFolder), since a stream
+ * consumed by a failed attempt can't be reused for the next one.
+ */
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      return await withTimeout(fn(), DRIVE_TIMEOUT_MS, label);
+    } catch (err) {
+      lastError = err;
+      console.log(`[drive] ${label} attempt ${attempt}/${MAX_ATTEMPTS} failed:`, String(err));
+      if (attempt < MAX_ATTEMPTS) await sleep(1000);
+    }
+  }
+  throw lastError;
+}
 
 let cachedClient: Impersonated | null = null;
 
@@ -117,16 +154,17 @@ export function isGoogleNativeFile(mimeType: string): boolean {
 
 /** Downloads a file's raw bytes. Check isGoogleNativeFile first — don't call this on a native Google file. */
 export async function downloadFileBuffer(fileId: string): Promise<Buffer> {
-  const drive = await getDriveClient();
-  const res = await drive.files.get(
-    { fileId, alt: "media", supportsAllDrives: true },
-    { responseType: "arraybuffer" }
-  );
-  return Buffer.from(res.data as ArrayBuffer);
+  return withRetry(async () => {
+    const drive = await getDriveClient();
+    const res = await drive.files.get(
+      { fileId, alt: "media", supportsAllDrives: true },
+      { responseType: "arraybuffer" }
+    );
+    return Buffer.from(res.data as ArrayBuffer);
+  }, `download file ${fileId}`);
 }
-// ---- Export: upload + manifest sheet ----
 
-import { Readable } from "stream";
+// ---- Export: upload + manifest sheet ----
 
 export async function uploadFileToFolder(
   folderId: string,
@@ -134,15 +172,19 @@ export async function uploadFileToFolder(
   buffer: Buffer,
   mimeType: string
 ): Promise<string> {
-  const drive = await getDriveClient();
-  const res = await drive.files.create({
-    requestBody: { name, parents: [folderId] },
-    media: { mimeType, body: Readable.from(buffer) },
-    fields: "id",
-    supportsAllDrives: true,
-  });
-  if (!res.data.id) throw new Error("Drive upload returned no file id");
-  return res.data.id;
+  return withRetry(async () => {
+    const drive = await getDriveClient();
+    const res = await drive.files.create({
+      requestBody: { name, parents: [folderId] },
+      // Built fresh on every attempt — a stream consumed by a failed
+      // attempt can't be replayed for a retry.
+      media: { mimeType, body: Readable.from(buffer) },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+    if (!res.data.id) throw new Error("Drive upload returned no file id");
+    return res.data.id;
+  }, `upload file ${name}`);
 }
 
 export async function findFileInFolder(
@@ -184,26 +226,30 @@ export async function createManifestSheet(
   title: string,
   rows: (string | number)[][]
 ): Promise<string> {
-  const drive = await getDriveClient();
-  const created = await drive.files.create({
-    requestBody: {
-      name: title,
-      mimeType: SHEET_MIME_TYPE,
-      parents: [exportFolderId],
-    },
-    fields: "id",
-    supportsAllDrives: true,
-  });
-  if (!created.data.id) throw new Error("Drive create returned no file id for manifest sheet");
-  const spreadsheetId = created.data.id;
+  const spreadsheetId = await withRetry(async () => {
+    const drive = await getDriveClient();
+    const created = await drive.files.create({
+      requestBody: {
+        name: title,
+        mimeType: SHEET_MIME_TYPE,
+        parents: [exportFolderId],
+      },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+    if (!created.data.id) throw new Error("Drive create returned no file id for manifest sheet");
+    return created.data.id;
+  }, `create manifest sheet ${title}`);
 
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: "A1",
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: rows },
-  });
+  await withRetry(async () => {
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: "A1",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: rows },
+    });
+  }, `write manifest values ${spreadsheetId}`);
 
   return spreadsheetId;
 }
@@ -212,12 +258,14 @@ export async function writeManifestValues(
   spreadsheetId: string,
   rows: (string | number)[][]
 ): Promise<void> {
-  const sheets = await getSheetsClient();
-  await sheets.spreadsheets.values.clear({ spreadsheetId, range: "A1:Z10000" });
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: "A1",
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: rows },
-  });
+  await withRetry(async () => {
+    const sheets = await getSheetsClient();
+    await sheets.spreadsheets.values.clear({ spreadsheetId, range: "A1:Z10000" });
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: "A1",
+      valueInputOption: "USER_ENTERED",
+      requestBody: { values: rows },
+    });
+  }, `write manifest values ${spreadsheetId}`);
 }

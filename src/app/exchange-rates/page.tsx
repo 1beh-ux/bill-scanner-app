@@ -13,6 +13,11 @@ type Rate = {
 
 type DayRow = { date: string; EUR?: string; PLN?: string };
 
+const inputSm =
+  "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const btn =
+  "rounded-lg bg-ember px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50 disabled:cursor-not-allowed";
+
 export default function ExchangeRatesPage() {
   const { t } = useTranslations();
 
@@ -105,158 +110,96 @@ export default function ExchangeRatesPage() {
     if (r.currency === "PLN") row.PLN = r.rateToCzk;
   }
 
-  const inputStyle: React.CSSProperties = {
-    padding: "0.4rem",
-    border: "1px solid #ccc",
-    borderRadius: 4,
-    fontSize: "0.9rem",
-  };
-
-  const btnStyle: React.CSSProperties = {
-    padding: "0.45rem 0.9rem",
-    background: "#111",
-    color: "#fff",
-    border: "none",
-    borderRadius: 4,
-    cursor: "pointer",
-    fontSize: "0.9rem",
-  };
-
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "0.4rem" }}>
-        {t("rates.title")}
-      </h1>
-      <p style={{ color: "#666", fontSize: "0.9rem", marginBottom: "1.25rem" }}>
-        {t("rates.subtitle")}
-      </p>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("rates.title")}</h1>
+      <p className="mb-5 text-[14px] text-ink-secondary">{t("rates.subtitle")}</p>
 
-      {error && <p style={{ color: "#c00", marginBottom: "0.75rem" }}>{error}</p>}
-      {message && <p style={{ color: "#080", marginBottom: "0.75rem" }}>{message}</p>}
+      {error && <p className="mb-3 text-[14px] text-red-600">{error}</p>}
+      {message && <p className="mb-3 text-[14px] text-pine">{message}</p>}
 
-      <div
-        style={{
-          border: "1px solid #e5e5e5",
-          borderRadius: 6,
-          padding: "1rem",
-          marginBottom: "1.5rem",
-          display: "flex",
-          flexDirection: "column",
-          gap: "0.85rem",
-        }}
-      >
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-          <button onClick={() => runSync({})} disabled={busy} style={btnStyle}>
+      <div className="mb-6 flex flex-col gap-3 rounded-lg border border-mist bg-paper-2 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => runSync({})} disabled={busy} className={btn}>
             {t("rates.fetchToday")}
           </button>
-          <span style={{ fontSize: "0.85rem", color: "#666" }}>
-            {t("rates.fetchTodayHint")}
-          </span>
+          <span className="text-[13px] text-ink-secondary">{t("rates.fetchTodayHint")}</span>
         </div>
 
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
             value={singleDate}
             onChange={(e) => setSingleDate(e.target.value)}
-            style={inputStyle}
+            className={inputSm}
           />
-          <button
-            onClick={() => runSync({ date: singleDate })}
-            disabled={busy || !singleDate}
-            style={btnStyle}
-          >
+          <button onClick={() => runSync({ date: singleDate })} disabled={busy || !singleDate} className={btn}>
             {t("rates.fetchDate")}
           </button>
         </div>
 
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="number"
             min={1}
             max={60}
             value={backfillDays}
             onChange={(e) => setBackfillDays(e.target.value)}
-            style={{ ...inputStyle, width: 80 }}
+            className={inputSm + " w-20"}
           />
-          <button
-            onClick={() => runSync({ days: backfillDays })}
-            disabled={busy}
-            style={btnStyle}
-          >
+          <button onClick={() => runSync({ days: backfillDays })} disabled={busy} className={btn}>
             {t("rates.backfill")}
           </button>
-          <span style={{ fontSize: "0.85rem", color: "#666" }}>
-            {t("rates.backfillHint")}
-          </span>
+          <span className="text-[13px] text-ink-secondary">{t("rates.backfillHint")}</span>
         </div>
 
-        {busy && <span style={{ color: "#666", fontSize: "0.85rem" }}>{t("common.loading")}</span>}
+        {busy && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
       </div>
 
       <div
-        style={{
-          border: "1px solid #e5e5e5",
-          borderRadius: 6,
-          padding: "1rem",
-          marginBottom: "1.5rem",
-          background: missingCzk > 0 ? "#fffaf0" : "#fff",
-        }}
+        className={
+          "mb-6 rounded-lg border border-mist p-4 " + (missingCzk > 0 ? "bg-amber-50" : "bg-paper-2")
+        }
       >
-        <div style={{ fontWeight: 600, marginBottom: "0.35rem" }}>
-          {t("rates.recalcTitle")}
-        </div>
-        <p style={{ fontSize: "0.85rem", color: "#666", margin: "0 0 0.6rem" }}>
-          {missingCzk > 0
-            ? t("rates.recalcPending", { count: String(missingCzk) })
-            : t("rates.recalcNone")}
+        <div className="mb-1 text-[14px] font-semibold text-ink">{t("rates.recalcTitle")}</div>
+        <p className="mb-2.5 text-[13px] text-ink-secondary">
+          {missingCzk > 0 ? t("rates.recalcPending", { count: String(missingCzk) }) : t("rates.recalcNone")}
         </p>
         <button
           onClick={runRecalculate}
           disabled={busy || missingCzk === 0}
-          style={{
-            ...btnStyle,
-            background: missingCzk === 0 ? "#f5f5f5" : "#111",
-            color: missingCzk === 0 ? "#999" : "#fff",
-            cursor: missingCzk === 0 ? "not-allowed" : "pointer",
-          }}
+          className={
+            missingCzk === 0
+              ? "cursor-not-allowed rounded-lg bg-mist px-3.5 py-1.5 text-[13px] text-ink-secondary"
+              : btn
+          }
         >
           {t("rates.recalcButton")}
         </button>
-        <p style={{ fontSize: "0.8rem", color: "#888", margin: "0.5rem 0 0" }}>
-          {t("rates.recalcNote")}
-        </p>
+        <p className="mt-2 text-[12px] text-ink-secondary">{t("rates.recalcNote")}</p>
       </div>
 
-      <h2 style={{ fontSize: "1.05rem", fontWeight: 600, marginBottom: "0.6rem" }}>
-        {t("rates.tableTitle")}
-      </h2>
+      <h2 className="mb-2.5 text-[16px] font-semibold text-ink">{t("rates.tableTitle")}</h2>
 
       {loading ? (
-        <p>{t("common.loading")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : byDay.length === 0 ? (
-        <p>{t("rates.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("rates.empty")}</p>
       ) : (
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <table className="w-full border-collapse">
           <thead>
-            <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-              <th style={{ padding: "0.5rem" }}>{t("rates.colDate")}</th>
-              <th style={{ padding: "0.5rem" }}>EUR</th>
-              <th style={{ padding: "0.5rem" }}>PLN</th>
+            <tr className="border-b border-mist text-left">
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("rates.colDate")}</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">EUR</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">PLN</th>
             </tr>
           </thead>
           <tbody>
             {byDay.map((row) => (
-              <tr key={row.date} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "0.5rem" }}>
-                  {new Date(row.date).toLocaleDateString("cs-CZ")}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  {row.EUR ? parseFloat(row.EUR).toFixed(3) : "—"}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  {row.PLN ? parseFloat(row.PLN).toFixed(3) : "—"}
-                </td>
+              <tr key={row.date} className="border-b border-mist/60">
+                <td className="p-2 text-[14px] text-ink">{new Date(row.date).toLocaleDateString("cs-CZ")}</td>
+                <td className="p-2 text-[14px] text-ink">{row.EUR ? parseFloat(row.EUR).toFixed(3) : "—"}</td>
+                <td className="p-2 text-[14px] text-ink">{row.PLN ? parseFloat(row.PLN).toFixed(3) : "—"}</td>
               </tr>
             ))}
           </tbody>

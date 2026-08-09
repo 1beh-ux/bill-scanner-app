@@ -17,6 +17,9 @@ type UnpaidRow = {
   items: { merchantName: string | null; amountCzk: string | null }[];
 };
 
+const inputClassSm =
+  "rounded-lg border border-mist bg-paper px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+
 export default function EventPaymentsPage({
   params,
 }: {
@@ -27,6 +30,7 @@ export default function EventPaymentsPage({
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [rows, setRows] = useState<UnpaidRow[]>([]);
+  const [scope, setScope] = useState<"approved" | "all">("approved");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,19 +48,17 @@ export default function EventPaymentsPage({
     setLoading(true);
     const [evRes, unpaidRes] = await Promise.all([
       fetch(`/api/events/${id}`),
-      fetch(`/api/events/${id}/unpaid-summary`),
+      fetch(`/api/events/${id}/unpaid-summary?scope=${scope}`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (unpaidRes.ok) setRows(await unpaidRes.json());
     setLoading(false);
-  }, [id]);
+  }, [id, scope]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  // QR codes are generated client-side, matching the tech stack's decision
-  // to keep this a browser-side transform with no backend round trip.
   useEffect(() => {
     let cancelled = false;
 
@@ -73,7 +75,7 @@ export default function EventPaymentsPage({
         newIbans[row.authorId] = iban;
         if (!iban) continue;
 
-const amount = parseFloat(row.unpaidTotalCzk || "0");
+        const amount = parseFloat(row.unpaidTotalCzk || "0");
         if (amount <= 0) continue;
 
         const itemized = buildItemizedMessage(
@@ -138,7 +140,7 @@ const amount = parseFloat(row.unpaidTotalCzk || "0");
     const res = await fetch(`/api/events/${id}/mark-paid`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authorId: row.authorId }),
+      body: JSON.stringify({ authorId: row.authorId, action: "pay", scope }),
     });
     setMarkingPaidId(null);
     if (!res.ok) {
@@ -153,101 +155,104 @@ const amount = parseFloat(row.unpaidTotalCzk || "0");
     load();
   }
 
-  if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
-  if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
+  if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+  if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <a href={`/events/${id}`} style={{ color: "#666", textDecoration: "none", fontSize: "0.9rem" }}>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <a href={`/events/${id}`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("billsPage.back")}
       </a>
 
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0.5rem 0 1.5rem" }}>
+      <h1 className="mb-4 mt-2 text-[22px] font-semibold text-ink">
         {t("paymentsPage.title")} — {event.name}
       </h1>
 
-      {error && <p style={{ color: "red", marginBottom: "1rem" }}>{error}</p>}
+      <div className="mb-5 flex gap-2">
+        <button
+          onClick={() => setScope("approved")}
+          className={
+            "rounded-full border px-3 py-1.5 text-[13px] " +
+            (scope === "approved" ? "border-ember bg-ember text-white" : "border-mist bg-paper-2 text-ink-secondary hover:bg-paper")
+          }
+        >
+          {t("paymentsPage.scopeApproved")}
+        </button>
+        <button
+          onClick={() => setScope("all")}
+          className={
+            "rounded-full border px-3 py-1.5 text-[13px] " +
+            (scope === "all" ? "border-ember bg-ember text-white" : "border-mist bg-paper-2 text-ink-secondary hover:bg-paper")
+          }
+        >
+          {t("paymentsPage.scopeAll")}
+        </button>
+      </div>
+
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {rows.length === 0 ? (
-        <p>{t("paymentsPage.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t("paymentsPage.empty")}</p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
+        <div className="flex flex-col gap-4">
           {rows.map((row) => (
-            <div
-              key={row.authorId}
-              style={{
-                border: "1px solid #eee",
-                borderRadius: 8,
-                padding: "1rem",
-                display: "flex",
-                gap: "1.5rem",
-                alignItems: "flex-start",
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: "1.05rem" }}>{row.name}</div>
-                <div style={{ color: "#666", fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+            <div key={row.authorId} className="flex flex-col gap-4 rounded-lg border border-mist bg-paper-2 p-4 sm:flex-row">
+              <div className="flex-1">
+                <div className="text-[16px] font-semibold text-ink">{row.name}</div>
+                <div className="mb-2 text-[14px] text-ink-secondary">
                   {parseFloat(row.unpaidTotalCzk).toLocaleString("cs-CZ")} Kč · {row.unpaidBillCount}{" "}
                   {t("paymentsPage.colBillCount")}
                 </div>
 
+                <ul className="mb-2 list-disc pl-5 text-[12px] text-ink-secondary">
+                  {row.items.map((it, i) => (
+                    <li key={i}>
+                      {it.merchantName || "—"}
+                      {it.amountCzk !== null && ` — ${parseFloat(it.amountCzk).toLocaleString("cs-CZ")} Kč`}
+                    </li>
+                  ))}
+                </ul>
+
                 {editingAuthorId === row.authorId ? (
-                  <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", flexWrap: "wrap" }}>
+                  <div className="mb-2 flex flex-wrap gap-2">
                     <input
                       type="text"
                       value={editBankAccountNumber}
                       onChange={(e) => setEditBankAccountNumber(e.target.value)}
                       placeholder={t("authors.bankAccountPlaceholder")}
-                      style={{ padding: "0.4rem", border: "1px solid #ccc", borderRadius: 4 }}
+                      className={inputClassSm}
                     />
                     <input
                       type="text"
                       value={editBankCode}
                       onChange={(e) => setEditBankCode(e.target.value)}
                       placeholder={t("authors.bankCodePlaceholder")}
-                      style={{ padding: "0.4rem", border: "1px solid #ccc", borderRadius: 4, width: 90 }}
+                      className={inputClassSm + " w-20"}
                     />
-                    <button
-                      onClick={() => saveBankDetails(row.authorId)}
-                      disabled={savingBank}
-                      style={{ color: "#080", background: "none", border: "none", cursor: "pointer" }}
-                    >
+                    <button onClick={() => saveBankDetails(row.authorId)} disabled={savingBank} className="text-[13px] text-pine hover:underline">
                       {t("common.save")}
                     </button>
-                    <button
-                      onClick={() => setEditingAuthorId(null)}
-                      style={{ color: "#666", background: "none", border: "none", cursor: "pointer" }}
-                    >
+                    <button onClick={() => setEditingAuthorId(null)} className="text-[13px] text-ink-secondary hover:underline">
                       {t("common.cancel")}
                     </button>
                   </div>
                 ) : (
-                  <div style={{ marginBottom: "0.5rem" }}>
+                  <div className="mb-2">
                     {row.bankAccountNumber ? (
-                      <span style={{ fontSize: "0.85rem", color: "#444" }}>
+                      <span className="text-[13px] text-ink">
                         {row.bankAccountNumber}/{row.bankCode}
                       </span>
                     ) : (
-                      <span style={{ fontSize: "0.85rem", color: "#c00" }}>{t("paymentsPage.noBankDetails")}</span>
+                      <span className="text-[13px] text-red-600">{t("paymentsPage.noBankDetails")}</span>
                     )}{" "}
-                    <button
-                      onClick={() => startEditBank(row)}
-                      style={{
-                        color: "#0645AD",
-                        textDecoration: "underline",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "0.85rem",
-                      }}
-                    >
+                    <button onClick={() => startEditBank(row)} className="text-[13px] text-ember hover:underline">
                       {t("paymentsPage.editBankButton")}
                     </button>
                   </div>
                 )}
 
                 {ibans[row.authorId] && (
-                  <div style={{ fontSize: "0.75rem", color: "#888", fontFamily: "monospace" }}>
+                  <div className="font-mono text-[12px] text-ink-secondary">
                     {t("paymentsPage.ibanLabel")}: {ibans[row.authorId]}
                   </div>
                 )}
@@ -255,26 +260,18 @@ const amount = parseFloat(row.unpaidTotalCzk || "0");
                 <button
                   onClick={() => handleMarkPaid(row)}
                   disabled={markingPaidId === row.authorId || event.status === "closed"}
-                  style={{
-                    marginTop: "0.75rem",
-                    padding: "0.4rem 0.8rem",
-                    background: "#111",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                  }}
+                  className="mt-3 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50"
                 >
                   {t("paymentsPage.markPaidButton")}
                 </button>
               </div>
 
-              <div style={{ width: 180, textAlign: "center" }}>
+              <div className="w-full text-center sm:w-[180px]">
                 {qrDataUrls[row.authorId] ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={qrDataUrls[row.authorId]} alt="QR Platba" width={180} height={180} />
+                  <img src={qrDataUrls[row.authorId]} alt="QR Platba" width={180} height={180} className="mx-auto" />
                 ) : (
-                  <div style={{ fontSize: "0.8rem", color: "#888" }}>{t("paymentsPage.qrUnavailable")}</div>
+                  <div className="text-[13px] text-ink-secondary">{t("paymentsPage.qrUnavailable")}</div>
                 )}
               </div>
             </div>

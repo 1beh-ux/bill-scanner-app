@@ -39,104 +39,94 @@ export default function EventBudgetPage({
     load();
   }, [id]);
 
-  if (loading) return <div style={{ padding: "2rem" }}>{t("common.loading")}</div>;
-  if (!event) return <div style={{ padding: "2rem" }}>{t("eventDetail.notFound")}</div>;
+  if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+  if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   const totalBudget = rows.reduce((sum, r) => sum + parseFloat(r.budgetAmount || "0"), 0);
   const totalActual = rows.reduce((sum, r) => sum + parseFloat(r.actualCzk || "0"), 0);
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "2rem" }}>
-      <a href={`/events/${id}`} style={{ color: "#666", textDecoration: "none", fontSize: "0.9rem" }}>
+    <div className="mx-auto max-w-3xl p-4 md:p-8">
+      <a href={`/events/${id}`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("billsPage.back")}
       </a>
 
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 600, margin: "0.5rem 0 1.5rem" }}>
+      <h1 className="mb-6 mt-2 text-[22px] font-semibold text-ink">
         {t("budgetPage.title")} — {event.name}
       </h1>
 
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: "left", borderBottom: "1px solid #ccc" }}>
-            <th style={{ padding: "0.5rem" }}>{t("eventDetail.colCategory")}</th>
-            <th style={{ padding: "0.5rem" }}>{t("eventDetail.colBudget")}</th>
-            <th style={{ padding: "0.5rem" }}>{t("budgetPage.colActual")}</th>
-            <th style={{ padding: "0.5rem" }}>{t("budgetPage.colRemaining")}</th>
-            <th style={{ padding: "0.5rem", width: 140 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => {
-            const budget = parseFloat(r.budgetAmount || "0");
-            const actual = parseFloat(r.actualCzk || "0");
-            const remaining = budget - actual;
-            const pct = budget > 0 ? Math.min((actual / budget) * 100, 100) : actual > 0 ? 100 : 0;
-            const overBudget = actual > budget;
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] border-collapse">
+          <thead>
+            <tr className="border-b border-mist text-left">
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("budgetPage.colActual")}</th>
+              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("budgetPage.colRemaining")}</th>
+              <th className="w-36 p-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => {
+              const budget = parseFloat(r.budgetAmount || "0");
+              const actual = parseFloat(r.actualCzk || "0");
+              const remaining = budget - actual;
+              const pct = budget > 0 ? Math.min((actual / budget) * 100, 100) : actual > 0 ? 100 : 0;
+              const overBudget = actual > budget;
 
-            return (
-              <tr key={r.id} style={{ borderBottom: "1px solid #eee" }}>
-                <td style={{ padding: "0.5rem" }}>
-                  {r.name}
-                  {r.excludedCount > 0 && (
-                    <div style={{ fontSize: "0.75rem", color: "#888" }}>
-                      {t("billsPage.totalExcludes", { count: String(r.excludedCount) })}
+              return (
+                <tr key={r.id} className="border-b border-mist/60">
+                  <td className="p-2 text-[14px] text-ink">
+                    {r.name}
+                    {r.excludedCount > 0 && (
+                      <div className="text-[12px] text-ink-secondary">
+                        {t("billsPage.totalExcludes", { count: String(r.excludedCount) })}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2 text-[14px] text-ink">{budget.toLocaleString("cs-CZ")}</td>
+                  <td className={"p-2 text-[14px] " + (overBudget ? "font-semibold text-red-600" : "text-ink")}>
+                    {actual.toLocaleString("cs-CZ")}
+                  </td>
+                  <td className={"p-2 text-[14px] " + (remaining < 0 ? "text-red-600" : "text-ink")}>
+                    {remaining.toLocaleString("cs-CZ")}
+                  </td>
+                  <td className="p-2">
+                    <div className="h-2 overflow-hidden rounded-full bg-mist">
+                      <div
+                        className={"h-full " + (overBudget ? "bg-red-600" : "bg-ember")}
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
-                  )}
-                </td>
-                <td style={{ padding: "0.5rem" }}>{budget.toLocaleString("cs-CZ")}</td>
-                <td
-                  style={{
-                    padding: "0.5rem",
-                    color: overBudget ? "#c00" : undefined,
-                    fontWeight: overBudget ? 600 : undefined,
-                  }}
-                >
-                  {actual.toLocaleString("cs-CZ")}
-                </td>
-                <td style={{ padding: "0.5rem", color: remaining < 0 ? "#c00" : undefined }}>
-                  {remaining.toLocaleString("cs-CZ")}
-                </td>
-                <td style={{ padding: "0.5rem" }}>
-                  <div style={{ background: "#eee", borderRadius: 4, height: 8, overflow: "hidden" }}>
-                    <div
-                      style={{
-                        width: `${pct}%`,
-                        height: "100%",
-                        background: overBudget ? "#c00" : "#111",
-                      }}
-                    />
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot>
-          <tr>
-            <td style={{ padding: "0.5rem", fontWeight: 600 }}>{t("eventDetail.total")}</td>
-            <td style={{ padding: "0.5rem", fontWeight: 600 }}>{totalBudget.toLocaleString("cs-CZ")}</td>
-            <td
-              style={{
-                padding: "0.5rem",
-                fontWeight: 600,
-                color: totalActual > totalBudget ? "#c00" : undefined,
-              }}
-            >
-              {totalActual.toLocaleString("cs-CZ")}
-            </td>
-            <td
-              style={{
-                padding: "0.5rem",
-                fontWeight: 600,
-                color: totalBudget - totalActual < 0 ? "#c00" : undefined,
-              }}
-            >
-              {(totalBudget - totalActual).toLocaleString("cs-CZ")}
-            </td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
+              <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")}</td>
+              <td
+                className={
+                  "p-2 text-[14px] font-semibold " + (totalActual > totalBudget ? "text-red-600" : "text-ink")
+                }
+              >
+                {totalActual.toLocaleString("cs-CZ")}
+              </td>
+              <td
+                className={
+                  "p-2 text-[14px] font-semibold " +
+                  (totalBudget - totalActual < 0 ? "text-red-600" : "text-ink")
+                }
+              >
+                {(totalBudget - totalActual).toLocaleString("cs-CZ")}
+              </td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
   );
 }

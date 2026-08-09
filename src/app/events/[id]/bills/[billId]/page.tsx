@@ -34,6 +34,7 @@ type BillDetail = {
   exchangeRateDate: string | null;
   aiConfidence: string | null;
   aiRawResponse: unknown;
+  paidToAuthor: boolean;
   categories: BillCategoryRow[];
 };
 
@@ -79,6 +80,7 @@ export default function BillDetailPage({
     prev: null,
     next: null,
   });
+  const [events, setEvents] = useState<{ id: string; name: string }[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,8 +95,22 @@ export default function BillDetailPage({
   const [notes, setNotes] = useState("");
   const [splits, setSplits] = useState<SplitRow[]>([]);
   const [editingImage, setEditingImage] = useState(false);
-  const [processingAi, setProcessingAi] = useState(false);
+const [processingAi, setProcessingAi] = useState(false);
+  const [paidToggling, setPaidToggling] = useState(false);
   const isPdf = bill?.originalFilename.toLowerCase().endsWith(".pdf") ?? false;
+
+  async function handlePaidChange(paid: boolean) {
+    setPaidToggling(true);
+    setError(null);
+    const res = await fetch(`/api/bills/${billId}/paid`, { method: paid ? "POST" : "DELETE" });
+    setPaidToggling(false);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(t(`billModal.error.${data.error}`) || t("billModal.paidChangeFailed"));
+      return;
+    }
+    load();
+  }
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -135,6 +151,10 @@ export default function BillDetailPage({
     fetch(`/api/authors`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setAuthors)
+      .catch(() => {});
+    fetch(`/api/events`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setEvents)
       .catch(() => {});
   }, [eventId]);
 
@@ -336,7 +356,35 @@ export default function BillDetailPage({
       setError(t("billModal.error.reopenFailed"));
     }
   }
+async function handleMoveToEvent(targetEventId: string) {
+    const targetEvent = events.find((ev) => ev.id === targetEventId);
+    if (!targetEvent) return;
+    if (!window.confirm(t("billModal.moveConfirm", { name: targetEvent.name }))) return;
 
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/bills/${billId}/move`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ targetEventId }),
+    });
+    setSaving(false);
+
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(t(`billModal.error.${data.error}`) || t("billModal.moveFailed"));
+      return;
+    }
+
+    const data = await res.json();
+    window.alert(
+      t("billModal.moveDone", {
+        matched: String(data.matchedCategories ?? 0),
+        dropped: String(data.droppedCategories ?? 0),
+      })
+    );
+    router.push(`/events/${targetEventId}/bills/${billId}`);
+  }
   async function handleProcessAi() {
     setProcessingAi(true);
     setError(null);
@@ -447,7 +495,7 @@ const statusLabel = t(
           >
             {t("billModal.openFile")}
           </a>
-          {!isPdf && !isLocked && (
+          {!isLocked && (
             <button
               onClick={() => setEditingImage(true)}
               className="mt-1.5 block text-[13px] text-ember hover:underline"
@@ -526,7 +574,7 @@ const statusLabel = t(
               disabled={isLocked}
               className={inputClass}
             >
-              <option value="">{t("billModal.payerEvent")}</option>
+<option value="">{t("billModal.payerEvent")}</option>
               {authors
                 .filter((a) => a.active)
                 .map((a) => (
@@ -536,6 +584,21 @@ const statusLabel = t(
                 ))}
             </select>
           </div>
+
+          {bill.payerAuthorId && (
+            <div>
+              <label className={labelClass}>{t("billModal.paidStatus")}</label>
+              <select
+                value={bill.paidToAuthor ? "paid" : "unpaid"}
+                onChange={(e) => handlePaidChange(e.target.value === "paid")}
+                disabled={paidToggling}
+                className={inputClass}
+              >
+                <option value="unpaid">{t("billModal.paidStatusUnpaid")}</option>
+                <option value="paid">{t("billModal.paidStatusPaid")}</option>
+              </select>
+            </div>
+          )}
 
           <div>
             <label className={labelClass}>{t("billModal.notes")}</label>
@@ -659,6 +722,25 @@ const statusLabel = t(
             >
               {processingAi ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
             </button>
+            {!isLocked && events.length > 1 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) handleMoveToEvent(e.target.value);
+                }}
+                disabled={saving}
+                className={inputBase + " w-auto"}
+              >
+                <option value="">{t("billModal.moveToEvent")}</option>
+                {events
+                  .filter((ev) => ev.id !== eventId)
+                  .map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+              </select>
+            )}
             {saving && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
           </div>
         </div>
@@ -669,6 +751,7 @@ const statusLabel = t(
           billId={bill.id}
           hasOriginal={!!bill.originalGcsObjectPath}
           version={bill.contentHash}
+          isPdf={isPdf}
           onClose={() => setEditingImage(false)}
           onSaved={() => {
             load();
