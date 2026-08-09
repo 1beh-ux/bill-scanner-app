@@ -65,8 +65,11 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (existing.status === "approved") {
+ if (existing.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
+  }
+  if (existing.status === "queued" || existing.status === "processing") {
+    return NextResponse.json({ error: "bill_processing_locked" }, { status: 409 });
   }
   if (existing.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });

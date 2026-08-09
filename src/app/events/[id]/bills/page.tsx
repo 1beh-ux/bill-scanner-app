@@ -67,8 +67,17 @@ export default function EventBillsPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([]);
 
+  const [aiProgressIds, setAiProgressIds] = useState<Set<string> | null>(null);
+
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  // Guards against out-of-order fetch responses: only the response matching
+  // the most recently issued request is ever applied to state. Without
+  // this, a slightly-delayed response can land after a newer one and
+  // silently overwrite fresher data with stale data — this is what caused
+  // the premature "done" message and contributed to the constant flashing.
+  const requestIdRef = useRef(0);
 
   const statusLabels: Record<string, string> = {
     new: t("billsPage.statusNew"),
@@ -82,18 +91,64 @@ export default function EventBillsPage({
 
   async function load() {
     setLoading(true);
+    const requestId = ++requestIdRef.current;
     const [evRes, billsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/bills`),
     ]);
-    if (evRes.ok) setEvent(await evRes.json());
-    if (billsRes.ok) setBills(await billsRes.json());
+    const isStale = requestId !== requestIdRef.current;
+    if (evRes.ok && !isStale) setEvent(await evRes.json());
+    if (billsRes.ok && !isStale) setBills(await billsRes.json());
     setLoading(false);
+  }
+
+  // Used only by background polling — updates bills quietly, never touches
+  // the loading state, so it never blanks the page. This is the actual fix
+  // for the flashing: polling no longer goes through the full page load.
+  async function refreshBillsQuietly() {
+    const requestId = ++requestIdRef.current;
+    const res = await fetch(`/api/events/${id}/bills`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (requestId !== requestIdRef.current) return;
+    setBills(data);
   }
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const aiActiveCount = useMemo(
+    () => bills.filter((b) => b.status === "queued" || b.status === "processing").length,
+    [bills]
+  );
+  const hasActiveAiRun = aiActiveCount > 0;
+
+  useEffect(() => {
+    if (!hasActiveAiRun) return;
+    const interval = setInterval(() => {
+      refreshBillsQuietly();
+    }, 4000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasActiveAiRun]);
+
+  useEffect(() => {
+    if (!aiProgressIds || aiProgressIds.size === 0) return;
+    const stillActive = bills.filter(
+      (b) => aiProgressIds.has(b.id) && (b.status === "queued" || b.status === "processing")
+    );
+    if (stillActive.length === 0) {
+      const tracked = bills.filter((b) => aiProgressIds.has(b.id));
+      const failedCount = tracked.filter((b) => b.status === "failed").length;
+      const succeeded = tracked.length - failedCount;
+      setBulkMessage(
+        t("billsPage.bulkResult", { succeeded: String(succeeded), failed: String(failedCount) })
+      );
+      setAiProgressIds(null);
+    }
+  }, [bills, aiProgressIds, t]);
 
   async function handleUpload(fileList: FileList | null, channel: "upload" | "camera") {
     if (!fileList || fileList.length === 0) return;
@@ -151,14 +206,16 @@ export default function EventBillsPage({
     0
   );
 
-  // Foreign-currency bills without a stored rate can't be included in the CZK
-  // total; surfacing the count is better than silently under-reporting.
   const unconvertedCount = filteredBills.filter(
     (b) => b.totalAmount !== null && b.amountCzk === null
   ).length;
 
   function billHref(billId: string) {
     return `/events/${id}/bills/${billId}${statusFilter ? `?status=${statusFilter}` : ""}`;
+  }
+
+  function isAiLocked(b: BillItem) {
+    return b.status === "queued" || b.status === "processing";
   }
 
   function toggleSelect(billId: string) {
@@ -220,6 +277,46 @@ export default function EventBillsPage({
     setSelected(new Set());
     setBulkRunning(false);
     load();
+  }
+
+  async function runBulkAi() {
+    if (selected.size === 0) return;
+    if (selected.size > 20) {
+      setError(t("billsPage.bulkAiTooMany", { max: "20" }));
+      return;
+    }
+    const ok = window.confirm(t("billsPage.confirmBulkAi", { count: String(selected.size) }));
+    if (!ok) return;
+
+    setBulkMessage(null);
+    setBulkFailures([]);
+    setError(null);
+
+    const billIdsToTrack = Array.from(selected);
+
+    const res = await fetch(`/api/events/${id}/bills/bulk-ai`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billIds: billIdsToTrack }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(
+        data.error === "too_many_bills"
+          ? t("billsPage.bulkAiTooMany", { max: String(data.max) })
+          : t("billsPage.bulkAiFailed")
+      );
+      return;
+    }
+
+    setSelected(new Set());
+    // Load fresh data BEFORE starting to track — otherwise the completion
+    // check can run once against stale bills from before this run even
+    // started, see nothing "active" simply because it hadn't refreshed
+    // yet, and declare the run falsely complete immediately.
+    await load();
+    setAiProgressIds(new Set(billIdsToTrack));
   }
 
   function bulkFailureText(f: BulkFailure): string {
@@ -388,11 +485,11 @@ export default function EventBillsPage({
             {t("billsPage.bulkApprove")}
           </button>
           <button
-            disabled
-            title={t("billModal.aiReprocessSoon")}
-            style={{ padding: "0.4rem 0.85rem", background: "#f5f5f5", color: "#999", border: "1px solid #ddd", borderRadius: 4, cursor: "not-allowed", fontSize: "0.85rem" }}
+            onClick={runBulkAi}
+            disabled={hasActiveAiRun}
+            style={{ padding: "0.4rem 0.85rem", background: "#111", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: "0.85rem" }}
           >
-            {t("billModal.aiReprocess")}
+            {hasActiveAiRun ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
           </button>
           <button
             onClick={() => runBulk("delete")}
@@ -409,6 +506,12 @@ export default function EventBillsPage({
           </button>
           {bulkRunning && <span style={{ color: "#666", fontSize: "0.85rem" }}>{t("common.loading")}</span>}
         </div>
+      )}
+
+      {hasActiveAiRun && (
+        <p style={{ color: "#666", marginBottom: "0.5rem", fontSize: "0.9rem" }}>
+          {t("billsPage.bulkAiActive", { count: String(aiActiveCount) })}
+        </p>
       )}
 
       {bulkMessage && <p style={{ color: "#080", marginBottom: "0.5rem" }}>{bulkMessage}</p>}
@@ -454,12 +557,17 @@ export default function EventBillsPage({
                     type="checkbox"
                     checked={selected.has(b.id)}
                     onChange={() => toggleSelect(b.id)}
+                    disabled={isAiLocked(b)}
                   />
                 </td>
                 <td style={{ padding: "0.5rem" }}>
-                  <a href={billHref(b.id)} style={{ color: "#0645AD", cursor: "pointer" }}>
-                    {b.originalFilename}
-                  </a>
+                  {isAiLocked(b) ? (
+                    <span style={{ color: "#999" }}>{b.originalFilename}</span>
+                  ) : (
+                    <a href={billHref(b.id)} style={{ color: "#0645AD", cursor: "pointer" }}>
+                      {b.originalFilename}
+                    </a>
+                  )}
                 </td>
                 <td style={{ padding: "0.5rem" }}>{statusLabels[b.status] || b.status}</td>
                 <td style={{ padding: "0.5rem" }}>{b.merchantName || "—"}</td>

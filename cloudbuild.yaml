@@ -23,8 +23,7 @@ steps:
       - --no-invoker-iam-check
       - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:bill-scanner-db
       - --set-secrets=DATABASE_URL=db-url-secret:latest,CRON_SECRET=cron-secret:latest
-      - --set-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files,DRIVE_SERVICE_ACCOUNT_EMAIL=bill-scanner-drive@prvni-beh-filesaver.iam.gserviceaccount.com,AI_SERVICE_URL=https://bill-scanner-ai-sml4zhisya-ew.a.run.app
-      - --memory=2Gi
+      - --set-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files,DRIVE_SERVICE_ACCOUNT_EMAIL=bill-scanner-drive@prvni-beh-filesaver.iam.gserviceaccount.com,AI_SERVICE_URL=https://bill-scanner-ai-sml4zhisya-ew.a.run.app,GCS_SIGNING_SERVICE_ACCOUNT=1050716617948-compute@developer.gserviceaccount.com
       - --cpu=1
       - --timeout=600
       - --max-instances=3

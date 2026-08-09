@@ -3,6 +3,7 @@ import { billsBucket } from "@/lib/gcs";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL;
 const REQUEST_TIMEOUT_MS = 60_000;
+const MAX_DOWNLOAD_ATTEMPTS = 3;
 
 export interface AiExtractionData {
   merchant_name: string | null;
@@ -51,6 +52,44 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Downloads a bill's bytes from GCS, retrying on failure. Cloud Shell's
+ * network path to GCS has shown occasional transient hangs (confirmed on
+ * both AI extraction and unrelated file-preview requests, so this isn't
+ * specific to this pipeline) — but a fresh retry has consistently succeeded
+ * quickly, so retrying automatically here removes the need for a human to
+ * notice a failure and manually click try-again.
+ */
+async function downloadWithRetry(gcsObjectPath: string): Promise<Buffer> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_DOWNLOAD_ATTEMPTS; attempt++) {
+    try {
+      console.log(
+        `[ai-extraction] step 0: downloading from GCS (attempt ${attempt}/${MAX_DOWNLOAD_ATTEMPTS})`,
+        gcsObjectPath
+      );
+      const [buffer] = await withTimeout(
+        billsBucket.file(gcsObjectPath).download(),
+        REQUEST_TIMEOUT_MS,
+        "GCS download"
+      );
+      console.log("[ai-extraction] step 0 done:", buffer.length, "bytes");
+      return buffer;
+    } catch (err) {
+      lastError = err;
+      console.log(`[ai-extraction] step 0 attempt ${attempt} failed:`, String(err));
+      if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+        await sleep(1000);
+      }
+    }
+  }
+  throw lastError;
+}
+
 let cachedAuth: GoogleAuth | null = null;
 
 async function getIdToken(): Promise<string> {
@@ -72,9 +111,7 @@ export async function extractBillWithAi(
 ): Promise<AiExtractionResult> {
   if (!AI_SERVICE_URL) throw new Error("AI_SERVICE_URL is not set");
 
-  console.log("[ai-extraction] step 0: downloading from GCS", gcsObjectPath);
-  const [buffer] = await billsBucket.file(gcsObjectPath).download();
-  console.log("[ai-extraction] step 0 done:", buffer.length, "bytes");
+  const buffer = await downloadWithRetry(gcsObjectPath);
 
   const mimeType = mimeTypeForFilename(originalFilename);
   const idToken = await withTimeout(getIdToken(), REQUEST_TIMEOUT_MS, "ID token fetch");

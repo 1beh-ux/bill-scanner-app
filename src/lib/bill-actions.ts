@@ -38,6 +38,9 @@ export async function approveBill(
   if (bill.status === "approved") {
     return { ok: false, billId, error: "already_approved" };
   }
+  if (bill.status === "queued" || bill.status === "processing") {
+    return { ok: false, billId, error: "bill_processing_locked" };
+  }
   if (bill.event.status === "closed") {
     return { ok: false, billId, error: "event_closed_locked" };
   }

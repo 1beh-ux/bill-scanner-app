@@ -32,6 +32,8 @@ type BillDetail = {
   amountCzk: string | null;
   exchangeRateUsed: string | null;
   exchangeRateDate: string | null;
+  aiConfidence: string | null;
+  aiRawResponse: unknown;
   categories: BillCategoryRow[];
 };
 
@@ -46,8 +48,18 @@ async function safeJson(res: Response): Promise<Record<string, unknown>> {
   }
 }
 
-const inputClass =
-  "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember disabled:bg-paper disabled:text-ink-secondary";
+function getAiFailureReason(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.error === "string") return r.error;
+  const data = r.data as Record<string, unknown> | undefined;
+  if (data && typeof data.notes === "string" && data.notes) return data.notes;
+  return null;
+}
+
+const inputBase =
+  "rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember disabled:bg-paper disabled:text-ink-secondary";
+const inputClass = inputBase + " w-full";
 const labelClass = "mb-1 block text-[12px] text-ink-secondary";
 
 export default function BillDetailPage({
@@ -73,7 +85,6 @@ export default function BillDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-
   const [merchantName, setMerchantName] = useState("");
   const [billDate, setBillDate] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
@@ -85,8 +96,6 @@ export default function BillDetailPage({
   const [processingAi, setProcessingAi] = useState(false);
   const isPdf = bill?.originalFilename.toLowerCase().endsWith(".pdf") ?? false;
 
-  // Plain browser API rather than next/navigation's useSearchParams — avoids
-  // any Suspense-boundary requirement for something this simple.
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     setStatusFilter(sp.get("status"));
@@ -129,9 +138,6 @@ export default function BillDetailPage({
       .catch(() => {});
   }, [eventId]);
 
-  // Recomputes prev/next from the full bill list every time, since a fresh
-  // page load has no access to whatever filtered list the bills page had in
-  // memory — this mirrors the same status-filter logic that page uses.
   useEffect(() => {
     fetch(`/api/events/${eventId}/bills`)
       .then((r) => (r.ok ? r.json() : []))
@@ -145,6 +151,21 @@ export default function BillDetailPage({
       })
       .catch(() => {});
   }, [eventId, billId, statusFilter]);
+
+  // While this bill is being processed by AI (queued or actively in
+  // flight), poll for it to resolve so the page updates itself once done —
+  // matches the same live-progress pattern used on the bills list.
+  useEffect(() => {
+    const aiLocked = bill?.status === "queued" || bill?.status === "processing";
+    if (!aiLocked) return;
+
+    const interval = setInterval(() => {
+      load();
+    }, 4000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bill?.status]);
 
   function qs() {
     return statusFilter ? `?status=${statusFilter}` : "";
@@ -168,6 +189,8 @@ export default function BillDetailPage({
   }, [adjacent, backHref]);
 
   const isApproved = bill?.status === "approved";
+  const isAiLocked = bill?.status === "queued" || bill?.status === "processing";
+  const isLocked = isApproved || isAiLocked;
 
   const splitTotal = splits.reduce((sum, s) => sum + parseFloat(s.amount || "0"), 0);
   const billTotalNum = parseFloat(totalAmount || "0");
@@ -302,6 +325,18 @@ export default function BillDetailPage({
     }
   }
 
+  async function handleReopen() {
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/bills/${billId}/approve`, { method: "DELETE" });
+    setSaving(false);
+    if (res.ok) {
+      load();
+    } else {
+      setError(t("billModal.error.reopenFailed"));
+    }
+  }
+
   async function handleProcessAi() {
     setProcessingAi(true);
     setError(null);
@@ -317,26 +352,14 @@ export default function BillDetailPage({
     load();
   }
 
-
-  async function handleReopen() {
-    setSaving(true);
-    setError(null);
-    const res = await fetch(`/api/bills/${billId}/approve`, { method: "DELETE" });
-    setSaving(false);
-    if (res.ok) {
-      load();
-    } else {
-      setError(t("billModal.error.reopenFailed"));
-    }
-  }
-
   if (loading || !bill) {
     return <div className="p-6 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   }
 
-  const statusLabel = t(
+const statusLabel = t(
     `billsPage.status${bill.status.replace(/_(.)/g, (_m, x) => x.toUpperCase()).replace(/^./, (x) => x.toUpperCase())}`
   );
+  const aiFailureReason = bill.status === "failed" ? getAiFailureReason(bill.aiRawResponse) : null;
 
   return (
     <div>
@@ -384,6 +407,16 @@ export default function BillDetailPage({
 
       {error && <p className="mx-4 mt-4 text-[13px] text-red-600 md:mx-6">{error}</p>}
       {message && <p className="mx-4 mt-4 text-[13px] text-pine md:mx-6">{message}</p>}
+     {isAiLocked && (
+        <p className="mx-4 mt-4 text-[13px] text-ink-secondary md:mx-6">
+          {t("billModal.aiLockedNotice")}
+        </p>
+      )}
+      {aiFailureReason && (
+        <p className="mx-4 mt-4 text-[13px] text-red-600 md:mx-6">
+          {t("billModal.aiFailureReason", { reason: aiFailureReason })}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 gap-6 p-4 md:p-6 lg:grid-cols-2">
         <div>
@@ -414,7 +447,7 @@ export default function BillDetailPage({
           >
             {t("billModal.openFile")}
           </a>
-          {!isPdf && !isApproved && (
+          {!isPdf && !isLocked && (
             <button
               onClick={() => setEditingImage(true)}
               className="mt-1.5 block text-[13px] text-ember hover:underline"
@@ -431,7 +464,7 @@ export default function BillDetailPage({
               type="text"
               value={merchantName}
               onChange={(e) => setMerchantName(e.target.value)}
-              disabled={isApproved}
+              disabled={isLocked}
               className={inputClass}
             />
           </div>
@@ -443,7 +476,7 @@ export default function BillDetailPage({
                 type="date"
                 value={billDate}
                 onChange={(e) => setBillDate(e.target.value)}
-                disabled={isApproved}
+                disabled={isLocked}
                 className={inputClass}
               />
             </div>
@@ -454,7 +487,7 @@ export default function BillDetailPage({
                 step="0.01"
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
-                disabled={isApproved}
+                disabled={isLocked}
                 className={inputClass}
               />
             </div>
@@ -463,7 +496,7 @@ export default function BillDetailPage({
               <select
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                disabled={isApproved}
+                disabled={isLocked}
                 className={inputClass}
               >
                 <option value="CZK">CZK</option>
@@ -490,7 +523,7 @@ export default function BillDetailPage({
             <select
               value={payerAuthorId}
               onChange={(e) => setPayerAuthorId(e.target.value)}
-              disabled={isApproved}
+              disabled={isLocked}
               className={inputClass}
             >
               <option value="">{t("billModal.payerEvent")}</option>
@@ -509,7 +542,7 @@ export default function BillDetailPage({
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              disabled={isApproved}
+              disabled={isLocked}
               rows={2}
               className={inputClass}
             />
@@ -526,8 +559,8 @@ export default function BillDetailPage({
                   <select
                     value={s.eventCategoryId}
                     onChange={(e) => updateSplit(i, { eventCategoryId: e.target.value })}
-                    disabled={isApproved}
-                    className={inputClass + " flex-1"}
+                    disabled={isLocked}
+                    className={inputBase + " min-w-0 flex-1"}
                   >
                     {eventCategories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -540,10 +573,10 @@ export default function BillDetailPage({
                     step="0.01"
                     value={s.amount}
                     onChange={(e) => updateSplit(i, { amount: e.target.value })}
-                    disabled={isApproved}
-                    className={inputClass + " w-28"}
+                    disabled={isLocked}
+                    className={inputBase + " w-28 shrink-0"}
                   />
-                  {!isApproved && (
+                  {!isLocked && (
                     <>
                       <button
                         onClick={() => fillRemainder(i)}
@@ -564,7 +597,7 @@ export default function BillDetailPage({
               ))}
             </div>
 
-            {!isApproved && (
+            {!isLocked && (
               <button
                 onClick={addSplit}
                 className="mt-2 text-[13px] text-ember hover:underline"
@@ -594,7 +627,7 @@ export default function BillDetailPage({
               >
                 {t("billModal.reopen")}
               </button>
-            ) : (
+            ) : isAiLocked ? null : (
               <>
                 <button
                   onClick={handleSaveAndNext}
@@ -621,7 +654,7 @@ export default function BillDetailPage({
             )}
             <button
               onClick={handleProcessAi}
-              disabled={isApproved || processingAi || saving}
+              disabled={isLocked || processingAi || saving}
               className="rounded-lg border border-mist px-4 py-2 text-[13px] text-ink-secondary hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
             >
               {processingAi ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}

@@ -21,8 +21,11 @@ export async function PUT(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (bill.status === "approved") {
+ if (bill.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
+  }
+  if (bill.status === "queued" || bill.status === "processing") {
+    return NextResponse.json({ error: "bill_processing_locked" }, { status: 409 });
   }
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
