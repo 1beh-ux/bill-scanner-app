@@ -55,6 +55,15 @@ function statusStyle(status: string): string {
   }
 }
 
+// Accent/case-insensitive compare so "novakova" matches "Nováková" and
+// "kavarna" matches "Kavárna" — worth doing given the org's Czech names.
+function normalize(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
 const pillBase = "rounded-full px-3 py-1.5 text-[13px] border transition-colors";
 const pillActive = "bg-ember text-white border-ember";
 const pillInactive = "bg-paper-2 text-ink-secondary border-mist hover:bg-paper";
@@ -78,6 +87,7 @@ export default function EventBillsPage({
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -181,7 +191,29 @@ export default function EventBillsPage({
     return c;
   }, [bills]);
 
-  const filteredBills = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
+  const filteredBills = useMemo(() => {
+    const byStatus = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
+
+    const query = normalize(searchQuery.trim());
+    if (!query) return byStatus;
+
+    return byStatus.filter((b) => {
+      const haystack = [
+        b.originalFilename,
+        b.merchantName,
+        b.payerAuthor?.canonicalName,
+        ...b.categories.map((c) => c.eventCategory.name),
+        b.billDate,
+        b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : null,
+        b.totalAmount,
+        b.amountCzk,
+        b.currency,
+      ]
+        .filter((v): v is string => Boolean(v))
+        .join(" ");
+      return normalize(haystack).includes(query);
+    });
+  }, [bills, statusFilter, searchQuery]);
 
   const runningTotal = filteredBills.reduce(
     (sum, b) => sum + parseFloat(b.amountCzk || "0"),
@@ -306,10 +338,9 @@ export default function EventBillsPage({
 
   async function runBulkAi() {
     if (selected.size === 0) return;
-    if (selected.size > 20) {
-      setError(t("billsPage.bulkAiTooMany", { max: "20" }));
-      return;
-    }
+    // No batch-size cap here any more — every bill is queued as its own
+    // independent Cloud Task, so a run of 100+ bills is handled the same
+    // way as a run of 5.
     const ok = window.confirm(t("billsPage.confirmBulkAi", { count: String(selected.size) }));
     if (!ok) return;
 
@@ -326,12 +357,7 @@ export default function EventBillsPage({
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setError(
-        data.error === "too_many_bills"
-          ? t("billsPage.bulkAiTooMany", { max: String(data.max) })
-          : t("billsPage.bulkAiFailed")
-      );
+      setError(t("billsPage.bulkAiFailed"));
       return;
     }
 
@@ -384,6 +410,26 @@ export default function EventBillsPage({
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
+      <div className="mb-3 relative max-w-sm">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t("billsPage.searchPlaceholder")}
+          aria-label={t("billsPage.searchPlaceholder")}
+          className="w-full rounded-lg border border-mist bg-paper-2 px-3 py-1.5 pr-8 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-ember"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            aria-label={t("billsPage.searchClear")}
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-secondary hover:text-ink"
+          >
+            ×
+          </button>
+        )}
+      </div>
+
       <div className="mb-4 flex flex-wrap gap-2">
         <button
           onClick={() => setStatusFilter(null)}
@@ -401,6 +447,12 @@ export default function EventBillsPage({
           </button>
         ))}
       </div>
+
+      {searchQuery && (
+        <p className="mb-3 text-[13px] text-ink-secondary">
+          {t("billsPage.searchResultCount", { count: String(filteredBills.length) })}
+        </p>
+      )}
 
       {selected.size > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 p-3">
@@ -477,7 +529,9 @@ export default function EventBillsPage({
       )}
 
       {filteredBills.length === 0 ? (
-        <p className="text-[14px] text-ink-secondary">{t("eventDetail.billsEmpty")}</p>
+        <p className="text-[14px] text-ink-secondary">
+          {searchQuery || statusFilter ? t("billsPage.searchNoMatches") : t("eventDetail.billsEmpty")}
+        </p>
       ) : (
         <>
           {/* Desktop / tablet: table */}

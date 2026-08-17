@@ -1,0 +1,901 @@
+diff --git a/prisma/schema.prisma b/prisma/schema.prisma
+index 520e93d..36dd451 100644
+--- a/prisma/schema.prisma
++++ b/prisma/schema.prisma
+@@ -179,6 +179,7 @@ model Bill {
+   aiRawResponse     Json?         @map("ai_raw_response")
+   createdByUserId   String        @map("created_by_user_id")
+   createdAt         DateTime      @default(now()) @map("created_at")
++  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at")
+   approvedAt        DateTime?     @map("approved_at")
+   approvedByUserId  String?       @map("approved_by_user_id")
+   exportedAt        DateTime?     @map("exported_at")
+diff --git a/src/app/api/bills/[id]/process-ai/route.ts b/src/app/api/bills/[id]/process-ai/route.ts
+index ae256be..f2cc823 100644
+--- a/src/app/api/bills/[id]/process-ai/route.ts
++++ b/src/app/api/bills/[id]/process-ai/route.ts
+@@ -1,14 +1,12 @@
+ import { NextRequest, NextResponse } from "next/server";
+-import { Prisma } from "@/generated/prisma";
+-import type { Currency } from "@/generated/prisma";
+-import { prisma } from "@/lib/prisma";
+ import { getCurrentUser } from "@/lib/auth";
+-import { extractBillWithAi } from "@/lib/ai-extraction";
+-import { convertToCzk } from "@/lib/exchange-rates";
+-import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
+-
+-const VALID_CURRENCIES = ["CZK", "PLN", "EUR"];
++import { processBillWithAi } from "@/lib/process-bill-ai";
+ 
++// Interactive single-bill "reprocess" button — this one stays synchronous
++// (called and awaited directly, no queue) since it's a single file
++// triggered by someone watching the screen for a result. The extraction +
++// persistence logic itself now lives in src/lib/process-bill-ai.ts, shared
++// with the Cloud Tasks worker used for bulk runs.
+ export async function POST(
+   req: NextRequest,
+   { params }: { params: Promise<{ id: string }> }
+@@ -19,124 +17,19 @@ export async function POST(
+   }
+ 
+   const { id } = await params;
+-  const bill = await prisma.bill.findUnique({
+-    where: { id },
+-    include: { event: { select: { status: true } } },
+-  });
+-
+-  if (!bill) {
+-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+-  }
+-  if (bill.status === "approved") {
+-    return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
+-  }
+-  if (bill.event.status === "closed") {
+-    return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
+-  }
+-
+-  const eventCategories = await prisma.eventCategory.findMany({
+-    where: { eventId: bill.eventId },
+-    select: { id: true, name: true, description: true },
+-  });
+-
+-  if (eventCategories.length === 0) {
+-    return NextResponse.json({ error: "no_categories" }, { status: 400 });
+-  }
+-
+-  await prisma.bill.update({ where: { id }, data: { status: "processing" } });
+-
+-  let aiResult;
+-  try {
+-    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories);
+-  } catch (err) {
+-    await prisma.bill.update({
+-      where: { id },
+-      data: { status: "failed", aiRawResponse: { error: String(err) } },
+-    });
+-    return NextResponse.json({ error: "ai_call_failed" }, { status: 502 });
+-  }
+-
+-const data = aiResult.data;
+-  let matchedCategory = data.category
+-    ? eventCategories.find((c) => c.name === data.category)
+-    : undefined;
+-  // A category chosen at import time, before AI ever ran, is a deliberate
+-  // human decision — it takes precedence over whatever AI guessed.
+-  if (bill.pendingCategoryId) {
+-    const pending = eventCategories.find((c) => c.id === bill.pendingCategoryId);
+-    if (pending) matchedCategory = pending;
+-  }
+-  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name);
+-
+-  const newStatus =
+-    aiResult.status === "AUTO_APPROVE"
+-      ? "auto_approved"
+-      : aiResult.status === "NEEDS_REVIEW"
+-        ? "to_review"
+-        : "failed";
+-
+-  const currency = (
+-    data.currency && VALID_CURRENCIES.includes(data.currency) ? data.currency : "CZK"
+-  ) as Currency;
+-  const totalAmount = data.total_amount !== null ? new Prisma.Decimal(data.total_amount) : null;
+-  const billDate = data.invoice_date ? new Date(data.invoice_date) : null;
+-
+-  let amountCzk: Prisma.Decimal | null = null;
+-  let exchangeRateUsed: Prisma.Decimal | null = null;
+-  let exchangeRateDate: Date | null = null;
+-
+-  if (totalAmount !== null) {
+-    if (currency === "CZK") {
+-      amountCzk = totalAmount;
+-      exchangeRateUsed = new Prisma.Decimal(1);
+-      exchangeRateDate = billDate;
+-    } else if (billDate) {
+-      const conv = await convertToCzk(totalAmount, currency, billDate);
+-      if (conv) {
+-        amountCzk = conv.amountCzk;
+-        exchangeRateUsed = conv.rateUsed;
+-        exchangeRateDate = conv.rateDate;
+-      }
+-    }
+-  }
+-
+-  const updated = await prisma.$transaction(async (tx) => {
+-    const updatedBill = await tx.bill.update({
+-      where: { id },
+-      data: {
+-        merchantName: canonicalMerchant ?? data.merchant_name,
+-        billDate,
+-        totalAmount,
+-        currency,
+-        amountCzk,
+-        exchangeRateUsed,
+-        exchangeRateDate,
+-        notes: data.notes,
+-        aiConfidence: new Prisma.Decimal(data.confidence),
+-        aiRawResponse: aiResult as unknown as Prisma.InputJsonValue,
+-        status: newStatus,
+-        pendingCategoryId: null,
+-      },
+-    });
+-
+-    // Single-category split at the full bill amount — matches what a human
+-    // would do for a straightforward receipt. Multi-category splitting isn't
+-    // something the AI is asked to attempt; a human can always adjust this
+-    // before approving, same as any manually-entered bill.
+-    if (matchedCategory && totalAmount !== null) {
+-      await tx.billCategory.deleteMany({ where: { billId: id } });
+-      await tx.billCategory.create({
+-        data: {
+-          billId: id,
+-          eventCategoryId: matchedCategory.id,
+-          amount: totalAmount,
+-          amountCzk,
+-        },
+-      });
+-    }
+-
+-    return updatedBill;
+-  });
+-
+-  return NextResponse.json({ ok: true, status: newStatus, bill: updated });
+-}
+\ No newline at end of file
++  const result = await processBillWithAi(id);
++
++  if (!result.ok) {
++    const status =
++      result.error === "not_found"
++        ? 404
++        : result.error === "no_categories"
++          ? 400
++          : result.error === "ai_call_failed"
++            ? 502
++            : 409;
++    return NextResponse.json({ error: result.error }, { status });
++  }
++
++  return NextResponse.json({ ok: true, status: result.status, bill: result.bill });
++}
+diff --git a/src/app/api/cron/requeue-stuck-bills/route.ts b/src/app/api/cron/requeue-stuck-bills/route.ts
+new file mode 100644
+index 0000000..035ee60
+--- /dev/null
++++ b/src/app/api/cron/requeue-stuck-bills/route.ts
+@@ -0,0 +1,51 @@
++import { NextRequest, NextResponse } from "next/server";
++import { prisma } from "@/lib/prisma";
++import { enqueueBillAiTasks } from "@/lib/cloud-tasks";
++
++// Cloud Tasks retries a bill's task automatically while something is still
++// trying it. But if a bill is left sitting in "queued" or "processing" for
++// a long time with nothing actually still working on it — the queue was
++// briefly misconfigured, a task's retries were exhausted after repeated
++// hard kills, whatever — nothing else in the app notices on its own. This
++// sweep, run on a schedule via Cloud Scheduler (same pattern as the
++// exchange-rate cron), finds bills stuck past a safe margin and re-queues
++// them, so a bad run heals itself instead of needing someone to spot 80
++// silently-stuck bills days later.
++const STUCK_AFTER_MINUTES = 30;
++
++function authorized(req: NextRequest): boolean {
++  const expected = process.env.CRON_SECRET;
++  if (!expected) return false;
++  return req.headers.get("x-cron-secret") === expected;
++}
++
++export async function POST(req: NextRequest) {
++  if (!authorized(req)) {
++    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
++  }
++
++  const cutoff = new Date(Date.now() - STUCK_AFTER_MINUTES * 60 * 1000);
++  const stuck = await prisma.bill.findMany({
++    where: {
++      status: { in: ["queued", "processing"] },
++      updatedAt: { lt: cutoff },
++    },
++    select: { id: true },
++  });
++
++  if (stuck.length === 0) {
++    return NextResponse.json({ ok: true, requeued: 0 });
++  }
++
++  const ids = stuck.map((b) => b.id);
++  await prisma.bill.updateMany({ where: { id: { in: ids } }, data: { status: "queued" } });
++
++  try {
++    await enqueueBillAiTasks(ids);
++  } catch (err) {
++    console.error("[requeue-stuck-bills] failed to enqueue", err);
++    return NextResponse.json({ ok: false, error: "enqueue_failed", found: ids.length }, { status: 502 });
++  }
++
++  return NextResponse.json({ ok: true, requeued: ids.length });
++}
+diff --git a/src/app/api/events/[id]/bills/bulk-ai/route.ts b/src/app/api/events/[id]/bills/bulk-ai/route.ts
+index a7648d2..94a9217 100644
+--- a/src/app/api/events/[id]/bills/bulk-ai/route.ts
++++ b/src/app/api/events/[id]/bills/bulk-ai/route.ts
+@@ -1,152 +1,21 @@
+ import { NextRequest, NextResponse } from "next/server";
+-import { Prisma } from "@/generated/prisma";
+-import type { Currency } from "@/generated/prisma";
+ import { prisma } from "@/lib/prisma";
+ import { getCurrentUser } from "@/lib/auth";
+-import { extractBillWithAi } from "@/lib/ai-extraction";
+-import { convertToCzk } from "@/lib/exchange-rates";
+-import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
+-
+-const CONCURRENCY = 3;
+-const MAX_BILLS_PER_RUN = 20;
+-const VALID_CURRENCIES = ["CZK", "PLN", "EUR"];
+-
+-interface BillResult {
+-  billId: string;
+-  ok: boolean;
+-  status?: string;
+-  error?: string;
+-}
+-
+-async function processOneBill(
+-  billId: string,
+-  eventCategories: { id: string; name: string; description: string | null }[]
+-): Promise<BillResult> {
+-  const bill = await prisma.bill.findUnique({ where: { id: billId } });
+-  if (!bill) return { billId, ok: false, error: "not_found" };
+-  if (bill.status === "approved") return { billId, ok: false, error: "bill_approved_locked" };
+-
+-  // Transition queued -> processing right as this bill's turn actually comes
+-  // up in the batch, not all at once at the start — this is what makes the
+-  // status bar reflect real progress instead of everyone showing the same
+-  // state regardless of whether they've actually started yet.
+-  await prisma.bill.update({ where: { id: billId }, data: { status: "processing" } });
+-
+-  let aiResult;
+-  try {
+-    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories);
+-  } catch (err) {
+-    await prisma.bill.update({
+-      where: { id: billId },
+-      data: { status: "failed", aiRawResponse: { error: String(err) } },
+-    });
+-    return { billId, ok: false, error: "ai_call_failed" };
+-  }
+-
+-  const data = aiResult.data;
+-  let matchedCategory = data.category
+-    ? eventCategories.find((c) => c.name === data.category)
+-    : undefined;
+-  // A category chosen at import time, before AI ever ran, is a deliberate
+-  // human decision — it takes precedence over whatever AI guessed.
+-  if (bill.pendingCategoryId) {
+-    const pending = eventCategories.find((c) => c.id === bill.pendingCategoryId);
+-    if (pending) matchedCategory = pending;
+-  }
+-  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name);
+-
+-  const newStatus =
+-    aiResult.status === "AUTO_APPROVE"
+-      ? "auto_approved"
+-      : aiResult.status === "NEEDS_REVIEW"
+-        ? "to_review"
+-        : "failed";
+-
+-  const currency = (
+-    data.currency && VALID_CURRENCIES.includes(data.currency) ? data.currency : "CZK"
+-  ) as Currency;
+-  const totalAmount = data.total_amount !== null ? new Prisma.Decimal(data.total_amount) : null;
+-  const billDate = data.invoice_date ? new Date(data.invoice_date) : null;
+-
+-  let amountCzk: Prisma.Decimal | null = null;
+-  let exchangeRateUsed: Prisma.Decimal | null = null;
+-  let exchangeRateDate: Date | null = null;
+-
+-  if (totalAmount !== null) {
+-    if (currency === "CZK") {
+-      amountCzk = totalAmount;
+-      exchangeRateUsed = new Prisma.Decimal(1);
+-      exchangeRateDate = billDate;
+-    } else if (billDate) {
+-      const conv = await convertToCzk(totalAmount, currency, billDate);
+-      if (conv) {
+-        amountCzk = conv.amountCzk;
+-        exchangeRateUsed = conv.rateUsed;
+-        exchangeRateDate = conv.rateDate;
+-      }
+-    }
+-  }
+-
+-  await prisma.$transaction(async (tx) => {
+-    await tx.bill.update({
+-      where: { id: billId },
+-      data: {
+-        merchantName: canonicalMerchant ?? data.merchant_name,
+-        billDate,
+-        totalAmount,
+-        currency,
+-        amountCzk,
+-        exchangeRateUsed,
+-        exchangeRateDate,
+-        notes: data.notes,
+-        aiConfidence: new Prisma.Decimal(data.confidence),
+-        aiRawResponse: aiResult as unknown as Prisma.InputJsonValue,
+-        status: newStatus,
+-        pendingCategoryId: null,
+-      },
+-    });
+-
+-    if (matchedCategory && totalAmount !== null) {
+-      await tx.billCategory.deleteMany({ where: { billId } });
+-      await tx.billCategory.create({
+-        data: {
+-          billId,
+-          eventCategoryId: matchedCategory.id,
+-          amount: totalAmount,
+-          amountCzk,
+-        },
+-      });
+-    }
+-  });
+-
+-  return { billId, ok: true, status: newStatus };
+-}
+-
+-async function processInBatches<T, R>(
+-  items: T[],
+-  batchSize: number,
+-  worker: (item: T) => Promise<R>
+-): Promise<R[]> {
+-  const results: R[] = [];
+-  for (let i = 0; i < items.length; i += batchSize) {
+-    const batch = items.slice(i, i + batchSize);
+-    const batchResults = await Promise.all(batch.map(worker));
+-    results.push(...batchResults);
+-  }
+-  return results;
+-}
+-
+-async function runBulkAiJob(
+-  billIds: string[],
+-  eventCategories: { id: string; name: string; description: string | null }[]
+-) {
+-  try {
+-    await processInBatches(billIds, CONCURRENCY, (billId) => processOneBill(billId, eventCategories));
+-  } catch (err) {
+-    console.error("[bulk-ai] unexpected top-level error", err);
+-  }
+-}
+-
++import { enqueueBillAiTasks } from "@/lib/cloud-tasks";
++
++// Triggers an AI run over any number of bills. This used to run the whole
++// batch in-process (`Promise.all` over chunks of 3, capped at 20 bills per
++// call, fired off without awaiting the result) — reliable enough for a
++// handful of files, but on Cloud Run that "fire and forget after the
++// response returns" pattern is exactly what let a 100-file run silently
++// lose most of its bills: once the HTTP response is sent, nothing
++// guarantees the instance stays alive long enough to finish the rest.
++//
++// Now each bill becomes one Cloud Task (src/lib/cloud-tasks.ts), which is
++// durable independent of this request or this Cloud Run instance, retries
++// on failure with backoff, and is rate-limited at the queue level — so
++// there's no longer a batch size this endpoint needs to protect itself
++// from. Select 20 bills or 500, it's the same call.
+ export async function POST(
+   req: NextRequest,
+   { params }: { params: Promise<{ id: string }> }
+@@ -171,28 +40,33 @@ export async function POST(
+   if (billIds.length === 0) {
+     return NextResponse.json({ error: "no_bills_selected" }, { status: 400 });
+   }
+-  if (billIds.length > MAX_BILLS_PER_RUN) {
+-    return NextResponse.json({ error: "too_many_bills", max: MAX_BILLS_PER_RUN }, { status: 400 });
+-  }
+ 
+-  const eventCategories = await prisma.eventCategory.findMany({
+-    where: { eventId },
+-    select: { id: true, name: true, description: true },
+-  });
+-  if (eventCategories.length === 0) {
++  const eventCategoryCount = await prisma.eventCategory.count({ where: { eventId } });
++  if (eventCategoryCount === 0) {
+     return NextResponse.json({ error: "no_categories" }, { status: 400 });
+   }
+ 
+-  // Queued, not processing — processing is set individually, per bill,
+-  // right as each one's turn actually comes up inside the batch loop.
++  // Mark queued immediately so the bill list's status pills and polling
++  // reflect the run starting right away, before Cloud Tasks has actually
++  // picked up any individual task.
+   await prisma.bill.updateMany({
+     where: { id: { in: billIds } },
+     data: { status: "queued" },
+   });
+ 
+-  // Deliberately not awaited — see ai-extraction.ts / gcs comments elsewhere
+-  // for why this needs --no-cpu-throttling in production to be reliable.
+-  void runBulkAiJob(billIds, eventCategories);
++  try {
++    await enqueueBillAiTasks(billIds);
++  } catch (err) {
++    // Enqueueing itself failed (misconfigured queue, Cloud Tasks API
++    // hiccup) — put these bills back to a visible, non-stuck state rather
++    // than leaving them showing "queued" forever with nothing behind them.
++    await prisma.bill.updateMany({
++      where: { id: { in: billIds }, status: "queued" },
++      data: { status: "new" },
++    });
++    console.error("[bulk-ai] failed to enqueue Cloud Tasks", err);
++    return NextResponse.json({ error: "enqueue_failed" }, { status: 502 });
++  }
+ 
+   return NextResponse.json({ started: true, count: billIds.length });
+-}
+\ No newline at end of file
++}
+diff --git a/src/app/api/tasks/process-bill-ai/[id]/route.ts b/src/app/api/tasks/process-bill-ai/[id]/route.ts
+new file mode 100644
+index 0000000..14ad9ea
+--- /dev/null
++++ b/src/app/api/tasks/process-bill-ai/[id]/route.ts
+@@ -0,0 +1,48 @@
++import { NextRequest, NextResponse } from "next/server";
++import { processBillWithAi } from "@/lib/process-bill-ai";
++
++// Called only by the Cloud Tasks queue (src/lib/cloud-tasks.ts) — one
++// request per bill. There's no signed-in user behind a queued task, so
++// this is authenticated with a shared secret header instead of the
++// session cookie the rest of the API uses — same pattern already used for
++// the exchange-rate cron endpoint (src/app/api/cron/exchange-rates).
++function authorized(req: NextRequest): boolean {
++  const expected = process.env.TASKS_SECRET;
++  if (!expected) return false;
++  return req.headers.get("x-tasks-secret") === expected;
++}
++
++// Generous ceiling for a single bill's extraction (GCS download + AI call,
++// each with their own shorter internal timeouts) — this is a safety net,
++// not the expected duration.
++export const maxDuration = 300;
++
++export async function POST(
++  req: NextRequest,
++  { params }: { params: Promise<{ id: string }> }
++) {
++  if (!authorized(req)) {
++    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
++  }
++
++  const { id } = await params;
++  const result = await processBillWithAi(id);
++
++  if (!result.ok) {
++    // Terminal, bill-specific outcomes — retrying won't change any of
++    // these. Returning 2xx tells Cloud Tasks the task is done so it stops
++    // retrying a bill that will never succeed (e.g. it was deleted, or its
++    // event got closed mid-run).
++    const terminal = ["not_found", "bill_approved_locked", "event_closed_locked", "no_categories"];
++    if (terminal.includes(result.error)) {
++      return NextResponse.json({ ok: false, error: result.error }, { status: 200 });
++    }
++    // ai_call_failed covers transient trouble — a GCS hiccup, an AI
++    // service timeout, a rate limit. A non-2xx here is exactly what tells
++    // Cloud Tasks to retry this bill on its own, with its configured
++    // backoff, without anyone needing to notice and re-click it.
++    return NextResponse.json({ error: result.error }, { status: 502 });
++  }
++
++  return NextResponse.json({ ok: true, status: result.status });
++}
+diff --git a/src/app/events/[id]/bills/page.tsx b/src/app/events/[id]/bills/page.tsx
+index 1b7cad8..c46de04 100644
+--- a/src/app/events/[id]/bills/page.tsx
++++ b/src/app/events/[id]/bills/page.tsx
+@@ -55,6 +55,15 @@ function statusStyle(status: string): string {
+   }
+ }
+ 
++// Accent/case-insensitive compare so "novakova" matches "Nováková" and
++// "kavarna" matches "Kavárna" — worth doing given the org's Czech names.
++function normalize(value: string): string {
++  return value
++    .normalize("NFD")
++    .replace(/[̀-ͯ]/g, "")
++    .toLowerCase();
++}
++
+ const pillBase = "rounded-full px-3 py-1.5 text-[13px] border transition-colors";
+ const pillActive = "bg-ember text-white border-ember";
+ const pillInactive = "bg-paper-2 text-ink-secondary border-mist hover:bg-paper";
+@@ -78,6 +87,7 @@ export default function EventBillsPage({
+   const [bills, setBills] = useState<BillItem[]>([]);
+   const [loading, setLoading] = useState(true);
+   const [statusFilter, setStatusFilter] = useState<string | null>(null);
++  const [searchQuery, setSearchQuery] = useState("");
+   const [error, setError] = useState<string | null>(null);
+ 
+   const [selected, setSelected] = useState<Set<string>>(new Set());
+@@ -181,7 +191,29 @@ export default function EventBillsPage({
+     return c;
+   }, [bills]);
+ 
+-  const filteredBills = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
++  const filteredBills = useMemo(() => {
++    const byStatus = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
++
++    const query = normalize(searchQuery.trim());
++    if (!query) return byStatus;
++
++    return byStatus.filter((b) => {
++      const haystack = [
++        b.originalFilename,
++        b.merchantName,
++        b.payerAuthor?.canonicalName,
++        ...b.categories.map((c) => c.eventCategory.name),
++        b.billDate,
++        b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : null,
++        b.totalAmount,
++        b.amountCzk,
++        b.currency,
++      ]
++        .filter((v): v is string => Boolean(v))
++        .join(" ");
++      return normalize(haystack).includes(query);
++    });
++  }, [bills, statusFilter, searchQuery]);
+ 
+   const runningTotal = filteredBills.reduce(
+     (sum, b) => sum + parseFloat(b.amountCzk || "0"),
+@@ -306,10 +338,9 @@ export default function EventBillsPage({
+ 
+   async function runBulkAi() {
+     if (selected.size === 0) return;
+-    if (selected.size > 20) {
+-      setError(t("billsPage.bulkAiTooMany", { max: "20" }));
+-      return;
+-    }
++    // No batch-size cap here any more — every bill is queued as its own
++    // independent Cloud Task, so a run of 100+ bills is handled the same
++    // way as a run of 5.
+     const ok = window.confirm(t("billsPage.confirmBulkAi", { count: String(selected.size) }));
+     if (!ok) return;
+ 
+@@ -326,12 +357,7 @@ export default function EventBillsPage({
+     });
+ 
+     if (!res.ok) {
+-      const data = await res.json().catch(() => ({}));
+-      setError(
+-        data.error === "too_many_bills"
+-          ? t("billsPage.bulkAiTooMany", { max: String(data.max) })
+-          : t("billsPage.bulkAiFailed")
+-      );
++      setError(t("billsPage.bulkAiFailed"));
+       return;
+     }
+ 
+@@ -384,6 +410,26 @@ export default function EventBillsPage({
+ 
+       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
+ 
++      <div className="mb-3 relative max-w-sm">
++        <input
++          type="text"
++          value={searchQuery}
++          onChange={(e) => setSearchQuery(e.target.value)}
++          placeholder={t("billsPage.searchPlaceholder")}
++          aria-label={t("billsPage.searchPlaceholder")}
++          className="w-full rounded-lg border border-mist bg-paper-2 px-3 py-1.5 pr-8 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-ember"
++        />
++        {searchQuery && (
++          <button
++            onClick={() => setSearchQuery("")}
++            aria-label={t("billsPage.searchClear")}
++            className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-secondary hover:text-ink"
++          >
++            ×
++          </button>
++        )}
++      </div>
++
+       <div className="mb-4 flex flex-wrap gap-2">
+         <button
+           onClick={() => setStatusFilter(null)}
+@@ -402,6 +448,12 @@ export default function EventBillsPage({
+         ))}
+       </div>
+ 
++      {searchQuery && (
++        <p className="mb-3 text-[13px] text-ink-secondary">
++          {t("billsPage.searchResultCount", { count: String(filteredBills.length) })}
++        </p>
++      )}
++
+       {selected.size > 0 && (
+         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 p-3">
+           <span className="text-[14px] font-medium text-ink">
+@@ -477,7 +529,9 @@ export default function EventBillsPage({
+       )}
+ 
+       {filteredBills.length === 0 ? (
+-        <p className="text-[14px] text-ink-secondary">{t("eventDetail.billsEmpty")}</p>
++        <p className="text-[14px] text-ink-secondary">
++          {searchQuery || statusFilter ? t("billsPage.searchNoMatches") : t("eventDetail.billsEmpty")}
++        </p>
+       ) : (
+         <>
+           {/* Desktop / tablet: table */}
+diff --git a/src/app/events/[id]/import/page.tsx b/src/app/events/[id]/import/page.tsx
+index 39c097b..b6b6e9b 100644
+--- a/src/app/events/[id]/import/page.tsx
++++ b/src/app/events/[id]/import/page.tsx
+@@ -208,20 +208,20 @@ export default function EventImportPage({
+       })
+     );
+ 
++    // Previously chunked into groups of 20 to stay under the bulk-ai
++    // endpoint's old hard cap. That cap is gone — every bill is now queued
++    // as its own Cloud Task, so the whole import batch (however large) is
++    // one call.
+     let aiTriggerFailed = false;
+     if (reprocessWithAi && createdBills.length > 0) {
+-      const ids = createdBills.map((b) => b.id);
+-      for (let i = 0; i < ids.length; i += 20) {
+-        const chunk = ids.slice(i, i + 20);
+-        try {
+-          await fetch(`/api/events/${eventId}/bills/bulk-ai`, {
+-            method: "POST",
+-            headers: { "Content-Type": "application/json" },
+-            body: JSON.stringify({ billIds: chunk }),
+-          });
+-        } catch {
+-          aiTriggerFailed = true;
+-        }
++      try {
++        await fetch(`/api/events/${eventId}/bills/bulk-ai`, {
++          method: "POST",
++          headers: { "Content-Type": "application/json" },
++          body: JSON.stringify({ billIds: createdBills.map((b) => b.id) }),
++        });
++      } catch {
++        aiTriggerFailed = true;
+       }
+     }
+ 
+diff --git a/src/lib/cloud-tasks.ts b/src/lib/cloud-tasks.ts
+new file mode 100644
+index 0000000..1d4bf9b
+--- /dev/null
++++ b/src/lib/cloud-tasks.ts
+@@ -0,0 +1,60 @@
++import { CloudTasksClient } from "@google-cloud/tasks";
++
++const client = new CloudTasksClient();
++
++const PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
++const LOCATION = process.env.CLOUD_TASKS_LOCATION || "europe-west3";
++const QUEUE = process.env.CLOUD_TASKS_QUEUE || "bill-ai-queue";
++const APP_BASE_URL = process.env.APP_BASE_URL;
++const TASKS_SECRET = process.env.TASKS_SECRET;
++
++/**
++ * Enqueues one Cloud Task per bill, targeting the internal worker route
++ * (src/app/api/tasks/process-bill-ai/[id]). This replaces the old
++ * fire-and-forget `void runBulkAiJob(...)` loop that used to run inside
++ * the bulk-ai request handler itself.
++ *
++ * Why that had to go: on Cloud Run, work kicked off after a response has
++ * already been sent is not guaranteed to keep running — the instance can
++ * be recycled or scaled down once the request is considered "done", which
++ * is exactly the kind of thing that silently drops a chunk of an
++ * in-progress batch. A Cloud Tasks queue is durable independent of any
++ * particular Cloud Run instance's lifecycle: each task survives instance
++ * recycling, retries automatically with backoff on failure, and its
++ * dispatch rate/concurrency is controlled at the queue level (see the
++ * `gcloud tasks queues create` command in the setup notes) instead of a
++ * hand-rolled `Promise.all` batch loop.
++ *
++ * One task per bill (rather than one task for the whole selection) is
++ * also what removes the old 20-bill cap: each bill's extraction succeeds,
++ * fails, and retries completely independently of every other bill in the
++ * run, so there's no longer a single unit of work whose size needs to be
++ * kept small enough to finish inside one request.
++ */
++export async function enqueueBillAiTasks(billIds: string[]): Promise<void> {
++  if (!PROJECT_ID || !APP_BASE_URL || !TASKS_SECRET) {
++    throw new Error(
++      "Cloud Tasks is not configured — GOOGLE_CLOUD_PROJECT, APP_BASE_URL and TASKS_SECRET must all be set"
++    );
++  }
++
++  const parent = client.queuePath(PROJECT_ID, LOCATION, QUEUE);
++
++  await Promise.all(
++    billIds.map((billId) =>
++      client.createTask({
++        parent,
++        task: {
++          httpRequest: {
++            httpMethod: "POST",
++            url: `${APP_BASE_URL}/api/tasks/process-bill-ai/${billId}`,
++            headers: {
++              "x-tasks-secret": TASKS_SECRET,
++              "Content-Type": "application/json",
++            },
++          },
++        },
++      })
++    )
++  );
++}
+diff --git a/src/lib/process-bill-ai.ts b/src/lib/process-bill-ai.ts
+new file mode 100644
+index 0000000..746ab6b
+--- /dev/null
++++ b/src/lib/process-bill-ai.ts
+@@ -0,0 +1,143 @@
++import { Prisma } from "@/generated/prisma";
++import type { Bill, Currency } from "@/generated/prisma";
++import { prisma } from "@/lib/prisma";
++import { extractBillWithAi } from "@/lib/ai-extraction";
++import { convertToCzk } from "@/lib/exchange-rates";
++import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
++
++const VALID_CURRENCIES = ["CZK", "PLN", "EUR"];
++
++export type ProcessBillAiResult =
++  | { ok: true; status: string; bill: Bill }
++  | { ok: false; error: string };
++
++/**
++ * Runs AI extraction for a single bill end to end: downloads the file from
++ * GCS, calls the extraction service, and writes the result back to the
++ * bill (and its category split) in one transaction.
++ *
++ * This is the ONLY place this logic lives. Both the interactive
++ * "reprocess" button (src/app/api/bills/[id]/process-ai) and the Cloud
++ * Tasks worker (src/app/api/tasks/process-bill-ai/[id]) call this
++ * function directly rather than each having their own copy — previously
++ * bulk-ai/route.ts had a near-duplicate of this that had already started
++ * drifting from the single-bill route. One implementation means a fix
++ * here fixes both callers at once.
++ */
++export async function processBillWithAi(billId: string): Promise<ProcessBillAiResult> {
++  const bill = await prisma.bill.findUnique({
++    where: { id: billId },
++    include: { event: { select: { status: true } } },
++  });
++
++  if (!bill) return { ok: false, error: "not_found" };
++  if (bill.status === "approved") return { ok: false, error: "bill_approved_locked" };
++  if (bill.event.status === "closed") return { ok: false, error: "event_closed_locked" };
++
++  const eventCategories = await prisma.eventCategory.findMany({
++    where: { eventId: bill.eventId },
++    select: { id: true, name: true, description: true },
++  });
++  if (eventCategories.length === 0) return { ok: false, error: "no_categories" };
++
++  // Transition to "processing" right before the actual extraction call —
++  // this is what makes the bill list's status pills and polling reflect
++  // real progress instead of every queued bill looking identical until
++  // the whole run finishes.
++  await prisma.bill.update({ where: { id: billId }, data: { status: "processing" } });
++
++  let aiResult;
++  try {
++    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories);
++  } catch (err) {
++    await prisma.bill.update({
++      where: { id: billId },
++      data: { status: "failed", aiRawResponse: { error: String(err) } },
++    });
++    return { ok: false, error: "ai_call_failed" };
++  }
++
++  const data = aiResult.data;
++  let matchedCategory = data.category
++    ? eventCategories.find((c) => c.name === data.category)
++    : undefined;
++  // A category chosen at import time, before AI ever ran, is a deliberate
++  // human decision — it takes precedence over whatever AI guessed.
++  if (bill.pendingCategoryId) {
++    const pending = eventCategories.find((c) => c.id === bill.pendingCategoryId);
++    if (pending) matchedCategory = pending;
++  }
++  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name);
++
++  const newStatus =
++    aiResult.status === "AUTO_APPROVE"
++      ? "auto_approved"
++      : aiResult.status === "NEEDS_REVIEW"
++        ? "to_review"
++        : "failed";
++
++  const currency = (
++    data.currency && VALID_CURRENCIES.includes(data.currency) ? data.currency : "CZK"
++  ) as Currency;
++  const totalAmount = data.total_amount !== null ? new Prisma.Decimal(data.total_amount) : null;
++  const billDate = data.invoice_date ? new Date(data.invoice_date) : null;
++
++  let amountCzk: Prisma.Decimal | null = null;
++  let exchangeRateUsed: Prisma.Decimal | null = null;
++  let exchangeRateDate: Date | null = null;
++
++  if (totalAmount !== null) {
++    if (currency === "CZK") {
++      amountCzk = totalAmount;
++      exchangeRateUsed = new Prisma.Decimal(1);
++      exchangeRateDate = billDate;
++    } else if (billDate) {
++      const conv = await convertToCzk(totalAmount, currency, billDate);
++      if (conv) {
++        amountCzk = conv.amountCzk;
++        exchangeRateUsed = conv.rateUsed;
++        exchangeRateDate = conv.rateDate;
++      }
++    }
++  }
++
++  const updated = await prisma.$transaction(async (tx) => {
++    const updatedBill = await tx.bill.update({
++      where: { id: billId },
++      data: {
++        merchantName: canonicalMerchant ?? data.merchant_name,
++        billDate,
++        totalAmount,
++        currency,
++        amountCzk,
++        exchangeRateUsed,
++        exchangeRateDate,
++        notes: data.notes,
++        aiConfidence: new Prisma.Decimal(data.confidence),
++        aiRawResponse: aiResult as unknown as Prisma.InputJsonValue,
++        status: newStatus,
++        pendingCategoryId: null,
++      },
++    });
++
++    // Single-category split at the full bill amount — matches what a human
++    // would do for a straightforward receipt. Multi-category splitting isn't
++    // something the AI is asked to attempt; a human can always adjust this
++    // before approving, same as any manually-entered bill.
++    if (matchedCategory && totalAmount !== null) {
++      await tx.billCategory.deleteMany({ where: { billId } });
++      await tx.billCategory.create({
++        data: {
++          billId,
++          eventCategoryId: matchedCategory.id,
++          amount: totalAmount,
++          amountCzk,
++        },
++      });
++    }
++
++    return updatedBill;
++  });
++
++  return { ok: true, status: newStatus, bill: updated };
++}

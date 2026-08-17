@@ -208,20 +208,20 @@ export default function EventImportPage({
       })
     );
 
+    // Previously chunked into groups of 20 to stay under the bulk-ai
+    // endpoint's old hard cap. That cap is gone — every bill is now queued
+    // as its own Cloud Task, so the whole import batch (however large) is
+    // one call.
     let aiTriggerFailed = false;
     if (reprocessWithAi && createdBills.length > 0) {
-      const ids = createdBills.map((b) => b.id);
-      for (let i = 0; i < ids.length; i += 20) {
-        const chunk = ids.slice(i, i + 20);
-        try {
-          await fetch(`/api/events/${eventId}/bills/bulk-ai`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ billIds: chunk }),
-          });
-        } catch {
-          aiTriggerFailed = true;
-        }
+      try {
+        await fetch(`/api/events/${eventId}/bills/bulk-ai`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ billIds: createdBills.map((b) => b.id) }),
+        });
+      } catch {
+        aiTriggerFailed = true;
       }
     }
 

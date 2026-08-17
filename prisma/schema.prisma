@@ -179,6 +179,7 @@ model Bill {
   aiRawResponse     Json?         @map("ai_raw_response")
   createdByUserId   String        @map("created_by_user_id")
   createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at")
   approvedAt        DateTime?     @map("approved_at")
   approvedByUserId  String?       @map("approved_by_user_id")
   exportedAt        DateTime?     @map("exported_at")
