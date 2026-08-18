@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { calculateAge } from "@/lib/age";
+import IncidentFormModal from "@/components/health/IncidentFormModal";
 
 type EventBasic = { id: string; name: string };
 
@@ -9,6 +11,7 @@ type Participant = {
   id: string;
   name: string;
   groupName: string | null;
+  dateOfBirth: string | null;
 };
 
 type GuardianDraft = {
@@ -42,6 +45,7 @@ export default function EventHealthPage({
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
   const [groupName, setGroupName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [allergies, setAllergies] = useState("");
   const [medsNotes, setMedsNotes] = useState("");
   const [chronicIssues, setChronicIssues] = useState("");
@@ -49,6 +53,8 @@ export default function EventHealthPage({
   const [guardians, setGuardians] = useState<GuardianDraft[]>([emptyGuardian()]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -75,6 +81,7 @@ export default function EventHealthPage({
     setError(null);
     setName("");
     setGroupName("");
+    setDateOfBirth("");
     setAllergies("");
     setMedsNotes("");
     setChronicIssues("");
@@ -115,6 +122,7 @@ export default function EventHealthPage({
       body: JSON.stringify({
         name: name.trim(),
         groupName: groupName.trim() || undefined,
+        dateOfBirth: dateOfBirth || undefined,
         allergies: allergies.trim() || undefined,
         medsNotes: medsNotes.trim() || undefined,
         chronicIssues: chronicIssues.trim() || undefined,
@@ -188,19 +196,33 @@ export default function EventHealthPage({
               <tr className="border-b border-mist text-left">
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
+                <th className="p-2"></th>
               </tr>
             </thead>
             <tbody>
-              {filteredParticipants.map((p) => (
-                <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
-                  <td className="p-2 text-[14px]">
-                    <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
-                      {p.name}
-                    </a>
-                  </td>
-                  <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
-                </tr>
-              ))}
+              {filteredParticipants.map((p) => {
+                const age = calculateAge(p.dateOfBirth);
+                return (
+                  <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
+                    <td className="p-2 text-[14px]">
+                      <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
+                        {p.name}
+                      </a>
+                    </td>
+                    <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
+                    <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
+                    <td className="whitespace-nowrap p-2 text-right">
+                      <button
+                        onClick={() => setIncidentParticipantId(p.id)}
+                        className="text-[13px] text-ember hover:underline"
+                      >
+                        {t("participantsPage.addIncidentButton")}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -227,6 +249,15 @@ export default function EventHealthPage({
                 onChange={(e) => setGroupName(e.target.value)}
                 className={inputClass}
               />
+              <label className="text-[13px] text-ink-secondary">
+                {t("participantsPage.dobLabel")}
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className={inputClass + " mt-1"}
+                />
+              </label>
               <textarea
                 placeholder={t("participantDetail.allergiesLabel")}
                 value={allergies}
@@ -312,6 +343,16 @@ export default function EventHealthPage({
             </form>
           </div>
         </div>
+      )}
+
+      {incidentParticipantId && (
+        <IncidentFormModal
+          eventId={id}
+          participantId={incidentParticipantId}
+          mode="new"
+          onClose={() => setIncidentParticipantId(null)}
+          onSaved={() => setIncidentParticipantId(null)}
+        />
       )}
     </div>
   );

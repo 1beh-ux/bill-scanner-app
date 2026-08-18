@@ -98,6 +98,11 @@ export default function IncidentDetailModal({
           </button>
         </div>
 
+        <p className="mb-2 text-[13px] text-ink-secondary">
+          {new Date(incident.incidentDate).toLocaleDateString("cs-CZ")}
+          {incident.incidentTime && ` · ${incident.incidentTime}`}
+        </p>
+
         {incident.tempC && (
           <p className="mb-2 text-[14px] text-ink">
             {t("incidentForm.tempLabel")}: {incident.tempC} °C
@@ -108,7 +113,9 @@ export default function IncidentDetailModal({
             {t("incidentForm.medLabel")}: {incident.pillName}
           </p>
         )}
-        <p className="mb-3 whitespace-pre-line text-[14px] text-ink">{incident.details}</p>
+        {incident.details && (
+          <p className="mb-3 whitespace-pre-line text-[14px] text-ink">{incident.details}</p>
+        )}
 
         {previewUrl && (
           // eslint-disable-next-line @next/next/no-img-element

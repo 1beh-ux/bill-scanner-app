@@ -35,26 +35,34 @@ export async function POST(
   const updateType: "correct" | "void" = body.updateType === "void" ? "void" : "correct";
 
   if (updateType === "correct") {
-    const { actionSummary, details } = body;
+    const { actionSummary } = body;
     if (!actionSummary || typeof actionSummary !== "string" || !actionSummary.trim()) {
       return NextResponse.json({ error: "action_summary_required" }, { status: 400 });
     }
-    if (!details || typeof details !== "string" || !details.trim()) {
-      return NextResponse.json({ error: "details_required" }, { status: 400 });
-    }
   }
 
-  // A void carries forward the current snapshot unchanged (schema requires
-  // actionSummary/details to be non-null on every update row) -- it's a
+  // A void carries forward the current snapshot unchanged (actionSummary is
+  // still required on every update row, details is optional) -- it's a
   // pure marker via updateType, not a content edit.
   const update = await prisma.incidentUpdate.create({
     data: {
       incidentId,
       updatedByUserId: user.id,
       updateType,
+      incidentDate: new Date(
+        updateType === "void"
+          ? current.incidentDate
+          : body.incidentDate || new Date().toISOString().slice(0, 10)
+      ),
+      incidentTime: updateType === "void" ? current.incidentTime : body.incidentTime || null,
       actionSummary: updateType === "void" ? current.actionSummary : body.actionSummary.trim(),
       pillName: updateType === "void" ? current.pillName : body.pillName || null,
-      details: updateType === "void" ? current.details : body.details.trim(),
+      details:
+        updateType === "void"
+          ? current.details
+          : typeof body.details === "string" && body.details.trim()
+            ? body.details.trim()
+            : null,
       photoGcsPath: updateType === "void" ? current.photoGcsPath : body.photoGcsPath || null,
       tempC: updateType === "void" ? current.tempC : body.tempC === "" || body.tempC === undefined ? null : body.tempC,
       bodyView: updateType === "void" ? current.bodyView : body.bodyView || null,

@@ -14,27 +14,44 @@ interface BodyMapPickerProps {
   backLabel: string;
 }
 
-// Schematic outline, not medical-grade art -- functional for tap-to-mark.
-// Front/back share the same silhouette; a small visual cue (eyes vs. a
-// spine line) is the only difference, since there's nothing anatomical to
-// draw on a plain outline.
+// Schematic, filled humanoid outline -- not medical-grade art (no such
+// asset exists to reuse in this project), but a solid silhouette with real
+// width on the limbs rather than thin stick lines, so a tap can land on a
+// specific spot along an arm or leg (upper vs. lower) instead of just "the
+// arm" as a whole. Front/back share the same shape; a small visual cue
+// (eyes vs. a spine line) is the only difference between them.
 function BodyOutline({ view }: { view: BodyView }) {
   return (
-    <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-      <circle cx="100" cy="45" r="32" strokeWidth="3" />
+    <g fill="currentColor" stroke="none">
+      {/* legs (drawn first so the torso overlaps the hip joins cleanly) */}
+      <line x1="85" y1="188" x2="78" y2="288" stroke="currentColor" strokeWidth="26" strokeLinecap="round" />
+      <line x1="78" y1="288" x2="72" y2="384" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <line x1="115" y1="188" x2="122" y2="288" stroke="currentColor" strokeWidth="26" strokeLinecap="round" />
+      <line x1="122" y1="288" x2="128" y2="384" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <ellipse cx="70" cy="390" rx="11" ry="7" />
+      <ellipse cx="130" cy="390" rx="11" ry="7" />
+
+      {/* arms */}
+      <line x1="68" y1="72" x2="44" y2="140" stroke="currentColor" strokeWidth="22" strokeLinecap="round" />
+      <line x1="44" y1="140" x2="37" y2="204" stroke="currentColor" strokeWidth="18" strokeLinecap="round" />
+      <line x1="132" y1="72" x2="156" y2="140" stroke="currentColor" strokeWidth="22" strokeLinecap="round" />
+      <line x1="156" y1="140" x2="163" y2="204" stroke="currentColor" strokeWidth="18" strokeLinecap="round" />
+      <circle cx="37" cy="210" r="9" />
+      <circle cx="163" cy="210" r="9" />
+
+      {/* torso */}
+      <path d="M 66 62 L 134 62 L 128 190 Q 100 202 72 190 Z" />
+
+      {/* head */}
+      <circle cx="100" cy="33" r="25" />
       {view === "front" ? (
         <>
-          <circle cx="90" cy="42" r="3" fill="currentColor" stroke="none" />
-          <circle cx="110" cy="42" r="3" fill="currentColor" stroke="none" />
+          <circle cx="90" cy="30" r="3" className="fill-paper-2" />
+          <circle cx="110" cy="30" r="3" className="fill-paper-2" />
         </>
       ) : (
-        <line x1="100" y1="28" x2="100" y2="62" strokeWidth="2" />
+        <line x1="100" y1="16" x2="100" y2="180" className="stroke-paper-2" strokeWidth="2" strokeLinecap="round" />
       )}
-      <path d="M 60 80 Q 100 70 140 80 L 145 200 Q 100 215 55 200 Z" />
-      <path d="M 60 85 L 25 180" />
-      <path d="M 140 85 L 175 180" />
-      <path d="M 80 205 L 70 340" />
-      <path d="M 120 205 L 130 340" />
     </g>
   );
 }
@@ -84,10 +101,10 @@ export default function BodyMapPicker({
       </div>
       <svg
         ref={svgRef}
-        viewBox="0 0 200 360"
+        viewBox="0 0 200 400"
         onClick={handleTap}
         className={
-          "h-72 w-40 rounded-lg border border-mist bg-paper-2 text-ink-secondary " +
+          "h-80 w-40 rounded-lg border border-mist bg-paper-2 text-ink-secondary " +
           (locked ? "" : "cursor-crosshair")
         }
       >
@@ -95,8 +112,8 @@ export default function BodyMapPicker({
         {value && value.bodyView === viewTab && (
           <circle
             cx={(value.bodyXPct / 100) * 200}
-            cy={(value.bodyYPct / 100) * 360}
-            r="6"
+            cy={(value.bodyYPct / 100) * 400}
+            r="7"
             fill="#e05d38"
             stroke="white"
             strokeWidth="1.5"

@@ -10,9 +10,11 @@ export type EffectiveIncident = Pick<
   | "templateType"
   | "parentIncidentId"
 > & {
+  incidentDate: Incident["incidentDate"];
+  incidentTime: string | null;
   actionSummary: string;
   pillName: string | null;
-  details: string;
+  details: string | null;
   photoGcsPath: string | null;
   tempC: Incident["tempC"];
   bodyView: Incident["bodyView"];
@@ -41,6 +43,8 @@ export function resolveIncidentState(
     category: incident.category,
     templateType: incident.templateType,
     parentIncidentId: incident.parentIncidentId,
+    incidentDate: latest ? latest.incidentDate : incident.incidentDate,
+    incidentTime: latest ? latest.incidentTime : incident.incidentTime,
     actionSummary: latest ? latest.actionSummary : incident.actionSummary,
     pillName: latest ? latest.pillName : incident.pillName,
     details: latest ? latest.details : incident.details,

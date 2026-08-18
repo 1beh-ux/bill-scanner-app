@@ -315,16 +315,17 @@ model MerchantAlias {
 // ---------------------------------------------------------------------------
 
 model Participant {
-  id            String   @id @default(uuid())
-  eventId       String   @map("event_id")
+  id            String    @id @default(uuid())
+  eventId       String    @map("event_id")
   name          String
-  groupName     String?  @map("group_name")
-  active        Boolean  @default(true)
+  groupName     String?   @map("group_name")
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  active        Boolean   @default(true)
   allergies     String?
-  medsNotes     String?  @map("meds_notes")
-  chronicIssues String?  @map("chronic_issues")
-  otherNotes    String?  @map("other_notes")
-  createdAt     DateTime @default(now()) @map("created_at")
+  medsNotes     String?   @map("meds_notes")
+  chronicIssues String?   @map("chronic_issues")
+  otherNotes    String?   @map("other_notes")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])
   guardians    ParticipantGuardian[]
@@ -357,9 +358,11 @@ model Incident {
   createdByUserId  String           @map("created_by_user_id")
   category         IncidentCategory
   templateType     String?          @map("template_type")
+  incidentDate     DateTime         @default(now()) @map("incident_date") @db.Date
+  incidentTime     String?          @map("incident_time")
   actionSummary    String           @map("action_summary")
   pillName         String?          @map("pill_name")
-  details          String
+  details          String?
   photoGcsPath     String?          @map("photo_gcs_path")
   parentIncidentId String?          @map("parent_incident_id")
   tempC            Decimal?         @map("temp_c") @db.Decimal(4, 1)
@@ -382,9 +385,11 @@ model IncidentUpdate {
   updatedAt       DateTime            @default(now()) @map("updated_at")
   updatedByUserId String              @map("updated_by_user_id")
   updateType      IncidentUpdateType  @map("update_type")
+  incidentDate    DateTime            @map("incident_date") @db.Date
+  incidentTime    String?             @map("incident_time")
   actionSummary   String              @map("action_summary")
   pillName        String?             @map("pill_name")
-  details         String
+  details         String?
   photoGcsPath    String?             @map("photo_gcs_path")
   tempC           Decimal?            @map("temp_c") @db.Decimal(4, 1)
   bodyView        BodyView?           @map("body_view")

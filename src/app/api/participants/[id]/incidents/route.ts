@@ -77,6 +77,7 @@ export async function POST(
     photoGcsPath,
     tempC,
     templateType,
+    incidentTime,
   } = body;
   type DecimalInput = number | string | Prisma.Decimal | null | undefined;
   let category: IncidentCategory | undefined = body.category;
@@ -84,12 +85,10 @@ export async function POST(
   let bodyXPct: DecimalInput = body.bodyXPct;
   let bodyYPct: DecimalInput = body.bodyYPct;
   let effectiveTemplateType: string | null | undefined = templateType;
+  const incidentDate: string = body.incidentDate || new Date().toISOString().slice(0, 10);
 
   if (!actionSummary || typeof actionSummary !== "string" || !actionSummary.trim()) {
     return NextResponse.json({ error: "action_summary_required" }, { status: 400 });
-  }
-  if (!details || typeof details !== "string" || !details.trim()) {
-    return NextResponse.json({ error: "details_required" }, { status: 400 });
   }
 
   let parent = null;
@@ -124,9 +123,11 @@ export async function POST(
       createdByUserId: user.id,
       category: category!,
       templateType: effectiveTemplateType || null,
+      incidentDate: new Date(incidentDate),
+      incidentTime: incidentTime || null,
       actionSummary: actionSummary.trim(),
       pillName: pillName || null,
-      details: details.trim(),
+      details: typeof details === "string" && details.trim() ? details.trim() : null,
       photoGcsPath: photoGcsPath || null,
       parentIncidentId: parent ? parent.id : null,
       tempC: tempC === "" || tempC === undefined ? null : tempC,

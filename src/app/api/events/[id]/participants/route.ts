@@ -43,7 +43,7 @@ export async function POST(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, allergies, medsNotes, chronicIssues, otherNotes } = body;
+  const { name, groupName, dateOfBirth, allergies, medsNotes, chronicIssues, otherNotes } = body;
   const guardians: GuardianInput[] = Array.isArray(body.guardians) ? body.guardians : [];
 
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -61,6 +61,7 @@ export async function POST(
         eventId,
         name: name.trim(),
         groupName: groupName || null,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         allergies: allergies || null,
         medsNotes: medsNotes || null,
         chronicIssues: chronicIssues || null,

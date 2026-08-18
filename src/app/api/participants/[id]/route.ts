@@ -42,7 +42,7 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, allergies, medsNotes, chronicIssues, otherNotes, active } = body;
+  const { name, groupName, dateOfBirth, allergies, medsNotes, chronicIssues, otherNotes, active } = body;
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -53,6 +53,7 @@ export async function PATCH(
     data: {
       ...(name !== undefined && { name: name.trim() }),
       ...(groupName !== undefined && { groupName: groupName || null }),
+      ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
       ...(allergies !== undefined && { allergies: allergies || null }),
       ...(medsNotes !== undefined && { medsNotes: medsNotes || null }),
       ...(chronicIssues !== undefined && { chronicIssues: chronicIssues || null }),

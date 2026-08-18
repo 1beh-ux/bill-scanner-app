@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import IncidentFormModal, { type IncidentClientData } from "@/components/health/IncidentFormModal";
 import IncidentDetailModal from "@/components/health/IncidentDetailModal";
+import { calculateAge } from "@/lib/age";
 
 type Guardian = {
   id: string;
@@ -18,6 +19,7 @@ type ParticipantDetail = {
   eventId: string;
   name: string;
   groupName: string | null;
+  dateOfBirth: string | null;
   allergies: string | null;
   medsNotes: string | null;
   chronicIssues: string | null;
@@ -31,6 +33,15 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
+
+function incidentMeta(inc: IncidentClientData): string {
+  const parts: string[] = [];
+  parts.push(new Date(inc.incidentDate).toLocaleDateString("cs-CZ"));
+  if (inc.incidentTime) parts.push(inc.incidentTime);
+  if (inc.tempC) parts.push(`${inc.tempC} °C`);
+  if (inc.pillName) parts.push(inc.pillName);
+  return parts.join(" · ");
+}
 
 export default function ParticipantDetailPage({
   params,
@@ -47,6 +58,7 @@ export default function ParticipantDetailPage({
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editGroup, setEditGroup] = useState("");
+  const [editDob, setEditDob] = useState("");
   const [editAllergies, setEditAllergies] = useState("");
   const [editMedsNotes, setEditMedsNotes] = useState("");
   const [editChronicIssues, setEditChronicIssues] = useState("");
@@ -101,6 +113,7 @@ export default function ParticipantDetailPage({
     setError(null);
     setEditName(participant.name);
     setEditGroup(participant.groupName ?? "");
+    setEditDob(participant.dateOfBirth ? participant.dateOfBirth.slice(0, 10) : "");
     setEditAllergies(participant.allergies ?? "");
     setEditMedsNotes(participant.medsNotes ?? "");
     setEditChronicIssues(participant.chronicIssues ?? "");
@@ -119,6 +132,7 @@ export default function ParticipantDetailPage({
       body: JSON.stringify({
         name: editName.trim(),
         groupName: editGroup.trim() || null,
+        dateOfBirth: editDob || null,
         allergies: editAllergies.trim() || null,
         medsNotes: editMedsNotes.trim() || null,
         chronicIssues: editChronicIssues.trim() || null,
@@ -190,7 +204,16 @@ export default function ParticipantDetailPage({
       <div className="mb-4 mt-2 flex items-start justify-between gap-3">
         <div>
           <h1 className="text-[22px] font-semibold text-ink">{participant.name}</h1>
-          {participant.groupName && <p className="text-[14px] text-ink-secondary">{participant.groupName}</p>}
+          <p className="text-[14px] text-ink-secondary">
+            {[
+              participant.groupName,
+              participant.dateOfBirth
+                ? `${new Date(participant.dateOfBirth).toLocaleDateString("cs-CZ")} (${calculateAge(participant.dateOfBirth)} let)`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
         </div>
         <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
           {t("common.edit")}
@@ -300,25 +323,38 @@ export default function ParticipantDetailPage({
         <div className="flex flex-col gap-2">
           {incidents.map((inc) => (
             <div key={inc.id} className="rounded-lg border border-mist/60 p-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div
+                onClick={() => setDetailIncident(inc)}
+                className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg hover:bg-paper-2"
+              >
                 <div className="text-[14px] text-ink">
                   <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
                     {t(`incidentForm.category.${inc.category}`)}
                   </span>
                   {inc.actionSummary}
+                  <div className="text-[12px] text-ink-secondary">{incidentMeta(inc)}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   {inc.followUps.length > 0 && (
-                    <button onClick={() => toggleCollapsed(inc.id)} className="text-[12px] text-ink-secondary hover:text-ink">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleCollapsed(inc.id);
+                      }}
+                      className="text-[12px] text-ink-secondary hover:text-ink"
+                    >
                       {collapsedIds.has(inc.id)
                         ? t("incidentsPage.showFollowUps", { count: String(inc.followUps.length) })
                         : t("incidentsPage.hideFollowUps")}
                     </button>
                   )}
-                  <button onClick={() => setDetailIncident(inc)} className="text-[13px] text-ember hover:underline">
-                    {t("incidentsPage.detailButton")}
-                  </button>
-                  <button onClick={() => setFollowUpParent(inc)} className="text-[13px] text-ember hover:underline">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFollowUpParent(inc);
+                    }}
+                    className="text-[13px] text-ember hover:underline"
+                  >
                     {t("incidentsPage.followUpButton")}
                   </button>
                 </div>
@@ -327,11 +363,13 @@ export default function ParticipantDetailPage({
               {inc.followUps.length > 0 && !collapsedIds.has(inc.id) && (
                 <div className="ml-4 mt-2 flex flex-col gap-1.5 border-l border-mist pl-3">
                   {inc.followUps.map((fu) => (
-                    <div key={fu.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <div
+                      key={fu.id}
+                      onClick={() => setDetailIncident(fu)}
+                      className="cursor-pointer rounded-lg p-1 hover:bg-paper-2"
+                    >
                       <div className="text-[13px] text-ink-secondary">{fu.actionSummary}</div>
-                      <button onClick={() => setDetailIncident(fu)} className="text-[12px] text-ember hover:underline">
-                        {t("incidentsPage.detailButton")}
-                      </button>
+                      <div className="text-[12px] text-ink-secondary">{incidentMeta(fu)}</div>
                     </div>
                   ))}
                 </div>
@@ -392,6 +430,15 @@ export default function ParticipantDetailPage({
                 onChange={(e) => setEditGroup(e.target.value)}
                 className={inputClass}
               />
+              <label className="text-[13px] text-ink-secondary">
+                {t("participantsPage.dobLabel")}
+                <input
+                  type="date"
+                  value={editDob}
+                  onChange={(e) => setEditDob(e.target.value)}
+                  className={inputClass + " mt-1"}
+                />
+              </label>
               <textarea
                 placeholder={t("participantDetail.allergiesLabel")}
                 value={editAllergies}

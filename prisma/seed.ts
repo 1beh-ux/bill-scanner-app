@@ -471,6 +471,11 @@ async function main() {
       { key: "bodyMap.title", cs: "Umístění na těle", en: "Body location" },
       { key: "bodyMap.front", cs: "Přední", en: "Front" },
       { key: "bodyMap.back", cs: "Zadní", en: "Back" },
+      { key: "participantsPage.colAge", cs: "Věk", en: "Age" },
+      { key: "participantsPage.dobLabel", cs: "Datum narození", en: "Date of birth" },
+      { key: "participantsPage.addIncidentButton", cs: "+ Záznam", en: "+ Record" },
+      { key: "incidentForm.showParticipantSummary", cs: "Zobrazit podrobnosti…", en: "Show details…" },
+      { key: "incidentForm.hideParticipantSummary", cs: "Skrýt podrobnosti", en: "Hide details" },
     ],
     skipDuplicates: true,
   });

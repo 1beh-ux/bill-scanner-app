@@ -12,15 +12,35 @@ export type IncidentClientData = {
   id: string;
   category: IncidentCategory;
   templateType: string | null;
+  incidentDate: string;
+  incidentTime: string | null;
   actionSummary: string;
   pillName: string | null;
-  details: string;
+  details: string | null;
   photoGcsPath: string | null;
   tempC: string | null;
   bodyView: "front" | "back" | null;
   bodyXPct: string | null;
   bodyYPct: string | null;
 };
+
+type ParticipantSummary = {
+  name: string;
+  allergies: string | null;
+  medsNotes: string | null;
+  chronicIssues: string | null;
+  otherNotes: string | null;
+};
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
 
 type ListItem = { id: string; key: string | null; name: string; data: unknown };
 type SituationData = {
@@ -87,6 +107,10 @@ export default function IncidentFormModal({
   const [templateType, setTemplateType] = useState<string | null>(
     isEdit ? (incident?.templateType ?? null) : null
   );
+  const [incidentDate, setIncidentDate] = useState(
+    isEdit && incident ? incident.incidentDate.slice(0, 10) : todayIso()
+  );
+  const [incidentTime, setIncidentTime] = useState(isEdit ? (incident?.incidentTime ?? "") : "");
   const [actionSummary, setActionSummary] = useState(isEdit ? (incident?.actionSummary ?? "") : "");
   const [details, setDetails] = useState(isEdit ? (incident?.details ?? "") : "");
   const [tempC, setTempC] = useState(isEdit ? (incident?.tempC ?? "") : "");
@@ -105,6 +129,9 @@ export default function IncidentFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [participantSummary, setParticipantSummary] = useState<ParticipantSummary | null>(null);
+  const [showParticipantSummary, setShowParticipantSummary] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,7 +144,11 @@ export default function IncidentFormModal({
       .then((r) => (r.ok ? r.json() : []))
       .then(setMeds)
       .catch(() => {});
-  }, [eventId]);
+    fetch(`/api/participants/${participantId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setParticipantSummary)
+      .catch(() => {});
+  }, [eventId, participantId]);
 
   function applySituation(item: ListItem) {
     const data = (item.data ?? {}) as SituationData;
@@ -152,7 +183,7 @@ export default function IncidentFormModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!actionSummary.trim() || !details.trim()) return;
+    if (!actionSummary.trim()) return;
     setSaving(true);
     setError(null);
 
@@ -160,9 +191,11 @@ export default function IncidentFormModal({
       selectedMedId !== FREE_TEXT_MED ? meds.find((m) => m.id === selectedMedId)?.name ?? "" : pillName;
 
     const commonFields = {
+      incidentDate,
+      incidentTime: incidentTime || undefined,
       actionSummary: actionSummary.trim(),
       pillName: effectivePillName.trim() || undefined,
-      details: details.trim(),
+      details: details.trim() || undefined,
       photoGcsPath: photoGcsPath || undefined,
       tempC: tempC === "" ? undefined : Number(tempC),
       bodyView: isFollowUp ? undefined : bodyMap?.bodyView,
@@ -204,11 +237,77 @@ export default function IncidentFormModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
-        <h2 className="mb-4 text-[16px] font-semibold text-ink">
+        <h2 className="mb-2 text-[16px] font-semibold text-ink">
           {isFollowUp ? t("incidentForm.titleFollowUp") : isEdit ? t("incidentForm.titleEdit") : t("incidentForm.titleNew")}
+          {participantSummary && <span className="ml-1 font-normal text-ink-secondary"> — {participantSummary.name}</span>}
         </h2>
 
+        {participantSummary && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setShowParticipantSummary((v) => !v)}
+              className="text-[13px] text-ember hover:underline"
+            >
+              {showParticipantSummary ? t("incidentForm.hideParticipantSummary") : t("incidentForm.showParticipantSummary")}
+            </button>
+            {showParticipantSummary && (
+              <div className="mt-2 flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink">
+                {participantSummary.allergies && (
+                  <p><strong>{t("participantDetail.allergiesLabel")}:</strong> {participantSummary.allergies}</p>
+                )}
+                {participantSummary.medsNotes && (
+                  <p><strong>{t("participantDetail.medsNotesLabel")}:</strong> {participantSummary.medsNotes}</p>
+                )}
+                {participantSummary.chronicIssues && (
+                  <p><strong>{t("participantDetail.chronicIssuesLabel")}:</strong> {participantSummary.chronicIssues}</p>
+                )}
+                {participantSummary.otherNotes && (
+                  <p><strong>{t("participantDetail.otherNotesLabel")}:</strong> {participantSummary.otherNotes}</p>
+                )}
+                {!participantSummary.allergies &&
+                  !participantSummary.medsNotes &&
+                  !participantSummary.chronicIssues &&
+                  !participantSummary.otherNotes && (
+                    <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
+                  )}
+              </div>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIncidentDate((d) => shiftDate(d, -1))}
+              className="rounded-lg border border-mist bg-paper-2 px-2.5 py-2 text-[14px] text-ink hover:bg-mist"
+              aria-label="-1"
+            >
+              −
+            </button>
+            <input
+              type="date"
+              value={incidentDate}
+              onChange={(e) => setIncidentDate(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <button
+              type="button"
+              onClick={() => setIncidentDate((d) => shiftDate(d, 1))}
+              className="rounded-lg border border-mist bg-paper-2 px-2.5 py-2 text-[14px] text-ink hover:bg-mist"
+              aria-label="+1"
+            >
+              +
+            </button>
+            <input
+              type="time"
+              value={incidentTime}
+              onChange={(e) => setIncidentTime(e.target.value)}
+              className={inputClass + " w-28 flex-none"}
+            />
+          </div>
+
           {isFollowUp ? (
             <p className="rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink-secondary">
               {t("incidentForm.followUpLockedNote", { category: t(`incidentForm.category.${category}`) })}
