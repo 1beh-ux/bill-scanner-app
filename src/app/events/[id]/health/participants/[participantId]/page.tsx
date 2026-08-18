@@ -29,6 +29,16 @@ type ParticipantDetail = {
 
 type IncidentWithFollowUps = IncidentClientData & { followUps: IncidentClientData[] };
 
+type NamedListItem = { id: string; name: string };
+type MedPlan = {
+  id: string;
+  dose: string | null;
+  notes: string | null;
+  active: boolean;
+  eventMed: NamedListItem;
+  eventSlot: NamedListItem;
+};
+
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
@@ -77,6 +87,65 @@ export default function ParticipantDetailPage({
   const [detailIncident, setDetailIncident] = useState<IncidentClientData | null>(null);
   const [followUpParent, setFollowUpParent] = useState<IncidentClientData | null>(null);
 
+  const [medPlans, setMedPlans] = useState<MedPlan[]>([]);
+  const [eventMeds, setEventMeds] = useState<NamedListItem[]>([]);
+  const [eventSlots, setEventSlots] = useState<NamedListItem[]>([]);
+  const [addingMedPlan, setAddingMedPlan] = useState(false);
+  const [planMedId, setPlanMedId] = useState("");
+  const [planSlotId, setPlanSlotId] = useState("");
+  const [planDose, setPlanDose] = useState("");
+  const [planNotes, setPlanNotes] = useState("");
+  const [savingMedPlan, setSavingMedPlan] = useState(false);
+
+  async function loadMedPlans() {
+    const [plansRes, medsRes, slotsRes] = await Promise.all([
+      fetch(`/api/participants/${participantId}/med-plans`),
+      fetch(`/api/events/${eventId}/list-items?kind=med`),
+      fetch(`/api/events/${eventId}/list-items?kind=slot`),
+    ]);
+    if (plansRes.ok) setMedPlans(await plansRes.json());
+    if (medsRes.ok) setEventMeds(await medsRes.json());
+    if (slotsRes.ok) setEventSlots(await slotsRes.json());
+  }
+
+  async function handleAddMedPlan(e: React.FormEvent) {
+    e.preventDefault();
+    if (!planMedId || !planSlotId) return;
+    setSavingMedPlan(true);
+    await fetch(`/api/participants/${participantId}/med-plans`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventMedId: planMedId,
+        eventSlotId: planSlotId,
+        dose: planDose.trim() || undefined,
+        notes: planNotes.trim() || undefined,
+      }),
+    });
+    setSavingMedPlan(false);
+    setPlanMedId("");
+    setPlanSlotId("");
+    setPlanDose("");
+    setPlanNotes("");
+    setAddingMedPlan(false);
+    loadMedPlans();
+  }
+
+  async function toggleMedPlanActive(plan: MedPlan) {
+    await fetch(`/api/participants/${participantId}/med-plans/${plan.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: !plan.active }),
+    });
+    loadMedPlans();
+  }
+
+  async function removeMedPlan(planId: string) {
+    if (!window.confirm(t("medPlansSection.confirmRemove"))) return;
+    await fetch(`/api/participants/${participantId}/med-plans/${planId}`, { method: "DELETE" });
+    loadMedPlans();
+  }
+
   async function load() {
     setLoading(true);
     const res = await fetch(`/api/participants/${participantId}`);
@@ -92,6 +161,7 @@ export default function ParticipantDetailPage({
   useEffect(() => {
     load();
     loadIncidents();
+    loadMedPlans();
   }, [participantId]);
 
   function handleIncidentChanged() {
@@ -302,6 +372,81 @@ export default function ParticipantDetailPage({
                   onClick={() => removeGuardian(g.id)}
                   className="text-[13px] text-red-600 hover:underline"
                 >
+                  {t("common.delete")}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mb-3 mt-6 flex items-center justify-between">
+        <h2 className="text-[16px] font-semibold text-ink">{t("medPlansSection.title")}</h2>
+        <button onClick={() => setAddingMedPlan((v) => !v)} className="text-[13px] text-ember hover:underline">
+          {t("medPlansSection.addButton")}
+        </button>
+      </div>
+
+      {addingMedPlan && (
+        <form
+          onSubmit={handleAddMedPlan}
+          className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2"
+        >
+          <select value={planMedId} onChange={(e) => setPlanMedId(e.target.value)} className={inputClass + " flex-1"}>
+            <option value="">{t("medPlansSection.selectMed")}</option>
+            {eventMeds.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <select value={planSlotId} onChange={(e) => setPlanSlotId(e.target.value)} className={inputClass + " flex-1"}>
+            <option value="">{t("medPlansSection.selectSlot")}</option>
+            {eventSlots.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          <input
+            type="text"
+            placeholder={t("medPlansSection.doseLabel")}
+            value={planDose}
+            onChange={(e) => setPlanDose(e.target.value)}
+            className={inputClass + " flex-1"}
+          />
+          <input
+            type="text"
+            placeholder={t("participantDetail.otherNotesLabel")}
+            value={planNotes}
+            onChange={(e) => setPlanNotes(e.target.value)}
+            className={inputClass + " flex-1"}
+          />
+          <button type="submit" disabled={savingMedPlan} className={btnPrimary}>
+            {t("common.save")}
+          </button>
+        </form>
+      )}
+
+      {medPlans.length === 0 ? (
+        <p className="mb-6 text-[14px] text-ink-secondary">{t("medPlansSection.empty")}</p>
+      ) : (
+        <div className="mb-6 flex flex-col gap-2">
+          {medPlans.map((plan) => (
+            <div
+              key={plan.id}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2"
+            >
+              <div className={"text-[14px] " + (plan.active ? "text-ink" : "text-ink-secondary line-through")}>
+                {plan.eventMed.name} · {plan.eventSlot.name}
+                {plan.dose && <span className="text-ink-secondary"> · {plan.dose}</span>}
+                {plan.notes && <span className="text-ink-secondary"> · {plan.notes}</span>}
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={() => toggleMedPlanActive(plan)} className="text-[12px] text-ink-secondary hover:text-ink">
+                  {plan.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
+                </button>
+                <button onClick={() => removeMedPlan(plan.id)} className="text-[13px] text-red-600 hover:underline">
                   {t("common.delete")}
                 </button>
               </div>

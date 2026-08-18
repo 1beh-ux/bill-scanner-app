@@ -20,6 +20,7 @@ import {
   Receipt,
   Upload,
   HeartPulse,
+  Pill,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -88,6 +89,7 @@ const eventNavItems = [
     { href: "/authors", label: t("nav.authors"), icon: Users },
     { href: "/category-templates", label: t("nav.categoryTemplates"), icon: Tags },
     { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
+    { href: "/health-templates", label: t("nav.healthTemplates"), icon: Pill },
     { href: "/users", label: t("nav.users"), icon: UserCog },
   ];
 

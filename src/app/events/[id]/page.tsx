@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 
 type EventDetail = {
   id: string;
@@ -56,7 +57,7 @@ export default function EventDetailPage({
   const { id } = use(params);
   const { t } = useTranslations();
 
-  const [tab, setTab] = useState<"settings" | "access">("settings");
+  const [tab, setTab] = useState<"settings" | "access" | "health">("settings");
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -283,9 +284,26 @@ export default function EventDetailPage({
         >
           {t("eventSettings.tabAccess")}
         </button>
+        <button
+          onClick={() => setTab("health")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "health" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("eventSettings.tabHealth")}
+        </button>
       </div>
 
       {tab === "access" && <AccessTab eventId={id} t={t} />}
+
+      {tab === "health" && (
+        <div className="flex flex-col gap-6">
+          <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
+          <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
+          <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
+        </div>
+      )}
 
       {tab === "settings" && (
       <>

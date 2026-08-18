@@ -180,6 +180,12 @@ export default function EventHealthPage({
         >
           {t("participantsPage.importButton")}
         </a>
+        <a
+          href={`/events/${id}/health/meds`}
+          className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
+        >
+          {t("medChecklistPage.title")}
+        </a>
         <button onClick={openForm} className={btnPrimary}>
           {t("participantsPage.addButton")}
         </button>

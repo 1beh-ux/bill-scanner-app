@@ -54,6 +54,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    const listTemplates = await tx.listTemplate.findMany({ where: { active: true } });
+    if (listTemplates.length > 0) {
+      await tx.eventListItem.createMany({
+        data: listTemplates.map((lt) => ({
+          eventId: created.id,
+          kind: lt.kind,
+          key: lt.key,
+          name: lt.name,
+          sortOrder: lt.sortOrder,
+          data: lt.data ?? undefined,
+          isFromTemplate: true,
+        })),
+      });
+    }
+
     await tx.eventModule.createMany({
       data: [
         { eventId: created.id, moduleKey: "bills", enabled: true },

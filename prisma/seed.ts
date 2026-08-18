@@ -476,9 +476,53 @@ async function main() {
       { key: "participantsPage.addIncidentButton", cs: "+ Záznam", en: "+ Record" },
       { key: "incidentForm.showParticipantSummary", cs: "Zobrazit podrobnosti…", en: "Show details…" },
       { key: "incidentForm.hideParticipantSummary", cs: "Skrýt podrobnosti", en: "Hide details" },
+      { key: "nav.healthTemplates", cs: "Šablony zdraví", en: "Health templates" },
+      { key: "eventSettings.tabHealth", cs: "Zdraví", en: "Health" },
+      { key: "eventHealthTab.slotsLabel", cs: "Časy podání", en: "Time slots" },
+      { key: "healthTemplatesPage.title", cs: "Šablony zdraví", en: "Health templates" },
+      { key: "healthTemplatesPage.subtitle", cs: "Výchozí seznamy léků a situací pro nové akce.", en: "Default med and situation lists for new events." },
+      { key: "healthTemplatesPage.tabMeds", cs: "Léky", en: "Meds" },
+      { key: "healthTemplatesPage.tabSituations", cs: "Situace", en: "Situations" },
+      { key: "listTemplateAdmin.empty", cs: "Zatím nic.", en: "Nothing yet." },
+      { key: "listTemplateAdmin.deactivate", cs: "Deaktivovat", en: "Deactivate" },
+      { key: "listTemplateAdmin.activate", cs: "Aktivovat", en: "Activate" },
+      { key: "listTemplateAdmin.errorSaveFailed", cs: "Nepodařilo se uložit.", en: "Failed to save." },
+      { key: "listTemplateAdmin.confirmDelete", cs: "Opravdu smazat „{name}“?", en: "Really delete \"{name}\"?" },
+      { key: "listTemplateAdmin.errorItemInUse", cs: "Nelze smazat — položka je použita u účastníka.", en: "Can't delete — item is in use by a participant." },
+      { key: "listTemplateAdmin.errorDeleteFailed", cs: "Smazání se nezdařilo.", en: "Failed to delete." },
+      { key: "listTemplateAdmin.shortDescriptionLabel", cs: "Krátký popis", en: "Short description" },
+      { key: "medPlansSection.title", cs: "Léky", en: "Meds" },
+      { key: "medPlansSection.addButton", cs: "+ Přidat lék", en: "+ Add medication" },
+      { key: "medPlansSection.selectMed", cs: "Vyberte lék", en: "Select medication" },
+      { key: "medPlansSection.selectSlot", cs: "Vyberte čas", en: "Select time" },
+      { key: "medPlansSection.doseLabel", cs: "Dávka", en: "Dose" },
+      { key: "medPlansSection.empty", cs: "Zatím žádné léky.", en: "No medications yet." },
+      { key: "medPlansSection.confirmRemove", cs: "Opravdu odebrat tento lék?", en: "Really remove this medication?" },
+      { key: "medChecklistPage.title", cs: "Výdej léků", en: "Med checklist" },
+      { key: "medChecklistPage.progress", cs: "Podáno {given} z {total}", en: "Given {given} of {total}" },
+      { key: "medChecklistPage.empty", cs: "Pro tento čas nejsou naplánované žádné léky.", en: "No meds scheduled for this time." },
     ],
     skipDuplicates: true,
   });
+
+  // ListTemplate has no natural unique key to dedupe createMany against, so
+  // seed these idempotently by checking first.
+  const defaultSlots = [
+    { name: "ráno", sortOrder: 1 },
+    { name: "po obědě", sortOrder: 2 },
+    { name: "po večeři", sortOrder: 3 },
+    { name: "před spaním", sortOrder: 4 },
+  ];
+  for (const slot of defaultSlots) {
+    const existing = await prisma.listTemplate.findFirst({
+      where: { kind: "slot", name: slot.name },
+    });
+    if (!existing) {
+      await prisma.listTemplate.create({
+        data: { kind: "slot", name: slot.name, sortOrder: slot.sortOrder },
+      });
+    }
+  }
 }
 
 main().finally(() => prisma.$disconnect());
