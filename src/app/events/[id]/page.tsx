@@ -58,6 +58,7 @@ export default function EventDetailPage({
   const { t } = useTranslations();
 
   const [tab, setTab] = useState<"settings" | "access" | "health">("settings");
+  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -96,7 +97,15 @@ export default function EventDetailPage({
 
   useEffect(() => {
     load();
+    fetch(`/api/events/${id}/modules/mine`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setModuleAccess)
+      .catch(() => setModuleAccess({}));
   }, [id]);
+
+  useEffect(() => {
+    if (tab === "health" && !moduleAccess.health) setTab("settings");
+  }, [tab, moduleAccess]);
 
   useEffect(() => {
     fetch("/api/config/drive-account")
@@ -284,15 +293,17 @@ export default function EventDetailPage({
         >
           {t("eventSettings.tabAccess")}
         </button>
-        <button
-          onClick={() => setTab("health")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "health" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("eventSettings.tabHealth")}
-        </button>
+        {moduleAccess.health && (
+          <button
+            onClick={() => setTab("health")}
+            className={
+              "border-b-2 px-3 py-2 text-[13px] font-medium " +
+              (tab === "health" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+            }
+          >
+            {t("eventSettings.tabHealth")}
+          </button>
+        )}
       </div>
 
       {tab === "access" && <AccessTab eventId={id} t={t} />}

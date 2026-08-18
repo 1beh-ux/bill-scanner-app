@@ -106,6 +106,8 @@ async function main() {
       { key: "nav.payments", cs: "Platby", en: "Payments" },
       { key: "nav.currentEvent", cs: "Aktuální akce", en: "Current event" },
       { key: "nav.organization", cs: "Organizace", en: "Organization" },
+      { key: "nav.sectionBills", cs: "Modul Účtenky", en: "Bills module" },
+      { key: "nav.sectionHealth", cs: "Modul Zdraví", en: "Health module" },
       { key: "nav.toggleTheme", cs: "Přepnout motiv", en: "Toggle theme" },
       { key: "nav.openMenu", cs: "Otevřít menu", en: "Open menu" },
       { key: "usersPage.title", cs: "Uživatelé", en: "Users" },

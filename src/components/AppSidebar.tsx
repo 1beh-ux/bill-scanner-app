@@ -73,23 +73,31 @@ export default function AppSidebar() {
     router.push(`/events/${id}/bills`);
   }
 
-const eventNavItems = [
+  const billsNavItems = [
     { href: eventId ? `/events/${eventId}/import` : "/events", label: t("nav.import"), icon: Upload },
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
-    ...(moduleAccess.health
-      ? [{ href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse }]
-      : []),
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
-    { href: eventId ? `/events/${eventId}` : "/events", label: t("nav.eventSetup"), icon: Settings },
-  ];
-
-  const orgNavItems = [
-    { href: "/events", label: t("nav.events"), icon: Calendar },
     { href: "/authors", label: t("nav.authors"), icon: Users },
     { href: "/category-templates", label: t("nav.categoryTemplates"), icon: Tags },
     { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
+  ];
+
+  const healthNavItems = [
+    ...(moduleAccess.health
+      ? [{ href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse }]
+      : []),
     { href: "/health-templates", label: t("nav.healthTemplates"), icon: Pill },
+  ];
+
+  const eventSettingsItem = {
+    href: eventId ? `/events/${eventId}` : "/events",
+    label: t("nav.eventSetup"),
+    icon: Settings,
+  };
+
+  const orgNavItems = [
+    { href: "/events", label: t("nav.events"), icon: Calendar },
     { href: "/users", label: t("nav.users"), icon: UserCog },
   ];
 
@@ -144,10 +152,30 @@ const eventNavItems = [
         </>
       )}
 
+      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+        {t("nav.sectionBills")}
+      </div>
       <nav className="flex flex-col gap-0.5">
-        {eventNavItems.map((item) => (
+        {billsNavItems.map((item) => (
           <NavLink key={item.label} {...item} />
         ))}
+      </nav>
+
+      <div className="my-3 h-px bg-night-border" />
+
+      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+        {t("nav.sectionHealth")}
+      </div>
+      <nav className="flex flex-col gap-0.5">
+        {healthNavItems.map((item) => (
+          <NavLink key={item.label} {...item} />
+        ))}
+      </nav>
+
+      <div className="my-3 h-px bg-night-border" />
+
+      <nav className="flex flex-col gap-0.5">
+        <NavLink {...eventSettingsItem} />
       </nav>
 
       <div className="my-3 h-px bg-night-border" />
