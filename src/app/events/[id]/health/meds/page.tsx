@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import PdfExportControls from "@/components/health/PdfExportControls";
 
 type EventBasic = { id: string; name: string; startDate: string; endDate: string };
 type Slot = { id: string; name: string };
@@ -186,6 +187,14 @@ export default function MedChecklistPage({
           {t("medChecklistPage.progress", { given: String(givenCount), total: String(rows.length) })}
         </p>
       )}
+
+      <div className="mb-4">
+        <PdfExportControls
+          buildHref={(mode, format) =>
+            `/api/events/${eventId}/med-checklist/export?type=plan&date=${date}&slotId=${slotId}&mode=${mode}&format=${format}`
+          }
+        />
+      </div>
 
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>

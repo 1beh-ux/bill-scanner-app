@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { fetchMedChecklistDay } from "@/lib/med-checklist-grid";
 
 // Checklist rows are computed from standing med plans, not stored ahead of
 // time -- a MedChecklist row only gets created (via upsert, in POST) the
-// first time someone actually toggles it for a given date. This GET
-// left-joins the plans against whatever checklist rows already exist for
-// the requested date.
+// first time someone actually toggles it for a given date. See
+// fetchMedChecklistDay for the query itself (also reused by the "plan" PDF
+// export).
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -26,46 +27,8 @@ export async function GET(
   if (!dateParam || !slotId) {
     return NextResponse.json({ error: "date_and_slot_required" }, { status: 400 });
   }
-  const date = new Date(dateParam);
 
-  const plans = await prisma.participantMedPlan.findMany({
-    where: {
-      eventSlotId: slotId,
-      active: true,
-      participant: { eventId, active: true },
-    },
-    include: {
-      participant: { select: { id: true, name: true, groupName: true } },
-      eventMed: { select: { id: true, name: true } },
-    },
-  });
-
-  const checklistRows = await prisma.medChecklist.findMany({
-    where: {
-      eventSlotId: slotId,
-      date,
-      participantId: { in: plans.map((p) => p.participantId) },
-    },
-  });
-  const givenByKey = new Map(
-    checklistRows.map((c) => [`${c.participantId}:${c.eventMedId}`, c])
-  );
-
-  const result = plans.map((plan) => {
-    const existing = givenByKey.get(`${plan.participantId}:${plan.eventMedId}`);
-    return {
-      participantId: plan.participant.id,
-      participantName: plan.participant.name,
-      participantGroup: plan.participant.groupName,
-      eventMedId: plan.eventMed.id,
-      medName: plan.eventMed.name,
-      dose: plan.dose,
-      notes: plan.notes,
-      given: existing?.given ?? false,
-      givenAt: existing?.givenAt ?? null,
-    };
-  });
-
+  const result = await fetchMedChecklistDay(eventId, new Date(dateParam), slotId);
   return NextResponse.json(result);
 }
 

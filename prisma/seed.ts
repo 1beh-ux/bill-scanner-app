@@ -524,6 +524,9 @@ async function main() {
       { key: "medGridPage.preset.event", cs: "Celá akce", en: "Whole event" },
       { key: "medGridPage.preset.custom", cs: "Vlastní rozsah", en: "Custom range" },
       { key: "medGridPage.expandHint", cs: "Klikněte na den pro zobrazení jednotlivých časů.", en: "Click a day to show its individual time slots." },
+      { key: "pdfExport.modeBlank", cs: "Prázdný (k vyplnění)", en: "Blank (to fill in)" },
+      { key: "pdfExport.modeHybrid", cs: "Aktuální stav", en: "Current status" },
+      { key: "pdfExport.downloadButton", cs: "Stáhnout PDF", en: "Download PDF" },
     ],
     skipDuplicates: true,
   });
