@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { deleteParticipantCascade } from "@/lib/participant-delete";
 
 export async function GET(
   req: NextRequest,
@@ -82,18 +83,7 @@ export async function DELETE(
   const denied = await requireModuleAccess(user, existing.eventId, "health");
   if (denied) return denied;
 
-  // No cascading deletes are configured on these relations (same situation
-  // as Bill deletion elsewhere in this app) -- delete every dependent row
-  // in dependency order before the participant itself.
-  await prisma.$transaction(async (tx) => {
-    await tx.parentEmailLog.deleteMany({ where: { participantId: id } });
-    await tx.incidentUpdate.deleteMany({ where: { incident: { participantId: id } } });
-    await tx.incident.deleteMany({ where: { participantId: id } });
-    await tx.participantMedPlan.deleteMany({ where: { participantId: id } });
-    await tx.medChecklist.deleteMany({ where: { participantId: id } });
-    await tx.participantGuardian.deleteMany({ where: { participantId: id } });
-    await tx.participant.delete({ where: { id } });
-  });
+  await deleteParticipantCascade(id);
 
   return NextResponse.json({ ok: true });
 }

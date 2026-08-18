@@ -56,6 +56,11 @@ export default function EventHealthPage({
 
   const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
 
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const [bulkFailures, setBulkFailures] = useState<{ name: string; error: string }[]>([]);
+
   async function load() {
     setLoading(true);
     const [evRes, partRes] = await Promise.all([
@@ -141,6 +146,59 @@ export default function EventHealthPage({
     load();
   }
 
+  function toggleSelect(participantId: string) {
+    const next = new Set(selected);
+    if (next.has(participantId)) next.delete(participantId);
+    else next.add(participantId);
+    setSelected(next);
+  }
+
+  const allVisibleSelected =
+    filteredParticipants.length > 0 && filteredParticipants.every((p) => selected.has(p.id));
+
+  function toggleSelectAll() {
+    if (allVisibleSelected) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredParticipants.map((p) => p.id)));
+    }
+  }
+
+  async function runBulkDelete() {
+    if (selected.size === 0) return;
+    const ok = window.confirm(t("participantsPage.confirmBulkDelete", { count: String(selected.size) }));
+    if (!ok) return;
+
+    setBulkRunning(true);
+    setBulkMessage(null);
+    setBulkFailures([]);
+    setError(null);
+
+    const res = await fetch(`/api/events/${id}/participants/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", participantIds: Array.from(selected) }),
+    });
+
+    if (!res.ok) {
+      setError(t("participantsPage.bulkFailed"));
+      setBulkRunning(false);
+      return;
+    }
+
+    const data = await res.json();
+    setBulkMessage(
+      t("participantsPage.bulkResult", {
+        succeeded: String(data.succeededCount),
+        failed: String(data.failedCount),
+      })
+    );
+    setBulkFailures(data.failed || []);
+    setSelected(new Set());
+    setBulkRunning(false);
+    load();
+  }
+
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
@@ -185,6 +243,34 @@ export default function EventHealthPage({
         </button>
       </div>
 
+      {selected.size > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-mist bg-paper-2 p-3">
+          <span className="text-[14px] font-medium text-ink">
+            {t("participantsPage.selectedCount", { count: String(selected.size) })}
+          </span>
+          <button
+            onClick={runBulkDelete}
+            disabled={bulkRunning}
+            className="rounded-lg border border-red-300 bg-paper px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+          >
+            {bulkRunning ? t("common.loading") : t("participantsPage.bulkDeleteButton")}
+          </button>
+        </div>
+      )}
+
+      {bulkMessage && (
+        <div className="mb-4 text-[13px] text-ink">
+          <p>{bulkMessage}</p>
+          {bulkFailures.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-red-600">
+              {bulkFailures.map((f, i) => (
+                <li key={i}>{f.name}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {filteredParticipants.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
           {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
@@ -194,6 +280,9 @@ export default function EventHealthPage({
           <table className="w-full min-w-[420px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
+                <th className="p-2">
+                  <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+                </th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
@@ -205,6 +294,9 @@ export default function EventHealthPage({
                 const age = calculateAge(p.dateOfBirth);
                 return (
                   <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
+                    <td className="p-2">
+                      <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                    </td>
                     <td className="p-2 text-[14px]">
                       <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
                         {p.name}
