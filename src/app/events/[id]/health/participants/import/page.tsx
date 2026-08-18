@@ -234,7 +234,19 @@ export default function ParticipantImportPage({
 
   const importableRows = useMemo(() => rows.filter((r) => r.errors.length === 0), [rows]);
   const invalidCount = rows.length - importableRows.length;
-  const duplicateCount = rows.filter((r) => r.duplicateOf).length;
+  const duplicateRows = useMemo(() => rows.filter((r) => r.duplicateOf), [rows]);
+  const duplicateCount = duplicateRows.length;
+
+  // Sets the same action for every duplicate row at once -- most imports
+  // want the same choice across the board, but individual rows can still
+  // be changed afterward via their own select.
+  function applyActionToAllDuplicates(action: RowAction) {
+    setRowOverrides((prev) => {
+      const next = { ...prev };
+      for (const row of duplicateRows) next[row.index] = action;
+      return next;
+    });
+  }
 
   // Merges an import row into an existing participant: structured fields
   // (group, date of birth) only fill in if currently empty; notes-type
@@ -410,6 +422,27 @@ export default function ParticipantImportPage({
             {duplicateCount > 0 &&
               " " + t("participantImportPage.duplicatesFound", { count: String(duplicateCount) })}
           </p>
+
+          {duplicateCount > 0 && (
+            <div className="mb-3 flex items-center gap-2">
+              <label className="text-[13px] text-ink-secondary">{t("participantImportPage.bulkActionLabel")}</label>
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) applyActionToAllDuplicates(e.target.value as RowAction);
+                  e.target.value = "";
+                }}
+                className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink"
+              >
+                <option value="" disabled>
+                  {t("participantImportPage.bulkActionPlaceholder")}
+                </option>
+                <option value="skip">{t("participantImportPage.actionSkip")}</option>
+                <option value="merge">{t("participantImportPage.actionMerge")}</option>
+                <option value="create">{t("participantImportPage.actionCreateAnyway")}</option>
+              </select>
+            </div>
+          )}
 
           <div className="mb-4 overflow-x-auto">
             <table className="w-full min-w-[900px] border-collapse">

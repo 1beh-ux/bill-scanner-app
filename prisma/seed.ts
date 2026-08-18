@@ -450,6 +450,8 @@ async function main() {
       { key: "participantImportPage.actionCreateAnyway", cs: "Přesto vytvořit", en: "Create anyway" },
       { key: "participantImportPage.doneMerged", cs: "Sloučeno {count}.", en: "Merged {count}." },
       { key: "participantImportPage.doneSkipped", cs: "Přeskočeno {count}.", en: "Skipped {count}." },
+      { key: "participantImportPage.bulkActionLabel", cs: "U všech duplicit:", en: "For all duplicates:" },
+      { key: "participantImportPage.bulkActionPlaceholder", cs: "Nastavit akci pro všechny…", en: "Set action for all…" },
       { key: "incidentsPage.title", cs: "Záznamy", en: "Records" },
       { key: "incidentsPage.empty", cs: "Zatím žádné záznamy.", en: "No records yet." },
       { key: "incidentsPage.addButton", cs: "+ Záznam", en: "+ Record" },
