@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
+import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 
 type CategoryTemplateRow = { id: string; name: string; description: string | null };
 
@@ -48,7 +49,7 @@ export default function TemplatesPage() {
 
 function HealthTemplatesTab() {
   const { t } = useTranslations();
-  const [subTab, setSubTab] = useState<"med" | "situation">("med");
+  const [subTab, setSubTab] = useState<"med" | "situation" | "email">("med");
 
   return (
     <div>
@@ -73,12 +74,22 @@ function HealthTemplatesTab() {
         >
           {t("healthTemplatesPage.tabSituations")}
         </button>
+        <button
+          onClick={() => setSubTab("email")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (subTab === "email" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("healthTemplatesPage.tabEmail")}
+        </button>
       </div>
 
       {subTab === "med" && <ListTemplateAdmin kind="med" scope="org" label={t("healthTemplatesPage.tabMeds")} />}
       {subTab === "situation" && (
         <ListTemplateAdmin kind="situation" scope="org" label={t("healthTemplatesPage.tabSituations")} />
       )}
+      {subTab === "email" && <EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} />}
     </div>
   );
 }

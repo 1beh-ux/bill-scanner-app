@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import IncidentFormModal, { type IncidentClientData } from "@/components/health/IncidentFormModal";
 import IncidentDetailModal from "@/components/health/IncidentDetailModal";
+import SendSummaryModal from "@/components/health/SendSummaryModal";
+import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import { calculateAge } from "@/lib/age";
 
 type Guardian = {
@@ -90,6 +92,10 @@ export default function ParticipantDetailPage({
   const [detailIncident, setDetailIncident] = useState<IncidentClientData | null>(null);
   const [followUpParent, setFollowUpParent] = useState<IncidentClientData | null>(null);
 
+  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+
   const [medPlans, setMedPlans] = useState<MedPlan[]>([]);
   const [eventMeds, setEventMeds] = useState<NamedListItem[]>([]);
   const [eventSlots, setEventSlots] = useState<NamedListItem[]>([]);
@@ -161,10 +167,23 @@ export default function ParticipantDetailPage({
     if (res.ok) setIncidents(await res.json());
   }
 
+  async function loadEmailLogs() {
+    const res = await fetch(`/api/participants/${participantId}/emails`);
+    if (res.ok) setEmailLogs(await res.json());
+  }
+
+  async function handleResend(log: EmailLogRow) {
+    setResendingId(log.id);
+    await fetch(`/api/participants/${participantId}/emails/${log.id}/resend`, { method: "POST" });
+    setResendingId(null);
+    loadEmailLogs();
+  }
+
   useEffect(() => {
     load();
     loadIncidents();
     loadMedPlans();
+    loadEmailLogs();
   }, [participantId]);
 
   function handleIncidentChanged() {
@@ -302,6 +321,15 @@ export default function ParticipantDetailPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setSendModalOpen(true)} className="text-[13px] text-ember hover:underline">
+            {t("sendSummary.sendButtonShort")}
+          </button>
+          <a
+            href={`/api/participants/${participantId}/summary-pdf`}
+            className="text-[13px] text-ink-secondary hover:text-ink"
+          >
+            {t("participantDetail.downloadPdfButton")}
+          </a>
           <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
             {t("common.edit")}
           </button>
@@ -547,6 +575,17 @@ export default function ParticipantDetailPage({
             </div>
           ))}
         </div>
+      )}
+
+      <h2 className="mb-3 mt-6 text-[16px] font-semibold text-ink">{t("sendLog.title")}</h2>
+      <ParentEmailLogTable logs={emailLogs} onResend={handleResend} resendingId={resendingId} />
+
+      {sendModalOpen && (
+        <SendSummaryModal
+          participantId={participantId}
+          onClose={() => setSendModalOpen(false)}
+          onSent={loadEmailLogs}
+        />
       )}
 
       {addingIncident && (
