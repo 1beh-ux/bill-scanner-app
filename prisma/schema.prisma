@@ -10,6 +10,7 @@ datasource db {
 enum UserRole {
   admin
   accountant
+  user
 }
 
 enum EventStatus {
@@ -45,6 +46,41 @@ enum AuditActionType {
   reopen
 }
 
+enum ModuleKey {
+  bills
+  health
+  mail
+}
+
+enum IncidentCategory {
+  illness
+  injury
+  parasite
+  medication
+  other
+}
+
+enum BodyView {
+  front
+  back
+}
+
+enum IncidentUpdateType {
+  correct
+  void
+}
+
+enum ListTemplateKind {
+  med
+  slot
+  situation
+}
+
+enum ParentEmailStatus {
+  sent
+  failed
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
@@ -53,24 +89,47 @@ model User {
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  eventAccess     UserEventAccess[]
-  billsCreated    Bill[]         @relation("BillCreatedBy")
-  billsApproved   Bill[]         @relation("BillApprovedBy")
-  billsPaid       Bill[]         @relation("BillPaidBy")
-  auditLogEntries BillAuditLog[]
+  moduleAccess       UserEventModuleAccess[]
+  billsCreated       Bill[]           @relation("BillCreatedBy")
+  billsApproved      Bill[]           @relation("BillApprovedBy")
+  billsPaid          Bill[]           @relation("BillPaidBy")
+  auditLogEntries    BillAuditLog[]
+  incidentsCreated   Incident[]       @relation("IncidentCreatedBy")
+  incidentUpdates    IncidentUpdate[] @relation("IncidentUpdatedBy")
+  medChecklistGiven  MedChecklist[]   @relation("MedChecklistGivenBy")
+  parentEmailsSent   ParentEmailLog[] @relation("ParentEmailSentBy")
 
   @@map("users")
 }
 
-model UserEventAccess {
-  userId  String @map("user_id")
-  eventId String @map("event_id")
+model Module {
+  key  ModuleKey @id
+  name String
+
+  @@map("modules")
+}
+
+model EventModule {
+  eventId   String    @map("event_id")
+  moduleKey ModuleKey @map("module_key")
+  enabled   Boolean   @default(false)
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@id([eventId, moduleKey])
+  @@map("event_modules")
+}
+
+model UserEventModuleAccess {
+  userId    String    @map("user_id")
+  eventId   String    @map("event_id")
+  moduleKey ModuleKey @map("module_key")
 
   user  User  @relation(fields: [userId], references: [id])
   event Event @relation(fields: [eventId], references: [id])
 
-  @@id([userId, eventId])
-  @@map("user_event_access")
+  @@id([userId, eventId, moduleKey])
+  @@map("user_event_module_access")
 }
 
 model Event {
@@ -85,10 +144,14 @@ model Event {
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
-  categories   EventCategory[]
-  userAccess   UserEventAccess[]
-  authorAccess AuthorEventAccess[]
-  bills        Bill[]
+  categories          EventCategory[]
+  modules              EventModule[]
+  moduleAccess          UserEventModuleAccess[]
+  authorAccess         AuthorEventAccess[]
+  bills                Bill[]
+  participants         Participant[]
+  eventListItems       EventListItem[]
+  eventEmailTemplates  EventEmailTemplate[]
 
   @@map("events")
 }
@@ -245,4 +308,203 @@ model MerchantAlias {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   @@map("merchant_aliases")
+}
+
+// ---------------------------------------------------------------------------
+// Health module
+// ---------------------------------------------------------------------------
+
+model Participant {
+  id            String   @id @default(uuid())
+  eventId       String   @map("event_id")
+  name          String
+  groupName     String?  @map("group_name")
+  active        Boolean  @default(true)
+  allergies     String?
+  medsNotes     String?  @map("meds_notes")
+  chronicIssues String?  @map("chronic_issues")
+  otherNotes    String?  @map("other_notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  event        Event                 @relation(fields: [eventId], references: [id])
+  guardians    ParticipantGuardian[]
+  incidents    Incident[]
+  medPlans     ParticipantMedPlan[]
+  medChecklist MedChecklist[]
+  emailLogs    ParentEmailLog[]
+
+  @@map("participants")
+}
+
+model ParticipantGuardian {
+  id                     String  @id @default(uuid())
+  participantId          String  @map("participant_id")
+  name                   String?
+  email                  String
+  relationship           String?
+  receivesCommunications Boolean @default(true) @map("receives_communications")
+
+  participant Participant      @relation(fields: [participantId], references: [id])
+  emailLogs   ParentEmailLog[]
+
+  @@map("participant_guardians")
+}
+
+model Incident {
+  id               String           @id @default(uuid())
+  participantId    String           @map("participant_id")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  createdByUserId  String           @map("created_by_user_id")
+  category         IncidentCategory
+  templateType     String?          @map("template_type")
+  actionSummary    String           @map("action_summary")
+  pillName         String?          @map("pill_name")
+  details          String
+  photoGcsPath     String?          @map("photo_gcs_path")
+  parentIncidentId String?          @map("parent_incident_id")
+  tempC            Decimal?         @map("temp_c") @db.Decimal(4, 1)
+  bodyView         BodyView?        @map("body_view")
+  bodyXPct         Decimal?         @map("body_x_pct") @db.Decimal(5, 2)
+  bodyYPct         Decimal?         @map("body_y_pct") @db.Decimal(5, 2)
+
+  participant    Participant      @relation(fields: [participantId], references: [id])
+  createdBy      User             @relation("IncidentCreatedBy", fields: [createdByUserId], references: [id])
+  parentIncident Incident?        @relation("IncidentFollowUp", fields: [parentIncidentId], references: [id])
+  followUps      Incident[]       @relation("IncidentFollowUp")
+  updates        IncidentUpdate[]
+
+  @@map("incidents")
+}
+
+model IncidentUpdate {
+  id              String              @id @default(uuid())
+  incidentId      String              @map("incident_id")
+  updatedAt       DateTime            @default(now()) @map("updated_at")
+  updatedByUserId String              @map("updated_by_user_id")
+  updateType      IncidentUpdateType  @map("update_type")
+  actionSummary   String              @map("action_summary")
+  pillName        String?             @map("pill_name")
+  details         String
+  photoGcsPath    String?             @map("photo_gcs_path")
+  tempC           Decimal?            @map("temp_c") @db.Decimal(4, 1)
+  bodyView        BodyView?           @map("body_view")
+  bodyXPct        Decimal?            @map("body_x_pct") @db.Decimal(5, 2)
+  bodyYPct        Decimal?            @map("body_y_pct") @db.Decimal(5, 2)
+  note            String?
+
+  incident  Incident @relation(fields: [incidentId], references: [id])
+  updatedBy User     @relation("IncidentUpdatedBy", fields: [updatedByUserId], references: [id])
+
+  @@map("incident_updates")
+}
+
+// Generic org-default -> per-event-copy template mechanism, shared by meds,
+// meds time slots, and situation templates (see design doc "Build note").
+model ListTemplate {
+  id        String           @id @default(uuid())
+  kind      ListTemplateKind
+  key       String?
+  name      String
+  sortOrder Int?             @map("sort_order")
+  active    Boolean          @default(true)
+  data      Json?
+
+  @@map("list_templates")
+}
+
+model EventListItem {
+  id             String           @id @default(uuid())
+  eventId        String           @map("event_id")
+  kind           ListTemplateKind
+  key            String?
+  name           String
+  sortOrder      Int?             @map("sort_order")
+  active         Boolean          @default(true)
+  isFromTemplate Boolean          @default(false) @map("is_from_template")
+  data           Json?
+
+  event            Event                @relation(fields: [eventId], references: [id])
+  medPlansAsMed    ParticipantMedPlan[] @relation("MedPlanMed")
+  medPlansAsSlot   ParticipantMedPlan[] @relation("MedPlanSlot")
+  checklistAsMed   MedChecklist[]       @relation("MedChecklistMed")
+  checklistAsSlot  MedChecklist[]       @relation("MedChecklistSlot")
+
+  @@map("event_list_items")
+}
+
+model ParticipantMedPlan {
+  id            String  @id @default(uuid())
+  participantId String  @map("participant_id")
+  eventMedId    String  @map("event_med_id")
+  eventSlotId   String  @map("event_slot_id")
+  dose          String?
+  notes         String?
+  active        Boolean @default(true)
+
+  participant Participant   @relation(fields: [participantId], references: [id])
+  eventMed    EventListItem @relation("MedPlanMed", fields: [eventMedId], references: [id])
+  eventSlot   EventListItem @relation("MedPlanSlot", fields: [eventSlotId], references: [id])
+
+  @@map("participant_med_plans")
+}
+
+model MedChecklist {
+  id            String    @id @default(uuid())
+  participantId String    @map("participant_id")
+  eventMedId    String    @map("event_med_id")
+  eventSlotId   String    @map("event_slot_id")
+  date          DateTime  @db.Date
+  given         Boolean   @default(false)
+  givenAt       DateTime? @map("given_at")
+  givenByUserId String?   @map("given_by_user_id")
+
+  participant Participant   @relation(fields: [participantId], references: [id])
+  eventMed    EventListItem @relation("MedChecklistMed", fields: [eventMedId], references: [id])
+  eventSlot   EventListItem @relation("MedChecklistSlot", fields: [eventSlotId], references: [id])
+  givenBy     User?         @relation("MedChecklistGivenBy", fields: [givenByUserId], references: [id])
+
+  @@unique([participantId, eventMedId, eventSlotId, date])
+  @@map("med_checklist")
+}
+
+model EmailTemplate {
+  id         String  @id @default(uuid())
+  purposeKey String  @unique @map("purpose_key")
+  subject    String
+  body       String
+  active     Boolean @default(true)
+
+  @@map("email_templates")
+}
+
+model EventEmailTemplate {
+  id             String  @id @default(uuid())
+  eventId        String  @map("event_id")
+  purposeKey     String  @map("purpose_key")
+  subject        String
+  body           String
+  isFromTemplate Boolean @default(false) @map("is_from_template")
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@unique([eventId, purposeKey])
+  @@map("event_email_templates")
+}
+
+model ParentEmailLog {
+  id            String             @id @default(uuid())
+  participantId String             @map("participant_id")
+  guardianId    String             @map("guardian_id")
+  purposeKey    String             @map("purpose_key")
+  sentAt        DateTime           @default(now()) @map("sent_at")
+  status        ParentEmailStatus
+  errorMessage  String?            @map("error_message")
+  sentByUserId  String             @map("sent_by_user_id")
+  pdfGcsPath    String?            @map("pdf_gcs_path")
+
+  participant Participant         @relation(fields: [participantId], references: [id])
+  guardian    ParticipantGuardian @relation(fields: [guardianId], references: [id])
+  sentBy      User                @relation("ParentEmailSentBy", fields: [sentByUserId], references: [id])
+
+  @@map("parent_email_log")
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function GET(
   req: NextRequest,
@@ -12,6 +13,9 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -28,6 +32,9 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const body = await req.json();
   const { name, startDate, endDate, driveIngestFolderId, driveExportFolderId } = body;
   const event = await prisma.event.update({

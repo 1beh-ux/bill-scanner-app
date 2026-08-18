@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { approveBill, deleteBill } from "@/lib/bill-actions";
 import { moveBillToEvent } from "@/lib/bill-move";
 
@@ -23,6 +24,9 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
+
   const body = await req.json();
   const action: string = body.action;
   const billIds: string[] = body.billIds || [];

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { IngestChannel } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { ingestBillFiles } from "@/lib/bill-ingest";
 
 export async function GET(
@@ -14,6 +15,9 @@ export async function GET(
   }
 
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const bills = await prisma.bill.findMany({
     where: { eventId: id },
     orderBy: { createdAt: "desc" },
@@ -36,6 +40,8 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
 
   const formData = await req.formData();
   const files = formData.getAll("files") as File[];

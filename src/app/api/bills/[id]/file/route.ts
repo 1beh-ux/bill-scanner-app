@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { billsBucket } from "@/lib/gcs";
 
 export async function GET(
@@ -21,6 +22,8 @@ export async function GET(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
 
   const file = billsBucket.file(bill.gcsObjectPath);
 

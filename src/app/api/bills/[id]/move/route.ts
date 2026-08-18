@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { moveBillToEvent } from "@/lib/bill-move";
 
 export async function POST(
@@ -11,6 +13,13 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
+  const bill = await prisma.bill.findUnique({ where: { id }, select: { eventId: true } });
+  if (!bill) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
+
   const body = await req.json().catch(() => ({}));
   const targetEventId: string | undefined = body.targetEventId;
   if (!targetEventId) {

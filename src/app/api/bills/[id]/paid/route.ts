@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function POST(
   req: NextRequest,
@@ -19,6 +20,8 @@ export async function POST(
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
@@ -50,6 +53,8 @@ export async function DELETE(
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }

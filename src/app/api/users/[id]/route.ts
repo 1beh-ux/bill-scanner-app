@@ -21,7 +21,7 @@ export async function PATCH(
   if (active === false && id === user.id) {
     return NextResponse.json({ error: "cannot_deactivate_self" }, { status: 400 });
   }
-  if (role !== undefined && role !== "admin" && role !== "accountant") {
+  if (role !== undefined && role !== "admin" && role !== "accountant" && role !== "user") {
     return NextResponse.json({ error: "invalid_role" }, { status: 400 });
   }
   if (role !== undefined && role !== "admin" && id === user.id) {

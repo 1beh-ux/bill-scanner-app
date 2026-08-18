@@ -29,6 +29,20 @@ type ExportSummary = {
   manifestSpreadsheetId: string;
 };
 
+type ModuleKey = "bills" | "health";
+
+type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
+
+type AccessRow = {
+  id: string;
+  displayName: string;
+  email: string;
+  role: "admin" | "accountant" | "user";
+  access: Record<ModuleKey, boolean>;
+};
+
+const MODULE_KEYS: ModuleKey[] = ["bills", "health"];
+
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
@@ -41,6 +55,8 @@ export default function EventDetailPage({
 }) {
   const { id } = use(params);
   const { t } = useTranslations();
+
+  const [tab, setTab] = useState<"settings" | "access">("settings");
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -248,6 +264,31 @@ export default function EventDetailPage({
         {lifecycleError && <p className="mt-1.5 text-[13px] text-red-600">{t(`eventDetail.error.${lifecycleError}`)}</p>}
       </div>
 
+      <div className="mb-6 flex gap-1 border-b border-mist">
+        <button
+          onClick={() => setTab("settings")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "settings" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("eventSettings.tabSettings")}
+        </button>
+        <button
+          onClick={() => setTab("access")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "access" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("eventSettings.tabAccess")}
+        </button>
+      </div>
+
+      {tab === "access" && <AccessTab eventId={id} t={t} />}
+
+      {tab === "settings" && (
+      <>
       <div className="mb-6 flex flex-wrap gap-2">
         <a href={`/events/${id}/bills`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
           {t("eventDetail.viewBillsLink", { count: String(billCount) })}
@@ -420,6 +461,142 @@ export default function EventDetailPage({
           </div>
         )}
       </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Record<string, string>) => string }) {
+  const [modules, setModules] = useState<ModuleState[]>([]);
+  const [rows, setRows] = useState<AccessRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    const [modRes, accessRes] = await Promise.all([
+      fetch(`/api/events/${eventId}/modules`),
+      fetch(`/api/events/${eventId}/module-access`),
+    ]);
+    if (modRes.ok) setModules(await modRes.json());
+    if (accessRes.ok) {
+      setRows(await accessRes.json());
+    } else if (accessRes.status === 403) {
+      // Non-admins can see the module toggles but not the user grid.
+      setRows([]);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [eventId]);
+
+  async function toggleModule(moduleKey: ModuleKey, enabled: boolean) {
+    setError(null);
+    const res = await fetch(`/api/events/${eventId}/modules`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ moduleKey, enabled }),
+    });
+    if (!res.ok) {
+      setError(t("accessTab.errorSaveFailed"));
+      return;
+    }
+    load();
+  }
+
+  async function toggleGrant(userId: string, moduleKey: ModuleKey, grant: boolean) {
+    setError(null);
+    const res = await fetch(`/api/events/${eventId}/module-access`, {
+      method: grant ? "POST" : "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, moduleKey }),
+    });
+    if (!res.ok) {
+      setError(t("accessTab.errorSaveFailed"));
+      return;
+    }
+    load();
+  }
+
+  if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+
+  const moduleLabel = (key: ModuleKey) => (key === "bills" ? t("accessTab.moduleBills") : t("accessTab.moduleHealth"));
+
+  return (
+    <div>
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
+
+      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
+      <div className="mb-8 flex flex-col gap-2">
+        {modules.map((m) => (
+          <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={m.enabled}
+              onChange={(e) => toggleModule(m.moduleKey, e.target.checked)}
+              className="h-4 w-4"
+            />
+            {moduleLabel(m.moduleKey)}
+            <span className="text-[12px] text-ink-secondary">({t("accessTab.moduleEnabledHint")})</span>
+          </label>
+        ))}
+      </div>
+
+      {rows.length > 0 && (
+        <>
+          <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.usersTitle")}</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse">
+              <thead>
+                <tr className="border-b border-mist text-left">
+                  <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("accessTab.colUser")}</th>
+                  {MODULE_KEYS.map((key) => (
+                    <th key={key} className="p-2 text-[12px] font-medium text-ink-secondary">
+                      {moduleLabel(key)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b border-mist/60">
+                    <td className="p-2 text-[14px] text-ink">
+                      {row.displayName}
+                      <div className="text-[12px] text-ink-secondary">{row.email}</div>
+                    </td>
+                    {MODULE_KEYS.map((key) => {
+                      const shortcut =
+                        row.role === "admin" || (row.role === "accountant" && key === "bills");
+                      return (
+                        <td key={key} className="p-2 text-[14px] text-ink">
+                          {shortcut ? (
+                            <span className="text-[12px] text-ink-secondary">
+                              {row.role === "admin"
+                                ? t("accessTab.shortcutAdmin")
+                                : t("accessTab.shortcutAccountant")}
+                            </span>
+                          ) : (
+                            <input
+                              type="checkbox"
+                              checked={row.access[key]}
+                              onChange={(e) => toggleGrant(row.id, key, e.target.checked)}
+                              className="h-4 w-4"
+                            />
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

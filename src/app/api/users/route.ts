@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
   if (!email || !displayName || !role) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
-  if (role !== "admin" && role !== "accountant") {
+  if (role !== "admin" && role !== "accountant" && role !== "user") {
     return NextResponse.json({ error: "invalid_role" }, { status: 400 });
   }
 

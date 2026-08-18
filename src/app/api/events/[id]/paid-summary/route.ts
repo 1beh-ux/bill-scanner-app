@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function GET(
   req: NextRequest,
@@ -13,6 +14,8 @@ export async function GET(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
 
   const bills = await prisma.bill.findMany({
     where: {

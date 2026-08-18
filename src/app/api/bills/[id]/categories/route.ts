@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function PUT(
   req: NextRequest,
@@ -21,6 +22,8 @@ export async function PUT(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
  if (bill.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   }

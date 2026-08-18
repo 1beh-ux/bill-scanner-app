@@ -19,6 +19,7 @@ import {
   Moon,
   Receipt,
   Upload,
+  HeartPulse,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -31,6 +32,7 @@ export default function AppSidebar() {
   const router = useRouter();
   const [events, setEvents] = useState<EventOption[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch("/api/events")
@@ -50,9 +52,20 @@ export default function AppSidebar() {
     setDrawerOpen(false);
   }, [pathname]);
 
-  if (pathname.startsWith("/login")) return null;
-
   const eventId = currentEventId || events[0]?.id || null;
+
+  useEffect(() => {
+    if (!eventId) {
+      setModuleAccess({});
+      return;
+    }
+    fetch(`/api/events/${eventId}/modules/mine`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setModuleAccess)
+      .catch(() => setModuleAccess({}));
+  }, [eventId]);
+
+  if (pathname.startsWith("/login")) return null;
 
   function onEventChange(id: string) {
     setCurrentEventId(id);
@@ -63,6 +76,9 @@ const eventNavItems = [
     { href: eventId ? `/events/${eventId}/import` : "/events", label: t("nav.import"), icon: Upload },
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
+    ...(moduleAccess.health
+      ? [{ href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse }]
+      : []),
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
     { href: eventId ? `/events/${eventId}` : "/events", label: t("nav.eventSetup"), icon: Settings },
   ];

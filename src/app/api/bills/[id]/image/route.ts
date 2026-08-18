@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { billsBucket } from "@/lib/gcs";
 
 export async function POST(
@@ -23,6 +24,8 @@ export async function POST(
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
   if (bill.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   }
@@ -118,6 +121,8 @@ export async function DELETE(
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
   if (bill.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   }

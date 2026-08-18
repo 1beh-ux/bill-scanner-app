@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { approveBill } from "@/lib/bill-actions";
 
 export async function POST(
@@ -13,6 +14,13 @@ export async function POST(
   }
 
   const { id } = await params;
+  const bill = await prisma.bill.findUnique({ where: { id }, select: { eventId: true } });
+  if (!bill) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
+
   const result = await approveBill(id, user.id);
 
   if (!result.ok) {
@@ -47,6 +55,8 @@ export async function DELETE(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
 
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });

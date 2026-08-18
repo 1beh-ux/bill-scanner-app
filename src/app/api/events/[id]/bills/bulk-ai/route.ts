@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { enqueueBillAiTasks } from "@/lib/cloud-tasks";
 
 // Triggers an AI run over any number of bills. This used to run the whole
@@ -26,6 +27,9 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
+
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });

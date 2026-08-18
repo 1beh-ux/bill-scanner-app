@@ -3,12 +3,20 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 
+type Role = "admin" | "accountant" | "user";
+
 type UserRow = {
   id: string;
   email: string;
   displayName: string;
-  role: "admin" | "accountant";
+  role: Role;
   active: boolean;
+};
+
+const ROLE_LABEL_KEYS: Record<Role, string> = {
+  admin: "usersPage.roleAdmin",
+  accountant: "usersPage.roleAccountant",
+  user: "usersPage.roleUser",
 };
 
 const inputClass =
@@ -24,11 +32,11 @@ export default function UsersPage() {
 
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [role, setRole] = useState<"admin" | "accountant">("accountant");
+  const [role, setRole] = useState<Role>("user");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
-  const [editRole, setEditRole] = useState<"admin" | "accountant">("accountant");
+  const [editRole, setEditRole] = useState<Role>("user");
 
   async function load() {
     setLoading(true);
@@ -71,7 +79,7 @@ export default function UsersPage() {
 
     setEmail("");
     setDisplayName("");
-    setRole("accountant");
+    setRole("user");
     load();
   }
 
@@ -146,9 +154,10 @@ export default function UsersPage() {
         />
         <select
           value={role}
-          onChange={(e) => setRole(e.target.value as "admin" | "accountant")}
+          onChange={(e) => setRole(e.target.value as Role)}
           className={inputClass}
         >
+          <option value="user">{t("usersPage.roleUser")}</option>
           <option value="accountant">{t("usersPage.roleAccountant")}</option>
           <option value="admin">{t("usersPage.roleAdmin")}</option>
         </select>
@@ -195,9 +204,10 @@ export default function UsersPage() {
                     <td className="p-2">
                       <select
                         value={editRole}
-                        onChange={(e) => setEditRole(e.target.value as "admin" | "accountant")}
+                        onChange={(e) => setEditRole(e.target.value as Role)}
                         className={inputClassSm}
                       >
+                        <option value="user">{t("usersPage.roleUser")}</option>
                         <option value="accountant">{t("usersPage.roleAccountant")}</option>
                         <option value="admin">{t("usersPage.roleAdmin")}</option>
                       </select>
@@ -219,7 +229,7 @@ export default function UsersPage() {
                     <td className="p-2 text-[14px] text-ink">{u.displayName}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{u.email}</td>
                     <td className="p-2 text-[14px] text-ink">
-                      {u.role === "admin" ? t("usersPage.roleAdmin") : t("usersPage.roleAccountant")}
+                      {t(ROLE_LABEL_KEYS[u.role])}
                     </td>
                     <td className="p-2">
                       <button

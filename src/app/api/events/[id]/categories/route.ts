@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function GET(
   req: NextRequest,
@@ -12,6 +13,9 @@ export async function GET(
   }
 
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const categories = await prisma.eventCategory.findMany({
     where: { eventId: id },
     orderBy: { name: "asc" },
@@ -30,6 +34,9 @@ export async function POST(
   }
 
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const body = await req.json();
   const { name, description, budgetAmount } = body;
 

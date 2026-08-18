@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function POST(
   req: NextRequest,
@@ -12,6 +13,9 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
+
   const body = await req.json().catch(() => ({}));
   const authorId: string | undefined = body.authorId;
   const action: "pay" | "unpay" = body.action === "unpay" ? "unpay" : "pay";

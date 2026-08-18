@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { processBillWithAi } from "@/lib/process-bill-ai";
 
 // Interactive single-bill "reprocess" button — this one stays synchronous
@@ -17,6 +19,13 @@ export async function POST(
   }
 
   const { id } = await params;
+  const bill = await prisma.bill.findUnique({ where: { id }, select: { eventId: true } });
+  if (!bill) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
+
   const result = await processBillWithAi(id);
 
   if (!result.ok) {

@@ -54,6 +54,13 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await tx.eventModule.createMany({
+      data: [
+        { eventId: created.id, moduleKey: "bills", enabled: true },
+        { eventId: created.id, moduleKey: "health", enabled: false },
+      ],
+    });
+
     return created;
   });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { getDriveClient } from "@/lib/drive";
 
 type FolderCheckResult = {
@@ -46,6 +47,9 @@ export async function POST(
   }
 
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const body = await req.json().catch(() => ({}));
 
   let ingestFolderId: string | null = body.ingestFolderId ?? null;

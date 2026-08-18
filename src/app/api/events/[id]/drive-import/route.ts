@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { importBillsFromDrive, DriveImportError } from "@/lib/drive-import";
 
 export async function POST(
@@ -12,6 +13,8 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "bills");
+  if (denied) return denied;
 
   try {
     const summary = await importBillsFromDrive(eventId, user.id);

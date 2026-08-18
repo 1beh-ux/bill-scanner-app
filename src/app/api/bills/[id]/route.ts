@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import type { Currency } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 import { billsBucket } from "@/lib/gcs";
 import { convertToCzk } from "@/lib/exchange-rates";
 import { recordMerchantCorrection } from "@/lib/merchant-aliases";
@@ -55,6 +56,8 @@ export async function GET(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
 
   return NextResponse.json(bill);
 }
@@ -77,6 +80,8 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, existing.eventId, "bills");
+  if (denied) return denied;
  if (existing.status === "approved") {
     return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   }
@@ -241,6 +246,8 @@ export async function DELETE(
   if (!bill) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  const denied = await requireModuleAccess(user, bill.eventId, "bills");
+  if (denied) return denied;
 
   await prisma.$transaction(async (tx) => {
     await tx.billCategory.deleteMany({ where: { billId: id } });

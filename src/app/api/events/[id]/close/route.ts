@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireModuleAccess } from "@/lib/module-access";
 
 export async function POST(
   req: NextRequest,
@@ -12,6 +13,9 @@ export async function POST(
   }
 
   const { id } = await params;
+  const denied = await requireModuleAccess(user, id, "bills");
+  if (denied) return denied;
+
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
