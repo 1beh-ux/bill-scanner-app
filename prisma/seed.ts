@@ -518,6 +518,12 @@ async function main() {
       { key: "medChecklistPage.title", cs: "Výdej léků", en: "Med checklist" },
       { key: "medChecklistPage.progress", cs: "Podáno {given} z {total}", en: "Given {given} of {total}" },
       { key: "medChecklistPage.empty", cs: "Pro tento čas nejsou naplánované žádné léky.", en: "No meds scheduled for this time." },
+      { key: "medGridPage.title", cs: "Přehled léků", en: "Meds overview" },
+      { key: "medGridPage.preset.today", cs: "Dnes", en: "Today" },
+      { key: "medGridPage.preset.week", cs: "Tento týden", en: "This week" },
+      { key: "medGridPage.preset.event", cs: "Celá akce", en: "Whole event" },
+      { key: "medGridPage.preset.custom", cs: "Vlastní rozsah", en: "Custom range" },
+      { key: "medGridPage.expandHint", cs: "Klikněte na den pro zobrazení jednotlivých časů.", en: "Click a day to show its individual time slots." },
     ],
     skipDuplicates: true,
   });

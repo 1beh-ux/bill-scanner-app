@@ -150,9 +150,14 @@ export default function MedChecklistPage({
         ← {t("participantsPage.title")}
       </a>
 
-      <h1 className="mb-4 mt-2 text-[22px] font-semibold text-ink">
-        {event.name} — {t("medChecklistPage.title")}
-      </h1>
+      <div className="mb-4 mt-2 flex items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold text-ink">
+          {event.name} — {t("medChecklistPage.title")}
+        </h1>
+        <a href={`/events/${eventId}/health/meds/grid`} className="text-[13px] text-ember hover:underline">
+          {t("medGridPage.title")}
+        </a>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <input
