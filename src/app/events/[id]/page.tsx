@@ -49,6 +49,8 @@ const inputClass =
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
+type Tab = "categories" | "drive" | "access" | "health" | "modules";
+
 export default function EventDetailPage({
   params,
 }: {
@@ -57,17 +59,17 @@ export default function EventDetailPage({
   const { id } = use(params);
   const { t } = useTranslations();
 
-  const [tab, setTab] = useState<"settings" | "access" | "health">("settings");
+  const [tab, setTab] = useState<Tab>("categories");
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [billCount, setBillCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [syncingCategories, setSyncingCategories] = useState(false);
 
   const [driveAccountEmail, setDriveAccountEmail] = useState("");
   const [ingestFolderId, setIngestFolderId] = useState("");
@@ -84,14 +86,12 @@ export default function EventDetailPage({
 
   async function load() {
     setLoading(true);
-    const [evRes, catRes, billsRes] = await Promise.all([
+    const [evRes, catRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/categories`),
-      fetch(`/api/events/${id}/bills`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (catRes.ok) setCategories(await catRes.json());
-    if (billsRes.ok) setBillCount((await billsRes.json()).length);
     setLoading(false);
   }
 
@@ -104,7 +104,7 @@ export default function EventDetailPage({
   }, [id]);
 
   useEffect(() => {
-    if (tab === "health" && !moduleAccess.health) setTab("settings");
+    if (tab === "health" && !moduleAccess.health) setTab("categories");
   }, [tab, moduleAccess]);
 
   useEffect(() => {
@@ -166,6 +166,18 @@ export default function EventDetailPage({
   async function handleDeleteCategory(catId: string) {
     if (!window.confirm(t("eventDetail.confirmDeleteCategory"))) return;
     await fetch(`/api/event-categories/${catId}`, { method: "DELETE" });
+    load();
+  }
+
+  async function syncCategoriesFromTemplates() {
+    setSyncingCategories(true);
+    setError(null);
+    const res = await fetch(`/api/events/${id}/categories/sync`, { method: "POST" });
+    setSyncingCategories(false);
+    if (!res.ok) {
+      setError(t("eventDetail.errorSyncFailed"));
+      return;
+    }
     load();
   }
 
@@ -274,15 +286,24 @@ export default function EventDetailPage({
         {lifecycleError && <p className="mt-1.5 text-[13px] text-red-600">{t(`eventDetail.error.${lifecycleError}`)}</p>}
       </div>
 
-      <div className="mb-6 flex gap-1 border-b border-mist">
+      <div className="mb-6 flex flex-wrap gap-1 border-b border-mist">
         <button
-          onClick={() => setTab("settings")}
+          onClick={() => setTab("categories")}
           className={
             "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "settings" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+            (tab === "categories" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
           }
         >
           {t("eventSettings.tabSettings")}
+        </button>
+        <button
+          onClick={() => setTab("drive")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "drive" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("eventSettings.tabDrive")}
         </button>
         <button
           onClick={() => setTab("access")}
@@ -304,9 +325,20 @@ export default function EventDetailPage({
             {t("eventSettings.tabHealth")}
           </button>
         )}
+        <button
+          onClick={() => setTab("modules")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "modules" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("eventSettings.tabModules")}
+        </button>
       </div>
 
       {tab === "access" && <AccessTab eventId={id} t={t} />}
+
+      {tab === "modules" && <ModulesTab eventId={id} t={t} />}
 
       {tab === "health" && (
         <div className="flex flex-col gap-6">
@@ -316,206 +348,197 @@ export default function EventDetailPage({
         </div>
       )}
 
-      {tab === "settings" && (
-      <>
-      <div className="mb-6 flex flex-wrap gap-2">
-        <a href={`/events/${id}/bills`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
-          {t("eventDetail.viewBillsLink", { count: String(billCount) })}
-        </a>
-        <a href={`/events/${id}/budget`} className="rounded-lg border border-mist bg-paper-2 px-4 py-2 text-[14px] text-ink hover:bg-paper">
-          {t("eventDetail.viewBudgetLink")}
-        </a>
-        <a href={`/events/${id}/payments`} className="rounded-lg border border-mist bg-paper-2 px-4 py-2 text-[14px] text-ink hover:bg-paper">
-          {t("eventDetail.viewPaymentsLink")}
-        </a>
-      </div>
+      {tab === "categories" && (
+        <>
+          {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
-      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
-
-      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("eventDetail.categoriesTitle")}</h2>
-
-      <div className="mb-6 overflow-x-auto">
-        <table className="w-full min-w-[420px] border-collapse">
-          <thead>
-            <tr className="border-b border-mist text-left">
-              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
-              <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
-              <th className="p-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {categories.map((cat) => (
-              <tr key={cat.id} className="border-b border-mist/60">
-                <td className="p-2 text-[14px] text-ink">
-                  <div>{cat.name}</div>
-                  {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
-                </td>
-                <td className="p-2 text-[14px] text-ink">
-                  {editingId === cat.id ? (
-                    <input
-                      type="number"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-                      autoFocus
-                    />
-                  ) : (
-                    <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
-                  )}
-                </td>
-                <td className="whitespace-nowrap p-2">
-                  {editingId === cat.id ? (
-                    <>
-                      <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
-                        {t("common.save")}
-                      </button>
-                      <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
-                        {t("common.cancel")}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button onClick={() => startEdit(cat)} className="mr-3 text-[13px] text-ember hover:underline">
-                        {t("common.edit")}
-                      </button>
-                      <button onClick={() => handleDeleteCategory(cat.id)} className="text-[13px] text-red-600 hover:underline">
-                        {t("common.delete")}
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
-              <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")} Kč</td>
-              <td></td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <form onSubmit={handleAddCategory} className="mb-8 flex gap-2">
-        <input
-          type="text"
-          placeholder={t("eventDetail.newCategoryPlaceholder")}
-          value={newCategoryName}
-          onChange={(e) => setNewCategoryName(e.target.value)}
-          className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-        />
-        <button type="submit" className={btnPrimary}>
-          {t("eventDetail.addCategory")}
-        </button>
-      </form>
-
-      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("driveSettings.title")}</h2>
-
-      <p className="mb-1 text-[14px] text-ink-secondary">{t("driveSettings.instructionsIntro")}</p>
-      <p className="mb-2 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
-        {driveAccountEmail || "…"}
-      </p>
-      <p className="mb-4 whitespace-pre-line text-[13px] text-ink-secondary">{t("driveSettings.instructionsSteps")}</p>
-
-      <form onSubmit={handleSaveDriveFolders} className="mb-1 flex max-w-md flex-col gap-2">
-        <label className="text-[13px] text-ink-secondary">
-          {t("driveSettings.ingestFolderLabel")}
-          <input
-            type="text"
-            value={ingestFolderId}
-            onChange={(e) => setIngestFolderId(e.target.value)}
-            className={inputClass + " mt-1"}
-          />
-        </label>
-        <label className="text-[13px] text-ink-secondary">
-          {t("driveSettings.exportFolderLabel")}
-          <input
-            type="text"
-            value={exportFolderId}
-            onChange={(e) => setExportFolderId(e.target.value)}
-            className={inputClass + " mt-1"}
-          />
-        </label>
-        <p className="text-[12px] text-ink-secondary">{t("driveSettings.folderIdHint")}</p>
-
-        {driveError && <p className="text-[13px] text-red-600">{driveError}</p>}
-
-        <div className="mt-1">
-          <button type="submit" disabled={driveSaving} className={btnPrimary}>
-            {t("driveSettings.saveFolders")}
-          </button>
-        </div>
-      </form>
-
-      {!hasFolderInput && <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.noFoldersSet")}</p>}
-
-      <div className="mt-6 border-t border-mist pt-6">
-        <button
-          type="button"
-          onClick={handleExportNow}
-          disabled={exporting || !event.driveExportFolderId}
-          className={btnPrimary}
-        >
-          {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
-        </button>
-
-        {!event.driveExportFolderId && (
-          <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.exportNoFolderSet")}</p>
-        )}
-
-        {exportError && (
-          <p className="mt-2 text-[14px] text-red-600">
-            {t(`driveSettings.error.${exportError}`) || t("driveSettings.error.exportGeneric")}
-          </p>
-        )}
-
-        {exportResult && (
-          <div className="mt-3 text-[14px] text-ink">
-            <p>
-              {t("driveSettings.exportResultSummary", {
-                total: String(exportResult.totalApproved),
-                new: String(exportResult.newlyExported),
-                already: String(exportResult.alreadyExported),
-              })}
-            </p>
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${exportResult.manifestSpreadsheetId}/edit`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-ember hover:underline"
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-[16px] font-semibold text-ink">{t("eventDetail.categoriesTitle")}</h2>
+            <button
+              onClick={syncCategoriesFromTemplates}
+              disabled={syncingCategories}
+              className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
             >
-              {t("driveSettings.exportOpenManifest")}
-            </a>
+              {syncingCategories ? t("common.loading") : t("eventDetail.syncFromTemplates")}
+            </button>
           </div>
-        )}
-      </div>
-      </>
+
+          <div className="mb-6 overflow-x-auto">
+            <table className="w-full min-w-[420px] border-collapse">
+              <thead>
+                <tr className="border-b border-mist text-left">
+                  <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
+                  <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
+                  <th className="p-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {categories.map((cat) => (
+                  <tr key={cat.id} className="border-b border-mist/60">
+                    <td className="p-2 text-[14px] text-ink">
+                      <div>{cat.name}</div>
+                      {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
+                    </td>
+                    <td className="p-2 text-[14px] text-ink">
+                      {editingId === cat.id ? (
+                        <input
+                          type="number"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                          autoFocus
+                        />
+                      ) : (
+                        <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap p-2">
+                      {editingId === cat.id ? (
+                        <>
+                          <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                            {t("common.save")}
+                          </button>
+                          <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                            {t("common.cancel")}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startEdit(cat)} className="mr-3 text-[13px] text-ember hover:underline">
+                            {t("common.edit")}
+                          </button>
+                          <button onClick={() => handleDeleteCategory(cat.id)} className="text-[13px] text-red-600 hover:underline">
+                            {t("common.delete")}
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
+                  <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")} Kč</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <form onSubmit={handleAddCategory} className="mb-8 flex gap-2">
+            <input
+              type="text"
+              placeholder={t("eventDetail.newCategoryPlaceholder")}
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+            />
+            <button type="submit" className={btnPrimary}>
+              {t("eventDetail.addCategory")}
+            </button>
+          </form>
+        </>
+      )}
+
+      {tab === "drive" && (
+        <>
+          <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("driveSettings.title")}</h2>
+
+          <p className="mb-1 text-[14px] text-ink-secondary">{t("driveSettings.instructionsIntro")}</p>
+          <p className="mb-2 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
+            {driveAccountEmail || "…"}
+          </p>
+          <p className="mb-4 whitespace-pre-line text-[13px] text-ink-secondary">{t("driveSettings.instructionsSteps")}</p>
+
+          <form onSubmit={handleSaveDriveFolders} className="mb-1 flex max-w-md flex-col gap-2">
+            <label className="text-[13px] text-ink-secondary">
+              {t("driveSettings.ingestFolderLabel")}
+              <input
+                type="text"
+                value={ingestFolderId}
+                onChange={(e) => setIngestFolderId(e.target.value)}
+                className={inputClass + " mt-1"}
+              />
+            </label>
+            <label className="text-[13px] text-ink-secondary">
+              {t("driveSettings.exportFolderLabel")}
+              <input
+                type="text"
+                value={exportFolderId}
+                onChange={(e) => setExportFolderId(e.target.value)}
+                className={inputClass + " mt-1"}
+              />
+            </label>
+            <p className="text-[12px] text-ink-secondary">{t("driveSettings.folderIdHint")}</p>
+
+            {driveError && <p className="text-[13px] text-red-600">{driveError}</p>}
+
+            <div className="mt-1">
+              <button type="submit" disabled={driveSaving} className={btnPrimary}>
+                {t("driveSettings.saveFolders")}
+              </button>
+            </div>
+          </form>
+
+          {!hasFolderInput && <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.noFoldersSet")}</p>}
+
+          <div className="mt-6 border-t border-mist pt-6">
+            <button
+              type="button"
+              onClick={handleExportNow}
+              disabled={exporting || !event.driveExportFolderId}
+              className={btnPrimary}
+            >
+              {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
+            </button>
+
+            {!event.driveExportFolderId && (
+              <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.exportNoFolderSet")}</p>
+            )}
+
+            {exportError && (
+              <p className="mt-2 text-[14px] text-red-600">
+                {t(`driveSettings.error.${exportError}`) || t("driveSettings.error.exportGeneric")}
+              </p>
+            )}
+
+            {exportResult && (
+              <div className="mt-3 text-[14px] text-ink">
+                <p>
+                  {t("driveSettings.exportResultSummary", {
+                    total: String(exportResult.totalApproved),
+                    new: String(exportResult.newlyExported),
+                    already: String(exportResult.alreadyExported),
+                  })}
+                </p>
+                <a
+                  href={`https://docs.google.com/spreadsheets/d/${exportResult.manifestSpreadsheetId}/edit`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-ember hover:underline"
+                >
+                  {t("driveSettings.exportOpenManifest")}
+                </a>
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Record<string, string>) => string }) {
+function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Record<string, string>) => string }) {
   const [modules, setModules] = useState<ModuleState[]>([]);
-  const [rows, setRows] = useState<AccessRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
-    const [modRes, accessRes] = await Promise.all([
-      fetch(`/api/events/${eventId}/modules`),
-      fetch(`/api/events/${eventId}/module-access`),
-    ]);
-    if (modRes.ok) setModules(await modRes.json());
-    if (accessRes.ok) {
-      setRows(await accessRes.json());
-    } else if (accessRes.status === 403) {
-      // Non-admins can see the module toggles but not the user grid.
-      setRows([]);
-    }
+    const res = await fetch(`/api/events/${eventId}/modules`);
+    if (res.ok) setModules(await res.json());
     setLoading(false);
   }
 
@@ -536,6 +559,55 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
     }
     load();
   }
+
+  if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+
+  const moduleLabel = (key: ModuleKey) => (key === "bills" ? t("accessTab.moduleBills") : t("accessTab.moduleHealth"));
+
+  return (
+    <div>
+      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
+
+      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
+      <div className="flex flex-col gap-2">
+        {modules.map((m) => (
+          <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={m.enabled}
+              onChange={(e) => toggleModule(m.moduleKey, e.target.checked)}
+              className="h-4 w-4"
+            />
+            {moduleLabel(m.moduleKey)}
+            <span className="text-[12px] text-ink-secondary">({t("accessTab.moduleEnabledHint")})</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Record<string, string>) => string }) {
+  const [rows, setRows] = useState<AccessRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    const accessRes = await fetch(`/api/events/${eventId}/module-access`);
+    if (accessRes.ok) {
+      setRows(await accessRes.json());
+    } else if (accessRes.status === 403) {
+      // Non-admins can't see the user access grid.
+      setRows([]);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
+  }, [eventId]);
 
   async function toggleGrant(userId: string, moduleKey: ModuleKey, grant: boolean) {
     setError(null);
@@ -558,22 +630,6 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
   return (
     <div>
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
-
-      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
-      <div className="mb-8 flex flex-col gap-2">
-        {modules.map((m) => (
-          <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">
-            <input
-              type="checkbox"
-              checked={m.enabled}
-              onChange={(e) => toggleModule(m.moduleKey, e.target.checked)}
-              className="h-4 w-4"
-            />
-            {moduleLabel(m.moduleKey)}
-            <span className="text-[12px] text-ink-secondary">({t("accessTab.moduleEnabledHint")})</span>
-          </label>
-        ))}
-      </div>
 
       {rows.length > 0 && (
         <>

@@ -11,7 +11,6 @@ import {
   Settings,
   Calendar,
   Users,
-  Tags,
   Landmark,
   UserCog,
   Menu,
@@ -21,7 +20,7 @@ import {
   Receipt,
   Upload,
   HeartPulse,
-  Pill,
+  LayoutTemplate,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -87,7 +86,6 @@ export default function AppSidebar() {
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
     { href: "/authors", label: t("nav.authors"), icon: Users },
-    { href: "/category-templates", label: t("nav.categoryTemplates"), icon: Tags },
     { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
   ];
 
@@ -102,7 +100,6 @@ export default function AppSidebar() {
           },
         ]
       : []),
-    { href: "/health-templates", label: t("nav.healthTemplates"), icon: Pill },
   ];
 
   const eventSettingsItem = {
@@ -114,6 +111,7 @@ export default function AppSidebar() {
   const orgNavItems = [
     { href: "/events", label: t("nav.events"), icon: Calendar },
     ...(role === "admin" ? [{ href: "/users", label: t("nav.users"), icon: UserCog }] : []),
+    { href: "/templates", label: t("nav.templates"), icon: LayoutTemplate },
   ];
 
   function isActive(href: string) {
