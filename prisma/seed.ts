@@ -487,6 +487,8 @@ async function main() {
       { key: "listTemplateAdmin.deactivate", cs: "Deaktivovat", en: "Deactivate" },
       { key: "listTemplateAdmin.activate", cs: "Aktivovat", en: "Activate" },
       { key: "listTemplateAdmin.errorSaveFailed", cs: "Nepodařilo se uložit.", en: "Failed to save." },
+      { key: "listTemplateAdmin.syncFromTemplates", cs: "Načíst ze šablon", en: "Load from templates" },
+      { key: "listTemplateAdmin.errorSyncFailed", cs: "Nepodařilo se načíst šablony.", en: "Failed to load templates." },
       { key: "listTemplateAdmin.confirmDelete", cs: "Opravdu smazat „{name}“?", en: "Really delete \"{name}\"?" },
       { key: "listTemplateAdmin.errorItemInUse", cs: "Nelze smazat — položka je použita u účastníka.", en: "Can't delete — item is in use by a participant." },
       { key: "listTemplateAdmin.errorDeleteFailed", cs: "Smazání se nezdařilo.", en: "Failed to delete." },

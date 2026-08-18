@@ -56,12 +56,30 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const [defaultTemp, setDefaultTemp] = useState("");
   const [defaultDetails, setDefaultDetails] = useState("");
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   async function load() {
     setLoading(true);
     const res = await fetch(listUrl);
     if (res.ok) setItems(await res.json());
     setLoading(false);
+  }
+
+  async function syncFromTemplates() {
+    if (scope !== "event") return;
+    setSyncing(true);
+    setError(null);
+    const res = await fetch(`${basePath}/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind }),
+    });
+    setSyncing(false);
+    if (!res.ok) {
+      setError(t("listTemplateAdmin.errorSyncFailed"));
+      return;
+    }
+    load();
   }
 
   useEffect(() => {
@@ -165,9 +183,20 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     <div>
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
-        <button onClick={openAdd} className="text-[13px] text-ember hover:underline">
-          {t("common.add")}
-        </button>
+        <div className="flex items-center gap-3">
+          {scope === "event" && (
+            <button
+              onClick={syncFromTemplates}
+              disabled={syncing}
+              className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
+            >
+              {syncing ? t("common.loading") : t("listTemplateAdmin.syncFromTemplates")}
+            </button>
+          )}
+          <button onClick={openAdd} className="text-[13px] text-ember hover:underline">
+            {t("common.add")}
+          </button>
+        </div>
       </div>
 
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
