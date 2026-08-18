@@ -430,6 +430,8 @@ async function main() {
       { key: "participantImportPage.field.chronicIssues", cs: "Chronické potíže", en: "Chronic issues" },
       { key: "participantImportPage.field.otherNotes", cs: "Ostatní poznámky", en: "Other notes" },
       { key: "participantImportPage.field.guardianEmail", cs: "E-mail zákonného zástupce", en: "Guardian email" },
+      { key: "participantImportPage.field.dateOfBirth", cs: "Datum narození", en: "Date of birth" },
+      { key: "participantImportPage.field.guardianName", cs: "Jméno zákonného zástupce", en: "Guardian name" },
       { key: "participantImportPage.previewSummary", cs: "{valid} v pořádku, {invalid} s chybou", en: "{valid} ok, {invalid} with errors" },
       { key: "participantImportPage.colStatus", cs: "Stav", en: "Status" },
       { key: "participantImportPage.statusOk", cs: "OK", en: "OK" },
