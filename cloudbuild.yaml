@@ -22,8 +22,8 @@ steps:
       - --platform=managed
       - --no-invoker-iam-check
       - --add-cloudsql-instances=$PROJECT_ID:${_REGION}:bill-scanner-db
-      - --update-secrets=DATABASE_URL=db-url-secret:latest,CRON_SECRET=cron-secret:latest,TASKS_SECRET=tasks-secret:latest
-      - --update-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files,DRIVE_SERVICE_ACCOUNT_EMAIL=bill-scanner-drive@prvni-beh-filesaver.iam.gserviceaccount.com,AI_SERVICE_URL=https://bill-scanner-ai-sml4zhisya-ew.a.run.app,GCS_SIGNING_SERVICE_ACCOUNT=1050716617948-compute@developer.gserviceaccount.com,APP_BASE_URL=https://bill-scanner-app-sml4zhisya-ey.a.run.app,GOOGLE_CLOUD_PROJECT=prvni-beh-filesaver,CLOUD_TASKS_LOCATION=europe-west3,CLOUD_TASKS_QUEUE=bill-ai-queue
+      - --update-secrets=DATABASE_URL=db-url-secret:latest,CRON_SECRET=cron-secret:latest,TASKS_SECRET=tasks-secret:latest,PDF_SECRET=pdf-secret:latest
+      - --update-env-vars=GCS_BUCKET_NAME=bill-scanner-v2-files,DRIVE_SERVICE_ACCOUNT_EMAIL=bill-scanner-drive@prvni-beh-filesaver.iam.gserviceaccount.com,AI_SERVICE_URL=https://bill-scanner-ai-sml4zhisya-ew.a.run.app,GCS_SIGNING_SERVICE_ACCOUNT=1050716617948-compute@developer.gserviceaccount.com,APP_BASE_URL=https://bill-scanner-app-sml4zhisya-ey.a.run.app,GOOGLE_CLOUD_PROJECT=prvni-beh-filesaver,CLOUD_TASKS_LOCATION=europe-west3,CLOUD_TASKS_QUEUE=bill-ai-queue,PDF_SERVICE_URL=https://bill-scanner-pdf-1050716617948.europe-west3.run.app
       - --cpu=1
       - --timeout=600
       - --max-instances=3
