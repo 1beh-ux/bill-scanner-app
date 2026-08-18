@@ -151,7 +151,7 @@ export default function EventHealthPage({
       </a>
 
       <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">
-        {event.name} — {t("participantsPage.title")}
+        {event.name} — {t("participantsPage.title")} ({participants.length})
       </h1>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -174,12 +174,6 @@ export default function EventHealthPage({
             </button>
           )}
         </div>
-        <a
-          href={`/events/${id}/health/participants/import`}
-          className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
-        >
-          {t("participantsPage.importButton")}
-        </a>
         <a
           href={`/events/${id}/health/meds`}
           className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"

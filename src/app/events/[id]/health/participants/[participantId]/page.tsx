@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import IncidentFormModal, { type IncidentClientData } from "@/components/health/IncidentFormModal";
 import IncidentDetailModal from "@/components/health/IncidentDetailModal";
@@ -60,6 +61,8 @@ export default function ParticipantDetailPage({
 }) {
   const { id: eventId, participantId } = use(params);
   const { t } = useTranslations();
+  const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
 
   const [participant, setParticipant] = useState<ParticipantDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -191,6 +194,19 @@ export default function ParticipantDetailPage({
     setEditing(true);
   }
 
+  async function handleDeleteParticipant() {
+    if (!participant) return;
+    if (!window.confirm(t("participantDetail.confirmDeleteParticipant", { name: participant.name }))) return;
+    setDeleting(true);
+    const res = await fetch(`/api/participants/${participantId}`, { method: "DELETE" });
+    if (!res.ok) {
+      setDeleting(false);
+      setError(t("participantDetail.errorDeleteFailed"));
+      return;
+    }
+    router.push(`/events/${eventId}/health`);
+  }
+
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
     if (!editName.trim()) return;
@@ -285,9 +301,18 @@ export default function ParticipantDetailPage({
               .join(" · ")}
           </p>
         </div>
-        <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
-          {t("common.edit")}
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
+            {t("common.edit")}
+          </button>
+          <button
+            onClick={handleDeleteParticipant}
+            disabled={deleting}
+            className="text-[13px] text-red-600 hover:underline disabled:opacity-50"
+          >
+            {t("common.delete")}
+          </button>
+        </div>
       </div>
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}

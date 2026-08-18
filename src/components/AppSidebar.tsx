@@ -85,7 +85,14 @@ export default function AppSidebar() {
 
   const healthNavItems = [
     ...(moduleAccess.health
-      ? [{ href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse }]
+      ? [
+          { href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse },
+          {
+            href: eventId ? `/events/${eventId}/health/participants/import` : "/events",
+            label: t("participantsPage.importButton"),
+            icon: Upload,
+          },
+        ]
       : []),
     { href: "/health-templates", label: t("nav.healthTemplates"), icon: Pill },
   ];

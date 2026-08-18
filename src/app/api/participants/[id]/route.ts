@@ -65,3 +65,35 @@ export async function PATCH(
 
   return NextResponse.json(updated);
 }
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const { id } = await params;
+  const existing = await prisma.participant.findUnique({ where: { id } });
+  if (!existing) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  const denied = await requireModuleAccess(user, existing.eventId, "health");
+  if (denied) return denied;
+
+  // No cascading deletes are configured on these relations (same situation
+  // as Bill deletion elsewhere in this app) -- delete every dependent row
+  // in dependency order before the participant itself.
+  await prisma.$transaction(async (tx) => {
+    await tx.parentEmailLog.deleteMany({ where: { participantId: id } });
+    await tx.incidentUpdate.deleteMany({ where: { incident: { participantId: id } } });
+    await tx.incident.deleteMany({ where: { participantId: id } });
+    await tx.participantMedPlan.deleteMany({ where: { participantId: id } });
+    await tx.medChecklist.deleteMany({ where: { participantId: id } });
+    await tx.participantGuardian.deleteMany({ where: { participantId: id } });
+    await tx.participant.delete({ where: { id } });
+  });
+
+  return NextResponse.json({ ok: true });
+}
