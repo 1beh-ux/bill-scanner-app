@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const { key, cs, en } = await req.json();
   if (!key || !cs || !en) {

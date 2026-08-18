@@ -541,6 +541,12 @@ async function main() {
       { key: "pdfExport.modeBlank", cs: "Prázdný (k vyplnění)", en: "Blank (to fill in)" },
       { key: "pdfExport.modeHybrid", cs: "Aktuální stav", en: "Current status" },
       { key: "pdfExport.downloadButton", cs: "Stáhnout PDF", en: "Download PDF" },
+      { key: "nav.translations", cs: "Překlady", en: "Translations" },
+      { key: "translationsPage.searchPlaceholder", cs: "Hledat podle klíče nebo textu...", en: "Search by key or text..." },
+      { key: "translationsPage.colKey", cs: "Klíč", en: "Key" },
+      { key: "translationsPage.colUsedIn", cs: "Použito v", en: "Used in" },
+      { key: "translationsPage.empty", cs: "Žádné překlady neodpovídají hledání.", en: "No translations match your search." },
+      { key: "translationsPage.errorSaveFailed", cs: "Uložení se nezdařilo.", en: "Failed to save." },
     ],
     skipDuplicates: true,
   });

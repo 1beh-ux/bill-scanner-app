@@ -21,6 +21,7 @@ import {
   Upload,
   HeartPulse,
   LayoutTemplate,
+  Languages,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -112,6 +113,9 @@ export default function AppSidebar() {
     { href: "/events", label: t("nav.events"), icon: Calendar },
     ...(role === "admin" ? [{ href: "/users", label: t("nav.users"), icon: UserCog }] : []),
     { href: "/templates", label: t("nav.templates"), icon: LayoutTemplate },
+    ...(role === "admin"
+      ? [{ href: "/translations", label: t("nav.translations"), icon: Languages }]
+      : []),
   ];
 
   function isActive(href: string) {
