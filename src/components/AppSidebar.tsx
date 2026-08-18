@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -27,7 +28,7 @@ import { useTranslations } from "@/lib/i18n";
 type EventOption = { id: string; name: string; status: string };
 
 export default function AppSidebar() {
-  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme } =
+  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role } =
     useTranslations();
   const pathname = usePathname();
   const router = useRouter();
@@ -70,7 +71,14 @@ export default function AppSidebar() {
 
   function onEventChange(id: string) {
     setCurrentEventId(id);
-    router.push(`/events/${id}/bills`);
+    const sectionMatch = pathname.match(/^\/events\/[^/]+\/([^/]+)/);
+    if (sectionMatch) {
+      router.push(`/events/${id}/${sectionMatch[1]}`);
+    } else if (/^\/events\/[^/]+$/.test(pathname)) {
+      router.push(`/events/${id}`);
+    }
+    // Otherwise we're on a non-event page (e.g. /users) — just switch the
+    // context so event-scoped links pick up the new id, stay put otherwise.
   }
 
   const billsNavItems = [
@@ -105,7 +113,7 @@ export default function AppSidebar() {
 
   const orgNavItems = [
     { href: "/events", label: t("nav.events"), icon: Calendar },
-    { href: "/users", label: t("nav.users"), icon: UserCog },
+    ...(role === "admin" ? [{ href: "/users", label: t("nav.users"), icon: UserCog }] : []),
   ];
 
   function isActive(href: string) {
@@ -115,7 +123,7 @@ export default function AppSidebar() {
   function NavLink({ href, label, icon: Icon }: { href: string; label: string; icon: LucideIcon }) {
     const active = isActive(href);
     return (
-      <a
+      <Link
         href={href}
         className={
           "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors " +
@@ -126,7 +134,7 @@ export default function AppSidebar() {
       >
         <Icon size={16} className={active ? "text-ember" : "text-night-muted"} aria-hidden="true" />
         {label}
-      </a>
+      </Link>
     );
   }
 

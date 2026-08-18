@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 
 type Role = "admin" | "accountant" | "user";
@@ -25,10 +26,17 @@ const inputClassSm =
   "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 export default function UsersPage() {
-  const { t } = useTranslations();
+  const { t, role: currentUserRole, roleLoaded } = useTranslations();
+  const router = useRouter();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (roleLoaded && currentUserRole !== "admin") {
+      router.replace("/events");
+    }
+  }, [roleLoaded, currentUserRole, router]);
 
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -132,6 +140,8 @@ export default function UsersPage() {
     }
     load();
   }
+
+  if (!roleLoaded || currentUserRole !== "admin") return null;
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">

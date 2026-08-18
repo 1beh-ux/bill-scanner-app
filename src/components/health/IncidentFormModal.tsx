@@ -33,12 +33,17 @@ type ParticipantSummary = {
 };
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function shiftDate(dateStr: string, days: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + days);
+  const [y, m, day] = dateStr.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m - 1, day));
+  d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -236,7 +241,8 @@ export default function IncidentFormModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-paper">
+      <div className="overflow-y-auto p-5">
         <h2 className="mb-2 text-[16px] font-semibold text-ink">
           {isFollowUp ? t("incidentForm.titleFollowUp") : isEdit ? t("incidentForm.titleEdit") : t("incidentForm.titleNew")}
           {participantSummary && <span className="ml-1 font-normal text-ink-secondary"> — {participantSummary.name}</span>}
@@ -276,7 +282,7 @@ export default function IncidentFormModal({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form id="incident-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -446,16 +452,17 @@ export default function IncidentFormModal({
           </div>
 
           {error && <p className="text-[13px] text-red-600">{error}</p>}
-
-          <div className="mt-2 flex justify-end gap-2">
-            <button type="button" onClick={onClose} className="text-[13px] text-ink-secondary hover:underline">
-              {t("common.cancel")}
-            </button>
-            <button type="submit" disabled={saving} className={btnPrimary}>
-              {isFollowUp ? t("incidentForm.saveFollowUp") : t("common.save")}
-            </button>
-          </div>
         </form>
+      </div>
+
+      <div className="flex justify-end gap-2 border-t border-mist bg-paper p-3">
+        <button type="button" onClick={onClose} className="text-[13px] text-ink-secondary hover:underline">
+          {t("common.cancel")}
+        </button>
+        <button type="submit" form="incident-form" disabled={saving} className={btnPrimary}>
+          {isFollowUp ? t("incidentForm.saveFollowUp") : t("common.save")}
+        </button>
+      </div>
       </div>
     </div>
   );
