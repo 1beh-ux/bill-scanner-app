@@ -26,6 +26,15 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
+# Next's standalone output-tracing can't see the dynamic requires that
+# @google-cloud/tasks (via google-gax) uses to load its .proto definitions
+# at runtime — same "expression is too dynamic" limitation that made us
+# mark these as serverExternalPackages in the first place, just showing up
+# again at the file-tracing stage instead of the bundling stage. Copying
+# the real, complete package directories from the untraced `deps` install
+# sidesteps the problem entirely.
+COPY --from=deps /app/node_modules/@google-cloud/tasks ./node_modules/@google-cloud/tasks
+COPY --from=deps /app/node_modules/google-gax ./node_modules/google-gax
 EXPOSE 8080
 ENV PORT=8080
 CMD ["node", "server.js"]
