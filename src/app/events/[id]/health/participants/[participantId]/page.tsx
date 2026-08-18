@@ -2,6 +2,8 @@
 
 import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import IncidentFormModal, { type IncidentClientData } from "@/components/health/IncidentFormModal";
+import IncidentDetailModal from "@/components/health/IncidentDetailModal";
 
 type Guardian = {
   id: string;
@@ -22,6 +24,8 @@ type ParticipantDetail = {
   otherNotes: string | null;
   guardians: Guardian[];
 };
+
+type IncidentWithFollowUps = IncidentClientData & { followUps: IncidentClientData[] };
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -55,6 +59,12 @@ export default function ParticipantDetailPage({
   const [gRelationship, setGRelationship] = useState("");
   const [savingGuardian, setSavingGuardian] = useState(false);
 
+  const [incidents, setIncidents] = useState<IncidentWithFollowUps[]>([]);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const [addingIncident, setAddingIncident] = useState(false);
+  const [detailIncident, setDetailIncident] = useState<IncidentClientData | null>(null);
+  const [followUpParent, setFollowUpParent] = useState<IncidentClientData | null>(null);
+
   async function load() {
     setLoading(true);
     const res = await fetch(`/api/participants/${participantId}`);
@@ -62,9 +72,29 @@ export default function ParticipantDetailPage({
     setLoading(false);
   }
 
+  async function loadIncidents() {
+    const res = await fetch(`/api/participants/${participantId}/incidents`);
+    if (res.ok) setIncidents(await res.json());
+  }
+
   useEffect(() => {
     load();
+    loadIncidents();
   }, [participantId]);
+
+  function handleIncidentChanged() {
+    loadIncidents();
+    setDetailIncident(null);
+  }
+
+  function toggleCollapsed(id: string) {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function startEdit() {
     if (!participant) return;
@@ -255,6 +285,91 @@ export default function ParticipantDetailPage({
             </div>
           ))}
         </div>
+      )}
+
+      <div className="mb-3 mt-6 flex items-center justify-between">
+        <h2 className="text-[16px] font-semibold text-ink">{t("incidentsPage.title")}</h2>
+        <button onClick={() => setAddingIncident(true)} className="text-[13px] text-ember hover:underline">
+          {t("incidentsPage.addButton")}
+        </button>
+      </div>
+
+      {incidents.length === 0 ? (
+        <p className="text-[14px] text-ink-secondary">{t("incidentsPage.empty")}</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {incidents.map((inc) => (
+            <div key={inc.id} className="rounded-lg border border-mist/60 p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[14px] text-ink">
+                  <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
+                    {t(`incidentForm.category.${inc.category}`)}
+                  </span>
+                  {inc.actionSummary}
+                </div>
+                <div className="flex items-center gap-2">
+                  {inc.followUps.length > 0 && (
+                    <button onClick={() => toggleCollapsed(inc.id)} className="text-[12px] text-ink-secondary hover:text-ink">
+                      {collapsedIds.has(inc.id)
+                        ? t("incidentsPage.showFollowUps", { count: String(inc.followUps.length) })
+                        : t("incidentsPage.hideFollowUps")}
+                    </button>
+                  )}
+                  <button onClick={() => setDetailIncident(inc)} className="text-[13px] text-ember hover:underline">
+                    {t("incidentsPage.detailButton")}
+                  </button>
+                  <button onClick={() => setFollowUpParent(inc)} className="text-[13px] text-ember hover:underline">
+                    {t("incidentsPage.followUpButton")}
+                  </button>
+                </div>
+              </div>
+
+              {inc.followUps.length > 0 && !collapsedIds.has(inc.id) && (
+                <div className="ml-4 mt-2 flex flex-col gap-1.5 border-l border-mist pl-3">
+                  {inc.followUps.map((fu) => (
+                    <div key={fu.id} className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="text-[13px] text-ink-secondary">{fu.actionSummary}</div>
+                      <button onClick={() => setDetailIncident(fu)} className="text-[12px] text-ember hover:underline">
+                        {t("incidentsPage.detailButton")}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {addingIncident && (
+        <IncidentFormModal
+          eventId={eventId}
+          participantId={participantId}
+          mode="new"
+          onClose={() => setAddingIncident(false)}
+          onSaved={loadIncidents}
+        />
+      )}
+
+      {followUpParent && (
+        <IncidentFormModal
+          eventId={eventId}
+          participantId={participantId}
+          mode="follow-up"
+          incident={followUpParent}
+          onClose={() => setFollowUpParent(null)}
+          onSaved={loadIncidents}
+        />
+      )}
+
+      {detailIncident && (
+        <IncidentDetailModal
+          eventId={eventId}
+          participantId={participantId}
+          incident={detailIncident}
+          onClose={() => setDetailIncident(null)}
+          onChanged={handleIncidentChanged}
+        />
       )}
 
       {editing && (
