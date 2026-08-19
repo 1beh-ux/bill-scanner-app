@@ -226,12 +226,14 @@ export default function MedChecklistPage({
    * across browsers. "start" = the sticky name cell, "end" = the last
    * visible data cell, "middle" = every other data cell.
    */
-  function cellClasses(i: number, position: "start" | "middle" | "end"): string {
+  function cellClasses(i: number, position: "start" | "middle" | "end", isDayStart = false): string {
     const m = groupMeta[i];
     const classes = [m?.shadeB ? "bg-paper-2" : "bg-paper"];
     if (m?.isFirst) classes.push("border-t-2 border-t-ink");
     if (m?.isLast) classes.push("border-b-2 border-b-ink");
-    if (position !== "start") classes.push("border-l border-mist"); // normal grid separator from the previous column
+    // Day boundary always wins over the normal thin column separator, and is
+    // independent of participant grouping / which periods are filtered in.
+    if (position !== "start") classes.push(isDayStart ? "border-l-2 border-l-ink" : "border-l border-mist");
     if (position === "start") classes.push(m?.hasMultiple ? "border-r-2 border-r-ink" : "border-r border-mist");
     if (position === "end" && m?.hasMultiple) classes.push("border-r-2 border-r-ink");
     return classes.join(" ");
@@ -344,15 +346,15 @@ export default function MedChecklistPage({
                     {t("medGridPage.colParticipant")}
                   </th>
                   {data.days.map((day) => (
-                    <th key={day} colSpan={visibleSlots.length} className="border-l border-mist p-1 text-center font-medium text-ink-secondary">
+                    <th key={day} colSpan={visibleSlots.length} className="border-l-2 border-l-ink p-1 text-center font-medium text-ink-secondary">
                       {formatDayShort(day)}
                     </th>
                   ))}
                 </tr>
                 <tr className="border-b border-mist">
                   {data.days.flatMap((day) =>
-                    visibleSlots.map((slot) => (
-                      <th key={`${day}:${slot.id}`} className="h-20 w-6 border-l border-mist p-0.5 align-bottom">
+                    visibleSlots.map((slot, si) => (
+                      <th key={`${day}:${slot.id}`} className={`h-20 w-6 p-0.5 align-bottom ${si === 0 ? "border-l-2 border-l-ink" : "border-l border-mist"}`}>
                         <span
                           style={{ writingMode: "vertical-rl", textOrientation: "sideways", transform: "rotate(180deg)" }}
                           className="whitespace-nowrap text-[10px] text-ink-secondary"
@@ -376,12 +378,13 @@ export default function MedChecklistPage({
                     {data.days.flatMap((day) =>
                       visibleSlots.map((slot, si) => {
                         const position = si === visibleSlots.length - 1 ? "end" : "middle";
+                        const isDayStart = si === 0;
                         if (!row.slotIds.includes(slot.id)) {
-                          return <td key={`${day}:${slot.id}`} className={cellClasses(i, position)} />;
+                          return <td key={`${day}:${slot.id}`} className={cellClasses(i, position, isDayStart)} />;
                         }
                         const status = row.days[day]?.[slot.id];
                         return (
-                          <td key={`${day}:${slot.id}`} className={`p-0.5 text-center ${cellClasses(i, position)}`}>
+                          <td key={`${day}:${slot.id}`} className={`p-0.5 text-center ${cellClasses(i, position, isDayStart)}`}>
                             <input type="checkbox" checked={!!status?.given} onChange={() => toggleCell(row, day, slot.id)} />
                           </td>
                         );

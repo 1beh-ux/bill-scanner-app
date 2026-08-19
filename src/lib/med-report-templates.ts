@@ -33,7 +33,11 @@ function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: num
     .page:last-child { page-break-after: auto; }
     h1 { font-size: 15px; margin: 0 0 3px; }
     p.subtitle { font-size: 11px; color: #555; margin: 0 0 8px; }
-    table { width: 100%; border-collapse: collapse; font-size: ${fontSizePt}px; table-layout: fixed; }
+    /* No explicit width: with table-layout: fixed, the table sizes itself
+       to the sum of its <col> widths below, so a band with fewer day-columns
+       (the last page of a split export) stays exactly as wide as its own
+       columns instead of stretching to fill the page. */
+    table { border-collapse: collapse; font-size: ${fontSizePt}px; table-layout: fixed; }
     th, td { border: 1px solid #bbb; padding: 1px 2px; text-align: center; vertical-align: middle; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; }
@@ -60,6 +64,7 @@ function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: num
     tr.group-last td { border-bottom: 2px solid #333; }
     td.group-edge-left { border-left: 2px solid #333; }
     td.group-edge-right { border-right: 2px solid #333; }
+    th.day-start, td.day-start { border-left: 2px solid #333; }
     p.gluehint { font-size: 10px; color: #777; margin: 4px 0 0; }
   `;
 }
@@ -100,10 +105,13 @@ function renderBandTable(opts: {
   const runs = dayRuns(band);
 
   const dayHeaderCells = runs
-    .map((run) => `<th colspan="${run.count}">${escapeHtml(formatDay(run.day))}</th>`)
+    .map((run) => `<th colspan="${run.count}" class="day-start">${escapeHtml(formatDay(run.day))}</th>`)
     .join("");
   const periodHeaderCells = band
-    .map((col) => `<th class="period"><span class="rot">${escapeHtml(slotNameById.get(col.slotId) ?? "")}</span></th>`)
+    .map((col, colIdx) => {
+      const isDayStart = colIdx === 0 || band[colIdx - 1].day !== col.day;
+      return `<th class="period${isDayStart ? " day-start" : ""}"><span class="rot">${escapeHtml(slotNameById.get(col.slotId) ?? "")}</span></th>`;
+    })
     .join("");
 
   const colsHtml =
@@ -119,7 +127,10 @@ function renderBandTable(opts: {
       const cells = band
         .map((col, colIdx) => {
           const isLastCol = colIdx === band.length - 1;
-          const cellClass = meta.hasMultiple && isLastCol ? " group-edge-right" : "";
+          const isDayStart = colIdx === 0 || band[colIdx - 1].day !== col.day;
+          const cellClass = [meta.hasMultiple && isLastCol ? "group-edge-right" : "", isDayStart ? "day-start" : ""]
+            .filter(Boolean)
+            .join(" ");
           if (!row.slotIds.includes(col.slotId)) return `<td class="${cellClass}"></td>`;
           const status = row.days[col.day]?.[col.slotId];
           return `<td class="${cellClass}">${checkbox(mode === "hybrid" && !!status?.given)}</td>`;
