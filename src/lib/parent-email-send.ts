@@ -16,21 +16,28 @@ export function formatDateRange(startDate: Date, endDate: Date): string {
   return start === end ? start : `${start} – ${end}`;
 }
 
-/** Resolved subject with the same variable substitution the real send uses, for a pre-send preview. */
-export async function resolveSubjectPreview(participantId: string, senderDisplayName: string): Promise<string> {
+/** Resolved subject + body with the same variable substitution the real send uses, for a pre-send preview. */
+export async function resolveEmailPreview(
+  participantId: string,
+  senderDisplayName: string
+): Promise<{ subject: string; body: string }> {
   const participant = await prisma.participant.findUnique({
     where: { id: participantId },
     include: { event: true },
   });
   if (!participant) throw new Error("participant_not_found");
 
-  const { subject: templateSubject } = await resolveEmailTemplate(participant.eventId);
-  return substituteVariables(templateSubject, {
+  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(participant.eventId);
+  const vars = {
     child_name: participant.name,
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
     sender_name: senderDisplayName,
-  });
+  };
+  return {
+    subject: substituteVariables(templateSubject, vars),
+    body: substituteVariables(templateBody, vars),
+  };
 }
 
 /**

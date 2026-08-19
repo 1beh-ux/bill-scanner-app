@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 
-type Preview = { subject: string; recipients: { name: string | null; email: string }[] };
+type Preview = { subject: string; body: string; recipients: { name: string | null; email: string }[] };
 
 interface SendSummaryModalProps {
   participantId: string;
@@ -54,7 +54,7 @@ export default function SendSummaryModal({ participantId, onClose, onSent }: Sen
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-paper p-5">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
         <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("sendSummary.title")}</h2>
 
         {loading ? (
@@ -87,6 +87,13 @@ export default function SendSummaryModal({ participantId, onClose, onSent }: Sen
                   {t("sendSummary.subjectLabel")}
                 </p>
                 <p className="mb-3 text-[14px] text-ink">{preview.subject}</p>
+
+                <p className="mb-1 text-[12px] font-medium uppercase tracking-wide text-ink-secondary">
+                  {t("sendSummary.bodyPreviewLabel")}
+                </p>
+                <p className="mb-3 whitespace-pre-wrap rounded-lg border border-mist bg-paper-2 p-3 text-[13px] text-ink">
+                  {preview.body}
+                </p>
 
                 <a
                   href={`/api/participants/${participantId}/summary-pdf`}

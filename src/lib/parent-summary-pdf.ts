@@ -3,7 +3,8 @@ import { renderPdf } from "@/lib/pdf-service";
 import { billsBucket } from "@/lib/gcs";
 import { uploadFileToFolder } from "@/lib/drive";
 import { resolveIncidentState, type EffectiveIncident } from "@/lib/incident-state";
-import { buildParentSummaryHtml, type SummaryIncident } from "@/lib/parent-summary-template";
+import { buildParentSummaryHtml, type SummaryIncident, type MedConfirmationRow } from "@/lib/parent-summary-template";
+import { fetchMedChecklistGrid } from "@/lib/med-checklist-grid";
 
 export async function loadParticipantSummaryIncidents(participantId: string): Promise<SummaryIncident[]> {
   const topLevel = await prisma.incident.findMany({
@@ -58,6 +59,20 @@ export async function generateParticipantSummaryPdf(
 
   const incidents = await loadParticipantSummaryIncidents(participantId);
 
+  const grid = await fetchMedChecklistGrid(participant.eventId, participant.event.startDate, participant.event.endDate);
+  const medRows: MedConfirmationRow[] = [];
+  for (const row of grid.rows) {
+    if (row.participantId !== participantId) continue;
+    for (const slotId of row.slotIds) {
+      const slotName = grid.slots.find((s) => s.id === slotId)?.name ?? "";
+      medRows.push({
+        medName: row.medName,
+        slotName,
+        cells: grid.days.map((day) => ({ date: day, ...row.days[day][slotId] })),
+      });
+    }
+  }
+
   const html = buildParentSummaryHtml({
     campName: participant.event.name,
     generatedAt: new Date(),
@@ -68,6 +83,7 @@ export async function generateParticipantSummaryPdf(
     chronicIssues: participant.chronicIssues,
     otherNotes: participant.otherNotes,
     incidents,
+    medConfirmation: { days: grid.days, rows: medRows },
   });
 
   const buffer = await renderPdf(html, "A4");

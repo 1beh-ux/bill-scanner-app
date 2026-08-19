@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { resolveSubjectPreview } from "@/lib/parent-email-send";
+import { resolveEmailPreview } from "@/lib/parent-email-send";
 
 export async function GET(
   req: NextRequest,
@@ -23,9 +23,10 @@ export async function GET(
   const denied = await requireModuleAccess(user, participant.eventId, "health");
   if (denied) return denied;
 
-  const subject = await resolveSubjectPreview(participantId, user.displayName);
+  const { subject, body } = await resolveEmailPreview(participantId, user.displayName);
   return NextResponse.json({
     subject,
+    body,
     recipients: participant.guardians.map((g) => ({ name: g.name, email: g.email })),
   });
 }

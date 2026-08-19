@@ -10,6 +10,43 @@ interface ParticipantSendResult {
   guardians: GuardianSendResult[];
 }
 
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const { id: eventId } = await params;
+  const denied = await requireModuleAccess(user, eventId, "health");
+  if (denied) return denied;
+
+  const participants = await prisma.participant.findMany({
+    where: { eventId },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      groupName: true,
+      guardians: { select: { email: true, receivesCommunications: true } },
+      _count: { select: { incidents: { where: { parentIncidentId: null } } } },
+      emailLogs: { orderBy: { sentAt: "desc" }, take: 1, select: { sentAt: true, status: true } },
+    },
+  });
+
+  const result = participants.map((p) => ({
+    id: p.id,
+    name: p.name,
+    groupName: p.groupName,
+    guardianEmails: p.guardians.filter((g) => g.receivesCommunications).map((g) => g.email),
+    incidentCount: p._count.incidents,
+    lastSent: p.emailLogs[0] ? { sentAt: p.emailLogs[0].sentAt, status: p.emailLogs[0].status } : null,
+  }));
+
+  return NextResponse.json(result);
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

@@ -3,9 +3,17 @@
 import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
+import TemplatePreviewModal from "@/components/health/TemplatePreviewModal";
 
 type EventBasic = { id: string; name: string };
-type Participant = { id: string; name: string; groupName: string | null };
+type Participant = {
+  id: string;
+  name: string;
+  groupName: string | null;
+  guardianEmails: string[];
+  incidentCount: number;
+  lastSent: { sentAt: string; status: "sent" | "failed" } | null;
+};
 
 type SendResult = {
   participantId: string;
@@ -27,6 +35,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [results, setResults] = useState<SendResult[] | null>(null);
+  const [showTemplatePreview, setShowTemplatePreview] = useState(false);
 
   const [logs, setLogs] = useState<EmailLogRow[]>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -35,7 +44,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
     setLoading(true);
     const [evRes, partRes] = await Promise.all([
       fetch(`/api/events/${eventId}`),
-      fetch(`/api/events/${eventId}/participants`),
+      fetch(`/api/events/${eventId}/health/send-summaries`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
@@ -78,6 +87,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
     if (res.ok) {
       const data = await res.json();
       setResults(data.results);
+      load();
       loadLogs();
     }
   }
@@ -93,7 +103,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-4xl p-4 md:p-8">
       <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("participantsPage.title")}
       </a>
@@ -138,33 +148,71 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
                   />
                   {t("bulkSendSummaries.selectAll")}
                 </label>
-                <button onClick={handleSend} disabled={sending || selected.size === 0} className={btnPrimary}>
-                  {sending
-                    ? t("common.loading")
-                    : t("bulkSendSummaries.sendButton", { count: String(selected.size) })}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setShowTemplatePreview(true)}
+                    className="text-[13px] text-ember hover:underline"
+                  >
+                    {t("bulkSendSummaries.previewTemplateButton")}
+                  </button>
+                  <button onClick={handleSend} disabled={sending || selected.size === 0} className={btnPrimary}>
+                    {sending
+                      ? t("common.loading")
+                      : t("bulkSendSummaries.sendButton", { count: String(selected.size) })}
+                  </button>
+                </div>
               </div>
 
-              <ul className="mb-6 list-none p-0">
-                {participants.map((p) => (
-                  <li key={p.id} className="flex items-center gap-2 border-b border-mist/60 py-2">
-                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
-                    <span className="text-[14px] text-ink">{p.name}</span>
-                    {p.groupName && <span className="text-[13px] text-ink-secondary">· {p.groupName}</span>}
-                    {results && (
-                      <span className="ml-auto text-[12px] text-ink-secondary">
-                        {(() => {
-                          const r = results.find((x) => x.participantId === p.id);
-                          if (!r) return null;
-                          const sent = r.guardians.filter((g) => g.status === "sent").length;
-                          const failed = r.guardians.length - sent;
-                          return t("bulkSendSummaries.resultInline", { sent: String(sent), failed: String(failed) });
-                        })()}
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div className="mb-6 overflow-x-auto">
+                <table className="w-full min-w-[640px] border-collapse text-[13px]">
+                  <thead>
+                    <tr className="border-b border-mist text-left text-[12px] text-ink-secondary">
+                      <th className="p-2 font-medium"></th>
+                      <th className="p-2 font-medium">{t("bulkSendSummaries.colName")}</th>
+                      <th className="p-2 font-medium">{t("bulkSendSummaries.colGuardians")}</th>
+                      <th className="p-2 font-medium">{t("bulkSendSummaries.colIncidents")}</th>
+                      <th className="p-2 font-medium">{t("bulkSendSummaries.colLastSent")}</th>
+                      <th className="p-2 font-medium"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {participants.map((p) => {
+                      const r = results?.find((x) => x.participantId === p.id);
+                      const sentCount = r?.guardians.filter((g) => g.status === "sent").length ?? 0;
+                      const failedCount = r ? r.guardians.length - sentCount : 0;
+                      return (
+                        <tr key={p.id} className="border-b border-mist/60">
+                          <td className="p-2">
+                            <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
+                          </td>
+                          <td className="p-2 text-ink">
+                            {p.name}
+                            {p.groupName && <span className="text-ink-secondary"> · {p.groupName}</span>}
+                          </td>
+                          <td className="p-2 text-ink-secondary">
+                            {p.guardianEmails.length > 0 ? (
+                              p.guardianEmails.join(", ")
+                            ) : (
+                              <span className="text-amber-600">{t("bulkSendSummaries.noGuardians")}</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-ink-secondary">{p.incidentCount}</td>
+                          <td className="p-2 text-ink-secondary">
+                            {p.lastSent
+                              ? `${new Date(p.lastSent.sentAt).toLocaleDateString("cs-CZ")} · ${
+                                  p.lastSent.status === "sent" ? t("sendLog.statusSent") : t("sendLog.statusFailed")
+                                }`
+                              : "—"}
+                          </td>
+                          <td className="p-2 text-ink-secondary">
+                            {r && t("bulkSendSummaries.resultInline", { sent: String(sentCount), failed: String(failedCount) })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </>
@@ -172,6 +220,10 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
 
       {tab === "log" && (
         <ParentEmailLogTable logs={logs} showParticipant onResend={handleResend} resendingId={resendingId} />
+      )}
+
+      {showTemplatePreview && (
+        <TemplatePreviewModal eventId={eventId} onClose={() => setShowTemplatePreview(false)} />
       )}
     </div>
   );

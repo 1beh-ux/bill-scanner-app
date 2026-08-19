@@ -2,15 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
-
-const VARIABLES = ["child_name", "camp_name", "date_range", "sender_name"] as const;
-
-const DUMMY_VALUES: Record<(typeof VARIABLES)[number], string> = {
-  child_name: "Anna Nováková",
-  camp_name: "Letní tábor 2026",
-  date_range: "1.–7. 8. 2026",
-  sender_name: "Zdravotník",
-};
+import { TEMPLATE_VARIABLES, substituteDummyTemplateValues } from "@/lib/email-template-preview";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -18,14 +10,6 @@ const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const varBtnClass =
   "rounded-full border border-mist bg-paper-2 px-2.5 py-1 text-[12px] text-ink-secondary hover:bg-mist";
-
-function substitute(text: string): string {
-  let out = text;
-  for (const key of VARIABLES) {
-    out = out.replaceAll(`{{${key}}}`, DUMMY_VALUES[key]);
-  }
-  return out;
-}
 
 interface EmailTemplateAdminProps {
   scope: "org" | "event";
@@ -139,7 +123,7 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
       <div className="mb-2 flex flex-wrap gap-1.5">
-        {VARIABLES.map((name) => (
+        {TEMPLATE_VARIABLES.map((name) => (
           <button key={name} type="button" onClick={() => insertVariable(name)} className={varBtnClass}>
             {`{{${name}}}`}
           </button>
@@ -170,8 +154,8 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
         <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">
           {t("emailTemplateAdmin.previewTitle")}
         </p>
-        <p className="mb-2 text-[14px] font-medium text-ink">{substitute(subject)}</p>
-        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substitute(body)}</p>
+        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject)}</p>
+        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body)}</p>
       </div>
 
       <div className="flex justify-end">

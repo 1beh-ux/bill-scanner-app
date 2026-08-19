@@ -45,6 +45,14 @@ const BASE_STYLE = `
   .incident .code { display: inline-block; min-width: 18px; text-align: center; background: #e05d38; color: #fff; border-radius: 3px; font-size: 11px; padding: 0 4px; margin-right: 6px; }
   .incident .summary { font-size: 13px; }
   .followup { margin-left: 16px; margin-top: 4px; padding-left: 8px; border-left: 2px solid #ddd; }
+  .medtable { border-collapse: collapse; width: 100%; font-size: 10px; }
+  .medtable th, .medtable td { border: 1px solid #ddd; padding: 3px 5px; text-align: center; }
+  .medtable th { background: #f5f5f5; font-weight: 600; }
+  .medtable td.medname { text-align: left; font-size: 11px; white-space: nowrap; }
+  .medtable .given { color: #1a8a4a; font-weight: bold; }
+  .medtable .missed { color: #c0392b; font-weight: bold; }
+  .medtable .future { color: #ccc; }
+  .medlegend { font-size: 10px; color: #666; margin: 4px 0 0; }
 `;
 
 function escapeHtml(s: string): string {
@@ -57,6 +65,38 @@ function formatDate(d: Date | string): string {
 }
 
 export type SummaryIncident = EffectiveIncident & { followUps: EffectiveIncident[]; code: string | null };
+
+export type MedConfirmationCell = { date: string; given: boolean; givenAt: string | null };
+export type MedConfirmationRow = { medName: string; slotName: string; cells: MedConfirmationCell[] };
+
+function formatDayHeader(dateKey: string): string {
+  const [, m, d] = dateKey.split("-");
+  return `${Number(d)}.${Number(m)}.`;
+}
+
+function renderMedConfirmationTable(days: string[], rows: MedConfirmationRow[], generatedAt: Date): string {
+  const todayKey = generatedAt.toISOString().slice(0, 10);
+  const headerCells = days.map((d) => `<th>${formatDayHeader(d)}</th>`).join("");
+  const bodyRows = rows
+    .map((row) => {
+      const cells = row.cells
+        .map((cell) => {
+          if (cell.date > todayKey) return `<td class="future">–</td>`;
+          return cell.given ? `<td class="given">&#10003;</td>` : `<td class="missed">&#10007;</td>`;
+        })
+        .join("");
+      const label = row.slotName ? `${row.medName} (${row.slotName})` : row.medName;
+      return `<tr><td class="medname">${escapeHtml(label)}</td>${cells}</tr>`;
+    })
+    .join("");
+
+  return `
+    <table class="medtable">
+      <thead><tr><th></th>${headerCells}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+    <p class="medlegend">&#10003; podáno &nbsp;·&nbsp; &#10007; nepodáno &nbsp;·&nbsp; – zatím neproběhlo</p>`;
+}
 
 function incidentMetaLine(inc: EffectiveIncident): string {
   const parts = [CATEGORY_LABELS[inc.category] ?? inc.category, formatDate(inc.incidentDate)];
@@ -98,7 +138,7 @@ function renderBodyMap(view: "front" | "back", label: string, markers: { code: s
 
   return `
     <div class="bodymap-col">
-      <svg viewBox="0 0 200 400" width="120" height="240">
+      <svg viewBox="0 0 200 400" width="180" height="360">
         <rect width="200" height="400" fill="#f5f5f5" rx="8" />
         ${BODY_OUTLINE_PATHS}
         ${dots}
@@ -117,8 +157,9 @@ export function buildParentSummaryHtml(opts: {
   chronicIssues: string | null;
   otherNotes: string | null;
   incidents: SummaryIncident[];
+  medConfirmation: { days: string[]; rows: MedConfirmationRow[] };
 }): string {
-  const { campName, generatedAt, participantName, groupName, allergies, medsNotes, chronicIssues, otherNotes, incidents } = opts;
+  const { campName, generatedAt, participantName, groupName, allergies, medsNotes, chronicIssues, otherNotes, incidents, medConfirmation } = opts;
 
   const hasNotes = allergies || medsNotes || chronicIssues || otherNotes;
   const notesHtml = hasNotes
@@ -150,6 +191,11 @@ export function buildParentSummaryHtml(opts: {
       ? incidents.map(renderIncidentBlock).join("")
       : `<p style="font-size:13px;color:#666;">Zatím žádné záznamy.</p>`;
 
+  const medTableHtml =
+    medConfirmation.rows.length > 0
+      ? renderMedConfirmationTable(medConfirmation.days, medConfirmation.rows, generatedAt)
+      : "";
+
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>${BASE_STYLE}</style></head>
 <body>
@@ -158,6 +204,8 @@ export function buildParentSummaryHtml(opts: {
 
   <h2>${escapeHtml(participantName)}${groupName ? ` — ${escapeHtml(groupName)}` : ""}</h2>
   ${notesHtml}
+
+  ${medTableHtml ? `<h2>Podávání léků</h2>${medTableHtml}` : ""}
 
   ${bodyMapsHtml ? `<h2>Umístění na těle</h2>${bodyMapsHtml}` : ""}
 

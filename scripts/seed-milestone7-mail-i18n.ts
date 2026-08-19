@@ -40,8 +40,12 @@ async function main() {
     { key: "sendSummary.noRecipients", cs: "Žádný zákonný zástupce nemá povolen příjem zpráv.", en: "No guardian has communications enabled." },
     { key: "sendSummary.recipientsLabel", cs: "Příjemci", en: "Recipients" },
     { key: "sendSummary.subjectLabel", cs: "Předmět", en: "Subject" },
+    { key: "sendSummary.bodyPreviewLabel", cs: "Text e-mailu (náhled)", en: "Email body (preview)" },
     { key: "sendSummary.sendButton", cs: "Odeslat", en: "Send" },
     { key: "sendSummary.resultMessage", cs: "Odesláno: {sent} · nezdařilo se: {failed}", en: "Sent: {sent} · failed: {failed}" },
+
+    { key: "templatePreviewModal.title", cs: "Náhled šablony e-mailu", en: "Email template preview" },
+    { key: "templatePreviewModal.hint", cs: "Ukázka s náhradními hodnotami — skutečný e-mail bude mít údaje konkrétního dítěte.", en: "Shown with placeholder values — the actual email will use the specific child's details." },
 
     { key: "sendLog.title", cs: "Odeslané e-maily", en: "Sent emails" },
     { key: "sendLog.empty", cs: "Zatím žádné odeslané e-maily.", en: "No emails sent yet." },
@@ -59,6 +63,12 @@ async function main() {
     { key: "bulkSendSummaries.confirm", cs: "Opravdu odeslat souhrn {count} rodičům? Tato akce se nedá vzít zpět.", en: "Really send the summary to {count} guardians? This cannot be undone." },
     { key: "bulkSendSummaries.sendButton", cs: "Odeslat ({count})", en: "Send ({count})" },
     { key: "bulkSendSummaries.resultInline", cs: "odesláno: {sent} · nezdařilo se: {failed}", en: "sent: {sent} · failed: {failed}" },
+    { key: "bulkSendSummaries.previewTemplateButton", cs: "Náhled šablony", en: "Preview template" },
+    { key: "bulkSendSummaries.colName", cs: "Jméno", en: "Name" },
+    { key: "bulkSendSummaries.colGuardians", cs: "Zákonní zástupci", en: "Guardians" },
+    { key: "bulkSendSummaries.colIncidents", cs: "Incidenty", en: "Incidents" },
+    { key: "bulkSendSummaries.colLastSent", cs: "Naposledy odesláno", en: "Last sent" },
+    { key: "bulkSendSummaries.noGuardians", cs: "žádný příjemce", en: "no recipient" },
   ];
 
   for (const row of rows) {
