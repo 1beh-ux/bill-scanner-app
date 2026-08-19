@@ -30,6 +30,25 @@ type GmailPart = {
   parts?: GmailPart[] | null;
 };
 
+// Bounded-concurrency map -- fetching N messages one at a time (sequential
+// awaits) turned a 25-message inbox load into ~90s of pure network
+// round-trip latency. Firing them all at once risks bursting past Gmail
+// API's per-second quota for large counts (up to 200), so batches of 10
+// balance speed against that.
+const CONCURRENCY = 10;
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
 function headerValue(headers: GmailHeader[] | undefined, name: string): string {
   const h = headers?.find((x) => (x.name || "").toLowerCase() === name.toLowerCase());
   return h?.value || "";
@@ -77,8 +96,7 @@ export async function listInboxMessagesWithDetails(
   });
   const ids = (listRes.data.messages || []).map((m) => m.id).filter((id): id is string => !!id);
 
-  const details: GmailMessageDetail[] = [];
-  for (const id of ids) {
+  const details = await mapWithConcurrency(ids, CONCURRENCY, async (id): Promise<GmailMessageDetail> => {
     const res = await gmail.users.messages.get({ userId: "me", id, format: "full" });
     const msg = res.data;
     const headers = (msg.payload?.headers || []) as GmailHeader[];
@@ -87,7 +105,7 @@ export async function listInboxMessagesWithDetails(
     collectAttachments(payload, attachments);
     const dateHeader = headerValue(headers, "date");
 
-    details.push({
+    return {
       messageId: id,
       threadId: msg.threadId || "",
       from: headerValue(headers, "from"),
@@ -96,8 +114,8 @@ export async function listInboxMessagesWithDetails(
       snippet: (msg.snippet || "").slice(0, 200),
       bodySnippet: findPlainTextBody(payload).slice(0, 1200),
       attachments,
-    });
-  }
+    };
+  });
 
   details.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
   return details;
