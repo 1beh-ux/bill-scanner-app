@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email-template-preview";
-import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
+import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";

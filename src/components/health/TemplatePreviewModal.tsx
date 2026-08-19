@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { substituteDummyTemplateValues } from "@/lib/email-template-preview";
-import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
+import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 export default function TemplatePreviewModal({
   eventId,

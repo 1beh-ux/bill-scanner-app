@@ -1,9 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import type { ModuleKey } from "@/generated/prisma";
+import {
+  PARENT_SUMMARY_PURPOSE_KEY,
+  MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_REPLY_PURPOSE_KEY,
+} from "@/lib/email-template-purpose-keys";
 
-export const PARENT_SUMMARY_PURPOSE_KEY = "parent_health_summary";
-export const MAIL_HELPER_BULK_STATUS_PURPOSE_KEY = "mail_helper_bulk_status_update";
-export const MAIL_HELPER_REPLY_PURPOSE_KEY = "mail_helper_reply";
+// Re-exported for existing server-side callers -- client components must
+// import these from email-template-purpose-keys.ts directly instead (see
+// that file's comment): this module pulls in prisma and can't be imported
+// from a "use client" component without leaking a Node-only dependency
+// (pg's `dns` usage) into the browser bundle.
+export { PARENT_SUMMARY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY };
 
 const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
   [PARENT_SUMMARY_PURPOSE_KEY]: {

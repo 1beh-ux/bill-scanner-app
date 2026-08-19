@@ -1,4 +1,4 @@
-import { PARENT_SUMMARY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
+import { PARENT_SUMMARY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "sender_name"],

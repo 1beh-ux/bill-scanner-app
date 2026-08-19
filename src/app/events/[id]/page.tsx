@@ -6,7 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
-import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
+import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 type EventDetail = {
   id: string;
