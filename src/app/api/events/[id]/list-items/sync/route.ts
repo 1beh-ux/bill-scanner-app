@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireListItemAccess } from "@/lib/module-access";
 
-const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation"];
+const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document"];
 
 // Copies active org-wide ListTemplate rows into this event's EventListItem
 // list, skipping any name already present so it's safe to call more than
@@ -21,14 +21,14 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));
   const kind: ListTemplateKind | undefined = body.kind;
   if (!kind || !ALLOWED_KINDS.includes(kind)) {
     return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
   }
+  const denied = await requireListItemAccess(user, eventId, kind);
+  if (denied) return denied;
 
   const [templates, existing] = await Promise.all([
     prisma.listTemplate.findMany({ where: { kind, active: true } }),

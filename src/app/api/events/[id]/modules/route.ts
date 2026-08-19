@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 
-const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health"];
+const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail"];
 
 export async function GET(
   req: NextRequest,

@@ -33,7 +33,7 @@ type ExportSummary = {
   manifestSpreadsheetId: string;
 };
 
-type ModuleKey = "bills" | "health";
+type ModuleKey = "bills" | "health" | "mail";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -45,7 +45,7 @@ type AccessRow = {
   access: Record<ModuleKey, boolean>;
 };
 
-const MODULE_KEYS: ModuleKey[] = ["bills", "health"];
+const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail"];
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -585,7 +585,8 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
 
   if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
-  const moduleLabel = (key: ModuleKey) => (key === "bills" ? t("accessTab.moduleBills") : t("accessTab.moduleHealth"));
+  const moduleLabel = (key: ModuleKey) =>
+    key === "bills" ? t("accessTab.moduleBills") : key === "health" ? t("accessTab.moduleHealth") : t("accessTab.moduleMail");
 
   return (
     <div>
@@ -648,7 +649,8 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
 
   if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
-  const moduleLabel = (key: ModuleKey) => (key === "bills" ? t("accessTab.moduleBills") : t("accessTab.moduleHealth"));
+  const moduleLabel = (key: ModuleKey) =>
+    key === "bills" ? t("accessTab.moduleBills") : key === "health" ? t("accessTab.moduleHealth") : t("accessTab.moduleMail");
 
   return (
     <div>

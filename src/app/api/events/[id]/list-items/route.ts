@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireListItemAccess } from "@/lib/module-access";
 
-const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation"];
+const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document"];
 
 // Slice of the generic EventListItem table (see the ListTemplate/
 // EventListItem design in Milestone 1) -- used both by the incident form
@@ -19,8 +19,6 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
 
   const { searchParams } = new URL(req.url);
   const kind = searchParams.get("kind") as ListTemplateKind | null;
@@ -28,6 +26,8 @@ export async function GET(
   if (!kind || !ALLOWED_KINDS.includes(kind)) {
     return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
   }
+  const denied = await requireListItemAccess(user, eventId, kind);
+  if (denied) return denied;
 
   const items = await prisma.eventListItem.findMany({
     where: { eventId, kind, ...(all ? {} : { active: true }) },
@@ -46,8 +46,6 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
 
   const body = await req.json();
   const kind: ListTemplateKind | undefined = body.kind;
@@ -55,6 +53,9 @@ export async function POST(
   if (!kind || !ALLOWED_KINDS.includes(kind)) {
     return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
   }
+  const denied = await requireListItemAccess(user, eventId, kind);
+  if (denied) return denied;
+
   if (!name || typeof name !== "string" || !name.trim()) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
   }

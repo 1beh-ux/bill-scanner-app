@@ -3,7 +3,7 @@ import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
-const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation"];
+const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document"];
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();

@@ -74,11 +74,28 @@ enum ListTemplateKind {
   med
   slot
   situation
+  document
 }
 
 enum ParentEmailStatus {
   sent
   failed
+}
+
+enum MailDocReceivedVia {
+  email
+  manual
+}
+
+enum MailActionType {
+  bulk_move
+  bulk_delete
+  attachment_saved
+}
+
+enum MailActionStatus {
+  ok
+  error
 }
 
 model User {
@@ -99,6 +116,8 @@ model User {
   medChecklistGiven  MedChecklist[]   @relation("MedChecklistGivenBy")
   parentEmailsSent   ParentEmailLog[] @relation("ParentEmailSentBy")
   mailAccountsConnected MailSenderAccount[] @relation("MailAccountConnectedBy")
+  documentsReceived    ParticipantDocument[] @relation("ParticipantDocumentReceivedBy")
+  mailActionsPerformed MailActionLog[]       @relation("MailActionLogUser")
 
   @@map("users")
 }
@@ -143,6 +162,9 @@ model Event {
   driveExportFolderId String?     @map("drive_export_folder_id")
   driveManifestSpreadsheetId String? @map("drive_manifest_spreadsheet_id")
   senderEmail         String?     @map("sender_email")
+  driveDocSyncEnabled      Boolean   @default(true) @map("drive_doc_sync_enabled")
+  statusExportSheetId      String?   @map("status_export_sheet_id")
+  statusExportLastSyncedAt DateTime? @map("status_export_last_synced_at")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -154,6 +176,7 @@ model Event {
   participants         Participant[]
   eventListItems       EventListItem[]
   eventEmailTemplates  EventEmailTemplate[]
+  mailActionLogs       MailActionLog[]
 
   @@map("events")
 }
@@ -335,6 +358,8 @@ model Participant {
   medPlans     ParticipantMedPlan[]
   medChecklist MedChecklist[]
   emailLogs    ParentEmailLog[]
+  documents    ParticipantDocument[]
+  mailActionLogs MailActionLog[]
 
   @@map("participants")
 }
@@ -435,6 +460,7 @@ model EventListItem {
   medPlansAsSlot   ParticipantMedPlan[] @relation("MedPlanSlot")
   checklistAsMed   MedChecklist[]       @relation("MedChecklistMed")
   checklistAsSlot  MedChecklist[]       @relation("MedChecklistSlot")
+  documents        ParticipantDocument[] @relation("ParticipantDocumentType")
 
   @@map("event_list_items")
 }
@@ -531,4 +557,50 @@ model ParentEmailLog {
   sentBy      User                @relation("ParentEmailSentBy", fields: [sentByUserId], references: [id])
 
   @@map("parent_email_log")
+}
+
+// The received-document record for Mail Helper. Row existence = received;
+// no row = missing. GCS is the source of truth; drive_file_id/drive_synced_at
+// are set once the one-way nightly/on-demand mirror sync runs (see design doc).
+model ParticipantDocument {
+  id                   String             @id @default(uuid())
+  participantId        String             @map("participant_id")
+  eventListItemId      String             @map("event_list_item_id")
+  gcsPath              String?            @map("gcs_path")
+  contentHash          String?            @map("content_hash")
+  originalFilename     String?            @map("original_filename")
+  driveFileId          String?            @map("drive_file_id")
+  driveSyncedAt        DateTime?          @map("drive_synced_at")
+  receivedVia          MailDocReceivedVia @map("received_via")
+  sourceEmailMessageId String?            @map("source_email_message_id")
+  receivedAt           DateTime           @default(now()) @map("received_at")
+  receivedByUserId     String             @map("received_by_user_id")
+
+  participant     Participant   @relation(fields: [participantId], references: [id])
+  eventListItem   EventListItem @relation("ParticipantDocumentType", fields: [eventListItemId], references: [id])
+  receivedByUser  User          @relation("ParticipantDocumentReceivedBy", fields: [receivedByUserId], references: [id])
+
+  @@map("participant_documents")
+}
+
+// Everything Mail Helper does that isn't a sent email (which stays in
+// ParentEmailLog with its own purpose keys) -- bulk move/delete, attachment
+// saves. See design doc "Logging -- split across two tables, not one".
+model MailActionLog {
+  id            String            @id @default(uuid())
+  userId        String            @map("user_id")
+  eventId       String            @map("event_id")
+  action        MailActionType
+  messageId     String?           @map("message_id")
+  participantId String?           @map("participant_id")
+  subject       String?
+  status        MailActionStatus
+  details       String?
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  user        User         @relation("MailActionLogUser", fields: [userId], references: [id])
+  event       Event        @relation(fields: [eventId], references: [id])
+  participant Participant? @relation(fields: [participantId], references: [id])
+
+  @@map("mail_action_logs")
 }

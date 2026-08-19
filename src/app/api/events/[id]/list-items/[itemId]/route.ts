@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireListItemAccess } from "@/lib/module-access";
 
 async function loadOwnedItem(eventId: string, itemId: string) {
   const item = await prisma.eventListItem.findUnique({ where: { id: itemId } });
@@ -19,13 +19,13 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId, itemId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
 
   const existing = await loadOwnedItem(eventId, itemId);
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireListItemAccess(user, eventId, existing.kind);
+  if (denied) return denied;
 
   const body = await req.json();
   const { name, key, sortOrder, active, data } = body;
@@ -56,13 +56,13 @@ export async function DELETE(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId, itemId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
 
   const existing = await loadOwnedItem(eventId, itemId);
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  const denied = await requireListItemAccess(user, eventId, existing.kind);
+  if (denied) return denied;
 
   try {
     await prisma.eventListItem.delete({ where: { id: itemId } });

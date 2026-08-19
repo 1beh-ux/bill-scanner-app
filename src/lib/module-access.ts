@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { ModuleKey, User } from "@/generated/prisma";
+import type { ListTemplateKind, ModuleKey, User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
 // admin acts as an unrestricted superuser across every module and event
@@ -32,6 +32,21 @@ export async function requireModuleAccess(
     return NextResponse.json({ error: "module_access_denied" }, { status: 403 });
   }
   return null;
+}
+
+// The generic ListTemplate/EventListItem mechanism (see Milestone 1) is
+// shared across modules by `kind`: med/slot/situation are Health's,
+// `document` (Mail Helper) belongs to `mail`. Callers must not gate the
+// whole route on a single module -- the caller-supplied `kind` decides
+// which module's grant is required, so a mail-only volunteer can't reach
+// health's med/slot/situation rows (or vice versa) through the same route.
+export async function requireListItemAccess(
+  user: User,
+  eventId: string,
+  kind: ListTemplateKind
+): Promise<NextResponse | null> {
+  const moduleKey: ModuleKey = kind === "document" ? "mail" : "health";
+  return requireModuleAccess(user, eventId, moduleKey);
 }
 
 export async function getEnabledModules(eventId: string): Promise<ModuleKey[]> {

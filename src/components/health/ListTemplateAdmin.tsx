@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 
-type Kind = "med" | "slot" | "situation";
+type Kind = "med" | "slot" | "situation" | "document";
 type IncidentCategory = "illness" | "injury" | "parasite" | "medication" | "other";
 
 const CATEGORIES: IncidentCategory[] = ["illness", "injury", "parasite", "medication", "other"];
@@ -16,11 +16,17 @@ type SituationData = {
   defaultDetails?: string;
 };
 
+type DocumentData = {
+  displayName?: string;
+  expectedValue?: string;
+  filenameSuffix?: string;
+};
+
 type Item = {
   id: string;
   name: string;
   active: boolean;
-  data: SituationData | null;
+  data: SituationData | DocumentData | null;
 };
 
 const inputClass =
@@ -38,6 +44,7 @@ interface ListTemplateAdminProps {
 export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListTemplateAdminProps) {
   const { t } = useTranslations();
   const isSituation = kind === "situation";
+  const isDocument = kind === "document";
 
   const basePath = scope === "org" ? "/api/list-templates" : `/api/events/${eventId}/list-items`;
   const listUrl = scope === "org" ? `${basePath}?kind=${kind}` : `${basePath}?kind=${kind}&all=true`;
@@ -55,6 +62,9 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const [defaultMed, setDefaultMed] = useState("");
   const [defaultTemp, setDefaultTemp] = useState("");
   const [defaultDetails, setDefaultDetails] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [expectedValue, setExpectedValue] = useState("");
+  const [filenameSuffix, setFilenameSuffix] = useState("");
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -94,6 +104,9 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setDefaultMed("");
     setDefaultTemp("");
     setDefaultDetails("");
+    setDisplayName("");
+    setExpectedValue("");
+    setFilenameSuffix("");
     setEditingId(null);
   }
 
@@ -107,11 +120,15 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setError(null);
     setEditingId(item.id);
     setName(item.name);
-    setCategory(item.data?.category ?? "illness");
-    setShortDescription(item.data?.shortDescription ?? "");
-    setDefaultMed(item.data?.defaultMed ?? "");
-    setDefaultTemp(item.data?.defaultTemp !== undefined ? String(item.data.defaultTemp) : "");
-    setDefaultDetails(item.data?.defaultDetails ?? "");
+    const situationData = item.data as SituationData | null;
+    setCategory(situationData?.category ?? "illness");
+    setShortDescription(situationData?.shortDescription ?? "");
+    setDefaultMed(situationData?.defaultMed ?? "");
+    setDefaultTemp(situationData?.defaultTemp !== undefined ? String(situationData.defaultTemp) : "");
+    setDefaultDetails((item.data as SituationData | null)?.defaultDetails ?? "");
+    setDisplayName((item.data as DocumentData | null)?.displayName ?? "");
+    setExpectedValue((item.data as DocumentData | null)?.expectedValue ?? "");
+    setFilenameSuffix((item.data as DocumentData | null)?.filenameSuffix ?? "");
     setFormOpen(true);
   }
 
@@ -121,13 +138,19 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setSaving(true);
     setError(null);
 
-    const data: SituationData | undefined = isSituation
+    const data: SituationData | DocumentData | undefined = isSituation
       ? {
           category,
           shortDescription: shortDescription.trim() || undefined,
           defaultMed: defaultMed.trim() || undefined,
           defaultTemp: defaultTemp === "" ? undefined : Number(defaultTemp),
           defaultDetails: defaultDetails.trim() || undefined,
+        }
+      : isDocument
+      ? {
+          displayName: displayName.trim() || undefined,
+          expectedValue: expectedValue.trim() || undefined,
+          filenameSuffix: filenameSuffix.trim() || undefined,
         }
       : undefined;
 
@@ -281,6 +304,31 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
                 onChange={(e) => setDefaultDetails(e.target.value)}
                 className={inputClass}
                 rows={2}
+              />
+            </>
+          )}
+          {isDocument && (
+            <>
+              <input
+                type="text"
+                placeholder={t("listTemplateAdmin.displayNameLabel")}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("listTemplateAdmin.expectedValueLabel")}
+                value={expectedValue}
+                onChange={(e) => setExpectedValue(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("listTemplateAdmin.filenameSuffixLabel")}
+                value={filenameSuffix}
+                onChange={(e) => setFilenameSuffix(e.target.value)}
+                className={inputClass}
               />
             </>
           )}
