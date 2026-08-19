@@ -30,15 +30,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "missing_code_or_state" }, { status: 400 });
   }
 
-  const [cookieNonce, eventId] = cookieValue.split(":");
-  if (!cookieNonce || !eventId || cookieNonce !== state) {
+  const [cookieNonce, eventId, redirectUri] = cookieValue.split("|");
+  if (!cookieNonce || !eventId || !redirectUri || cookieNonce !== state) {
     return NextResponse.json({ error: "state_mismatch" }, { status: 400 });
   }
+  // Same origin the authorize step actually used (see the cookie comment
+  // there) -- req.nextUrl.origin can't be trusted to match it here.
+  const origin = new URL(redirectUri).origin;
 
   const denied = await requireModuleAccess(user, eventId, "health");
   if (denied) return denied;
 
-  const redirectUri = `${req.nextUrl.origin}/api/mail-oauth/callback`;
   const oauth2Client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET, redirectUri);
 
   try {
@@ -63,9 +65,9 @@ export async function GET(req: NextRequest) {
     });
     await prisma.event.update({ where: { id: eventId }, data: { senderEmail: email } });
 
-    return redirectToEvent(req.nextUrl.origin, eventId, "connected");
+    return redirectToEvent(origin, eventId, "connected");
   } catch (err) {
     console.error("[mail-oauth] callback failed:", err);
-    return redirectToEvent(req.nextUrl.origin, eventId, "error");
+    return redirectToEvent(origin, eventId, "error");
   }
 }

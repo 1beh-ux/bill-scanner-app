@@ -43,7 +43,13 @@ export async function GET(req: NextRequest) {
   });
 
   const response = NextResponse.redirect(authUrl);
-  response.cookies.set("mail_oauth_state", `${nonce}:${eventId}`, {
+  // The token exchange in the callback must send back this exact same
+  // redirect_uri (OAuth2 spec requirement) -- carry it through the cookie
+  // rather than recomputing req.nextUrl.origin in the callback request,
+  // since that can resolve differently between the two requests behind a
+  // proxy (e.g. Cloud Shell's web preview terminates TLS and can present a
+  // different effective origin per request).
+  response.cookies.set("mail_oauth_state", `${nonce}|${eventId}|${redirectUri}`, {
     httpOnly: true,
     secure: true,
     maxAge: 600,
