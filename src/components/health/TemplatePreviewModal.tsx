@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { substituteDummyTemplateValues } from "@/lib/email-template-preview";
+import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 
-export default function TemplatePreviewModal({ eventId, onClose }: { eventId: string; onClose: () => void }) {
+export default function TemplatePreviewModal({
+  eventId,
+  purposeKey = PARENT_SUMMARY_PURPOSE_KEY,
+  onClose,
+}: {
+  eventId: string;
+  purposeKey?: string;
+  onClose: () => void;
+}) {
   const { t } = useTranslations();
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -12,7 +21,7 @@ export default function TemplatePreviewModal({ eventId, onClose }: { eventId: st
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/events/${eventId}/email-template`)
+    fetch(`/api/events/${eventId}/email-template?purposeKey=${encodeURIComponent(purposeKey)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) {
@@ -24,7 +33,7 @@ export default function TemplatePreviewModal({ eventId, onClose }: { eventId: st
       })
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventId]);
+  }, [eventId, purposeKey]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -41,13 +50,13 @@ export default function TemplatePreviewModal({ eventId, onClose }: { eventId: st
             <p className="mb-1 text-[12px] font-medium uppercase tracking-wide text-ink-secondary">
               {t("sendSummary.subjectLabel")}
             </p>
-            <p className="mb-3 text-[14px] text-ink">{substituteDummyTemplateValues(subject)}</p>
+            <p className="mb-3 text-[14px] text-ink">{substituteDummyTemplateValues(subject, purposeKey)}</p>
 
             <p className="mb-1 text-[12px] font-medium uppercase tracking-wide text-ink-secondary">
               {t("sendSummary.bodyPreviewLabel")}
             </p>
             <p className="mb-3 whitespace-pre-wrap rounded-lg border border-mist bg-paper-2 p-3 text-[13px] text-ink">
-              {substituteDummyTemplateValues(body)}
+              {substituteDummyTemplateValues(body, purposeKey)}
             </p>
           </>
         )}

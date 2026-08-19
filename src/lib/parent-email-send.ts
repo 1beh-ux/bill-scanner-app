@@ -27,7 +27,10 @@ export async function resolveEmailPreview(
   });
   if (!participant) throw new Error("participant_not_found");
 
-  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(participant.eventId);
+  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
+    participant.eventId,
+    PARENT_SUMMARY_PURPOSE_KEY
+  );
   const vars = {
     child_name: participant.name,
     camp_name: participant.event.name,
@@ -86,7 +89,10 @@ export async function sendSummaryToGuardians(
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
   const senderDisplayName = sentByUser?.displayName ?? "Zdravotník";
 
-  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(participant.eventId);
+  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
+    participant.eventId,
+    PARENT_SUMMARY_PURPOSE_KEY
+  );
   const vars = {
     child_name: participant.name,
     camp_name: participant.event.name,

@@ -2,14 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { encryptMailToken } from "@/lib/mail-token-crypto";
 
 const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
 const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
 
-function redirectToEvent(origin: string, eventId: string, result: "connected" | "error"): NextResponse {
-  const response = NextResponse.redirect(`${origin}/events/${eventId}?tab=health&mailConnect=${result}`);
+function redirectToEvent(
+  origin: string,
+  eventId: string,
+  purpose: "health" | "mail",
+  result: "connected" | "error"
+): NextResponse {
+  const target =
+    purpose === "mail"
+      ? `${origin}/events/${eventId}/mail?mailConnect=${result}`
+      : `${origin}/events/${eventId}?tab=health&mailConnect=${result}`;
+  const response = NextResponse.redirect(target);
   response.cookies.delete("mail_oauth_state");
   return response;
 }
@@ -30,15 +39,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "missing_code_or_state" }, { status: 400 });
   }
 
-  const [cookieNonce, eventId, redirectUri] = cookieValue.split("|");
+  const [cookieNonce, eventId, redirectUri, purposeRaw] = cookieValue.split("|");
   if (!cookieNonce || !eventId || !redirectUri || cookieNonce !== state) {
     return NextResponse.json({ error: "state_mismatch" }, { status: 400 });
   }
+  const purpose: "health" | "mail" = purposeRaw === "mail" ? "mail" : "health";
   // Same origin the authorize step actually used (see the cookie comment
   // there) -- req.nextUrl.origin can't be trusted to match it here.
   const origin = new URL(redirectUri).origin;
 
-  const denied = await requireModuleAccess(user, eventId, "health");
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const oauth2Client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET, redirectUri);
@@ -60,14 +70,23 @@ export async function GET(req: NextRequest) {
 
     await prisma.mailSenderAccount.upsert({
       where: { email },
-      update: { refreshTokenEncrypted: encryptMailToken(tokens.refresh_token), connectedByUserId: user.id },
-      create: { email, refreshTokenEncrypted: encryptMailToken(tokens.refresh_token), connectedByUserId: user.id },
+      update: {
+        refreshTokenEncrypted: encryptMailToken(tokens.refresh_token),
+        connectedByUserId: user.id,
+        scope: tokens.scope ?? null,
+      },
+      create: {
+        email,
+        refreshTokenEncrypted: encryptMailToken(tokens.refresh_token),
+        connectedByUserId: user.id,
+        scope: tokens.scope ?? null,
+      },
     });
     await prisma.event.update({ where: { id: eventId }, data: { senderEmail: email } });
 
-    return redirectToEvent(origin, eventId, "connected");
+    return redirectToEvent(origin, eventId, purpose, "connected");
   } catch (err) {
     console.error("[mail-oauth] callback failed:", err);
-    return redirectToEvent(origin, eventId, "error");
+    return redirectToEvent(origin, eventId, purpose, "error");
   }
 }

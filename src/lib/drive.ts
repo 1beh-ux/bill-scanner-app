@@ -187,6 +187,22 @@ export async function uploadFileToFolder(
   }, `upload file ${name}`);
 }
 
+export async function getOrCreateSubfolder(parentFolderId: string, name: string): Promise<string> {
+  const existing = await findFileInFolder(parentFolderId, name, FOLDER_MIME_TYPE);
+  if (existing) return existing.id;
+
+  return withRetry(async () => {
+    const drive = await getDriveClient();
+    const res = await drive.files.create({
+      requestBody: { name, mimeType: FOLDER_MIME_TYPE, parents: [parentFolderId] },
+      fields: "id",
+      supportsAllDrives: true,
+    });
+    if (!res.data.id) throw new Error("Drive folder create returned no file id");
+    return res.data.id;
+  }, `create subfolder ${name}`);
+}
+
 export async function findFileInFolder(
   folderId: string,
   name: string,

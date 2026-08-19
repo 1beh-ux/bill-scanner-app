@@ -1,7 +1,5 @@
-import crypto from "crypto";
-import { google } from "googleapis";
-import { prisma } from "@/lib/prisma";
-import { decryptMailToken } from "@/lib/mail-token-crypto";
+import { getGmailClient } from "@/lib/gmail-client";
+import { encodeHeaderValue, base64UrlEncode, chunk76, newMimeBoundary } from "@/lib/mail-mime";
 
 // Gmail sending was originally meant to go through Workspace domain-wide
 // delegation (one service account impersonating any mailbox via a signed
@@ -11,44 +9,8 @@ import { decryptMailToken } from "@/lib/mail-token-crypto";
 // Workspace mailbox owner grants gmail.send consent themselves (via
 // /api/mail-oauth), and we store their refresh token (see
 // MailSenderAccount, encrypted at rest -- src/lib/mail-token-crypto.ts).
-const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
-const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
-
-// One OAuth2 client per connected mailbox, cached for the life of this
-// process -- googleapis' OAuth2 client refreshes its own access token
-// transparently from the refresh token, so repeated sends to the same
-// sender (e.g. a bulk send) don't re-decrypt/re-exchange every time.
-const clientsBySender = new Map<string, InstanceType<typeof google.auth.OAuth2>>();
-
-async function getGmailClient(senderEmail: string) {
-  if (!MAIL_OAUTH_CLIENT_ID || !MAIL_OAUTH_CLIENT_SECRET) {
-    throw new Error("MAIL_OAUTH_CLIENT_ID / MAIL_OAUTH_CLIENT_SECRET is not set");
-  }
-
-  let client = clientsBySender.get(senderEmail);
-  if (!client) {
-    const account = await prisma.mailSenderAccount.findUnique({ where: { email: senderEmail } });
-    if (!account) throw new Error("sender_not_connected");
-
-    client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET);
-    client.setCredentials({ refresh_token: decryptMailToken(account.refreshTokenEncrypted) });
-    clientsBySender.set(senderEmail, client);
-  }
-
-  return google.gmail({ version: "v1", auth: client });
-}
-
-function encodeHeaderValue(value: string): string {
-  return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
-}
-
-function base64UrlEncode(buf: Buffer): string {
-  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-
-function chunk76(base64: string): string {
-  return base64.replace(/(.{76})/g, "$1\r\n");
-}
+// The OAuth2 client cache itself lives in src/lib/gmail-client.ts, shared
+// with src/lib/mail-read.ts (Mail Helper's read/reply/archive calls).
 
 function buildRawMessage(opts: {
   to: string;
@@ -59,7 +21,7 @@ function buildRawMessage(opts: {
   pdfBuffer: Buffer;
   pdfFilename: string;
 }): string {
-  const boundary = `mixed_${crypto.randomBytes(12).toString("hex")}`;
+  const boundary = newMimeBoundary("mixed");
   const bodyBase64 = chunk76(Buffer.from(opts.body, "utf-8").toString("base64"));
   const pdfBase64 = chunk76(opts.pdfBuffer.toString("base64"));
 
@@ -100,5 +62,42 @@ export async function sendParentSummaryEmail(opts: {
 }): Promise<void> {
   const gmail = await getGmailClient(opts.senderEmail);
   const raw = buildRawMessage(opts);
+  await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+}
+
+function buildPlainTextRawMessage(opts: {
+  to: string;
+  fromName: string;
+  senderEmail: string;
+  subject: string;
+  body: string;
+}): string {
+  const bodyBase64 = chunk76(Buffer.from(opts.body, "utf-8").toString("base64"));
+
+  const message = [
+    `From: ${encodeHeaderValue(opts.fromName)} <${opts.senderEmail}>`,
+    `To: ${opts.to}`,
+    `Subject: ${encodeHeaderValue(opts.subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    bodyBase64,
+  ].join("\r\n");
+
+  return base64UrlEncode(Buffer.from(message, "utf-8"));
+}
+
+// Used for Mail Helper's bulk status-update send -- no PDF, just the
+// templated status text (see src/lib/mail-bulk-status-send.ts).
+export async function sendPlainTextEmail(opts: {
+  to: string;
+  fromName: string;
+  senderEmail: string;
+  subject: string;
+  body: string;
+}): Promise<void> {
+  const gmail = await getGmailClient(opts.senderEmail);
+  const raw = buildPlainTextRawMessage(opts);
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
 }

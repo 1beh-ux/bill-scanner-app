@@ -6,6 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
+import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
 
 type EventDetail = {
   id: string;
@@ -16,6 +17,10 @@ type EventDetail = {
   closedAt: string | null;
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
+  driveDocSyncEnabled: boolean;
+  statusExportEnabled: boolean;
+  statusExportSheetId: string | null;
+  statusExportLastSyncedAt: string | null;
 };
 
 type Category = {
@@ -52,7 +57,7 @@ const inputClass =
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-type Tab = "categories" | "drive" | "access" | "health" | "modules";
+type Tab = "categories" | "drive" | "access" | "health" | "mail" | "modules";
 
 export default function EventDetailPage({
   params,
@@ -111,6 +116,7 @@ export default function EventDetailPage({
 
   useEffect(() => {
     if (tab === "health" && !moduleAccess.health) setTab("categories");
+    if (tab === "mail" && !moduleAccess.mail) setTab("categories");
   }, [tab, moduleAccess]);
 
   useEffect(() => {
@@ -331,6 +337,17 @@ export default function EventDetailPage({
             {t("eventSettings.tabHealth")}
           </button>
         )}
+        {moduleAccess.mail && (
+          <button
+            onClick={() => setTab("mail")}
+            className={
+              "border-b-2 px-3 py-2 text-[13px] font-medium " +
+              (tab === "mail" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+            }
+          >
+            {t("eventSettings.tabMail")}
+          </button>
+        )}
         <button
           onClick={() => setTab("modules")}
           className={
@@ -366,6 +383,35 @@ export default function EventDetailPage({
           <div>
             <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">
               {t("bulkSendSummaries.entryPoint")}
+            </a>
+          </div>
+        </div>
+      )}
+
+      {tab === "mail" && (
+        <div className="flex flex-col gap-6">
+          {mailConnect === "connected" && (
+            <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
+              {t("senderEmailField.connectSuccessBanner")}
+            </p>
+          )}
+          {mailConnect === "error" && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+              {t("senderEmailField.connectErrorBanner")}
+            </p>
+          )}
+          <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
+          <SenderEmailField eventId={id} purpose="mail" />
+          <EmailTemplateAdmin
+            scope="event"
+            eventId={id}
+            purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
+            label={t("mailTab.bulkStatusTemplateLabel")}
+          />
+          <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />
+          <div>
+            <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
+              {t("mailTab.openInboxLink")}
             </a>
           </div>
         </div>
@@ -547,6 +593,111 @@ export default function EventDetailPage({
             )}
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+function MailSyncSettings({
+  eventId,
+  event,
+  onSynced,
+  t,
+}: {
+  eventId: string;
+  event: EventDetail | null;
+  onSynced: () => void;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const [syncingDrive, setSyncingDrive] = useState(false);
+  const [syncingSheets, setSyncingSheets] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function toggle(field: "driveDocSyncEnabled" | "statusExportEnabled", enabled: boolean) {
+    setError(null);
+    const res = await fetch(`/api/events/${eventId}/mail/sync-settings`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ [field]: enabled }),
+    });
+    if (!res.ok) {
+      setError(t("mailTab.syncSettingsErrorSaveFailed"));
+      return;
+    }
+    onSynced();
+  }
+
+  async function syncNow(kind: "drive" | "sheets") {
+    setError(null);
+    if (kind === "drive") setSyncingDrive(true);
+    else setSyncingSheets(true);
+    const res = await fetch(`/api/events/${eventId}/mail/${kind}-sync`, { method: "POST" });
+    if (kind === "drive") setSyncingDrive(false);
+    else setSyncingSheets(false);
+    if (!res.ok) {
+      setError(t("mailTab.syncNowFailed"));
+      return;
+    }
+    onSynced();
+  }
+
+  if (!event) return null;
+
+  return (
+    <div>
+      <h3 className="mb-1 text-[15px] font-semibold text-ink">{t("mailTab.syncSettingsTitle")}</h3>
+      <p className="mb-3 text-[13px] text-amber-600">{t("mailTab.syncOneWayWarning")}</p>
+      {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-[14px] text-ink">
+          <input
+            type="checkbox"
+            checked={event.driveDocSyncEnabled}
+            onChange={(e) => toggle("driveDocSyncEnabled", e.target.checked)}
+          />
+          {t("mailTab.driveSyncEnabledLabel")}
+        </label>
+        <button
+          onClick={() => syncNow("drive")}
+          disabled={syncingDrive || !event.driveDocSyncEnabled}
+          className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist disabled:opacity-50"
+        >
+          {syncingDrive ? t("common.loading") : t("mailTab.syncNowButton")}
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-[14px] text-ink">
+          <input
+            type="checkbox"
+            checked={event.statusExportEnabled}
+            onChange={(e) => toggle("statusExportEnabled", e.target.checked)}
+          />
+          {t("mailTab.statusExportEnabledLabel")}
+        </label>
+        <button
+          onClick={() => syncNow("sheets")}
+          disabled={syncingSheets || !event.statusExportEnabled}
+          className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist disabled:opacity-50"
+        >
+          {syncingSheets ? t("common.loading") : t("mailTab.syncNowButton")}
+        </button>
+        {event.statusExportSheetId && (
+          <a
+            href={`https://docs.google.com/spreadsheets/d/${event.statusExportSheetId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[13px] text-ember hover:underline"
+          >
+            {t("mailTab.openSheetLink")}
+          </a>
+        )}
+      </div>
+      {event.statusExportLastSyncedAt && (
+        <p className="mt-2 text-[12px] text-ink-secondary">
+          {t("mailTab.lastSyncedAt", { date: new Date(event.statusExportLastSyncedAt).toLocaleString("cs-CZ") })}
+        </p>
       )}
     </div>
   );

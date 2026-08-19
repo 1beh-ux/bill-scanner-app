@@ -34,6 +34,21 @@ export async function requireModuleAccess(
   return null;
 }
 
+// For routes shared between two modules against the same underlying data
+// (the mailbox OAuth flow and Event.senderEmail are now used by both Health
+// and Mail Helper against the same MailSenderAccount/Event fields) -- access
+// via any one of the listed modules is sufficient.
+export async function requireAnyModuleAccess(
+  user: User,
+  eventId: string,
+  moduleKeys: ModuleKey[]
+): Promise<NextResponse | null> {
+  for (const moduleKey of moduleKeys) {
+    if (await hasModuleAccess(user, eventId, moduleKey)) return null;
+  }
+  return NextResponse.json({ error: "module_access_denied" }, { status: 403 });
+}
+
 // The generic ListTemplate/EventListItem mechanism (see Milestone 1) is
 // shared across modules by `kind`: med/slot/situation are Health's,
 // `document` (Mail Helper) belongs to `mail`. Callers must not gate the

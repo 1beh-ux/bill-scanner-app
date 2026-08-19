@@ -12,8 +12,8 @@ export async function GET() {
   }
 
   const accounts = await prisma.mailSenderAccount.findMany({
-    select: { email: true },
+    select: { email: true, scope: true },
     orderBy: { email: "asc" },
   });
-  return NextResponse.json(accounts.map((a) => a.email));
+  return NextResponse.json(accounts);
 }

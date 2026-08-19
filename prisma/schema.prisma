@@ -163,8 +163,11 @@ model Event {
   driveManifestSpreadsheetId String? @map("drive_manifest_spreadsheet_id")
   senderEmail         String?     @map("sender_email")
   driveDocSyncEnabled      Boolean   @default(true) @map("drive_doc_sync_enabled")
+  statusExportEnabled      Boolean   @default(true) @map("status_export_enabled")
   statusExportSheetId      String?   @map("status_export_sheet_id")
   statusExportLastSyncedAt DateTime? @map("status_export_last_synced_at")
+  mailDoneLabelName        String?   @map("mail_done_label_name")
+  mailQuestionnaireUrl     String?   @map("mail_questionnaire_url")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -533,6 +536,7 @@ model MailSenderAccount {
   id                  String   @id @default(uuid())
   email               String   @unique
   refreshTokenEncrypted String @map("refresh_token_encrypted")
+  scope               String?  @map("scope")
   connectedByUserId   String   @map("connected_by_user_id")
   connectedAt         DateTime @default(now()) @map("connected_at")
 

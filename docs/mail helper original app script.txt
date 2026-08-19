@@ -1,0 +1,3326 @@
+appscript.json:
+{
+  "timeZone": "Europe/Prague",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "webapp": {
+    "executeAs": "USER_DEPLOYING",
+    "access": "ANYONE"
+  },
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/gmail.readonly"
+  ],
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Gmail",
+        "version": "v1",
+        "serviceId": "gmail"
+      }
+    ]
+  }
+}
+
+code.gs:
+function doGet(e) {
+  const page = (e && e.parameter && e.parameter.page) ? e.parameter.page : "index";
+
+  if (page === "app") {
+    return HtmlService.createTemplateFromFile("App")
+      .evaluate()
+      .setTitle("Camp Mail Helper")
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
+
+  return HtmlService.createTemplateFromFile("Index")
+    .evaluate()
+    .setTitle("Camp Mail Helper")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function include(filename) {
+  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+}
+
+function api_getWebAppUrl() {
+  return ScriptApp.getService().getUrl();
+}
+
+function api_bootstrap() {
+  Auth.assertAllowedUser_();
+
+  const userEmail = Session.getEffectiveUser().getEmail();
+  const userConfig = Data.getUserConfig_(userEmail);
+  
+  const cfg = Data.getControllerConfig_();
+  const allEvents = Data.getEvents_();
+
+  // REMOVED: Auth.assertEventAccess_(payload.eventId);
+  
+  // Filter events based on user's allowed events
+  let events = allEvents;
+  if (userConfig && userConfig.allowedEventIds && userConfig.allowedEventIds.length > 0) {
+    events = allEvents.filter(e => userConfig.allowedEventIds.includes(e.eventId));
+  }
+
+  if (events.length === 0) {
+    throw new Error("Nemáte přístup k žádné události. Kontaktujte správce.");
+  }
+
+  // Determine default event: user's default > global config > first available
+  let defaultEventId = null;
+  if (userConfig && userConfig.defaultEventId) {
+    defaultEventId = userConfig.defaultEventId;
+  } else {
+    defaultEventId = cfg.DEFAULT_EVENT_ID || (events[0] ? events[0].eventId : null);
+  }
+
+   const event = events.find(x => x.eventId === defaultEventId) || events[0];
+  const children = Data.getChildren_(event);
+  const documentTypes = Data.getDocumentTypes_(event.eventId);
+
+  return {
+    appTitle: cfg.APP_TITLE || "Camp Mail Helper",
+    userEmail: userEmail,
+    events,
+    selectedEvent: event,
+    children,
+    documentTypes
+  };
+
+}
+
+
+
+function api_selectEvent(eventId) {
+  Auth.assertAllowedUser_();
+  Auth.assertEventAccess_(eventId);
+  
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === eventId);
+  if (!event) throw new Error("Událost nenalezena: " + eventId);
+  const children = Data.getChildren_(event);
+  const documentTypes = Data.getDocumentTypes_(eventId);
+  return { selectedEvent: event, children, documentTypes };
+
+}
+
+
+
+function api_listEmails(maxCount) {
+  Auth.assertAllowedUser_();
+  maxCount = Math.max(1, Math.min(Number(maxCount || 25), 200));
+  return GmailSvc.listInboxMessages_(maxCount);
+}
+
+function api_listEmailDetails(maxCount) {
+  Auth.assertAllowedUser_();
+  maxCount = Math.max(1, Math.min(Number(maxCount || 25), 200));
+  return GmailSvc.listInboxMessageDetails_(maxCount);
+}
+
+function api_prepareAttachmentPreviews(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !payload.messageId) {
+    throw new Error("Neplatný požadavek (chybí eventId/messageId).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const msg = GmailSvc.getMessageObject_(payload.messageId);
+  const atts = GmailSvc.listAttachments_(msg);
+  const previewFolder = DriveSvc.getOrCreateFolder_(event.rootFolderId, "_MailHelper_Previews");
+
+  const ts = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd_HHmmss");
+
+  const previews = atts.map(att => {
+    const safeName = `${ts}__${att.name || "attachment"}`;
+    const file = previewFolder.createFile(att.blob).setName(safeName);
+    return {
+      attachmentId: String(att.attachmentId),
+      fileId: file.getId(),
+      name: safeName,
+      mimeType: att.contentType || ""
+    };
+  });
+
+  DriveSvc.cleanupOldFiles_(previewFolder, { maxAgeHours: 24, keepNewest: 50 });
+
+  return { previews };
+}
+
+function api_bulkMoveEmails(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !Array.isArray(payload.messageIds)) {
+    throw new Error("Neplatný požadavek (chybí eventId/messageIds).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const userEmail = Auth.getUserEmail_ ? Auth.getUserEmail_() : Session.getEffectiveUser().getEmail();
+
+  const moved = [];
+  const failed = [];
+
+  payload.messageIds.forEach(messageId => {
+    try {
+      const msg = GmailSvc.getMessageObject_(messageId);
+      const subject = msg.getSubject() || "";
+      GmailSvc.moveToDone_(messageId, event.doneLabelName);
+      moved.push(messageId);
+
+      Data.appendLog_({
+        userEmail,
+        eventId: event.eventId,
+        eventName: event.eventName,
+        action: "BULK_MOVE_EMAIL",
+        messageId,
+        subject,
+        status: "OK",
+        details: `Moved to label: ${event.doneLabelName}`
+      });
+    } catch (err) {
+      failed.push({ messageId, error: String(err) });
+
+      Data.appendLog_({
+        userEmail,
+        eventId: event.eventId,
+        eventName: event.eventName,
+        action: "BULK_MOVE_EMAIL",
+        messageId,
+        status: "ERROR",
+        details: String(err)
+      });
+    }
+  });
+
+  return { movedCount: moved.length, failedCount: failed.length, moved, failed };
+}
+
+function api_bulkDeleteEmails(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !Array.isArray(payload.messageIds)) {
+    throw new Error("Neplatný požadavek (chybí eventId/messageIds).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const userEmail = Auth.getUserEmail_ ? Auth.getUserEmail_() : Session.getEffectiveUser().getEmail();
+
+  const deleted = [];
+  const failed = [];
+
+  payload.messageIds.forEach(messageId => {
+    try {
+      const msg = GmailSvc.getMessageObject_(messageId);
+      const subject = msg.getSubject() || "";
+      msg.getThread().moveToTrash();
+      deleted.push(messageId);
+
+      Data.appendLog_({
+        userEmail,
+        eventId: event.eventId,
+        eventName: event.eventName,
+        action: "BULK_DELETE_EMAIL",
+        messageId,
+        subject,
+        status: "OK",
+        details: "Moved to trash"
+      });
+    } catch (err) {
+      failed.push({ messageId, error: String(err) });
+
+      Data.appendLog_({
+        userEmail,
+        eventId: event.eventId,
+        eventName: event.eventName,
+        action: "BULK_DELETE_EMAIL",
+        messageId,
+        status: "ERROR",
+        details: String(err)
+      });
+    }
+  });
+
+  return { deletedCount: deleted.length, failedCount: failed.length, deleted, failed };
+}
+
+function api_getLatestLogs(limit) {
+  Auth.assertAllowedUser_();
+  return Data.getLatestLogs_(limit || 30);
+}
+
+function api_prepareAttachmentPreview(payload) {
+  Auth.assertAllowedUser_();
+
+if (!payload || !payload.eventId || !payload.messageId || payload.attachmentId === undefined) {
+  throw new Error("Neplatný požadavek (chybí eventId/messageId/attachmentId).");
+}
+
+Auth.assertEventAccess_(payload.eventId);
+
+const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const msg = GmailSvc.getMessageObject_(payload.messageId);
+  const atts = GmailSvc.listAttachments_(msg);
+  const att = atts.find(a => String(a.attachmentId) === String(payload.attachmentId));
+  if (!att) throw new Error("Příloha nenalezena: " + payload.attachmentId);
+
+  // Create/Reuse preview folder under event root
+  const previewFolder = DriveSvc.getOrCreateFolder_(event.rootFolderId, "_MailHelper_Previews");
+
+  // Create file in Drive for preview
+  const ts = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyyMMdd_HHmmss");
+  const safeName = `${ts}__${att.name || "attachment"}`;
+  const file = previewFolder.createFile(att.blob).setName(safeName);
+    // Cleanup: keep folder sane (trash old files + cap total count)
+  DriveSvc.cleanupOldFiles_(previewFolder, { maxAgeHours: 24, keepNewest: 50 });
+
+
+  return {
+    fileId: file.getId(),
+    name: safeName,
+    mimeType: att.contentType || ""
+  };
+}
+
+function api_deletePreviewFile(fileId) {
+  Auth.assertAllowedUser_();
+  if (!fileId) return { ok: true };
+
+  try {
+    DriveApp.getFileById(String(fileId)).setTrashed(true);
+    return { ok: true };
+  } catch (e) {
+    // Don't block UX if deletion fails (e.g. already trashed)
+    return { ok: false, error: String(e) };
+  }
+}
+
+
+
+
+function api_getEmail(messageId) {
+  Auth.assertAllowedUser_();
+  return GmailSvc.getMessageDetails_(messageId);
+}
+
+function api_buildReplyPreview(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !payload.childName) {
+    throw new Error("Neplatný požadavek (chybí eventId/childName).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const cfg = Data.getControllerConfig_();
+  const questionnaireUrl = event.questionnaireUrl || String(cfg.QUESTIONNAIRE_URL || "").trim();
+
+  const child = Data.findChildByName_(event, payload.childName);
+  if (!child) throw new Error("Dítě nenalezeno: " + payload.childName);
+
+  const documentTypes = Data.getDocumentTypes_(event.eventId);
+  const actions = payload.attachmentActions || [];
+
+  const simulatedChildData = { ...child };
+
+  actions.forEach(a => {
+    const targetChildName = String(a.childName || payload.childName || "").trim();
+
+    if (targetChildName !== String(payload.childName || "").trim()) return;
+
+    if (a.action !== "IGNORE") {
+      const docType = documentTypes.find(d => d.documentKey === a.action);
+      if (docType && docType.columnName) {
+        simulatedChildData[docType.columnName] = docType.expectedValue;
+      }
+    }
+  });
+
+  const appDocType = documentTypes.find(d => d.documentKey === "APPLICATION");
+  const isFirstTimeApplication = appDocType &&
+    actions.some(a =>
+      a.action === "APPLICATION" &&
+      String(a.childName || payload.childName || "").trim() === String(payload.childName || "").trim()
+    ) &&
+    String(child[appDocType.columnName] || "").trim().toLowerCase() !==
+      String(appDocType.expectedValue || "yes").trim().toLowerCase();
+
+  const userEmail = Session.getEffectiveUser().getEmail();
+  const signature = Data.getUserSignature_(userEmail);
+
+  const text = GmailSvc.buildSingleReplyTextCz_({
+    childName: child.childName,
+    childData: simulatedChildData,
+    documentTypes,
+    questionnaireUrl,
+    note: String(payload.note || "").trim(),
+    signature,
+    isFirstTimeApplication
+  });
+
+  return { replyText: text };
+}
+
+function api_executeCustomActions(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !payload.messageId) {
+    throw new Error("Neplatný požadavek (chybí eventId/messageId).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  const msg = GmailSvc.getMessageObject_(payload.messageId);
+  let saved = { savedFiles: [] };
+
+  // Action 1: Save attachments
+  if (payload.actions.saveAttachments) {
+    if (!payload.childName) {
+      throw new Error("Pro uložení příloh je potřeba vybrat dítě.");
+    }
+
+    const attachments = GmailSvc.listAttachments_(msg);
+    const documentTypes = Data.getDocumentTypes_(event.eventId);
+
+    const actionMap = {};
+    (payload.attachmentActions || []).forEach(a => {
+      actionMap[String(a.attachmentId)] = {
+        action: a.action,
+        childName: String(a.childName || payload.childName || "").trim()
+      };
+    });
+
+    const docTypeCounter = {};
+
+    attachments.forEach(att => {
+      const mapped = actionMap[String(att.attachmentId)] || {
+        action: "IGNORE",
+        childName: String(payload.childName || "").trim()
+      };
+
+      const action = mapped.action || "IGNORE";
+      if (action === "IGNORE") return;
+
+      const targetChildName = mapped.childName || String(payload.childName || "").trim();
+      const targetChild = Data.findChildByName_(event, targetChildName);
+      if (!targetChild) {
+        throw new Error("Dítě pro přílohu nenalezeno: " + targetChildName);
+      }
+
+      const docType = documentTypes.find(d => d.documentKey === action);
+      if (!docType || !docType.filenameSuffix) return;
+
+      const childFolder = DriveSvc.getChildFolder_(event.rootFolderId, targetChild.folderName);
+
+      const blob = att.blob;
+      const ext = DriveSvc.getSafeExtension_(blob.getName());
+      const base = targetChild.childName;
+
+      const counterKey = `${targetChild.childName}__${action}`;
+      if (!docTypeCounter[counterKey]) {
+        docTypeCounter[counterKey] = 0;
+      }
+      docTypeCounter[counterKey]++;
+
+      const suffix = docTypeCounter[counterKey] > 1 ? `_${docTypeCounter[counterKey]}` : "";
+      const newName = `${base}_${docType.filenameSuffix}${suffix}${ext}`;
+
+      const file = childFolder.createFile(blob).setName(newName);
+
+      saved.savedFiles.push({
+        name: newName,
+        fileId: file.getId(),
+        documentKey: action,
+        childName: targetChild.childName,
+        rowIndex: targetChild.rowIndex
+      });
+
+      if (!saved.documents) saved.documents = {};
+      if (!saved.documentsByChild) saved.documentsByChild = {};
+
+      saved.documents[action] = true;
+
+      if (!saved.documentsByChild[targetChild.rowIndex]) {
+        saved.documentsByChild[targetChild.rowIndex] = {
+          childName: targetChild.childName,
+          rowIndex: targetChild.rowIndex,
+          documents: {}
+        };
+      }
+
+      saved.documentsByChild[targetChild.rowIndex].documents[action] = true;
+    });
+  }
+
+  // Action 2: Send reply
+  if (payload.actions.sendReply) {
+    if (!payload.replyText || !payload.replyText.trim()) {
+      throw new Error("Pro odeslání odpovědi je potřeba zadat text.");
+    }
+    GmailSvc.replyToMessage_(payload.messageId, payload.replyText);
+  }
+
+  // Action 3: Move email
+  if (payload.actions.moveEmail) {
+    GmailSvc.moveToDone_(payload.messageId, event.doneLabelName);
+  }
+
+  // Action 4: Update table
+  if (payload.actions.updateTable && saved.documentsByChild) {
+    const documentTypes = Data.getDocumentTypes_(event.eventId);
+
+    Object.keys(saved.documentsByChild).forEach(rowKey => {
+      const item = saved.documentsByChild[rowKey];
+      const updates = {};
+
+      Object.keys(item.documents || {}).forEach(docKey => {
+        const docType = documentTypes.find(d => d.documentKey === docKey);
+        if (docType && docType.columnName) {
+          updates[docType.columnName] = docType.expectedValue;
+        }
+      });
+
+      Data.updateChildDocFlags_(event, Number(item.rowIndex), updates);
+    });
+  }
+
+  return {
+    ok: true,
+    saved,
+    actionsExecuted: payload.actions
+  };
+}
+
+function api_deleteEmail(messageId) {
+  Auth.assertAllowedUser_();
+  
+  if (!messageId) {
+    throw new Error("Neplatný požadavek (chybí messageId).");
+  }
+
+
+  const msg = GmailSvc.getMessageObject_(messageId);
+  const thread = msg.getThread();
+  thread.moveToTrash();
+
+  return { ok: true };
+}
+
+
+
+
+
+function api_prepareBulk(eventId) {
+  Auth.assertAllowedUser_();
+  Auth.assertEventAccess_(eventId);  // FIXED: use eventId not payload.eventId
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === eventId);
+  if (!event) throw new Error("Událost nenalezena: " + eventId);
+
+  // Use event-specific questionnaire URL, fallback to global config if not set
+  const cfg = Data.getControllerConfig_();
+  const questionnaireUrl = event.questionnaireUrl || String(cfg.QUESTIONNAIRE_URL || "").trim();
+
+  const userEmail = Session.getEffectiveUser().getEmail();
+  const signature = Data.getUserSignature_(userEmail);
+
+  const children = Data.getChildren_(event);
+  const documentTypes = Data.getDocumentTypes_(event.eventId);
+
+  const rows = children
+    .filter(c => (c.parentEmail || "").toString().trim())
+    .map(c => {
+      const allYes = GmailSvc.isAllYes_(c, documentTypes);
+      
+      // Build dynamic status object
+const statusObj = {
+  rowIndex: c.rowIndex,
+  childName: c.childName,
+  parentEmail: c.parentEmail,
+  allYes,
+  defaultSend: !allYes
+};
+      
+      // Add each document type's status
+      documentTypes.forEach(docType => {
+        statusObj[docType.documentKey] = c[docType.columnName] || "";
+      });
+      
+      return statusObj;
+    });
+
+  const templatePreview = GmailSvc.buildBulkTemplatePreviewCz_({
+    signature,
+    questionnaireUrl,
+    documentTypes
+  });
+
+
+  return {
+    count: rows.length,
+    rows,
+    templatePreview
+  };
+}
+function api_sendBulkSelected(payload) {
+  Auth.assertAllowedUser_();
+
+  if (!payload || !payload.eventId || !Array.isArray(payload.rowIndexes)) {
+    throw new Error("Neplatný požadavek (chybí eventId/rowIndexes).");
+  }
+
+  Auth.assertEventAccess_(payload.eventId);
+
+  const events = Data.getEvents_();
+  const event = events.find(x => x.eventId === payload.eventId);
+  if (!event) throw new Error("Událost nenalezena: " + payload.eventId);
+
+  // Use event-specific questionnaire URL, fallback to global config if not set
+  const cfg = Data.getControllerConfig_();
+  const questionnaireUrl = event.questionnaireUrl || String(cfg.QUESTIONNAIRE_URL || "").trim();
+
+  const userEmail = Session.getEffectiveUser().getEmail();
+  const signature = Data.getUserSignature_(userEmail);
+  const documentTypes = Data.getDocumentTypes_(event.eventId);
+
+  const rowSet = new Set(payload.rowIndexes.map(x => Number(x)));
+  const children = Data.getChildren_(event)
+    .filter(c => rowSet.has(Number(c.rowIndex)))
+    .filter(c => (c.parentEmail || "").toString().trim());
+
+  const sent = [];
+  const failed = [];
+
+  children.forEach(c => {
+    try {
+      const subject = `${event.eventName} | Stav dokumentů (${c.childName})`;
+
+      const body = GmailSvc.buildBulkUpdateTextCz_({
+        childName: c.childName,
+        childData: c,
+        documentTypes,
+        signature,
+        questionnaireUrl
+      });
+
+      GmailApp.sendEmail(c.parentEmail, subject, body);
+      sent.push({ childName: c.childName, parentEmail: c.parentEmail });
+    } catch (err) {
+      failed.push({ childName: c.childName, parentEmail: c.parentEmail, error: String(err) });
+    }
+  });
+
+  return { sentCount: sent.length, failedCount: failed.length, sent, failed };
+}
+
+
+Auth.gs:
+const Auth = (() => {
+
+  function getUserEmail_() {
+    try {
+      const e1 = Session.getActiveUser().getEmail();
+      if (e1) return e1;
+    } catch (err) {}
+
+    try {
+      const e2 = Session.getEffectiveUser().getEmail();
+      if (e2) return e2;
+    } catch (err) {}
+
+    throw new Error(
+      "Nepodařilo se zjistit email uživatele. Zkontrolujte oauthScopes (userinfo.email)."
+    );
+  }
+
+  function assertAllowedUser_() {
+    const email = getUserEmail_();
+    const allowed = Data.getAllowedUsers_();
+    const ok = allowed.some(u => (u.email || "").toLowerCase() === email.toLowerCase());
+
+    if (!ok) {
+      throw new Error(
+        "Nemáte přístup k této aplikaci. Požádejte správce, aby vás přidal do listu Users. " +
+        `(${email})`
+      );
+    }
+  }
+
+  function assertEventAccess_(eventId) {
+    const email = getUserEmail_();
+    const userConfig = Data.getUserConfig_(email);
+    
+    if (!userConfig) {
+      throw new Error("Uživatel nenalezen v konfiguraci.");
+    }
+
+    // If no allowed events defined, allow all (backward compatibility)
+    if (!userConfig.allowedEventIds || userConfig.allowedEventIds.length === 0) {
+      return;
+    }
+
+    // Check if user has access to this event
+    const hasAccess = userConfig.allowedEventIds.includes(eventId);
+    if (!hasAccess) {
+      throw new Error(`Nemáte přístup k události "${eventId}". Kontaktujte správce.`);
+    }
+  }
+
+return { getUserEmail_, assertAllowedUser_, assertEventAccess_ };
+
+
+
+})();
+
+
+Data.gs:
+const Data = (() => {
+
+  function controllerSs_() {
+    return SpreadsheetApp.getActiveSpreadsheet();
+  }
+
+  function sheetByName_(ss, name) {
+    const sh = ss.getSheetByName(name);
+    if (!sh) throw new Error(`Chybí list "${name}" v controller spreadsheetu.`);
+    return sh;
+  }
+
+  function readTable_(sheet) {
+    const values = sheet.getDataRange().getValues();
+    if (!values.length) return [];
+    const headers = values[0].map(h => String(h || "").trim());
+    const rows = [];
+    for (let i = 1; i < values.length; i++) {
+      const obj = {};
+      headers.forEach((h, idx) => obj[h] = values[i][idx]);
+      obj._rowIndex = i + 1; // 1-based
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function normalizeMultiline_(s) {
+    let t = String(s || "");
+
+    // Trim whitespace
+    t = t.trim();
+
+    // Remove surrounding quotes if user pasted "...."
+    if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+      t = t.slice(1, -1);
+    }
+
+    // Convert literal \n into real newlines
+    // (user sometimes writes \n inside a cell)
+    t = t.replace(/\\n/g, "\n");
+
+    // Normalize CRLF
+    t = t.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    return t.trim();
+  }
+
+  /**
+   * Supports BOTH formats:
+   * A) Vertical:
+   *   Key | Value
+   *   APP_TITLE | ...
+   * B) Wide (your current):
+   *   DEFAULT_EVENT_ID | APP_TITLE | QUESTIONNAIRE_URL
+   *   SUMMER_2026      | ...       | https://...
+   */
+  function getControllerConfig_() {
+    const sh = sheetByName_(controllerSs_(), "Config");
+    const values = sh.getDataRange().getValues();
+    if (!values.length) return {};
+
+    const header = values[0].map(x => String(x || "").trim());
+    const out = {};
+
+    // Case A: first row includes Key/Value headers
+    const keyIdx = header.findIndex(h => h.toLowerCase() === "key");
+    const valIdx = header.findIndex(h => h.toLowerCase() === "value");
+    if (keyIdx >= 0 && valIdx >= 0) {
+      for (let r = 1; r < values.length; r++) {
+        const k = String(values[r][keyIdx] || "").trim();
+        if (!k) continue;
+        out[k] = String(values[r][valIdx] || "").trim();
+      }
+      return out;
+    }
+
+    // Case B: wide format => take the first non-empty data row
+    let dataRow = null;
+    for (let r = 1; r < values.length; r++) {
+      const any = values[r].some(v => String(v || "").trim() !== "");
+      if (any) { dataRow = values[r]; break; }
+    }
+    if (!dataRow) return {};
+
+    header.forEach((k, i) => {
+      const key = String(k || "").trim();
+      if (!key) return;
+      out[key] = String(dataRow[i] || "").trim();
+    });
+
+    return out;
+  }
+
+  function getEvents_() {
+    const sh = sheetByName_(controllerSs_(), "Events");
+    const rows = readTable_(sh);
+
+    return rows
+      .filter(r => String(r.EventId || "").trim())
+      .map(r => ({
+        eventId: String(r.EventId || "").trim(),
+        eventName: String(r.EventName || "").trim(),
+        childrenSpreadsheetId: String(r.ChildrenSpreadsheetId || "").trim(),
+        childrenSheetName: String(r.ChildrenSheetName || "Children").trim(),
+        rootFolderId: String(r.RootFolderId || "").trim(),
+        doneLabelName: String(r.DoneLabelName || "CampDone").trim(),
+        questionnaireUrl: String(r.QuestionnaireURL || "").trim()
+      }));
+  }
+
+
+  function getAllowedUsers_() {
+    const sh = sheetByName_(controllerSs_(), "Users");
+    const rows = readTable_(sh);
+
+    return rows
+      .filter(r => String(r.Active || "").toUpperCase() === "TRUE")
+      .map(r => ({
+        email: String(r.Email || "").trim(),
+        role: String(r.Role || "").trim(),
+        signature: normalizeMultiline_(r.Signature || r.signature || ""),
+        defaultEventId: String(r.DefaultEventId || "").trim(),
+        allowedEventIds: String(r.AllowedEventIds || "").trim().split(',').map(x => x.trim()).filter(x => x)
+      }));
+  }
+
+  function getUserConfig_(email) {
+    const users = getAllowedUsers_();
+    return users.find(x => (x.email || "").toLowerCase() === (email || "").toLowerCase()) || null;
+  }
+
+    function getDocumentTypes_(eventId) {
+    const sh = sheetByName_(controllerSs_(), "DocumentTypes");
+    const rows = readTable_(sh);
+
+    return rows
+      .filter(r => String(r.EventId || "").trim() === String(eventId || "").trim())
+      .filter(r => String(r.Active || "").toUpperCase() === "TRUE")
+      .map(r => ({
+        documentKey: String(r.DocumentKey || "").trim(),
+        displayName: String(r.DisplayName || "").trim(),
+        columnName: String(r.ColumnName || "").trim(),
+        expectedValue: String(r.ExpectedValue || "Yes").trim(),
+        filenameSuffix: String(r.FilenameSuffix || "").trim(),
+        active: true
+      }));
+  }
+
+  function getDocumentTypeByKey_(eventId, documentKey) {
+    const docTypes = getDocumentTypes_(eventId);
+    return docTypes.find(d => d.documentKey === documentKey) || null;
+  }
+
+
+
+  function getUserSignature_(email) {
+    const users = getAllowedUsers_();
+    const u = users.find(x => (x.email || "").toLowerCase() === (email || "").toLowerCase());
+    return (u && u.signature) ? u.signature : "";
+  }
+
+
+
+
+
+  function openChildrenSheet_(event) {
+    if (!event.childrenSpreadsheetId) {
+      throw new Error("Chybí ChildrenSpreadsheetId v Events listu. Zkontrolujte sloupec 'ChildrenSpreadsheetId' pro událost '" + event.eventName + "'.");
+    }
+    let ss;
+    try {
+      ss = SpreadsheetApp.openById(event.childrenSpreadsheetId);
+    } catch (e) {
+      throw new Error(`Nelze otevřít spreadsheet dětí s ID "${event.childrenSpreadsheetId}" pro událost '${event.eventName}'. Zkontrolujte oprávnění nebo platnost ID. Původní chyba: ${e.message}`);
+    }
+    const sh = ss.getSheetByName(event.childrenSheetName);
+    if (!sh) {
+        throw new Error(`V children spreadsheetu "${ss.getName()}" (ID: "${event.childrenSpreadsheetId}") chybí list "${event.childrenSheetName}". Zkontrolujte sloupec 'ChildrenSheetName' v listu Events.`);
+    }
+    return sh;
+  }
+
+
+  function getChildren_(event) {
+    const sh = openChildrenSheet_(event);
+    const rows = readTable_(sh);
+
+    return rows
+      .filter(r => String(r.ChildName || "").trim())
+      .map(r => {
+        const child = {
+          rowIndex: r._rowIndex,
+          childName: String(r.ChildName || "").trim(),
+          parentEmail: String(r.ParentEmail || "").trim(),
+          folderName: String(r.FolderName || "").trim()
+        };
+        
+        // Add all other columns dynamically with original names preserved
+        Object.keys(r).forEach(key => {
+          if (!child[key] && key !== '_rowIndex') {
+            child[key] = String(r[key] || "").trim();
+          }
+        });
+        
+        return child;
+      });
+  }
+
+
+  function findChildByName_(event, childName) {
+    const key = String(childName || "").trim().toLowerCase();
+    const children = getChildren_(event);
+    return children.find(c => c.childName.toLowerCase() === key) || null;
+  }
+
+  function updateChildDocFlags_(event, rowIndex, updates) {
+    if (!updates || Object.keys(updates).length === 0) return;
+    
+    const sh = openChildrenSheet_(event);
+    const header = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].map(x => String(x).trim());
+
+    Object.keys(updates).forEach(columnName => {
+      const colIndex = header.indexOf(columnName) + 1;
+      if (colIndex > 0) {
+        sh.getRange(rowIndex, colIndex).setValue(updates[columnName]);
+      }
+    });
+  }
+function getOrCreateLogsSheet_() {
+  const ss = controllerSs_();
+  let sh = ss.getSheetByName("Logs");
+
+  const headers = [
+    "Timestamp",
+    "UserEmail",
+    "EventId",
+    "EventName",
+    "Action",
+    "MessageId",
+    "ChildName",
+    "Subject",
+    "Status",
+    "Details"
+  ];
+
+  if (!sh) {
+    sh = ss.insertSheet("Logs");
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+  }
+
+  return sh;
+}
+
+function appendLog_(entry) {
+  const sh = getOrCreateLogsSheet_();
+
+  sh.appendRow([
+    new Date(),
+    entry.userEmail || "",
+    entry.eventId || "",
+    entry.eventName || "",
+    entry.action || "",
+    entry.messageId || "",
+    entry.childName || "",
+    entry.subject || "",
+    entry.status || "",
+    entry.details || ""
+  ]);
+}
+
+function getLatestLogs_(limit) {
+  limit = Math.max(1, Math.min(Number(limit || 30), 100));
+
+  const sh = getOrCreateLogsSheet_();
+  const lastRow = sh.getLastRow();
+  if (lastRow <= 1) return [];
+
+  const startRow = Math.max(2, lastRow - limit + 1);
+  const numRows = lastRow - startRow + 1;
+  const values = sh.getRange(startRow, 1, numRows, 10).getValues();
+
+  return values.reverse().map(r => ({
+    timestamp: r[0] instanceof Date ? r[0].toISOString() : String(r[0] || ""),
+    userEmail: String(r[1] || ""),
+    eventId: String(r[2] || ""),
+    eventName: String(r[3] || ""),
+    action: String(r[4] || ""),
+    messageId: String(r[5] || ""),
+    childName: String(r[6] || ""),
+    subject: String(r[7] || ""),
+    status: String(r[8] || ""),
+    details: String(r[9] || "")
+  }));
+}
+
+  return {
+    getControllerConfig_,
+    getEvents_,
+    getAllowedUsers_,
+    getUserSignature_,
+    getUserConfig_,
+    getChildren_,
+    findChildByName_,
+    updateChildDocFlags_,
+    getDocumentTypes_,
+    appendLog_,
+getLatestLogs_,
+    getDocumentTypeByKey_
+  };
+
+})();
+
+
+GmailSc.gs:
+const GmailSvc = (() => {
+
+
+function listInboxMessages_(maxCount) {
+  maxCount = Math.max(1, Math.min(Number(maxCount || 25), 200));
+
+  // Message view query:
+  // - in:inbox = only inbox
+  // - -from:me = exclude your sent replies from the stream
+  const q = 'in:inbox -from:me';
+
+  const res = Gmail.Users.Messages.list('me', {
+    q,
+    maxResults: maxCount
+  });
+
+  const ids = (res.messages || []).map(m => m.id);
+  const out = [];
+
+  ids.forEach(id => {
+    const msg = Gmail.Users.Messages.get('me', id, { format: 'metadata' });
+
+    const headers = {};
+    (msg.payload.headers || []).forEach(h => headers[h.name.toLowerCase()] = h.value);
+
+    out.push({
+      messageId: id,
+      threadId: msg.threadId || '',
+      from: headers['from'] || '',
+      subject: headers['subject'] || '',
+      date: (headers['date'] ? new Date(headers['date']).toISOString() : ''),
+      snippet: (msg.snippet || '').slice(0, 200)
+    });
+  });
+
+  // newest first (API already returns newest, but keep it deterministic)
+  out.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return out;
+}
+
+
+
+
+
+  function getMessageObject_(messageId) {
+    return GmailApp.getMessageById(messageId);
+  }
+
+  function listAttachments_(message) {
+    const atts = message.getAttachments({ includeInlineImages: false, includeAttachments: true });
+    return atts.map((blob, idx) => ({
+      attachmentId: String(idx),
+      name: blob.getName(),
+      contentType: blob.getContentType(),
+      size: blob.getBytes().length,
+      blob
+    }));
+  }
+
+
+
+
+  function getMessageDetails_(messageId) {
+    const msg = getMessageObject_(messageId);
+    const body = msg.getPlainBody() || "";
+
+    const attachments = listAttachments_(msg).map(a => ({
+      attachmentId: a.attachmentId,
+      name: a.name,
+      contentType: a.contentType,
+      size: a.size
+    }));
+
+    return {
+      messageId,
+      from: msg.getFrom(),
+      subject: msg.getSubject(),
+      date: msg.getDate() ? msg.getDate().toISOString() : "",
+      bodySnippet: body.slice(0, 1200),
+      attachments
+    };
+  }
+
+  function replyToMessage_(messageId, bodyText) {
+    const msg = getMessageObject_(messageId);
+    
+    // Get original message details for proper reply formatting
+    const originalBody = msg.getPlainBody() || "";
+    const originalFrom = msg.getFrom() || "";
+    const originalDate = msg.getDate() ? msg.getDate().toLocaleString('cs-CZ') : "";
+    const originalSubject = msg.getSubject() || "";
+    
+    // Create proper reply format with original message quoted
+    const replyBody = [
+      bodyText,
+      "",
+      "-----Original Message-----",
+      `From: ${originalFrom}`,
+      `Date: ${originalDate}`,
+      `Subject: ${originalSubject}`,
+      "",
+      originalBody
+    ].join("\n");
+    
+    msg.reply(replyBody);
+  }
+
+  function ensureLabel_(labelName) {
+    let label = GmailApp.getUserLabelByName(labelName);
+    if (!label) label = GmailApp.createLabel(labelName);
+    return label;
+  }
+
+  function moveToDone_(messageId, doneLabelName) {
+    const msg = getMessageObject_(messageId);
+    const thread = msg.getThread();
+    const label = ensureLabel_(doneLabelName);
+
+    thread.addLabel(label);
+    thread.moveToArchive();
+  }
+
+  function isYes_(v) {
+    return String(v || "").trim().toLowerCase() === "yes";
+  }
+
+  function icon_(vYesNo) {
+    return isYes_(vYesNo) ? "✅" : "❌";
+  }
+
+    function buildSingleReplyTextCz_(p) {
+    const note = String(p.note || "").trim();
+    const noteLines = note ? ["", note, ""] : [];
+    const signature = String(p.signature || "").trim();
+    
+    // Build document status lines dynamically
+    const docLines = [];
+    const documentTypes = p.documentTypes || [];
+    
+    documentTypes.forEach(docType => {
+      const value = String(p.childData[docType.columnName] || "").trim();
+      const expectedValue = String(docType.expectedValue || "yes").trim();
+      const isComplete = value.toLowerCase() === expectedValue.toLowerCase();
+      const icon = isComplete ? "✅" : "❌";
+
+      
+      // Special handling for first-time application
+      if (docType.documentKey === "APPLICATION" && isComplete && p.isFirstTimeApplication) {
+        docLines.push(`- ${icon} ${docType.displayName} (tímto potvrzujeme místo na táboře),`);
+      } else {
+        docLines.push(`- ${icon} ${docType.displayName},`);
+      }
+    });
+    
+    // Check if questionnaire link is needed
+    const qDoc = documentTypes.find(d => d.documentKey === "QUESTIONNAIRE");
+    const needsQuestionnaire = qDoc && (
+      String(p.childData[qDoc.columnName] || "").trim().toLowerCase() !==
+      String(qDoc.expectedValue || "yes").trim().toLowerCase()
+    );
+    const qUrl = String(p.questionnaireUrl || "").trim();
+    const questionnaireLines = (needsQuestionnaire && qUrl)
+      ? ["", `Odkaz na vyplnění dotazníku: ${qUrl}.`, ""]
+      : [];
+
+    return [
+      "Dobrý den,",
+      "",
+      "Děkujeme za zaslání a posíláme potvrzení o aktuálním stavu dokumentů:",
+      "",
+      ...docLines,
+      ...questionnaireLines,
+      ...noteLines,
+      "Děkujeme za důvěru,",
+      "",
+      signature
+    ].join("\n");
+  }
+
+
+  function buildBulkUpdateTextCz_(p) {
+    const url = String(p.questionnaireUrl || "").trim() || "[URL]";
+    const signature = String(p.signature || "").trim();
+    
+    // Build document status lines dynamically
+    const docLines = [];
+    const documentTypes = p.documentTypes || [];
+    
+    documentTypes.forEach(docType => {
+      const value = String(p.childData[docType.columnName] || "").trim();
+      const expectedValue = String(docType.expectedValue || "yes").trim();
+      const isComplete = value.toLowerCase() === expectedValue.toLowerCase();
+      const iconStr = isComplete ? "✅" : "❌";
+
+      docLines.push(`- ${iconStr} ${docType.displayName},`);
+    });
+
+    return [
+      "Dobrý den,",
+      "",
+      `posíláme průběžnou informaci ke stavu podkladů pro dítě: ${p.childName}`,
+      "",
+      ...docLines,
+      "",
+      `Pokud něco chybí, prosím o poslání v odpovědi na tento email. Odkaz na vyplnění dotazníku: ${url}.`,
+      "",
+      "Děkujeme,",
+      "",
+      signature
+    ].join("\n");
+  }
+
+
+  function buildBulkTemplatePreviewCz_(p) {
+    const url = String(p.questionnaireUrl || "").trim() || "[URL]";
+    const signature = String(p.signature || "").trim();
+    
+    // Build document status lines dynamically (example with mixed statuses)
+    const docLines = [];
+    const documentTypes = p.documentTypes || [];
+    
+    documentTypes.forEach((docType, idx) => {
+      // Alternate icons for preview (just to show variety)
+      const iconStr = (idx % 2 === 0) ? "✅" : "❌";
+      docLines.push(`- ${iconStr} ${docType.displayName},`);
+    });
+
+    return [
+      "Dobrý den,",
+      "",
+      "posíláme průběžnou informaci ke stavu podkladů pro dítě: [jméno dítěte]",
+      "",
+      ...docLines,
+      "",
+      `Pokud něco chybí, prosím o poslání v odpovědi na tento email. Odkaz na vyplnění dotazníku: ${url}.`,
+      "",
+      "Děkujeme,",
+      "",
+      signature
+    ].join("\n");
+  }
+  function isAllYes_(childData, documentTypes) {
+    return documentTypes.every(docType => {
+      const value = String(childData[docType.columnName] || "").trim();
+      const expectedValue = String(docType.expectedValue || "yes").trim();
+      return value.toLowerCase() === expectedValue.toLowerCase();
+    });
+  }
+function listInboxMessageDetails_(maxCount) {
+  const emails = listInboxMessages_(maxCount);
+  return emails.map(e => {
+    const detail = getMessageDetails_(e.messageId);
+    return Object.assign({}, e, detail);
+  });
+}
+
+
+  return {
+    listInboxMessages_,
+    getMessageDetails_,
+    getMessageObject_,
+    listAttachments_,
+    replyToMessage_,
+    moveToDone_,
+    buildSingleReplyTextCz_,
+    buildBulkUpdateTextCz_,
+    buildBulkTemplatePreviewCz_,
+    listInboxMessageDetails_,
+    isAllYes_
+  };
+
+
+})();
+
+
+
+DriveSvc.gs:
+const DriveSvc = (() => {
+
+  function getChildFolder_(rootFolderId, childFolderName) {
+    if (!rootFolderId) {
+      throw new Error("Chybí RootFolderId v Events listu. Zkontrolujte sloupec 'RootFolderId'.");
+    }
+    if (!childFolderName) {
+      throw new Error("Chybí FolderName u dítěte. Zkontrolujte sloupec 'FolderName' v Children spreadsheetu.");
+    }
+
+    let root;
+    try {
+      root = DriveApp.getFolderById(rootFolderId);
+    } catch (e) {
+      throw new Error(`Nelze otevřít root složku pro událost s ID "${rootFolderId}". Zkontrolujte oprávnění nebo platnost ID. Původní chyba: ${e.message}`);
+    }
+
+    const iter = root.getFoldersByName(childFolderName);
+
+    if (!iter.hasNext()) {
+      throw new Error(`Složka dítěte s názvem "${childFolderName}" nenalezena v root složce (ID: "${rootFolderId}"). Ujistěte se, že existuje a je správně pojmenována.`);
+    }
+    return iter.next();
+  }
+
+
+  function getSafeExtension_(originalName) {
+    const name = String(originalName || "");
+    const idx = name.lastIndexOf(".");
+    if (idx < 0) return "";
+    const ext = name.slice(idx).trim();
+    if (ext.length > 10) return "";
+    return ext;
+  }
+
+  function getOrCreateFolder_(parentFolderId, folderName) {
+    if (!parentFolderId) throw new Error("Chybí parentFolderId.");
+    if (!folderName) throw new Error("Chybí folderName.");
+
+    const parent = DriveApp.getFolderById(parentFolderId);
+    const it = parent.getFoldersByName(folderName);
+    if (it.hasNext()) return it.next();
+    return parent.createFolder(folderName);
+  }
+
+  function cleanupOldFiles_(folder, options) {
+  options = options || {};
+  const maxAgeHours = Number(options.maxAgeHours || 24);
+  const keepNewest = Number(options.keepNewest || 50);
+
+  const now = Date.now();
+  const cutoff = now - (maxAgeHours * 60 * 60 * 1000);
+
+  // Collect files
+  const files = [];
+  const it = folder.getFiles();
+  while (it.hasNext()) {
+    const f = it.next();
+    files.push(f);
+  }
+
+  // Sort newest first
+  files.sort((a, b) => b.getLastUpdated().getTime() - a.getLastUpdated().getTime());
+
+  // Keep N newest always
+  const keepSet = new Set(files.slice(0, keepNewest).map(f => f.getId()));
+
+  // Trash old ones + anything beyond keepNewest (optional)
+  files.forEach((f, idx) => {
+    const updated = f.getLastUpdated().getTime();
+    const isOld = updated < cutoff;
+    const beyondCap = idx >= keepNewest;
+
+    if (isOld || beyondCap) {
+      try { f.setTrashed(true); } catch (e) {}
+    }
+  });
+}
+
+
+  return { getChildFolder_, getSafeExtension_, getOrCreateFolder_, cleanupOldFiles_  };
+
+
+})();
+
+
+Index.html:
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?!= include("Styles"); ?>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="title">Camp Mail Helper</div>
+      <div class="muted index-description">
+        Aplikace pro zpracování emailů od rodičů: uložení příloh do Drive, kontrola stavu (platba/dotazník) a odpověď.
+      </div>
+
+      <div class="index-button-wrap">
+        <button class="btn" id="btnOpenApp">Otevřít aplikaci</button>
+        <div class="muted index-hint" id="openHint"></div>
+      </div>
+
+      <div class="muted index-note">
+        Pozn.: Přístup mají pouze uživatelé uvedení v listu <b>Users</b>.
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    function api(fn, payload){
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(err => reject(err))
+          [fn](payload);
+      });
+    }
+
+    window.addEventListener('load', async () => {
+      const hint = document.getElementById('openHint');
+      try{
+        const url = await api('api_getWebAppUrl');
+        hint.textContent = 'URL: ' + url;
+        document.getElementById('btnOpenApp').onclick = () => {
+          window.top.location.href = url + '?page=app';
+        };
+      }catch(e){
+        hint.textContent = 'Chyba: ' + (e && e.message ? e.message : e);
+      }
+    });
+  </script>
+</body>
+</html>
+
+
+App.html:
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <?!= include("Styles"); ?>
+</head>
+<body>
+  <div class="container">
+    <div id="fatal" class="card fatal-card">
+      <div class="section-title fatal-title">Chyba při načtení</div>
+      <pre class="pre fatal-text" id="fatalText"></pre>
+    </div>
+
+    <div class="topbar">
+      <div class="topbar-left-section">
+        <div class="title" id="appTitle">Camp Mail Helper</div>
+        <div class="muted" id="userLine"></div>
+      </div>
+      <div class="topbar-right-controls">
+        <label class="theme-toggle">
+          <div class="theme-switch" id="themeSwitch"></div>
+          <span id="themeLabel">🌙</span>
+        </label>
+        <a href="https://accounts.google.com/AccountChooser" target="_blank" class="btn btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
+          👤 Přepnout účet
+        </a>
+        <select class="select topbar-event-select" id="eventSelect"></select>
+        <button class="btn btn-secondary" id="btnReload">Reload</button>
+<button class="btn btn-secondary" id="btnBulk">Hromadný status update</button>
+<button class="btn btn-secondary" id="btnLogs">Logy</button>
+      </div>
+
+
+
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="section-title">Inbox</div>
+<div class="row inbox-controls">
+  <input class="input email-count-input" id="emailCount" type="number" min="5" max="100" value="25">
+  <button class="btn" id="btnLoadEmails">Načíst emaily</button>
+  <select class="select email-sort-select" id="emailSort">
+    <option value="oldest">Od nejstarších</option>
+    <option value="newest">Od nejnovějších</option>
+  </select>
+  <button class="btn btn-secondary" id="btnToggleSelectMode">Vybrat emaily</button>
+</div>
+
+<div class="row bulk-email-actions" id="bulkEmailActions">
+  <button class="btn btn-secondary" id="btnSelectAllEmails">Vybrat vše</button>
+  <button class="btn btn-secondary" id="btnClearEmailSelection">Zrušit výběr</button>
+  <button class="btn btn-secondary" id="btnBulkMoveEmails">Přesunout vybrané</button>
+  <button class="btn btn-danger" id="btnBulkDeleteEmails">Smazat vybrané</button>
+  <span class="muted" id="bulkEmailStatus"></span>
+</div>
+        <div class="muted inbox-status" id="inboxStatus"></div>
+        <div id="emailList" class="list email-list"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">Detail emailu</div>
+        <div class="muted email-detail-status" id="detailStatus"></div>
+        <div id="emailDetailEmpty" class="muted email-detail-empty">Vyber email vlevo.</div>
+        <div id="emailDetail" class="email-detail-content">
+          <div class="kv kv-detail-section">
+            <div class="k">Od</div><div class="v" id="dFrom"></div>
+            <div class="k">Předmět</div><div class="v" id="dSubject"></div>
+            <div class="k">Datum</div><div class="v" id="dDate"></div>
+          </div>
+          <div class="section-title detail-section-title">Text (výňatek)</div>
+          <pre class="pre" id="dBody"></pre>
+          <div class="section-title detail-section-title">Dítě</div>
+          <div class="row child-selection-row">
+            <input class="input" id="childSearch" placeholder="Hledat dítě (např. Novák)..." />
+            <select class="select child-select-dropdown" id="childSelect"></select>
+          </div>
+          <div class="muted child-hint" id="childHint"></div>
+          <div class="section-title detail-section-title">Přílohy</div>
+          <div id="attList" class="list"></div>
+          <div class="section-title detail-section-title">Poznámka (volitelné)</div>
+          <input class="input" id="noteInput" placeholder="Např. Prosíme ještě o doplnění XYZ..." />
+          <div class="section-title detail-section-title">Náhled / úprava odpovědi</div>
+          <textarea class="input reply-edit-textarea" id="replyEdit"></textarea>
+          <div class="row reply-controls-row">
+            <button class="btn btn-secondary" id="btnRefreshReply">Obnovit návrh</button>
+            <span class="muted" id="replyHint"></span>
+          </div>
+          <div class="section-title detail-section-title">Akce</div>
+          <div class="actions-section">
+            <div class="action-checkboxes">
+              <label class="action-checkbox-item">
+                <input type="checkbox" id="actionSaveAttachments" checked>
+                <span>💾 Uložit přílohy</span>
+              </label>
+              <label class="action-checkbox-item">
+                <input type="checkbox" id="actionSendReply" checked>
+                <span>📧 Odeslat odpověď</span>
+              </label>
+              <label class="action-checkbox-item">
+                <input type="checkbox" id="actionMoveEmail" checked>
+                <span>📁 Přesunout email</span>
+              </label>
+              <label class="action-checkbox-item">
+                <input type="checkbox" id="actionUpdateTable" checked>
+                <span>📊 Aktualizovat tabulku</span>
+              </label>
+            </div>
+            <div class="action-buttons">
+              <button class="btn" id="btnExecuteActions">Provést vybrané akce</button>
+              <button class="btn btn-danger" id="btnDelete">Smazat email</button>
+            </div>
+            <span class="muted" id="processStatus"></span>
+          </div>
+
+
+        </div>
+      </div>
+    </div>
+
+    <!-- BULK MODAL -->
+    <div class="modal bulk-modal" id="bulkModal">
+      <div class="modal-content">
+        <div class="row modal-header-row">
+          <div class="section-title">Hromadný status update</div>
+          <button class="btn btn-secondary" id="btnCloseBulk">Zavřít</button>
+        </div>
+<div class="muted bulk-description">Zaškrtnuté řádky budou odeslány. Řádky s kompletním stavem dokumentů jsou defaultně odškrtnuté.</div>        <div class="section-title bulk-template-title">Text emailu (náhled)</div>
+        <pre class="pre bulk-template-preview" id="bulkTemplatePreview"></pre>
+        <div class="bulk-controls-row row">
+          <button class="btn" id="btnLoadBulk">Načíst přehled</button>
+          <button class="btn btn-secondary bulk-control-btn" id="btnCheckAll">Zaškrtnout vše</button>
+          <button class="btn btn-secondary bulk-control-btn" id="btnUncheckAll">Odškrtnout vše</button>
+          <button class="btn btn-danger bulk-control-btn" id="btnSendBulk" disabled>Odeslat vybrané</button>
+          <span class="muted bulk-status" id="bulkStatus"></span>
+        </div>
+        <div id="bulkTableWrap" class="bulk-table-wrap"></div>
+      </div>
+    </div>
+
+
+<!-- LOGS MODAL -->
+<div class="modal logs-modal" id="logsModal">
+  <div class="modal-content logs-modal-content">
+    <div class="row modal-header-row">
+      <div class="section-title">Poslední akce</div>
+      <button class="btn btn-secondary" id="btnCloseLogs">Zavřít</button>
+    </div>
+    <div class="muted logs-status" id="logsStatus"></div>
+    <div id="logsList" class="logs-list"></div>
+  </div>
+</div>
+
+
+
+    <!-- PREVIEW MODAL -->
+    <div class="modal preview-modal" id="previewModal">
+      <div class="modal-content preview-modal-content">
+        <div class="row modal-header-row">
+          <div class="section-title" id="previewTitle">Náhled přílohy</div>
+          <button class="btn btn-secondary" id="btnClosePreview">Zavřít</button>
+        </div>
+        <div class="muted preview-status" id="previewStatus"></div>
+        <div class="preview-frame-wrap">
+          <iframe id="previewFrame" class="preview-iframe" referrerpolicy="no-referrer"></iframe>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <?!= include("Script"); ?>
+</body>
+</html>
+
+
+Styles.html:
+<style>
+  :root{
+    --bg:#0b1220;
+    --card:#121a2b;
+    --muted:#9bb0d0;
+    --text:#e8f0ff;
+    --accent:#4ea1ff;
+    --accent2:#2f6bff;
+    --danger:#ff4d4d;
+    --border:rgba(255,255,255,0.08);
+  }
+
+  :root.light-mode{
+    --bg:#f8fafc;
+    --card:#ffffff;
+    --muted:#64748b;
+    --text:#0f172a;
+    --accent:#3b82f6;
+    --accent2:#2563eb;
+    --danger:#ef4444;
+    --border:rgba(0,0,0,0.12);
+  }
+
+  .light-mode body {
+    background: linear-gradient(180deg, #f1f5f9, #e2e8f0);
+  }
+
+  .light-mode .card {
+    background: rgba(255,255,255,0.9);
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .light-mode .topbar {
+    background: rgba(255,255,255,0.85);
+    border: 1px solid rgba(0,0,0,0.08);
+    backdrop-filter: blur(8px);
+  }
+
+  .light-mode .input, .light-mode .select {
+    background: rgba(0,0,0,0.04);
+    border: 1px solid rgba(0,0,0,0.12);
+  }
+
+  .light-mode .input:focus, .light-mode .select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.1);
+  }
+
+  .light-mode .list-item {
+    background: rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .light-mode .list-item:hover {
+    border-color: rgba(59,130,246,0.3);
+    background: rgba(59,130,246,0.04);
+  }
+
+  .light-mode .att-row {
+    background: rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .light-mode .pre {
+    background: rgba(0,0,0,0.03);
+    border: 1px solid rgba(0,0,0,0.08);
+  }
+
+  .light-mode .pill {
+    background: rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.1);
+  }
+
+  .light-mode .modal {
+    background: rgba(15,23,42,0.4);
+  }
+
+  .light-mode .modal-content {
+    background: rgba(255,255,255,0.98);
+    border: 1px solid rgba(0,0,0,0.08);
+    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+  }
+
+  .light-mode th {
+    background: rgba(248,250,252,0.98);
+  }
+
+  .light-mode .btn-secondary {
+    background: rgba(0,0,0,0.02);
+    border: 1px solid rgba(0,0,0,0.12);
+  }
+
+  .light-mode .btn-secondary:hover {
+    background: rgba(0,0,0,0.05);
+  }
+
+  .light-mode .fatal-card {
+    border-color: rgba(239,68,68,0.3);
+    background: rgba(254,242,242,0.9);
+  }
+
+
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+    background: linear-gradient(180deg, #071025, #050b15);
+    color: var(--text);
+  }
+
+  .container{ max-width:1100px; margin:0 auto; padding:14px; }
+
+  .title{ font-size:18px; font-weight:700; }
+  .muted{ color: var(--muted); font-size:13px; }
+  .card{
+    background: rgba(18,26,43,0.85);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px;
+  }
+
+  /* TOPBAR STYLES - Applying whitespace handling */
+  .topbar{
+    display:flex;
+    justify-content: space-between; /* Pushes left and right sections to opposite ends */
+    align-items: center; /* Vertically center content of left and right sections */
+    gap:12px; /* Minimum space between the left and right sections */
+    padding:12px;
+    border:1px solid var(--border);
+    border-radius:14px;
+    background: rgba(18,26,43,0.7);
+    backdrop-filter: blur(6px);
+    margin-bottom:12px;
+
+    /* KEY: Handle unwanted text nodes (whitespace) */
+    font-size: 0; /* Collapse text nodes */
+    word-spacing: 0;
+    letter-spacing: 0;
+  }
+  /* Reset font properties for actual content within topbar */
+  .topbar > * {
+    font-size: 1rem; /* Reset to default font size or specific value */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  .topbar-left-section {
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    flex-grow: 0;
+  }
+
+  .topbar-right-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .topbar-event-select {
+    max-width: 200px;
+  }
+
+    /* Dark Mode Toggle Switch */
+  .theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .theme-switch {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    background: var(--border);
+    border-radius: 999px;
+    transition: background 0.3s;
+  }
+
+  .theme-switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    background: var(--text);
+    border-radius: 999px;
+    transition: transform 0.3s, background 0.3s;
+  }
+
+  .light-mode .theme-switch {
+    background: #cbd5e1;
+  }
+
+  .light-mode .theme-switch::after {
+    transform: translateX(22px);
+  }
+
+
+  /* Media query for smaller screens: Stack the entire topbar sections */
+  @media (max-width: 768px) {
+    .topbar {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+    .topbar-left-section, .topbar-right-controls {
+      width: 100%;
+      justify-content: flex-start;
+    }
+    .topbar-right-controls {
+      margin-top: 10px;
+    }
+    .topbar-event-select {
+      max-width: 100%;
+    }
+  }
+
+  /* MAIN GRID LAYOUT (Inbox & Detail) - Applying whitespace handling */
+  .grid{
+    display:grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap:12px;
+
+    /* KEY: Handle unwanted text nodes (whitespace) */
+    font-size: 0; /* Collapse text nodes */
+    word-spacing: 0;
+    letter-spacing: 0;
+  }
+  /* Reset font properties for actual content within grid */
+  .grid > .card {
+    font-size: 1rem; /* Reset to default font size or specific value */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  @media (max-width: 900px){
+    .grid{ grid-template-columns: 1fr; }
+  }
+
+  /* General row style - Applying whitespace handling */
+  .row{
+    display:flex;
+    align-items:center;
+    /* KEY: Handle unwanted text nodes (whitespace) within rows */
+    font-size: 0; /* Collapse text nodes */
+    word-spacing: 0;
+    letter-spacing: 0;
+  }
+  /* Reset font properties for actual content within rows */
+  .row > * {
+    font-size: 1rem; /* Reset to default font size or specific value */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  
+  /* Button styles */
+  .btn{
+    background: linear-gradient(180deg, var(--accent), var(--accent2));
+    border: none;
+    color:white;
+    padding:10px 12px;
+    border-radius:10px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .btn-secondary{
+    background: transparent;
+    border:1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-danger{
+    background: linear-gradient(180deg, #ff6b6b, var(--danger));
+  }
+
+  /* Input and Select styles */
+  .input, .select{
+    width:100%;
+    background: rgba(255,255,255,0.06);
+    border:1px solid var(--border);
+    color: var(--text);
+    padding:10px 10px;
+    border-radius:10px;
+    outline:none;
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem; /* Adjust if inputs should have a specific font size */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  /* Section title styles */
+  .section-title{
+    font-weight:800;
+    font-size:14px;
+    letter-spacing:0.2px;
+    margin:0;
+  }
+
+  /* List styles */
+  .list{ display:flex; flex-direction:column; gap:8px; }
+  .list-item{
+    padding:10px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background: rgba(255,255,255,0.03);
+    cursor:pointer;
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem;
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  .list-item:hover{ border-color: rgba(78,161,255,0.35); }
+  .list-item .sub{ color: var(--muted); font-size:12px; margin-top:4px; }
+
+  /* Key-Value styles */
+  .kv{
+    display:grid;
+    grid-template-columns: 120px 1fr;
+    gap:8px 10px;
+    font-size:13px; /* This specific font size should override the parent's font-size:0 if kv is inside a row */
+    word-spacing: normal; /* Resetting */
+    letter-spacing: normal; /* Resetting */
+    margin-top:8px;
+  }
+  .kv .k{ color: var(--muted); }
+  .kv .v{ color: var(--text); word-break:break-word; }
+
+  /* Preformatted text styles */
+  .pre{
+    background: rgba(255,255,255,0.04);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:10px;
+    font-size:12px;
+    white-space:pre-wrap;
+    overflow:auto;
+    /* Reset font properties if parent has font-size:0 */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  /* Pill/Tag styles */
+  .pill{
+    display:inline-block;
+    font-size:12px;
+    padding:3px 8px;
+    border-radius:999px;
+    border:1px solid var(--border);
+    color: var(--muted);
+    margin-left:8px;
+    /* Reset font properties if parent has font-size:0 */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  /* Attachment row styles */
+  .att-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background: rgba(255,255,255,0.03);
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem;
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  .att-meta{ font-size:12px; color: var(--muted); margin-top:3px; }
+
+  /* Modal styles */
+  .modal{
+    position:fixed; inset:0; background: rgba(0,0,0,0.6);
+    display:flex; align-items:center; justify-content:center;
+    padding:16px;
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem;
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  .modal-content{
+    width:min(1000px, 100%);
+    background: rgba(18,26,43,0.96);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:12px;
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem;
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+
+  /* Table styles */
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:12px;
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  th, td{
+    border-bottom:1px solid var(--border);
+    padding:8px;
+    vertical-align:top;
+    /* Reset font properties if parent has font-size:0 */
+    font-size: 1rem; /* Adjust if table cells should have a specific font size */
+    word-spacing: normal;
+    letter-spacing: normal;
+  }
+  th{ text-align:left; color: var(--muted); position:sticky; top:0; background: rgba(18,26,43,0.96); }
+
+  /* Specific styles moved from inline or newly created */
+  .att-info-wrap {
+    min-width: 0;
+  }
+  .att-actions-wrap {
+    gap: 8px;
+    min-width: 260px;
+    justify-content: flex-end;
+  }
+  .att-preview-btn {
+    padding: 8px 10px;
+  }
+  .att-action-select {
+    min-width: 160px;
+  }
+
+  /* Styles for Index.html - Further adjusted for compactness */
+  .index-description {
+    margin-top: 6px;
+  }
+  .index-button-wrap {
+    margin-top: 10px;
+  }
+  .index-hint {
+    margin-top: 4px;
+  }
+  .index-note {
+    margin-top: 10px;
+  }
+
+  /* Styles for App.html - Fatal Error, Topbar, Inbox */
+  .fatal-card {
+    display: none;
+    border-color: rgba(255,77,77,0.6);
+  }
+  .fatal-title {
+    color: #ffb3b3;
+  }
+  .fatal-text {
+    margin-top: 10px;
+  }
+
+  .inbox-controls {
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .email-count-input {
+    max-width: 110px;
+  }
+  .inbox-status {
+    margin-top: 8px;
+  }
+  .email-list {
+    margin-top: 12px;
+  }
+
+  /* Styles for App.html - Email Detail Card */
+  .email-detail-status {
+    margin-top: 8px;
+  }
+  .email-detail-empty {
+    margin-top: 10px;
+  }
+  .email-detail-content {
+    display: none;
+    margin-top: 10px;
+  }
+  .kv-detail-section {
+    margin-top: 8px;
+  }
+  .detail-section-title {
+    margin-top: 14px;
+  }
+  .child-selection-row {
+    gap: 10px;
+  }
+  .child-select-dropdown {
+    min-width: 260px;
+  }
+  .child-hint {
+    margin-top: 6px;
+  }
+  .reply-edit-textarea {
+    min-height: 240px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .reply-controls-row {
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .process-actions-row {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* Styles for App.html - Bulk Modal */
+  .bulk-modal {
+    display: none;
+  }
+  .modal-header-row {
+    justify-content: space-between;
+    align-items: center;
+  }
+  .bulk-description {
+    margin-top: 8px;
+  }
+  .bulk-template-title {
+    margin-top: 14px;
+  }
+  .bulk-template-preview {
+    margin-top: 8px;
+  }
+  .bulk-controls-row {
+    gap: 10px;
+    margin-top: 12px;
+  }
+  .bulk-control-btn {
+    margin-left: 8px;
+  }
+  .bulk-status {
+    margin-left: 10px;
+  }
+  .bulk-table-wrap {
+    margin-top: 12px;
+    max-height: 50vh;
+    overflow: auto;
+  }
+
+  /* Styles for App.html - Preview Modal */
+  .preview-modal {
+    display: none;
+  }
+  .preview-modal-content {
+    width: min(900px, 100%);
+  }
+  .preview-status {
+    margin-top: 8px;
+  }
+  .preview-frame-wrap {
+    margin-top: 12px;
+    height: 70vh;
+  }
+  .preview-iframe {
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255,255,255,0.02);
+  }
+
+    /* Action checkboxes styling */
+  .actions-section {
+    margin-top: 10px;
+  }
+
+  .action-checkboxes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .light-mode .action-checkboxes {
+    background: rgba(0,0,0,0.02);
+  }
+
+  .action-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 6px;
+    transition: background 0.2s;
+  }
+
+  .action-checkbox-item:hover {
+    background: rgba(255,255,255,0.05);
+  }
+
+  .light-mode .action-checkbox-item:hover {
+    background: rgba(0,0,0,0.05);
+  }
+
+  .action-checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+
+  .action-checkbox-item span {
+    font-weight: 500;
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 600px) {
+    .action-checkboxes {
+      grid-template-columns: 1fr;
+    }
+  }
+
+
+
+  .email-sort-select {
+  max-width: 170px;
+}
+
+.bulk-email-actions {
+  display: none;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.email-list {
+  max-height: calc(100vh - 230px);
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.list-item.selected-email {
+  border-color: rgba(78,161,255,0.8);
+  background: rgba(78,161,255,0.12);
+}
+
+.email-select-checkbox {
+  margin-right: 8px;
+  transform: scale(1.15);
+}
+
+.processing-badge {
+  display: inline-block;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.logs-modal {
+  display: none;
+}
+
+.logs-modal-content {
+  width: min(850px, 100%);
+}
+
+.logs-status {
+  margin-top: 8px;
+}
+
+.logs-list {
+  margin-top: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.log-row {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(255,255,255,0.03);
+}
+
+.light-mode .log-row {
+  background: rgba(0,0,0,0.02);
+}
+
+.log-row-ok {
+  border-color: rgba(34,197,94,0.35);
+}
+
+.log-row-error {
+  border-color: rgba(239,68,68,0.45);
+}
+
+.log-main {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.log-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .email-list {
+    max-height: 45vh;
+  }
+}
+
+.att-child-select {
+  min-width: 180px;
+}
+
+</style>
+
+
+Script.html:
+<script>
+  let STATE = {
+    bootstrap: null,
+    selectedEvent: null,
+    children: [],
+    emails: [],
+    emailDetailsById: {},
+    selectedEmail: null,
+    selectedEmailId: null,
+    attachmentActions: {},
+attachmentChildren: {},
+attachmentChildTouched: {},
+    attachmentPreviewCache: {},
+    previewFileIds: [],
+    bulkSelection: {},
+    selectedEmailIds: {},
+    selectMode: false,
+    documentTypes: []
+  };
+
+  function api(fn, payload){
+    return new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(err => reject(err))
+        [fn](payload);
+    });
+  }
+
+  function showFatal(err){
+    const box = document.getElementById('fatal');
+    const txt = document.getElementById('fatalText');
+    box.style.display = 'block';
+    txt.textContent = (err && err.message) ? err.message : String(err);
+  }
+
+  function fmtDate(iso){
+    try{ return new Date(iso).toLocaleString('cs-CZ'); }
+    catch(e){ return iso || ''; }
+  }
+
+  function normalize(s){ return (s || '').toString().toLowerCase(); }
+
+  function escapeHtml(s){
+    return (s || '').toString()
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;');
+  }
+
+  function setStatus(id, text){
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = text || '';
+  }
+
+  function setDisabled(id, disabled){
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.disabled = !!disabled;
+  }
+
+  function getSortedEmails(){
+    const sort = document.getElementById('emailSort')?.value || 'oldest';
+    const arr = [...STATE.emails];
+
+    arr.sort((a, b) => {
+      const da = new Date(a.date || 0).getTime();
+      const db = new Date(b.date || 0).getTime();
+      return sort === 'oldest' ? da - db : db - da;
+    });
+
+    return arr;
+  }
+
+  function getNextEmailId(currentId){
+    const sorted = getSortedEmails();
+    const idx = sorted.findIndex(e => e.messageId === currentId);
+    if (idx < 0) return sorted[0]?.messageId || null;
+    return sorted[idx + 1]?.messageId || sorted[idx - 1]?.messageId || null;
+  }
+
+  async function cleanupPreviewFiles(){
+    const ids = [...STATE.previewFileIds];
+    STATE.previewFileIds = [];
+    STATE.attachmentPreviewCache = {};
+
+    await Promise.all(ids.map(id => {
+      return api('api_deletePreviewFile', id).catch(() => null);
+    }));
+  }
+
+  function openPreviewModal(){
+    document.getElementById('previewModal').style.display = 'flex';
+    document.getElementById('previewStatus').textContent = '';
+  }
+
+  async function closePreviewModal(){
+    document.getElementById('previewModal').style.display = 'none';
+    document.getElementById('previewFrame').src = 'about:blank';
+  }
+
+  async function preloadAttachmentPreviews(messageId){
+    if (!STATE.selectedEvent || !messageId) return;
+
+    try{
+      await cleanupPreviewFiles();
+
+      const res = await api('api_prepareAttachmentPreviews', {
+        eventId: STATE.selectedEvent.eventId,
+        messageId
+      });
+
+      (res.previews || []).forEach(p => {
+        STATE.attachmentPreviewCache[String(p.attachmentId)] = p;
+        STATE.previewFileIds.push(p.fileId);
+      });
+    }catch(e){
+      console.warn('Attachment preload failed:', e);
+    }
+  }
+
+  async function previewAttachment(attachmentId, attachmentName){
+    if (!STATE.selectedEmail) return;
+
+    document.getElementById('previewTitle').textContent = 'Náhled: ' + (attachmentName || 'příloha');
+    document.getElementById('previewStatus').textContent = 'Načítám náhled...';
+    document.getElementById('previewFrame').src = 'about:blank';
+    openPreviewModal();
+
+    try{
+      let cached = STATE.attachmentPreviewCache[String(attachmentId)];
+
+      if (!cached) {
+        const res = await api('api_prepareAttachmentPreview', {
+          eventId: STATE.selectedEvent.eventId,
+          messageId: STATE.selectedEmail.messageId,
+          attachmentId: String(attachmentId)
+        });
+
+        cached = {
+          attachmentId: String(attachmentId),
+          fileId: res.fileId,
+          name: res.name,
+          mimeType: res.mimeType
+        };
+
+        STATE.attachmentPreviewCache[String(attachmentId)] = cached;
+        STATE.previewFileIds.push(res.fileId);
+      }
+
+      document.getElementById('previewStatus').textContent = 'Načteno.';
+      document.getElementById('previewFrame').src = 'https://drive.google.com/file/d/' + cached.fileId + '/preview';
+    }catch(e){
+      document.getElementById('previewStatus').textContent = 'Chyba: ' + (e && e.message ? e.message : e);
+    }
+  }
+
+  function renderChildSelect(filterText){
+    const sel = document.getElementById('childSelect');
+    sel.innerHTML = '';
+    const ft = normalize(filterText);
+
+    const filtered = STATE.children.filter(c => !ft || normalize(c.childName).includes(ft));
+
+    filtered.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.childName;
+      opt.textContent = c.childName;
+      sel.appendChild(opt);
+    });
+
+    if (filtered.length === 0){
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Nenalezeno';
+      sel.appendChild(opt);
+    }
+  }
+
+  function detectChildFromEmail(detail){
+    const text = normalize((detail.subject || '') + ' ' + (detail.bodySnippet || ''));
+    let best = null;
+
+    STATE.children.forEach(c => {
+      const name = normalize(c.childName);
+      if (name && text.includes(name)){
+        if (!best || name.length > normalize(best).length) best = c.childName;
+      }
+    });
+
+    return best;
+  }
+
+  function renderEmailList(){
+    const wrap = document.getElementById('emailList');
+    wrap.innerHTML = '';
+
+    const sorted = getSortedEmails();
+
+    sorted.forEach(e => {
+      const div = document.createElement('div');
+      const isSelected = e.messageId === STATE.selectedEmailId;
+      div.className = 'list-item' + (isSelected ? ' selected-email' : '');
+
+      const checked = STATE.selectedEmailIds[e.messageId] ? 'checked' : '';
+      const checkboxHtml = STATE.selectMode
+        ? `<input class="email-select-checkbox" type="checkbox" data-email-select="${escapeHtml(e.messageId)}" ${checked}>`
+        : '';
+
+      div.innerHTML = `
+        <div>
+          ${checkboxHtml}
+          <b>${escapeHtml(e.subject || '(bez předmětu)')}</b>
+          ${e._processing ? '<span class="processing-badge">zpracovává se...</span>' : ''}
+        </div>
+        <div class="sub">${escapeHtml(e.from || '')} · ${escapeHtml(fmtDate(e.date))}</div>
+        <div class="sub">${escapeHtml(e.snippet || '')}</div>
+      `;
+
+      div.onclick = (ev) => {
+        if (ev.target && ev.target.matches('input[data-email-select]')) return;
+        if (!STATE.selectMode) showEmailDetail(e.messageId);
+      };
+
+      wrap.appendChild(div);
+    });
+
+    document.querySelectorAll('input[data-email-select]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = cb.getAttribute('data-email-select');
+        STATE.selectedEmailIds[id] = cb.checked;
+        updateBulkEmailStatus();
+      });
+    });
+
+    if (!STATE.emails.length){
+      wrap.innerHTML = `<div class="muted">Žádné emaily.</div>`;
+    }
+
+    updateBulkEmailStatus();
+  }
+
+  async function refreshReplyDraft(){
+    const hint = document.getElementById('replyHint');
+    hint.textContent = 'Generuji návrh...';
+
+    const childName = document.getElementById('childSelect').value;
+    if (!childName){
+      hint.textContent = 'Vyberte dítě.';
+      return;
+    }
+
+    const note = document.getElementById('noteInput').value || '';
+const attachmentActions = Object.keys(STATE.attachmentActions).map(k => ({
+  attachmentId: k,
+  action: STATE.attachmentActions[k],
+  childName: STATE.attachmentChildren[k] || childName
+}));
+
+    try{
+      const res = await api('api_buildReplyPreview', {
+        eventId: STATE.selectedEvent.eventId,
+        childName,
+        note,
+        attachmentActions
+      });
+
+      document.getElementById('replyEdit').value = res.replyText || '';
+      hint.textContent = 'Návrh aktualizován (můžete upravit ručně).';
+    }catch(e){
+      hint.textContent = 'Chyba při generování: ' + (e && e.message ? e.message : e);
+    }
+  }
+
+  function showEmailDetail(messageId){
+    const detail = STATE.emailDetailsById[messageId];
+    if (!detail) {
+      setStatus('detailStatus', 'Detail emailu ještě není načten.');
+      return;
+    }
+
+    STATE.selectedEmail = detail;
+    STATE.selectedEmailId = messageId;
+    STATE.attachmentActions = {};
+STATE.attachmentChildren = {};
+STATE.attachmentChildTouched = {};
+
+    document.getElementById('processStatus').textContent = '';
+    document.getElementById('replyEdit').value = '';
+    document.getElementById('replyHint').textContent = '';
+    document.getElementById('noteInput').value = '';
+
+    document.getElementById('emailDetailEmpty').style.display = 'none';
+    document.getElementById('emailDetail').style.display = 'block';
+
+    document.getElementById('dFrom').textContent = detail.from || '';
+    document.getElementById('dSubject').textContent = detail.subject || '';
+    document.getElementById('dDate').textContent = fmtDate(detail.date);
+    document.getElementById('dBody').textContent = detail.bodySnippet || '';
+
+    const autoChild = detectChildFromEmail(detail);
+    document.getElementById('childSearch').value = '';
+    renderChildSelect('');
+
+    if (autoChild){
+      document.getElementById('childSelect').value = autoChild;
+      document.getElementById('childHint').textContent = `Automaticky rozpoznáno: ${autoChild} (zkontrolujte)`;
+    } else {
+      document.getElementById('childHint').textContent = 'Dítě nebylo automaticky rozpoznáno – vyberte ručně.';
+    }
+
+    renderAttachments(detail.attachments || []);
+    refreshReplyDraft();
+    preloadAttachmentPreviews(messageId);
+
+    setStatus('detailStatus', 'Detail načten.');
+    renderEmailList();
+  }
+
+  function renderAttachments(atts){
+    const wrap = document.getElementById('attList');
+    wrap.innerHTML = '';
+
+    if (!atts.length){
+      wrap.innerHTML = `<div class="muted">Email nemá přílohy.</div>`;
+      return;
+    }
+
+    atts.forEach(a => {
+      const n = normalize(a.name);
+      let def = 'IGNORE';
+
+      STATE.documentTypes.forEach(docType => {
+        if (!docType.filenameSuffix) return;
+        const keywords = docType.filenameSuffix.toLowerCase().split(/[_-]/);
+        keywords.forEach(keyword => {
+          if (keyword && n.includes(keyword)) def = docType.documentKey;
+        });
+      });
+
+      STATE.attachmentActions[a.attachmentId] = def;
+
+
+
+
+let optionsHtml = '<option value="IGNORE">Ignorovat</option>';
+STATE.documentTypes.forEach(docType => {
+  if (docType.filenameSuffix) {
+    optionsHtml += `<option value="${escapeHtml(docType.documentKey)}">${escapeHtml(docType.displayName)}</option>`;
+  }
+});
+
+const defaultChildName = document.getElementById('childSelect').value || '';
+STATE.attachmentChildren[a.attachmentId] = defaultChildName;
+
+let childOptionsHtml = '';
+STATE.children.forEach(c => {
+  childOptionsHtml += `<option value="${escapeHtml(c.childName)}">${escapeHtml(c.childName)}</option>`;
+});
+
+      const row = document.createElement('div');
+      row.className = 'att-row';
+      row.innerHTML = `
+        <div class="att-info-wrap">
+          <div><b>${escapeHtml(a.name)}</b> <span class="pill">${escapeHtml(a.contentType || '')}</span></div>
+          <div class="att-meta">Velikost: ${Math.round((a.size||0)/1024)} KB</div>
+        </div>
+        <div class="row att-actions-wrap">
+          <button class="btn btn-secondary att-preview-btn" data-preview="${a.attachmentId}">Náhled</button>
+<select class="select att-child-select" data-att-child="${a.attachmentId}">
+  ${childOptionsHtml}
+</select>
+<select class="select att-action-select" data-att="${a.attachmentId}">
+  ${optionsHtml}
+</select>
+        </div>
+      `;
+
+      wrap.appendChild(row);
+
+const childSel = row.querySelector('select[data-att-child]');
+childSel.value = defaultChildName;
+childSel.onchange = async () => {
+  STATE.attachmentChildren[a.attachmentId] = childSel.value;
+  STATE.attachmentChildTouched[a.attachmentId] = true;
+  await refreshReplyDraft();
+};
+
+const sel = row.querySelector('select[data-att]');
+sel.value = def;
+sel.onchange = async () => {
+  STATE.attachmentActions[a.attachmentId] = sel.value;
+  await refreshReplyDraft();
+};
+
+      const btnPrev = row.querySelector('button[data-preview]');
+      btnPrev.onclick = () => previewAttachment(a.attachmentId, a.name);
+    });
+  }
+
+  async function loadBootstrap(){
+    const boot = await api('api_bootstrap');
+    STATE.bootstrap = boot;
+    STATE.selectedEvent = boot.selectedEvent;
+    STATE.children = boot.children || [];
+    STATE.documentTypes = boot.documentTypes || [];
+
+    document.getElementById('appTitle').textContent = boot.appTitle || 'Camp Mail Helper';
+
+    const eventSelect = document.getElementById('eventSelect');
+    eventSelect.innerHTML = '';
+
+    STATE.bootstrap.events.forEach(event => {
+      const option = document.createElement('option');
+      option.value = event.eventId;
+      option.textContent = event.eventName;
+      eventSelect.appendChild(option);
+    });
+
+    eventSelect.value = STATE.selectedEvent.eventId;
+
+    document.getElementById('userLine').textContent =
+      `Přihlášen: ${boot.userEmail} · Událost: ${STATE.selectedEvent.eventName}`;
+
+    renderChildSelect('');
+  }
+
+  async function loadEmails(){
+    const n = Number(document.getElementById('emailCount').value || 25);
+
+    setStatus('inboxStatus', 'Načítám emaily včetně detailů...');
+    setDisabled('btnLoadEmails', true);
+
+    try{
+      const details = await api('api_listEmailDetails', n);
+
+      STATE.emails = details.map(d => ({
+        messageId: d.messageId,
+        threadId: d.threadId || '',
+        from: d.from || '',
+        subject: d.subject || '',
+        date: d.date || '',
+        snippet: d.snippet || d.bodySnippet || ''
+      }));
+
+      STATE.emailDetailsById = {};
+      details.forEach(d => STATE.emailDetailsById[d.messageId] = d);
+
+      renderEmailList();
+      setStatus('inboxStatus', `Načteno: ${STATE.emails.length} emailů včetně detailů`);
+
+      if (STATE.emails.length && !STATE.selectedEmailId) {
+        showEmailDetail(getSortedEmails()[0].messageId);
+      }
+    }catch(e){
+      setStatus('inboxStatus', 'Chyba: ' + (e && e.message ? e.message : e));
+      throw e;
+    }finally{
+      setDisabled('btnLoadEmails', false);
+    }
+  }
+
+  function updateBulkEmailStatus(){
+    const selected = Object.keys(STATE.selectedEmailIds).filter(k => STATE.selectedEmailIds[k]);
+    const st = document.getElementById('bulkEmailStatus');
+    if (st) st.textContent = selected.length ? `Vybráno: ${selected.length}` : '';
+  }
+
+  function toggleSelectMode(){
+    STATE.selectMode = !STATE.selectMode;
+    document.getElementById('bulkEmailActions').style.display = STATE.selectMode ? 'flex' : 'none';
+    document.getElementById('btnToggleSelectMode').textContent = STATE.selectMode ? 'Zavřít výběr' : 'Vybrat emaily';
+
+    if (!STATE.selectMode) {
+      STATE.selectedEmailIds = {};
+    }
+
+    renderEmailList();
+  }
+
+  function selectAllEmails(){
+    getSortedEmails().forEach(e => STATE.selectedEmailIds[e.messageId] = true);
+    renderEmailList();
+  }
+
+  function clearEmailSelection(){
+    STATE.selectedEmailIds = {};
+    renderEmailList();
+  }
+
+  async function bulkMoveEmails(){
+    const ids = Object.keys(STATE.selectedEmailIds).filter(k => STATE.selectedEmailIds[k]);
+    if (!ids.length) return;
+
+    setStatus('bulkEmailStatus', `Přesouvám ${ids.length} emailů...`);
+
+    try{
+      const res = await api('api_bulkMoveEmails', {
+        eventId: STATE.selectedEvent.eventId,
+        messageIds: ids
+      });
+
+      STATE.emails = STATE.emails.filter(e => !ids.includes(e.messageId));
+      ids.forEach(id => delete STATE.emailDetailsById[id]);
+      clearEmailSelection();
+
+      if (STATE.selectedEmailId && ids.includes(STATE.selectedEmailId)) {
+        STATE.selectedEmail = null;
+        STATE.selectedEmailId = null;
+        document.getElementById('emailDetailEmpty').style.display = 'block';
+        document.getElementById('emailDetail').style.display = 'none';
+      }
+
+      setStatus('bulkEmailStatus', `Hotovo. Přesunuto: ${res.movedCount}, chyby: ${res.failedCount}`);
+      renderEmailList();
+    }catch(e){
+      setStatus('bulkEmailStatus', 'Chyba: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  async function bulkDeleteEmails(){
+    const ids = Object.keys(STATE.selectedEmailIds).filter(k => STATE.selectedEmailIds[k]);
+    if (!ids.length) return;
+
+    if (!confirm(`Opravdu chcete smazat ${ids.length} vybraných emailů?`)) return;
+
+    setStatus('bulkEmailStatus', `Mažu ${ids.length} emailů...`);
+
+    try{
+      const res = await api('api_bulkDeleteEmails', {
+        eventId: STATE.selectedEvent.eventId,
+        messageIds: ids
+      });
+
+      STATE.emails = STATE.emails.filter(e => !ids.includes(e.messageId));
+      ids.forEach(id => delete STATE.emailDetailsById[id]);
+      clearEmailSelection();
+
+      if (STATE.selectedEmailId && ids.includes(STATE.selectedEmailId)) {
+        STATE.selectedEmail = null;
+        STATE.selectedEmailId = null;
+        document.getElementById('emailDetailEmpty').style.display = 'block';
+        document.getElementById('emailDetail').style.display = 'none';
+      }
+
+      setStatus('bulkEmailStatus', `Hotovo. Smazáno: ${res.deletedCount}, chyby: ${res.failedCount}`);
+      renderEmailList();
+    }catch(e){
+      setStatus('bulkEmailStatus', 'Chyba: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  async function executeSelectedActions(){
+    const status = document.getElementById('processStatus');
+
+    if (!STATE.selectedEmail){
+      status.textContent = 'Vyberte email.';
+      return;
+    }
+
+    const currentEmail = STATE.selectedEmail;
+    const currentEmailId = currentEmail.messageId;
+
+    const actions = {
+      saveAttachments: document.getElementById('actionSaveAttachments').checked,
+      sendReply: document.getElementById('actionSendReply').checked,
+      moveEmail: document.getElementById('actionMoveEmail').checked,
+      updateTable: document.getElementById('actionUpdateTable').checked
+    };
+
+    if (actions.saveAttachments || actions.updateTable) {
+      const childName = document.getElementById('childSelect').value;
+      if (!childName) {
+        status.textContent = 'Pro uložení příloh nebo aktualizaci tabulky vyberte dítě.';
+        return;
+      }
+    }
+
+    if (actions.sendReply) {
+      const replyText = document.getElementById('replyEdit').value || '';
+      if (!replyText.trim()) {
+        status.textContent = 'Pro odeslání odpovědi zadejte text.';
+        return;
+      }
+    }
+
+const mainChildName = document.getElementById('childSelect').value;
+
+const attachmentActions = Object.keys(STATE.attachmentActions).map(k => ({
+  attachmentId: k,
+  action: STATE.attachmentActions[k],
+  childName: STATE.attachmentChildren[k] || mainChildName
+}));
+
+    const payload = {
+      eventId: STATE.selectedEvent.eventId,
+      messageId: currentEmailId,
+      childName: document.getElementById('childSelect').value,
+      replyText: document.getElementById('replyEdit').value,
+      attachmentActions,
+      actions
+    };
+
+    const nextId = getNextEmailId(currentEmailId);
+
+    STATE.emails = STATE.emails.map(e => {
+      if (e.messageId === currentEmailId) return Object.assign({}, e, { _processing: true });
+      return e;
+    });
+
+    renderEmailList();
+    status.textContent = 'Zpracování spuštěno. Můžete pokračovat dalším emailem.';
+
+    if (nextId && nextId !== currentEmailId) {
+      showEmailDetail(nextId);
+    } else {
+      STATE.selectedEmail = null;
+      STATE.selectedEmailId = null;
+      document.getElementById('emailDetailEmpty').style.display = 'block';
+      document.getElementById('emailDetail').style.display = 'none';
+    }
+
+    api('api_executeCustomActions', payload)
+      .then(result => {
+        const executed = [];
+        if (actions.saveAttachments && result.saved.savedFiles.length > 0) executed.push('přílohy uloženy');
+        if (actions.sendReply) executed.push('odpověď odeslána');
+        if (actions.moveEmail) executed.push('email přesunut');
+        if (actions.updateTable && result.saved.documents && Object.keys(result.saved.documents).length > 0) {
+          executed.push('tabulka aktualizována');
+        }
+
+        STATE.emails = STATE.emails.filter(e => e.messageId !== currentEmailId);
+        delete STATE.emailDetailsById[currentEmailId];
+
+        renderEmailList();
+        setStatus('inboxStatus', executed.length ? `Hotovo: ${executed.join(', ')}.` : 'Hotovo.');
+      })
+      .catch(e => {
+        STATE.emails = STATE.emails.map(mail => {
+          if (mail.messageId === currentEmailId) return Object.assign({}, mail, { _processing: false });
+          return mail;
+        });
+
+        renderEmailList();
+        setStatus('inboxStatus', 'Chyba při zpracování emailu: ' + (e && e.message ? e.message : e));
+      });
+  }
+
+  async function deleteSelectedEmail(){
+    if (!STATE.selectedEmail){
+      document.getElementById('processStatus').textContent = 'Vyberte email.';
+      return;
+    }
+
+    if (!confirm('Opravdu chcete smazat tento email? Tato akce je nevratná.')){
+      return;
+    }
+
+    const currentId = STATE.selectedEmail.messageId;
+    const nextId = getNextEmailId(currentId);
+
+    document.getElementById('processStatus').textContent = 'Mazání spuštěno...';
+
+    if (nextId && nextId !== currentId) {
+      showEmailDetail(nextId);
+    }
+
+    try{
+      await api('api_deleteEmail', currentId);
+
+      STATE.emails = STATE.emails.filter(e => e.messageId !== currentId);
+      delete STATE.emailDetailsById[currentId];
+
+      if (STATE.selectedEmailId === currentId) {
+        STATE.selectedEmail = null;
+        STATE.selectedEmailId = null;
+        document.getElementById('emailDetailEmpty').style.display = 'block';
+        document.getElementById('emailDetail').style.display = 'none';
+      }
+
+      renderEmailList();
+      setStatus('inboxStatus', 'Email byl smazán.');
+    }catch(e){
+      setStatus('inboxStatus', 'Chyba mazání: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  function openBulk(){
+    document.getElementById('bulkModal').style.display = 'flex';
+    document.getElementById('bulkStatus').textContent = '';
+    document.getElementById('bulkTableWrap').innerHTML = '';
+    document.getElementById('bulkTemplatePreview').textContent = '';
+    document.getElementById('btnSendBulk').disabled = true;
+    STATE.bulkSelection = {};
+  }
+
+  function closeBulk(){ document.getElementById('bulkModal').style.display = 'none'; }
+
+  function setAllBulk(val){
+    Object.keys(STATE.bulkSelection).forEach(k => STATE.bulkSelection[k] = val);
+    document.querySelectorAll('input[data-bulk-row]').forEach(cb => { cb.checked = val; });
+    updateBulkSendButtonState();
+  }
+
+  function updateBulkSendButtonState(){
+    const any = Object.values(STATE.bulkSelection).some(v => v === true);
+    document.getElementById('btnSendBulk').disabled = !any;
+  }
+
+  async function loadBulkPreview(){
+    const st = document.getElementById('bulkStatus');
+    st.textContent = 'Načítám...';
+
+    const res = await api('api_prepareBulk', STATE.selectedEvent.eventId);
+    const rows = res.rows || [];
+
+    document.getElementById('bulkTemplatePreview').textContent = res.templatePreview || '';
+
+    STATE.bulkSelection = {};
+    rows.forEach(r => STATE.bulkSelection[String(r.rowIndex)] = !!r.defaultSend);
+
+    st.textContent = `Připraveno: ${rows.length} záznamů`;
+    updateBulkSendButtonState();
+
+    const wrap = document.getElementById('bulkTableWrap');
+    const docTypes = STATE.documentTypes || [];
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Odeslat</th>
+            <th>Dítě</th>
+            <th>Email rodiče</th>
+            ${docTypes.map(d => `<th>${escapeHtml(d.displayName)}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    rows.forEach(r => {
+      const checked = r.defaultSend ? 'checked' : '';
+      const muted = r.allYes ? ' style="opacity:0.65;"' : '';
+
+      html += `
+        <tr${muted}>
+          <td><input type="checkbox" data-bulk-row="${escapeHtml(String(r.rowIndex))}" ${checked}></td>
+          <td>${escapeHtml(r.childName)}</td>
+          <td>${escapeHtml(r.parentEmail)}</td>
+          ${docTypes.map(d => `<td>${escapeHtml(r[d.documentKey] || '')}</td>`).join('')}
+        </tr>
+      `;
+    });
+
+    html += `</tbody></table>`;
+    wrap.innerHTML = html;
+
+    document.querySelectorAll('input[data-bulk-row]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const rowKey = cb.getAttribute('data-bulk-row');
+        STATE.bulkSelection[rowKey] = cb.checked;
+        updateBulkSendButtonState();
+      });
+    });
+  }
+
+  async function sendBulkSelected(){
+    const st = document.getElementById('bulkStatus');
+    const selected = Object.keys(STATE.bulkSelection).filter(k => STATE.bulkSelection[k]);
+
+    if (!selected.length){
+      st.textContent = 'Nic není vybráno.';
+      return;
+    }
+
+    st.textContent = `Odesílám (${selected.length})...`;
+    document.getElementById('btnSendBulk').disabled = true;
+
+    try{
+      const res = await api('api_sendBulkSelected', {
+        eventId: STATE.selectedEvent.eventId,
+        rowIndexes: selected.map(x => Number(x))
+      });
+
+      st.textContent = `Hotovo. Odesláno: ${res.sentCount}, Chyby: ${res.failedCount}`;
+      updateBulkSendButtonState();
+    }catch(e){
+      st.textContent = 'Chyba: ' + (e && e.message ? e.message : e);
+      updateBulkSendButtonState();
+    }
+  }
+
+  async function openLogs(){
+    document.getElementById('logsModal').style.display = 'flex';
+    document.getElementById('logsStatus').textContent = 'Načítám logy...';
+    document.getElementById('logsList').innerHTML = '';
+
+    try{
+      const logs = await api('api_getLatestLogs', 30);
+      document.getElementById('logsStatus').textContent = logs.length ? `Posledních ${logs.length} akcí` : 'Žádné logy.';
+
+      const wrap = document.getElementById('logsList');
+      wrap.innerHTML = logs.map(l => {
+        const cls = l.status === 'OK' ? 'log-row-ok' : 'log-row-error';
+        return `
+          <div class="log-row ${cls}">
+            <div class="log-main">${escapeHtml(l.action)} · ${escapeHtml(l.status)}</div>
+            <div class="log-sub">${escapeHtml(fmtDate(l.timestamp))} · ${escapeHtml(l.userEmail)} · ${escapeHtml(l.eventName)}</div>
+            <div class="log-sub">${escapeHtml(l.childName || '')} ${l.subject ? '· ' + escapeHtml(l.subject) : ''}</div>
+            <div class="log-sub">${escapeHtml(l.details || '')}</div>
+          </div>
+        `;
+      }).join('');
+    }catch(e){
+      document.getElementById('logsStatus').textContent = 'Chyba: ' + (e && e.message ? e.message : e);
+    }
+  }
+
+  function closeLogs(){
+    document.getElementById('logsModal').style.display = 'none';
+  }
+
+  function toggleTheme(){
+    const current = document.documentElement.classList.contains('light-mode') ? 'light' : 'dark';
+    const newTheme = current === 'light' ? 'dark' : 'light';
+
+    if (newTheme === 'light') {
+      document.documentElement.classList.add('light-mode');
+    } else {
+      document.documentElement.classList.remove('light-mode');
+    }
+
+    localStorage.setItem('theme', newTheme);
+    updateThemeLabel(newTheme);
+  }
+
+  function updateThemeLabel(theme) {
+    const label = document.getElementById('themeLabel');
+    if (label) {
+      label.textContent = theme === 'dark' ? '☀️' : '🌙';
+    }
+  }
+
+  function initTheme(){
+    const savedTheme = localStorage.getItem('theme') || 'dark';
+    if (savedTheme === 'light') {
+      document.documentElement.classList.add('light-mode');
+    }
+    updateThemeLabel(savedTheme);
+  }
+
+  window.addEventListener('load', async () => {
+    initTheme();
+
+    try{
+      await loadBootstrap();
+      await loadEmails();
+    }catch(e){
+      showFatal(e);
+      return;
+    }
+
+    document.getElementById('btnLoadEmails').onclick = loadEmails;
+    document.getElementById('emailSort').onchange = renderEmailList;
+
+    document.getElementById('btnReload').onclick = async () => {
+      try {
+        STATE.selectedEmail = null;
+        STATE.selectedEmailId = null;
+        await loadBootstrap();
+        await loadEmails();
+      } catch(e) {
+        showFatal(e);
+      }
+    };
+
+    document.getElementById('childSearch').addEventListener('input', (ev) => {
+      renderChildSelect(ev.target.value);
+    });
+
+document.getElementById('childSelect').addEventListener('change', async () => {
+  const newChildName = document.getElementById('childSelect').value || '';
+
+  document.querySelectorAll('select[data-att-child]').forEach(sel => {
+    const attId = sel.getAttribute('data-att-child');
+    if (!STATE.attachmentChildTouched[attId]) {
+      sel.value = newChildName;
+      STATE.attachmentChildren[attId] = newChildName;
+    }
+  });
+
+  await refreshReplyDraft();
+});
+
+    document.getElementById('noteInput').addEventListener('input', async () => {
+      await refreshReplyDraft();
+    });
+
+    document.getElementById('btnRefreshReply').onclick = refreshReplyDraft;
+    document.getElementById('btnExecuteActions').onclick = executeSelectedActions;
+    document.getElementById('btnDelete').onclick = deleteSelectedEmail;
+    document.getElementById('themeSwitch').addEventListener('click', toggleTheme);
+
+    document.getElementById('btnToggleSelectMode').onclick = toggleSelectMode;
+    document.getElementById('btnSelectAllEmails').onclick = selectAllEmails;
+    document.getElementById('btnClearEmailSelection').onclick = clearEmailSelection;
+    document.getElementById('btnBulkMoveEmails').onclick = bulkMoveEmails;
+    document.getElementById('btnBulkDeleteEmails').onclick = bulkDeleteEmails;
+
+    document.getElementById('btnBulk').onclick = openBulk;
+    document.getElementById('btnCloseBulk').onclick = closeBulk;
+    document.getElementById('btnClosePreview').onclick = closePreviewModal;
+
+const btnLogs = document.getElementById('btnLogs');
+if (btnLogs) btnLogs.onclick = openLogs;
+
+const btnCloseLogs = document.getElementById('btnCloseLogs');
+if (btnCloseLogs) btnCloseLogs.onclick = closeLogs;
+
+    document.getElementById('btnLoadBulk').onclick = loadBulkPreview;
+    document.getElementById('btnSendBulk').onclick = sendBulkSelected;
+
+    document.getElementById('btnCheckAll').onclick = () => setAllBulk(true);
+    document.getElementById('btnUncheckAll').onclick = () => setAllBulk(false);
+
+    document.getElementById('eventSelect').addEventListener('change', async (ev) => {
+      const newEventId = ev.target.value;
+
+      try {
+        await cleanupPreviewFiles();
+
+        const { selectedEvent, children, documentTypes } = await api('api_selectEvent', newEventId);
+
+        STATE.selectedEvent = selectedEvent;
+        STATE.children = children;
+        STATE.documentTypes = documentTypes || [];
+        STATE.selectedEmail = null;
+        STATE.selectedEmailId = null;
+        STATE.emailDetailsById = {};
+        STATE.selectedEmailIds = {};
+
+        document.getElementById('userLine').textContent =
+          `Přihlášen: ${STATE.bootstrap.userEmail} · Událost: ${STATE.selectedEvent.eventName}`;
+
+        document.getElementById('emailDetailEmpty').style.display = 'block';
+        document.getElementById('emailDetail').style.display = 'none';
+        document.getElementById('processStatus').textContent = '';
+        document.getElementById('replyEdit').value = '';
+        document.getElementById('replyHint').textContent = '';
+        document.getElementById('noteInput').value = '';
+        document.getElementById('attList').innerHTML = '<div class="muted">Email nemá přílohy.</div>';
+
+        renderChildSelect('');
+        await loadEmails();
+
+        setStatus('inboxStatus', `Emaily pro událost '${STATE.selectedEvent.eventName}' načteny.`);
+      } catch (e) {
+        showFatal(e);
+        document.getElementById('eventSelect').value = STATE.selectedEvent.eventId;
+      }
+    });
+  });
+</script>

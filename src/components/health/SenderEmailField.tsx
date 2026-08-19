@@ -8,12 +8,22 @@ const selectClass =
 const btnPrimary =
   "shrink-0 rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-export default function SenderEmailField({ eventId }: { eventId: string }) {
+type MailAccount = { email: string; scope: string | null };
+
+const MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+
+export default function SenderEmailField({
+  eventId,
+  purpose = "health",
+}: {
+  eventId: string;
+  purpose?: "health" | "mail";
+}) {
   const { t } = useTranslations();
   const url = `/api/events/${eventId}/health/sender-email`;
 
   const [senderEmail, setSenderEmail] = useState<string | null>(null);
-  const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
+  const [connectedAccounts, setConnectedAccounts] = useState<MailAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +68,10 @@ export default function SenderEmailField({ eventId }: { eventId: string }) {
     return <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>;
   }
 
-  const isConnected = senderEmail !== null && connectedAccounts.includes(senderEmail);
+  const selectedAccount = connectedAccounts.find((a) => a.email === senderEmail) ?? null;
+  const isConnected = selectedAccount !== null;
+  const needsReconnect =
+    purpose === "mail" && isConnected && !(selectedAccount?.scope ?? "").includes(MODIFY_SCOPE);
 
   return (
     <div className="mb-6">
@@ -74,8 +87,13 @@ export default function SenderEmailField({ eventId }: { eventId: string }) {
           {t("senderEmailField.setButNotConnectedWarning", { email: senderEmail })}
         </p>
       )}
-      {senderEmail && isConnected && (
+      {senderEmail && isConnected && !needsReconnect && (
         <p className="mb-3 text-[13px] text-green-600">{t("senderEmailField.connectedStatus", { email: senderEmail })}</p>
+      )}
+      {needsReconnect && (
+        <p className="mb-3 text-[13px] text-amber-600">
+          {t("senderEmailField.needsReconnectWarning", { email: senderEmail ?? "" })}
+        </p>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -89,15 +107,15 @@ export default function SenderEmailField({ eventId }: { eventId: string }) {
             <option value="" disabled>
               {t("senderEmailField.pickPlaceholder")}
             </option>
-            {connectedAccounts.map((email) => (
-              <option key={email} value={email}>
-                {email}
+            {connectedAccounts.map((a) => (
+              <option key={a.email} value={a.email}>
+                {a.email}
               </option>
             ))}
           </select>
         )}
-        <a href={`/api/mail-oauth/authorize?eventId=${eventId}`} className={btnPrimary}>
-          {t("senderEmailField.connectNewButton")}
+        <a href={`/api/mail-oauth/authorize?eventId=${eventId}&purpose=${purpose}`} className={btnPrimary}>
+          {needsReconnect ? t("senderEmailField.reconnectButton") : t("senderEmailField.connectNewButton")}
         </a>
       </div>
       {saved && <p className="mt-2 text-[13px] text-green-600">{t("senderEmailField.saved")}</p>}

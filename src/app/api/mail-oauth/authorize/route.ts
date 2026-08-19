@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { google } from "googleapis";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 
 const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
 const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
+// gmail.modify (superset of gmail.send) is required for Mail Helper's
+// read/archive actions -- see docs/mail-helper-module-design.md ("Mailbox
+// / OAuth"). Anyone who connected a mailbox under the old gmail.send-only
+// scope needs to reconnect; consent is scope-specific and doesn't
+// retroactively expand. MailSenderAccount.scope records what was actually
+// granted so the UI can detect and prompt for this (see SenderEmailField).
 const SCOPES = [
-  "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/userinfo.email",
 ];
 
@@ -29,8 +35,11 @@ export async function GET(req: NextRequest) {
   if (!eventId) {
     return NextResponse.json({ error: "event_id_required" }, { status: 400 });
   }
-  const denied = await requireModuleAccess(user, eventId, "health");
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
+
+  const purposeParam = req.nextUrl.searchParams.get("purpose");
+  const purpose = purposeParam === "mail" ? "mail" : "health";
 
   const nonce = crypto.randomBytes(16).toString("hex");
   const redirectUri = `${req.nextUrl.origin}/api/mail-oauth/callback`;
@@ -49,7 +58,7 @@ export async function GET(req: NextRequest) {
   // since that can resolve differently between the two requests behind a
   // proxy (e.g. Cloud Shell's web preview terminates TLS and can present a
   // different effective origin per request).
-  response.cookies.set("mail_oauth_state", `${nonce}|${eventId}|${redirectUri}`, {
+  response.cookies.set("mail_oauth_state", `${nonce}|${eventId}|${redirectUri}|${purpose}`, {
     httpOnly: true,
     secure: true,
     maxAge: 600,

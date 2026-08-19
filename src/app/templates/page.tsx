@@ -14,7 +14,7 @@ const btnPrimary =
 
 export default function TemplatesPage() {
   const { t } = useTranslations();
-  const [tab, setTab] = useState<"health" | "bills">("health");
+  const [tab, setTab] = useState<"health" | "mail" | "bills">("health");
 
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-8">
@@ -31,6 +31,15 @@ export default function TemplatesPage() {
           {t("templatesPage.tabHealth")}
         </button>
         <button
+          onClick={() => setTab("mail")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "mail" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("templatesPage.tabMail")}
+        </button>
+        <button
           onClick={() => setTab("bills")}
           className={
             "border-b-2 px-3 py-2 text-[13px] font-medium " +
@@ -42,6 +51,7 @@ export default function TemplatesPage() {
       </div>
 
       {tab === "health" && <HealthTemplatesTab />}
+      {tab === "mail" && <ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} />}
       {tab === "bills" && <BillsTemplatesTab />}
     </div>
   );

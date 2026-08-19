@@ -23,6 +23,7 @@ import {
   Pill,
   LayoutTemplate,
   Languages,
+  Mail,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 
@@ -106,6 +107,12 @@ export default function AppSidebar() {
             icon: Pill,
           },
         ]
+      : []),
+  ];
+
+  const mailNavItems = [
+    ...(moduleAccess.mail
+      ? [{ href: eventId ? `/events/${eventId}/mail` : "/events", label: t("nav.mail"), icon: Mail }]
       : []),
   ];
 
@@ -194,6 +201,20 @@ export default function AppSidebar() {
           <NavLink key={item.label} {...item} />
         ))}
       </nav>
+
+      {mailNavItems.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-night-border" />
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.sectionMail")}
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {mailNavItems.map((item) => (
+              <NavLink key={item.label} {...item} />
+            ))}
+          </nav>
+        </>
+      )}
 
       <div className="my-3 h-px bg-night-border" />
 

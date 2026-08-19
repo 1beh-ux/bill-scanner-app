@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
-import { TEMPLATE_VARIABLES, substituteDummyTemplateValues } from "@/lib/email-template-preview";
+import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email-template-preview";
+import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -15,11 +16,19 @@ interface EmailTemplateAdminProps {
   scope: "org" | "event";
   eventId?: string;
   label: string;
+  purposeKey?: string;
 }
 
-export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTemplateAdminProps) {
+export default function EmailTemplateAdmin({
+  scope,
+  eventId,
+  label,
+  purposeKey = PARENT_SUMMARY_PURPOSE_KEY,
+}: EmailTemplateAdminProps) {
   const { t } = useTranslations();
-  const url = scope === "org" ? "/api/email-templates" : `/api/events/${eventId}/email-template`;
+  const baseUrl = scope === "org" ? "/api/email-templates" : `/api/events/${eventId}/email-template`;
+  const url = `${baseUrl}?purposeKey=${encodeURIComponent(purposeKey)}`;
+  const variables = templateVariablesFor(purposeKey);
 
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -49,7 +58,7 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scope, eventId]);
+  }, [scope, eventId, purposeKey]);
 
   function insertVariable(name: string) {
     const token = `{{${name}}}`;
@@ -76,7 +85,7 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
     const res = await fetch(url, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, body }),
+      body: JSON.stringify({ subject, body, purposeKey }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -123,7 +132,7 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
       <div className="mb-2 flex flex-wrap gap-1.5">
-        {TEMPLATE_VARIABLES.map((name) => (
+        {variables.map((name) => (
           <button key={name} type="button" onClick={() => insertVariable(name)} className={varBtnClass}>
             {`{{${name}}}`}
           </button>
@@ -154,8 +163,8 @@ export default function EmailTemplateAdmin({ scope, eventId, label }: EmailTempl
         <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">
           {t("emailTemplateAdmin.previewTitle")}
         </p>
-        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject)}</p>
-        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body)}</p>
+        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey)}</p>
+        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey)}</p>
       </div>
 
       <div className="flex justify-end">
