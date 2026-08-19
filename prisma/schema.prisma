@@ -98,6 +98,7 @@ model User {
   incidentUpdates    IncidentUpdate[] @relation("IncidentUpdatedBy")
   medChecklistGiven  MedChecklist[]   @relation("MedChecklistGivenBy")
   parentEmailsSent   ParentEmailLog[] @relation("ParentEmailSentBy")
+  mailAccountsConnected MailSenderAccount[] @relation("MailAccountConnectedBy")
 
   @@map("users")
 }
@@ -495,6 +496,23 @@ model EventEmailTemplate {
 
   @@unique([eventId, purposeKey])
   @@map("event_email_templates")
+}
+
+// A Workspace mailbox that its own owner has connected via OAuth consent
+// (gmail.send scope only) -- the fallback to domain-wide delegation, which
+// was rejected by the Workspace admin. Keyed by email, not event, so the
+// same connected mailbox can be reused across multiple events without
+// reconnecting; Event.senderEmail just points at one of these by address.
+model MailSenderAccount {
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  refreshTokenEncrypted String @map("refresh_token_encrypted")
+  connectedByUserId   String   @map("connected_by_user_id")
+  connectedAt         DateTime @default(now()) @map("connected_at")
+
+  connectedByUser User @relation("MailAccountConnectedBy", fields: [connectedByUserId], references: [id])
+
+  @@map("mail_sender_accounts")
 }
 
 model ParentEmailLog {

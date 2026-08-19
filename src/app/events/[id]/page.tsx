@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
@@ -60,8 +61,11 @@ export default function EventDetailPage({
 }) {
   const { id } = use(params);
   const { t } = useTranslations();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const mailConnect = searchParams.get("mailConnect");
 
-  const [tab, setTab] = useState<Tab>("categories");
+  const [tab, setTab] = useState<Tab>(requestedTab === "health" ? "health" : "categories");
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [event, setEvent] = useState<EventDetail | null>(null);
@@ -344,6 +348,16 @@ export default function EventDetailPage({
 
       {tab === "health" && (
         <div className="flex flex-col gap-6">
+          {mailConnect === "connected" && (
+            <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
+              {t("senderEmailField.connectSuccessBanner")}
+            </p>
+          )}
+          {mailConnect === "error" && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+              {t("senderEmailField.connectErrorBanner")}
+            </p>
+          )}
           <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
           <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
           <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />

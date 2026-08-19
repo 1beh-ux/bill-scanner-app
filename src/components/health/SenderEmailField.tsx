@@ -3,53 +3,62 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 
-const inputClass =
+const selectClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
-  "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
+  "shrink-0 rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
 export default function SenderEmailField({ eventId }: { eventId: string }) {
   const { t } = useTranslations();
   const url = `/api/events/${eventId}/health/sender-email`;
 
-  const [senderEmail, setSenderEmail] = useState("");
+  const [senderEmail, setSenderEmail] = useState<string | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
+  async function load() {
     setLoading(true);
-    fetch(url)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data) setSenderEmail(data.senderEmail ?? "");
-        else setError(t("senderEmailField.errorLoadFailed"));
-      })
-      .finally(() => setLoading(false));
+    const [fieldRes, accountsRes] = await Promise.all([fetch(url), fetch("/api/mail-accounts")]);
+    if (fieldRes.ok) {
+      setSenderEmail((await fieldRes.json()).senderEmail);
+    } else {
+      setError(t("senderEmailField.errorLoadFailed"));
+    }
+    if (accountsRes.ok) setConnectedAccounts(await accountsRes.json());
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  async function handleSave() {
+  async function handlePick(email: string) {
     setSaving(true);
     setError(null);
     setSaved(false);
     const res = await fetch(url, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ senderEmail }),
+      body: JSON.stringify({ senderEmail: email }),
     });
     setSaving(false);
     if (!res.ok) {
       setError(t("senderEmailField.errorSaveFailed"));
       return;
     }
+    setSenderEmail(email);
     setSaved(true);
   }
 
   if (loading) {
     return <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>;
   }
+
+  const isConnected = senderEmail !== null && connectedAccounts.includes(senderEmail);
 
   return (
     <div className="mb-6">
@@ -60,21 +69,36 @@ export default function SenderEmailField({ eventId }: { eventId: string }) {
       {!senderEmail && !error && (
         <p className="mb-3 text-[13px] text-amber-600">{t("senderEmailField.notConfiguredWarning")}</p>
       )}
+      {senderEmail && !isConnected && !error && (
+        <p className="mb-3 text-[13px] text-amber-600">
+          {t("senderEmailField.setButNotConnectedWarning", { email: senderEmail })}
+        </p>
+      )}
+      {senderEmail && isConnected && (
+        <p className="mb-3 text-[13px] text-green-600">{t("senderEmailField.connectedStatus", { email: senderEmail })}</p>
+      )}
 
-      <div className="flex gap-2">
-        <input
-          type="email"
-          value={senderEmail}
-          onChange={(e) => {
-            setSenderEmail(e.target.value);
-            setSaved(false);
-          }}
-          placeholder="tabor2026@vasedoména.cz"
-          className={inputClass}
-        />
-        <button onClick={handleSave} disabled={saving} className={btnPrimary}>
-          {t("common.save")}
-        </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {connectedAccounts.length > 0 && (
+          <select
+            value={senderEmail ?? ""}
+            onChange={(e) => e.target.value && handlePick(e.target.value)}
+            disabled={saving}
+            className={selectClass}
+          >
+            <option value="" disabled>
+              {t("senderEmailField.pickPlaceholder")}
+            </option>
+            {connectedAccounts.map((email) => (
+              <option key={email} value={email}>
+                {email}
+              </option>
+            ))}
+          </select>
+        )}
+        <a href={`/api/mail-oauth/authorize?eventId=${eventId}`} className={btnPrimary}>
+          {t("senderEmailField.connectNewButton")}
+        </a>
       </div>
       {saved && <p className="mt-2 text-[13px] text-green-600">{t("senderEmailField.saved")}</p>}
     </div>
