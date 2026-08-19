@@ -18,6 +18,13 @@ async function main() {
     { key: "emailTemplateAdmin.bodyLabel", cs: "Text zprávy", en: "Body" },
     { key: "emailTemplateAdmin.previewTitle", cs: "Náhled", en: "Preview" },
 
+    { key: "senderEmailField.title", cs: "Odesílatel e-mailů", en: "Sender email" },
+    { key: "senderEmailField.hint", cs: "Schránka Google Workspace, ze které se odešlou souhrny rodičům pro tuto akci. Stejnou adresu lze použít pro více akcí.", en: "The Google Workspace mailbox summaries for this event are sent from. The same address can be reused across multiple events." },
+    { key: "senderEmailField.notConfiguredWarning", cs: "Bez nastavené adresy nelze rodičům odesílat souhrny.", en: "Summaries can't be sent to guardians until an address is set." },
+    { key: "senderEmailField.errorLoadFailed", cs: "Načtení se nezdařilo.", en: "Failed to load." },
+    { key: "senderEmailField.errorSaveFailed", cs: "Uložení se nezdařilo.", en: "Failed to save." },
+    { key: "senderEmailField.saved", cs: "Uloženo.", en: "Saved." },
+
     { key: "participantDetail.downloadPdfButton", cs: "Stáhnout PDF", en: "Download PDF" },
 
     { key: "sendSummary.sendButtonShort", cs: "Odeslat souhrn rodičům", en: "Send summary to guardians" },

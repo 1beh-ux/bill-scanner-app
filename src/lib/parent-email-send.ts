@@ -57,6 +57,25 @@ export async function sendSummaryToGuardians(
   if (!participant) throw new Error("participant_not_found");
   if (participant.guardians.length === 0) return [];
 
+  const senderEmail = participant.event.senderEmail;
+  if (!senderEmail) {
+    const results: GuardianSendResult[] = [];
+    for (const guardian of participant.guardians) {
+      await prisma.parentEmailLog.create({
+        data: {
+          participantId,
+          guardianId: guardian.id,
+          purposeKey: PARENT_SUMMARY_PURPOSE_KEY,
+          status: "failed",
+          errorMessage: "sender_not_configured",
+          sentByUserId,
+        },
+      });
+      results.push({ guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage: "sender_not_configured" });
+    }
+    return results;
+  }
+
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
   const senderDisplayName = sentByUser?.displayName ?? "Zdravotník";
 
@@ -99,6 +118,7 @@ export async function sendSummaryToGuardians(
       await sendParentSummaryEmail({
         to: guardian.email,
         fromName: senderDisplayName,
+        senderEmail,
         subject,
         body,
         pdfBuffer: pdf.buffer,

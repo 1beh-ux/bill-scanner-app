@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
+import SenderEmailField from "@/components/health/SenderEmailField";
 
 type EventDetail = {
   id: string;
@@ -346,6 +347,7 @@ export default function EventDetailPage({
           <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
           <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
           <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
+          <SenderEmailField eventId={id} />
           <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />
           <div>
             <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">

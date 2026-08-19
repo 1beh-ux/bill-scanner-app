@@ -7,25 +7,32 @@ import { google } from "googleapis";
 // impersonation, no Workspace involvement) -- that's why this has its own
 // auth path instead of reusing getDriveClient()'s pattern.
 const MAIL_SA_KEY_JSON = process.env.MAIL_SA_KEY_JSON;
-const SENDER_EMAIL = process.env.MAIL_SENDER_EMAIL || "1beh@zare.cz";
 
-let gmailClientPromise: ReturnType<typeof buildGmailClient> | null = null;
+// Every event impersonates its own Workspace mailbox (Event.senderEmail), so
+// the client is cached per sender rather than once globally -- domain-wide
+// delegation authorizes the whole domain, so any mailbox in it is a valid
+// `sub` claim, no per-address setup needed on the Google side.
+const gmailClientsBySender = new Map<string, ReturnType<typeof buildGmailClient>>();
 
-function buildGmailClient() {
+function buildGmailClient(senderEmail: string) {
   if (!MAIL_SA_KEY_JSON) throw new Error("MAIL_SA_KEY_JSON is not set");
   const credentials = JSON.parse(MAIL_SA_KEY_JSON);
   const auth = new google.auth.JWT({
     email: credentials.client_email,
     key: credentials.private_key,
     scopes: ["https://www.googleapis.com/auth/gmail.send"],
-    subject: SENDER_EMAIL,
+    subject: senderEmail,
   });
   return Promise.resolve(google.gmail({ version: "v1", auth }));
 }
 
-function getGmailClient() {
-  if (!gmailClientPromise) gmailClientPromise = buildGmailClient();
-  return gmailClientPromise;
+function getGmailClient(senderEmail: string) {
+  let clientPromise = gmailClientsBySender.get(senderEmail);
+  if (!clientPromise) {
+    clientPromise = buildGmailClient(senderEmail);
+    gmailClientsBySender.set(senderEmail, clientPromise);
+  }
+  return clientPromise;
 }
 
 function encodeHeaderValue(value: string): string {
@@ -43,6 +50,7 @@ function chunk76(base64: string): string {
 function buildRawMessage(opts: {
   to: string;
   fromName: string;
+  senderEmail: string;
   subject: string;
   body: string;
   pdfBuffer: Buffer;
@@ -53,7 +61,7 @@ function buildRawMessage(opts: {
   const pdfBase64 = chunk76(opts.pdfBuffer.toString("base64"));
 
   const message = [
-    `From: ${encodeHeaderValue(opts.fromName)} <${SENDER_EMAIL}>`,
+    `From: ${encodeHeaderValue(opts.fromName)} <${opts.senderEmail}>`,
     `To: ${opts.to}`,
     `Subject: ${encodeHeaderValue(opts.subject)}`,
     `MIME-Version: 1.0`,
@@ -81,12 +89,13 @@ function buildRawMessage(opts: {
 export async function sendParentSummaryEmail(opts: {
   to: string;
   fromName: string;
+  senderEmail: string;
   subject: string;
   body: string;
   pdfBuffer: Buffer;
   pdfFilename: string;
 }): Promise<void> {
-  const gmail = await getGmailClient();
+  const gmail = await getGmailClient(opts.senderEmail);
   const raw = buildRawMessage(opts);
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
 }
