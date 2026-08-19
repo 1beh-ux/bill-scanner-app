@@ -15,11 +15,11 @@ const PAGE_MM: Record<"A4" | "A3", { w: number; h: number }> = {
 };
 const MARGIN_MM = 10; // matches the fixed margin the PDF microservice applies on every side
 const STICKY_COL_WIDTH_MM = 38;
-const MIN_COL_WIDTH_MM = 6.5; // floor for a checkbox + a rotated 8pt label to stay legible
-const MAX_COL_WIDTH_MM = 13; // don't let columns balloon when there are very few of them
+const MIN_COL_WIDTH_MM = 5; // floor for a checkbox + a rotated 8pt label to stay legible
+const MAX_COL_WIDTH_MM = 10; // don't let columns balloon when there are very few of them
 const ROOMY_FONT_PT = 10;
 const COMPACT_FONT_PT = 8;
-const ROOMY_COL_THRESHOLD_MM = 9;
+const ROOMY_COL_THRESHOLD_MM = 7.5;
 
 /**
  * Decides orientation (whichever axis -- participant/med rows vs. day×period

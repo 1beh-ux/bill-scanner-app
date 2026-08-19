@@ -34,16 +34,27 @@ function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: num
     h1 { font-size: 15px; margin: 0 0 3px; }
     p.subtitle { font-size: 11px; color: #555; margin: 0 0 8px; }
     table { width: 100%; border-collapse: collapse; font-size: ${fontSizePt}px; table-layout: fixed; }
-    th, td { border: 1px solid #bbb; padding: 2px 3px; text-align: center; vertical-align: middle; }
+    th, td { border: 1px solid #bbb; padding: 1px 2px; text-align: center; vertical-align: middle; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; }
     col.sticky { width: ${stickyColWidthMm}mm; }
     col.data { width: ${colWidthMm}mm; }
-    th.name, td.name { text-align: left; white-space: normal; font-size: ${fontSizePt}px; }
+    th.name, td.name { text-align: left; white-space: normal; font-size: ${fontSizePt}px; padding: 2px 4px; }
     td.name .medname { color: #666; font-size: ${Math.max(fontSizePt - 1, 7)}px; }
-    th.period { height: 24mm; vertical-align: bottom; padding-bottom: 2mm; }
-    th.period .rot { display: inline-block; white-space: nowrap; transform: rotate(-90deg); transform-origin: center; font-weight: 500; }
-    .box { font-size: ${fontSizePt + 2}px; line-height: 1; }
+    th.period { height: 20mm; padding: 2px 0; }
+    /* A single sideways line of text, sized by the layout engine itself
+       (not a post-hoc transform), so it can't visually overflow into the
+       row above the way a rotated inline-block with the wrong
+       transform-origin can. */
+    th.period .rot {
+      writing-mode: vertical-rl;
+      text-orientation: sideways;
+      transform: rotate(180deg);
+      white-space: nowrap;
+      margin: 0 auto;
+      font-weight: 500;
+    }
+    .box { font-size: ${fontSizePt + 1}px; line-height: 1; }
     tr.shade-b td { background: #f3f3f3; }
     tr.group-first td { border-top: 2px solid #333; }
     tr.group-last td { border-bottom: 2px solid #333; }
@@ -149,7 +160,11 @@ export function buildMedsGridPdfHtml(opts: {
   const usedSlotIds = new Set(opts.grid.rows.flatMap((r) => r.slotIds));
   const visibleSet = visibleSlotIds ? new Set(visibleSlotIds) : null;
   const slots = opts.grid.slots.filter((s) => usedSlotIds.has(s.id) && (!visibleSet || visibleSet.has(s.id)));
-  const grid: GridResult = { ...opts.grid, slots };
+  const visibleSlotIdSet = new Set(slots.map((s) => s.id));
+  // A row whose med isn't given in any currently-visible period would just
+  // show as an empty stripe -- drop it rather than print dead rows.
+  const rows = opts.grid.rows.filter((r) => r.slotIds.some((id) => visibleSlotIdSet.has(id)));
+  const grid: GridResult = { ...opts.grid, slots, rows };
 
   const columns: ExportColumnKey[] = [];
   for (const day of grid.days) {

@@ -82,6 +82,7 @@ export default function MedChecklistPage({
   const [data, setData] = useState<GridResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [visibleSlotIds, setVisibleSlotIds] = useState<Set<string> | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
   const [notesCache, setNotesCache] = useState<Record<string, ParticipantNotes>>({});
 
@@ -205,15 +206,35 @@ export default function MedChecklistPage({
     }
   }
 
-  const groupMeta = useMemo(() => computeGroupMeta(data?.rows ?? []), [data]);
+  // A row whose med has nothing in any currently-visible period would just
+  // be an empty stripe -- drop it. Search narrows by participant name.
+  const visibleRows = useMemo(() => {
+    if (!data) return [];
+    const q = searchQuery.trim().toLowerCase();
+    return data.rows.filter(
+      (r) =>
+        r.slotIds.some((id) => visibleSlotIds?.has(id)) &&
+        (!q || r.participantName.toLowerCase().includes(q))
+    );
+  }, [data, visibleSlotIds, searchQuery]);
 
-  function rowBgClass(i: number): string {
-    return groupMeta[i]?.shadeB ? "bg-paper-2" : "bg-paper";
-  }
-  function rowBorderClass(i: number): string {
+  const groupMeta = useMemo(() => computeGroupMeta(visibleRows), [visibleRows]);
+
+  /**
+   * Border/shade classes applied directly to every <td> in a row (not the
+   * <tr>) -- <tr>-level borders render unreliably in collapsed tables
+   * across browsers. "start" = the sticky name cell, "end" = the last
+   * visible data cell, "middle" = every other data cell.
+   */
+  function cellClasses(i: number, position: "start" | "middle" | "end"): string {
     const m = groupMeta[i];
-    if (!m) return "";
-    return [m.isFirst ? "border-t-2 border-t-ink" : "", m.isLast ? "border-b-2 border-b-ink" : ""].join(" ");
+    const classes = [m?.shadeB ? "bg-paper-2" : "bg-paper"];
+    if (m?.isFirst) classes.push("border-t-2 border-t-ink");
+    if (m?.isLast) classes.push("border-b-2 border-b-ink");
+    if (position !== "start") classes.push("border-l border-mist"); // normal grid separator from the previous column
+    if (position === "start") classes.push(m?.hasMultiple ? "border-r-2 border-r-ink" : "border-r border-mist");
+    if (position === "end" && m?.hasMultiple) classes.push("border-r-2 border-r-ink");
+    return classes.join(" ");
   }
 
   function NotesPanel({ participantId }: { participantId: string }) {
@@ -266,17 +287,39 @@ export default function MedChecklistPage({
         )}
       </div>
 
-      {usedSlots.length > 1 && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <span className="text-[12px] text-ink-secondary">{t("medGridPage.periodFilterLabel")}:</span>
-          {usedSlots.map((s) => (
-            <label key={s.id} className="flex items-center gap-1 rounded-full border border-mist bg-paper-2 px-2 py-1 text-[12px] text-ink">
-              <input type="checkbox" checked={visibleSlotIds?.has(s.id) ?? true} onChange={() => toggleSlotVisible(s.id)} />
-              {s.name}
-            </label>
-          ))}
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="relative max-w-xs flex-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("participantsPage.searchPlaceholder")}
+            aria-label={t("participantsPage.searchPlaceholder")}
+            className="w-full rounded-lg border border-mist bg-paper-2 px-3 py-1.5 pr-8 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-ember"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              aria-label={t("common.cancel")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-secondary hover:text-ink"
+            >
+              ×
+            </button>
+          )}
         </div>
-      )}
+
+        {usedSlots.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] text-ink-secondary">{t("medGridPage.periodFilterLabel")}:</span>
+            {usedSlots.map((s) => (
+              <label key={s.id} className="flex items-center gap-1 rounded-full border border-mist bg-paper-2 px-2 py-1 text-[12px] text-ink">
+                <input type="checkbox" checked={visibleSlotIds?.has(s.id) ?? true} onChange={() => toggleSlotVisible(s.id)} />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
 
       <div className="mb-4">
         <PdfExportControls
@@ -288,16 +331,16 @@ export default function MedChecklistPage({
 
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
-      ) : !data || data.rows.length === 0 ? (
+      ) : !data || visibleRows.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">{t("medChecklistPage.empty")}</p>
       ) : (
         <>
           {/* Desktop / wide: full day×period grid */}
           <div className="hidden overflow-x-auto rounded-lg border border-mist md:block">
-            <table className="w-full border-collapse text-[11px]">
+            <table className="border-collapse text-[11px]">
               <thead>
                 <tr className="border-b border-mist">
-                  <th rowSpan={2} className="sticky left-0 z-10 border-r border-mist bg-paper-2 p-1.5 text-left align-bottom font-medium text-ink-secondary">
+                  <th rowSpan={2} className="sticky left-0 z-10 whitespace-nowrap border-r border-mist bg-paper-2 p-1.5 text-left align-bottom font-medium text-ink-secondary">
                     {t("medGridPage.colParticipant")}
                   </th>
                   {data.days.map((day) => (
@@ -309,45 +352,47 @@ export default function MedChecklistPage({
                 <tr className="border-b border-mist">
                   {data.days.flatMap((day) =>
                     visibleSlots.map((slot) => (
-                      <th key={`${day}:${slot.id}`} className="h-16 w-7 border-l border-mist align-bottom p-0.5">
-                        <span className="inline-block origin-center -rotate-90 whitespace-nowrap text-[10px] text-ink-secondary">{slot.name}</span>
+                      <th key={`${day}:${slot.id}`} className="h-20 w-6 border-l border-mist p-0.5 align-bottom">
+                        <span
+                          style={{ writingMode: "vertical-rl", textOrientation: "sideways", transform: "rotate(180deg)" }}
+                          className="whitespace-nowrap text-[10px] text-ink-secondary"
+                        >
+                          {slot.name}
+                        </span>
                       </th>
                     ))
                   )}
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((row, i) => {
-                  const meta = groupMeta[i];
-                  return (
-                    <tr key={`${row.participantId}:${row.eventMedId}`} className={`${rowBgClass(i)} ${rowBorderClass(i)}`}>
-                      <td className={`sticky left-0 z-10 border-r p-1.5 text-ink ${meta?.hasMultiple ? "border-r-2 border-r-ink" : "border-mist"} ${rowBgClass(i)}`}>
-                        <button onClick={() => toggleNotes(row.participantId)} className="text-left hover:underline">
-                          {row.participantName}
-                        </button>
-                        <div className="text-[10px] text-ink-secondary">{row.medName}</div>
-                      </td>
-                      {data.days.flatMap((day) =>
-                        visibleSlots.map((slot, si) => {
-                          const isLastCol = si === visibleSlots.length - 1;
-                          if (!row.slotIds.includes(slot.id)) {
-                            return <td key={`${day}:${slot.id}`} className={`border-l border-mist ${isLastCol && meta?.hasMultiple ? "border-r-2 border-r-ink" : ""}`} />;
-                          }
-                          const status = row.days[day]?.[slot.id];
-                          return (
-                            <td key={`${day}:${slot.id}`} className={`border-l border-mist p-0.5 text-center ${isLastCol && meta?.hasMultiple ? "border-r-2 border-r-ink" : ""}`}>
-                              <input type="checkbox" checked={!!status?.given} onChange={() => toggleCell(row, day, slot.id)} />
-                            </td>
-                          );
-                        })
-                      )}
-                    </tr>
-                  );
-                })}
+                {visibleRows.map((row, i) => (
+                  <tr key={`${row.participantId}:${row.eventMedId}`}>
+                    <td className={`sticky left-0 z-10 whitespace-nowrap p-1.5 text-ink ${cellClasses(i, "start")}`}>
+                      <button onClick={() => toggleNotes(row.participantId)} className="text-left hover:underline">
+                        {row.participantName}
+                      </button>
+                      <span className="ml-1 text-[10px] text-ink-secondary">{row.medName}</span>
+                    </td>
+                    {data.days.flatMap((day) =>
+                      visibleSlots.map((slot, si) => {
+                        const position = si === visibleSlots.length - 1 ? "end" : "middle";
+                        if (!row.slotIds.includes(slot.id)) {
+                          return <td key={`${day}:${slot.id}`} className={cellClasses(i, position)} />;
+                        }
+                        const status = row.days[day]?.[slot.id];
+                        return (
+                          <td key={`${day}:${slot.id}`} className={`p-0.5 text-center ${cellClasses(i, position)}`}>
+                            <input type="checkbox" checked={!!status?.given} onChange={() => toggleCell(row, day, slot.id)} />
+                          </td>
+                        );
+                      })
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
-          {expandedParticipantId && data.rows.some((r) => r.participantId === expandedParticipantId) && (
+          {expandedParticipantId && visibleRows.some((r) => r.participantId === expandedParticipantId) && (
             <div className="mt-2 hidden md:block">
               <NotesPanel participantId={expandedParticipantId} />
             </div>
@@ -357,7 +402,7 @@ export default function MedChecklistPage({
           <div className="flex flex-col gap-2 md:hidden">
             {(() => {
               const byParticipant = new Map<string, { name: string; meds: GridRow[] }>();
-              for (const row of data.rows) {
+              for (const row of visibleRows) {
                 const entry = byParticipant.get(row.participantId) ?? { name: row.participantName, meds: [] };
                 entry.meds.push(row);
                 byParticipant.set(row.participantId, entry);
