@@ -2,36 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { fetchMedChecklistDay } from "@/lib/med-checklist-grid";
 
 // Checklist rows are computed from standing med plans, not stored ahead of
-// time -- a MedChecklist row only gets created (via upsert, in POST) the
-// first time someone actually toggles it for a given date. See
-// fetchMedChecklistDay for the query itself (also reused by the "plan" PDF
-// export).
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const user = await getCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-  const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
-  if (denied) return denied;
-
-  const { searchParams } = new URL(req.url);
-  const dateParam = searchParams.get("date");
-  const slotId = searchParams.get("slotId");
-  if (!dateParam || !slotId) {
-    return NextResponse.json({ error: "date_and_slot_required" }, { status: 400 });
-  }
-
-  const result = await fetchMedChecklistDay(eventId, new Date(dateParam), slotId);
-  return NextResponse.json(result);
-}
-
+// time -- a MedChecklist row only gets created (via upsert, here) the first
+// time someone actually toggles it for a given date. Reads go through
+// fetchMedChecklistGrid (see /api/events/[id]/med-checklist/grid) -- this
+// route is toggle-only.
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

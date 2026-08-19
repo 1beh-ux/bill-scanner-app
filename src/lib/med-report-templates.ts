@@ -1,112 +1,187 @@
-import type { DayRow, GridResult } from "@/lib/med-checklist-grid";
-
-const BASE_STYLE = `
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 0; }
-  h1 { font-size: 16px; margin: 0 0 4px; }
-  p.subtitle { font-size: 12px; color: #555; margin: 0 0 12px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th, td { border: 1px solid #999; padding: 4px 6px; text-align: left; vertical-align: top; }
-  th { background: #eee; font-weight: 600; }
-  td.check, th.check { text-align: center; white-space: nowrap; }
-  .box { font-size: 14px; }
-`;
+import type { GridResult, GridRow } from "@/lib/med-checklist-grid";
+import { planMedsExportLayout, type ExportColumnKey } from "@/lib/med-export-layout";
 
 function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
 function checkbox(checked: boolean): string {
-  return `<span class="box">${checked ? "☑" : "☐"}</span>`;
-}
-
-export function buildPlanReportHtml(opts: {
-  eventName: string;
-  dateLabel: string;
-  slotName: string;
-  rows: DayRow[];
-  mode: "blank" | "hybrid";
-}): string {
-  const { eventName, dateLabel, slotName, rows, mode } = opts;
-  const body = rows
-    .map(
-      (r) => `
-        <tr>
-          <td>${escapeHtml(r.participantName)}</td>
-          <td>${escapeHtml(r.participantGroup ?? "")}</td>
-          <td>${escapeHtml(r.medName)}</td>
-          <td>${escapeHtml(r.dose ?? "")}</td>
-          <td class="check">${checkbox(mode === "hybrid" && r.given)}</td>
-        </tr>`
-    )
-    .join("");
-
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${BASE_STYLE}</style></head>
-<body>
-  <h1>${escapeHtml(eventName)} — Výdej léků</h1>
-  <p class="subtitle">${escapeHtml(dateLabel)} · ${escapeHtml(slotName)}</p>
-  <table>
-    <thead>
-      <tr><th>Účastník</th><th>Skupina</th><th>Lék</th><th>Dávka</th><th class="check">Podáno</th></tr>
-    </thead>
-    <tbody>${body}</tbody>
-  </table>
-</body></html>`;
-}
-
-export function buildGridReportHtml(opts: {
-  eventName: string;
-  rangeLabel: string;
-  grid: GridResult;
-  mode: "blank" | "hybrid";
-}): string {
-  const { eventName, rangeLabel, grid, mode } = opts;
-
-  const dayHeaderCells = grid.days
-    .map((day) => `<th colspan="${grid.slots.length}" class="check">${escapeHtml(formatDay(day))}</th>`)
-    .join("");
-  const slotHeaderCells = grid.days
-    .map(() => grid.slots.map((s) => `<th class="check">${escapeHtml(s.name)}</th>`).join(""))
-    .join("");
-
-  const bodyRows = grid.rows
-    .map((row) => {
-      const cells = grid.days
-        .map((day) =>
-          grid.slots
-            .map((slot) => {
-              if (!row.slotIds.includes(slot.id)) return `<td class="check">—</td>`;
-              const status = row.days[day]?.[slot.id];
-              return `<td class="check">${checkbox(mode === "hybrid" && !!status?.given)}</td>`;
-            })
-            .join("")
-        )
-        .join("");
-      return `
-        <tr>
-          <td>${escapeHtml(row.participantName)}<br/><span style="color:#666">${escapeHtml(row.medName)}</span></td>
-          ${cells}
-        </tr>`;
-    })
-    .join("");
-
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><style>${BASE_STYLE}</style></head>
-<body>
-  <h1>${escapeHtml(eventName)} — Přehled léků</h1>
-  <p class="subtitle">${escapeHtml(rangeLabel)}</p>
-  <table>
-    <thead>
-      <tr><th rowspan="2">Účastník / lék</th>${dayHeaderCells}</tr>
-      <tr>${slotHeaderCells}</tr>
-    </thead>
-    <tbody>${bodyRows}</tbody>
-  </table>
-</body></html>`;
+  return `<span class="box">${checked ? "&#9745;" : "&#9744;"}</span>`;
 }
 
 function formatDay(iso: string): string {
   const d = new Date(iso + "T00:00:00");
   return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+}
+
+/** Runs of consecutive columns sharing the same day, for building colspan'd day headers. */
+function dayRuns(columns: ExportColumnKey[]): { day: string; count: number }[] {
+  const runs: { day: string; count: number }[] = [];
+  for (const col of columns) {
+    const last = runs[runs.length - 1];
+    if (last && last.day === col.day) last.count += 1;
+    else runs.push({ day: col.day, count: 1 });
+  }
+  return runs;
+}
+
+function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: number): string {
+  return `
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1a1a1a; margin: 0; padding: 0; }
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+    h1 { font-size: 15px; margin: 0 0 3px; }
+    p.subtitle { font-size: 11px; color: #555; margin: 0 0 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: ${fontSizePt}px; table-layout: fixed; }
+    th, td { border: 1px solid #bbb; padding: 2px 3px; text-align: center; vertical-align: middle; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; }
+    col.sticky { width: ${stickyColWidthMm}mm; }
+    col.data { width: ${colWidthMm}mm; }
+    th.name, td.name { text-align: left; white-space: normal; font-size: ${fontSizePt}px; }
+    td.name .medname { color: #666; font-size: ${Math.max(fontSizePt - 1, 7)}px; }
+    th.period { height: 24mm; vertical-align: bottom; padding-bottom: 2mm; }
+    th.period .rot { display: inline-block; white-space: nowrap; transform: rotate(-90deg); transform-origin: center; font-weight: 500; }
+    .box { font-size: ${fontSizePt + 2}px; line-height: 1; }
+    tr.shade-b td { background: #f3f3f3; }
+    tr.group-first td { border-top: 2px solid #333; }
+    tr.group-last td { border-bottom: 2px solid #333; }
+    td.group-edge-left { border-left: 2px solid #333; }
+    td.group-edge-right { border-right: 2px solid #333; }
+    p.gluehint { font-size: 10px; color: #777; margin: 4px 0 0; }
+  `;
+}
+
+interface ParticipantGroupMeta {
+  isFirst: boolean;
+  isLast: boolean;
+  shadeB: boolean;
+  hasMultiple: boolean;
+}
+
+/** Assumes grid.rows is already sorted so a participant's med rows are contiguous (see fetchMedChecklistGrid's orderBy). */
+function computeGroupMeta(rows: GridRow[]): ParticipantGroupMeta[] {
+  const meta: ParticipantGroupMeta[] = [];
+  let shadeToggle = false;
+  let i = 0;
+  while (i < rows.length) {
+    let j = i;
+    while (j < rows.length && rows[j].participantId === rows[i].participantId) j += 1;
+    const groupSize = j - i;
+    for (let k = i; k < j; k++) {
+      meta.push({ isFirst: k === i, isLast: k === j - 1, shadeB: shadeToggle, hasMultiple: groupSize > 1 });
+    }
+    shadeToggle = !shadeToggle;
+    i = j;
+  }
+  return meta;
+}
+
+function renderBandTable(opts: {
+  grid: GridResult;
+  mode: "blank" | "hybrid";
+  band: ExportColumnKey[];
+  groupMeta: ParticipantGroupMeta[];
+  slotNameById: Map<string, string>;
+}): string {
+  const { grid, mode, band, groupMeta, slotNameById } = opts;
+  const runs = dayRuns(band);
+
+  const dayHeaderCells = runs
+    .map((run) => `<th colspan="${run.count}">${escapeHtml(formatDay(run.day))}</th>`)
+    .join("");
+  const periodHeaderCells = band
+    .map((col) => `<th class="period"><span class="rot">${escapeHtml(slotNameById.get(col.slotId) ?? "")}</span></th>`)
+    .join("");
+
+  const colsHtml =
+    `<col class="sticky" />` + band.map(() => `<col class="data" />`).join("");
+
+  const bodyRows = grid.rows
+    .map((row, i) => {
+      const meta = groupMeta[i];
+      const rowClasses = [meta.isFirst ? "group-first" : "", meta.isLast ? "group-last" : "", meta.shadeB ? "shade-b" : ""]
+        .filter(Boolean)
+        .join(" ");
+      const nameCellClass = "name" + (meta.hasMultiple ? " group-edge-left" : "");
+      const cells = band
+        .map((col, colIdx) => {
+          const isLastCol = colIdx === band.length - 1;
+          const cellClass = meta.hasMultiple && isLastCol ? " group-edge-right" : "";
+          if (!row.slotIds.includes(col.slotId)) return `<td class="${cellClass}"></td>`;
+          const status = row.days[col.day]?.[col.slotId];
+          return `<td class="${cellClass}">${checkbox(mode === "hybrid" && !!status?.given)}</td>`;
+        })
+        .join("");
+      return `
+        <tr class="${rowClasses}">
+          <td class="${nameCellClass}">${escapeHtml(row.participantName)}<div class="medname">${escapeHtml(row.medName)}</div></td>
+          ${cells}
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <table>
+      <colgroup>${colsHtml}</colgroup>
+      <thead>
+        <tr><th class="name" rowspan="2">Účastník / lék</th>${dayHeaderCells}</tr>
+        <tr>${periodHeaderCells}</tr>
+      </thead>
+      <tbody>${bodyRows}</tbody>
+    </table>`;
+}
+
+export function buildMedsGridPdfHtml(opts: {
+  eventName: string;
+  rangeLabel: string;
+  grid: GridResult;
+  mode: "blank" | "hybrid";
+  format: "A4" | "A3";
+  /** Further restrict to these slot ids (the web page's period filter), on top of auto-hiding unused ones. */
+  visibleSlotIds?: string[];
+}): { html: string; landscape: boolean } {
+  const { eventName, rangeLabel, mode, format, visibleSlotIds } = opts;
+
+  // Hide periods nobody actually has a med plan for in this range, and
+  // optionally further restrict to whatever the caller says is visible.
+  const usedSlotIds = new Set(opts.grid.rows.flatMap((r) => r.slotIds));
+  const visibleSet = visibleSlotIds ? new Set(visibleSlotIds) : null;
+  const slots = opts.grid.slots.filter((s) => usedSlotIds.has(s.id) && (!visibleSet || visibleSet.has(s.id)));
+  const grid: GridResult = { ...opts.grid, slots };
+
+  const columns: ExportColumnKey[] = [];
+  for (const day of grid.days) {
+    for (const slot of grid.slots) {
+      columns.push({ day, slotId: slot.id });
+    }
+  }
+
+  const layout = planMedsExportLayout({ format, rowCount: grid.rows.length, columns });
+  const slotNameById = new Map(grid.slots.map((s) => [s.id, s.name]));
+  const groupMeta = computeGroupMeta(grid.rows);
+
+  const pages = layout.bands
+    .map((band, bandIndex) => {
+      const table = renderBandTable({ grid, mode, band, groupMeta, slotNameById });
+      const glueHint =
+        layout.bands.length > 1
+          ? `<p class="gluehint">Strana ${bandIndex + 1} z ${layout.bands.length} — vytiskněte a slepte vedle sebe.</p>`
+          : "";
+      return `
+        <div class="page">
+          <h1>${escapeHtml(eventName)} — Přehled léků</h1>
+          <p class="subtitle">${escapeHtml(rangeLabel)}</p>
+          ${glueHint}
+          ${table}
+        </div>`;
+    })
+    .join("");
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><style>${baseStyle(layout.fontSizePt, layout.colWidthMm, layout.stickyColWidthMm)}</style></head>
+<body>${pages}</body></html>`;
+
+  return { html, landscape: layout.landscape };
 }

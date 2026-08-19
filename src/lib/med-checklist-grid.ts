@@ -40,6 +40,10 @@ export async function fetchMedChecklistGrid(
 
   const plans = await prisma.participantMedPlan.findMany({
     where: { active: true, participant: { eventId, active: true } },
+    // Ordered so a participant's med rows always land contiguously in the
+    // output -- both the meds grid page and the PDF export group/border
+    // rows per participant and rely on that adjacency.
+    orderBy: [{ participant: { name: "asc" } }, { eventMed: { name: "asc" } }],
     include: {
       participant: { select: { id: true, name: true, groupName: true } },
       eventMed: { select: { id: true, name: true } },
@@ -120,61 +124,4 @@ export async function fetchMedChecklistGrid(
   });
 
   return { slots, days, rows };
-}
-
-export type DayRow = {
-  participantId: string;
-  participantName: string;
-  participantGroup: string | null;
-  eventMedId: string;
-  medName: string;
-  dose: string | null;
-  notes: string | null;
-  given: boolean;
-  givenAt: string | null;
-};
-
-// Same computed-checklist shape as fetchMedChecklistGrid, but for a single
-// date + slot -- the single-day checklist page's query, factored out so
-// the "plan" PDF report can reuse it instead of duplicating it.
-export async function fetchMedChecklistDay(
-  eventId: string,
-  date: Date,
-  slotId: string
-): Promise<DayRow[]> {
-  const plans = await prisma.participantMedPlan.findMany({
-    where: {
-      eventSlotId: slotId,
-      active: true,
-      participant: { eventId, active: true },
-    },
-    include: {
-      participant: { select: { id: true, name: true, groupName: true } },
-      eventMed: { select: { id: true, name: true } },
-    },
-  });
-
-  const checklistRows = await prisma.medChecklist.findMany({
-    where: {
-      eventSlotId: slotId,
-      date,
-      participantId: { in: plans.map((p) => p.participantId) },
-    },
-  });
-  const givenByKey = new Map(checklistRows.map((c) => [`${c.participantId}:${c.eventMedId}`, c]));
-
-  return plans.map((plan) => {
-    const existing = givenByKey.get(`${plan.participantId}:${plan.eventMedId}`);
-    return {
-      participantId: plan.participant.id,
-      participantName: plan.participant.name,
-      participantGroup: plan.participant.groupName,
-      eventMedId: plan.eventMed.id,
-      medName: plan.eventMed.name,
-      dose: plan.dose,
-      notes: plan.notes,
-      given: existing?.given ?? false,
-      givenAt: existing?.givenAt ? existing.givenAt.toISOString() : null,
-    };
-  });
 }

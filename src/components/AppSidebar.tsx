@@ -20,6 +20,7 @@ import {
   Receipt,
   Upload,
   HeartPulse,
+  Pill,
   LayoutTemplate,
   Languages,
 } from "lucide-react";
@@ -98,6 +99,11 @@ export default function AppSidebar() {
             href: eventId ? `/events/${eventId}/health/participants/import` : "/events",
             label: t("participantsPage.importButton"),
             icon: Upload,
+          },
+          {
+            href: eventId ? `/events/${eventId}/health/meds` : "/events",
+            label: t("medChecklistPage.title"),
+            icon: Pill,
           },
         ]
       : []),
