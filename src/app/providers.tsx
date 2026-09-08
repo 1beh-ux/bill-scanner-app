@@ -7,7 +7,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <I18nProvider>
       <div className="flex min-h-screen flex-col bg-paper text-ink md:flex-row">
         <AppSidebar />
-        <main className="min-w-0 flex-1">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-auto">{children}</main>
       </div>
     </I18nProvider>
   );

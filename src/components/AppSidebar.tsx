@@ -271,7 +271,7 @@ export default function AppSidebar() {
 
   return (
     <>
-      <aside className="hidden w-56 shrink-0 border-r border-night-border bg-night md:flex">
+      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-night-border bg-night md:sticky md:top-0 md:flex md:h-screen">
         {sidebarContent}
       </aside>
 

@@ -535,7 +535,7 @@ export default function EventBillsPage({
       ) : (
         <>
           {/* Desktop / tablet: table */}
-          <table className="hidden w-full border-collapse md:table">
+          <table className="hidden w-full min-w-[880px] border-collapse md:table">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="w-8 p-2">

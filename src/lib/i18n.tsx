@@ -21,10 +21,23 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
+const TRANSLATIONS_CACHE_KEY = "translations-cache-v1";
+
+function readCachedTranslations(): TranslationsMap {
+  try {
+    const raw = sessionStorage.getItem(TRANSLATIONS_CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang] = useState<Lang>("cs");
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
-  const [translations, setTranslations] = useState<TranslationsMap>({});
+  // Seeded from sessionStorage so a hard navigation shows real text instead of
+  // raw i18n keys while the fresh fetch below is still in flight.
+  const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);
   const [role, setRole] = useState<Role | null>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
   // Default "light" here is just the initial render value — the no-flash
@@ -67,6 +80,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           map[row.key] = { cs: row.cs, en: row.en };
         }
         setTranslations(map);
+        try {
+          sessionStorage.setItem(TRANSLATIONS_CACHE_KEY, JSON.stringify(map));
+        } catch {}
       })
       .catch(() => {});
   }, []);
