@@ -8,3 +8,11 @@
 export const PARENT_SUMMARY_PURPOSE_KEY = "parent_health_summary";
 export const MAIL_HELPER_BULK_STATUS_PURPOSE_KEY = "mail_helper_bulk_status_update";
 export const MAIL_HELPER_REPLY_PURPOSE_KEY = "mail_helper_reply";
+// Sent once per participant, when an admin decides to accept a registration
+// (see docs/registration-workflow.md). Editable template like the others.
+export const REGISTRATION_ACCEPTANCE_PURPOSE_KEY = "registration_acceptance";
+// Not a stored/editable template -- an admin types fresh subject/body every
+// time for the "open email to selected participants" feature. Used only as
+// a ParentEmailLog.purposeKey tag so these sends are distinguishable from
+// the others in the action log.
+export const PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY = "participant_open_email";

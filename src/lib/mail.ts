@@ -101,3 +101,60 @@ export async function sendPlainTextEmail(opts: {
   const raw = buildPlainTextRawMessage(opts);
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
 }
+
+// Generalized version of buildRawMessage's attachment path -- an arbitrary
+// user-uploaded file instead of a hardcoded generated PDF. Used by the
+// registration-acceptance and open-email sends (src/lib/participant-bulk-email.ts).
+function buildAttachmentRawMessage(opts: {
+  to: string;
+  fromName: string;
+  senderEmail: string;
+  subject: string;
+  body: string;
+  attachment: { buffer: Buffer; filename: string; mimeType: string };
+}): string {
+  const boundary = newMimeBoundary("mixed");
+  const bodyBase64 = chunk76(Buffer.from(opts.body, "utf-8").toString("base64"));
+  const attachmentBase64 = chunk76(opts.attachment.buffer.toString("base64"));
+
+  const message = [
+    `From: ${encodeHeaderValue(opts.fromName)} <${opts.senderEmail}>`,
+    `To: ${opts.to}`,
+    `Subject: ${encodeHeaderValue(opts.subject)}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ``,
+    `--${boundary}`,
+    `Content-Type: text/plain; charset="UTF-8"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    bodyBase64,
+    ``,
+    `--${boundary}`,
+    `Content-Type: ${opts.attachment.mimeType}; name="${opts.attachment.filename}"`,
+    `Content-Disposition: attachment; filename="${opts.attachment.filename}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    attachmentBase64,
+    ``,
+    `--${boundary}--`,
+  ].join("\r\n");
+
+  return base64UrlEncode(Buffer.from(message, "utf-8"));
+}
+
+/** Like sendPlainTextEmail, but with an optional arbitrary file attached. */
+export async function sendEmailWithOptionalAttachment(opts: {
+  to: string;
+  fromName: string;
+  senderEmail: string;
+  subject: string;
+  body: string;
+  attachment?: { buffer: Buffer; filename: string; mimeType: string };
+}): Promise<void> {
+  const gmail = await getGmailClient(opts.senderEmail);
+  const raw = opts.attachment
+    ? buildAttachmentRawMessage({ ...opts, attachment: opts.attachment })
+    : buildPlainTextRawMessage(opts);
+  await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
+}

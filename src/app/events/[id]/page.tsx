@@ -6,7 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
-import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 type EventDetail = {
   id: string;
@@ -380,6 +380,12 @@ export default function EventDetailPage({
           <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
           <SenderEmailField eventId={id} />
           <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />
+          <EmailTemplateAdmin
+            scope="event"
+            eventId={id}
+            purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
+            label={t("healthTemplatesPage.tabRegistrationEmail")}
+          />
           <div>
             <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">
               {t("bulkSendSummaries.entryPoint")}

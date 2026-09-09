@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
+import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 type CategoryTemplateRow = { id: string; name: string; description: string | null };
 
@@ -99,7 +100,16 @@ function HealthTemplatesTab() {
       {subTab === "situation" && (
         <ListTemplateAdmin kind="situation" scope="org" label={t("healthTemplatesPage.tabSituations")} />
       )}
-      {subTab === "email" && <EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} />}
+      {subTab === "email" && (
+        <div className="flex flex-col gap-6">
+          <EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} />
+          <EmailTemplateAdmin
+            scope="org"
+            purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
+            label={t("healthTemplatesPage.tabRegistrationEmail")}
+          />
+        </div>
+      )}
     </div>
   );
 }

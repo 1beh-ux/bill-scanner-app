@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
 import IncidentFormModal from "@/components/health/IncidentFormModal";
+import ComposeEmailModal from "@/components/health/ComposeEmailModal";
+import BulkStatusModal from "@/components/mail/BulkStatusModal";
 
 type EventBasic = { id: string; name: string };
 
@@ -12,6 +14,9 @@ type Participant = {
   name: string;
   groupName: string | null;
   dateOfBirth: string | null;
+  registrationStatus: "pending" | "accepted";
+  documentsTotal: number;
+  documentsReceived: number;
 };
 
 type GuardianDraft = {
@@ -61,6 +66,12 @@ export default function EventHealthPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   const [bulkFailures, setBulkFailures] = useState<{ name: string; error: string }[]>([]);
 
+  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
+  const [composeModal, setComposeModal] = useState<{ mode: "acceptance" | "freeform"; participantIds: string[] } | null>(
+    null
+  );
+  const [statusModalOpen, setStatusModalOpen] = useState(false);
+
   async function load() {
     setLoading(true);
     const [evRes, partRes] = await Promise.all([
@@ -74,6 +85,10 @@ export default function EventHealthPage({
 
   useEffect(() => {
     load();
+    fetch(`/api/events/${id}/modules/mine`)
+      .then((r) => (r.ok ? r.json() : {}))
+      .then(setModuleAccess)
+      .catch(() => {});
   }, [id]);
 
   const filteredParticipants = useMemo(() => {
@@ -238,6 +253,14 @@ export default function EventHealthPage({
         >
           {t("bulkSendSummaries.entryPoint")}
         </a>
+        {moduleAccess.mail && (
+          <button
+            onClick={() => setStatusModalOpen(true)}
+            className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
+          >
+            {t("participantsPage.openBulkStatusButton")}
+          </button>
+        )}
         <button onClick={openForm} className={btnPrimary}>
           {t("participantsPage.addButton")}
         </button>
@@ -248,6 +271,18 @@ export default function EventHealthPage({
           <span className="text-[14px] font-medium text-ink">
             {t("participantsPage.selectedCount", { count: String(selected.size) })}
           </span>
+          <button
+            onClick={() => setComposeModal({ mode: "acceptance", participantIds: Array.from(selected) })}
+            className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
+          >
+            {t("participantsPage.bulkAcceptButton")}
+          </button>
+          <button
+            onClick={() => setComposeModal({ mode: "freeform", participantIds: Array.from(selected) })}
+            className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
+          >
+            {t("participantsPage.bulkEmailButton")}
+          </button>
           <button
             onClick={runBulkDelete}
             disabled={bulkRunning}
@@ -277,7 +312,7 @@ export default function EventHealthPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[420px] border-collapse">
+          <table className="w-full min-w-[620px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="p-2">
@@ -286,6 +321,8 @@ export default function EventHealthPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -304,6 +341,23 @@ export default function EventHealthPage({
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
+                    <td className="p-2 text-[13px]">
+                      {p.registrationStatus === "accepted" ? (
+                        <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">
+                          {t("participantsPage.statusAccepted")}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id] })}
+                          className="rounded-full bg-ember/15 px-2 py-0.5 text-ember hover:bg-ember/25"
+                        >
+                          {t("participantsPage.statusPendingAction")}
+                        </button>
+                      )}
+                    </td>
+                    <td className="p-2 text-[13px] text-ink-secondary">
+                      {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
+                    </td>
                     <td className="whitespace-nowrap p-2 text-right">
                       <button
                         onClick={() => setIncidentParticipantId(p.id)}
@@ -445,6 +499,23 @@ export default function EventHealthPage({
           onClose={() => setIncidentParticipantId(null)}
           onSaved={() => setIncidentParticipantId(null)}
         />
+      )}
+
+      {composeModal && (
+        <ComposeEmailModal
+          eventId={id}
+          participantIds={composeModal.participantIds}
+          mode={composeModal.mode}
+          onClose={() => setComposeModal(null)}
+          onSent={() => {
+            setSelected(new Set());
+            load();
+          }}
+        />
+      )}
+
+      {statusModalOpen && event && (
+        <BulkStatusModal eventId={id} eventName={event.name} onClose={() => setStatusModalOpen(false)} />
       )}
     </div>
   );

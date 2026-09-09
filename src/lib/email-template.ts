@@ -4,6 +4,7 @@ import {
   PARENT_SUMMARY_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 // Re-exported for existing server-side callers -- client components must
@@ -11,7 +12,12 @@ import {
 // that file's comment): this module pulls in prisma and can't be imported
 // from a "use client" component without leaking a Node-only dependency
 // (pg's `dns` usage) into the browser bundle.
-export { PARENT_SUMMARY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY };
+export {
+  PARENT_SUMMARY_PURPOSE_KEY,
+  MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_REPLY_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+};
 
 const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
   [PARENT_SUMMARY_PURPOSE_KEY]: {
@@ -34,6 +40,21 @@ posíláme průběžnou informaci ke stavu podkladů pro dítě: {{participant_n
 Pokud něco chybí, prosím o poslání v odpovědi na tento email. Odkaz na vyplnění dotazníku: {{questionnaire_url}}.
 
 Děkujeme,
+{{sender_name}}`,
+  },
+  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: {
+    // Placeholder -- Pavel said he'll specify the real wording and which
+    // documents get attached later. Attach the přihláška (or anything
+    // else) manually when sending, via the file picker in the send dialog,
+    // until document generation exists.
+    subject: "{{camp_name}} — přijetí registrace ({{participant_name}})",
+    body: `Dobrý den,
+
+potvrzujeme přijetí registrace pro {{participant_name}} na akci {{camp_name}}.
+
+V příloze najdete přihlášku k vyplnění a odeslání zpět. [PLACEHOLDER: text a přílohy doladíme později]
+
+S pozdravem,
 {{sender_name}}`,
   },
 };

@@ -18,6 +18,16 @@ enum EventStatus {
   closed
 }
 
+// pending: just entered the roster (manually, pasted, or imported from a
+// registration Sheet) and hasn't been reviewed yet. accepted: an admin
+// decided to accept them and (normally) sent the acceptance email -- see
+// REGISTRATION_ACCEPTANCE_PURPOSE_KEY. No "rejected" state yet -- not asked
+// for, add one if that's ever a real need.
+enum RegistrationStatus {
+  pending
+  accepted
+}
+
 enum IngestChannel {
   drive
   upload
@@ -353,6 +363,7 @@ model Participant {
   medsNotes     String?   @map("meds_notes")
   chronicIssues String?   @map("chronic_issues")
   otherNotes    String?   @map("other_notes")
+  registrationStatus RegistrationStatus @default(pending) @map("registration_status")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])
