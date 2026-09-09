@@ -172,7 +172,8 @@ function BillsTemplatesTab() {
     load();
   }
 
-  async function handleDelete(id: string) {
+  async function handleDelete(id: string, name: string) {
+    if (!window.confirm(t("categoryTemplates.confirmDelete", { name }))) return;
     await fetch(`/api/category-templates/${id}`, { method: "DELETE" });
     load();
   }
@@ -245,7 +246,7 @@ function BillsTemplatesTab() {
                   <button onClick={() => startEdit(tpl)} className="text-[13px] text-ember hover:underline">
                     {t("common.edit")}
                   </button>
-                  <button onClick={() => handleDelete(tpl.id)} className="text-[13px] text-red-600 hover:underline">
+                  <button onClick={() => handleDelete(tpl.id, tpl.name)} className="text-[13px] text-red-600 hover:underline">
                     {t("common.delete")}
                   </button>
                 </div>

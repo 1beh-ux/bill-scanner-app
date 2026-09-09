@@ -81,7 +81,7 @@ function resolveField(
 }
 
 // DD/MM vs MM/DD can't be resolved per-row (both parts <=12 is genuinely
-// ambiguous) -- instead scan the whole pasted batch once for a row that
+// ambiguous) -- instead scan the whole batch once for a row that
 // disambiguates it (a value > 12 can only be a day), and apply that one
 // order to every row. Defaults to day-first (Czech convention) if the
 // entire batch is ambiguous.
@@ -136,18 +136,22 @@ type ParsedRow = {
 
 type RowAction = "create" | "skip" | "merge";
 
+// Source-agnostic: both the paste tab (tab-split lines) and the Google
+// Sheets tab (values.get's own array-of-arrays) end up as the same
+// string[][] shape before reaching this — one mapping/preview/import
+// pipeline for both.
 function buildRows(
-  dataLines: string[],
+  cellRows: string[][],
   headers: string[],
   mapping: FieldTarget[],
   existingParticipants: ExistingParticipant[]
 ): ParsedRow[] {
-  const cellRows = dataLines.map((line) => line.split("\t")).filter((cells) => cells.some((c) => c.trim()));
-  const rawDobs = cellRows.map((cells) => resolveField(cells, headers, mapping, "dateOfBirth"));
+  const nonEmptyRows = cellRows.filter((cells) => cells.some((c) => c.trim()));
+  const rawDobs = nonEmptyRows.map((cells) => resolveField(cells, headers, mapping, "dateOfBirth"));
   const dateOrder = detectDateOrder(rawDobs);
   const existingByName = new Map(existingParticipants.map((p) => [normalizeName(p.name), p]));
 
-  return cellRows.map((cells, index) => {
+  return nonEmptyRows.map((cells, index) => {
     const name = resolveField(cells, headers, mapping, "name");
     const guardianEmail = resolveField(cells, headers, mapping, "guardianEmail");
     const dateOfBirthRaw = resolveField(cells, headers, mapping, "dateOfBirth");
@@ -173,6 +177,8 @@ function buildRows(
   });
 }
 
+type SourceTab = "paste" | "sheets";
+
 export default function ParticipantImportPage({
   params,
 }: {
@@ -181,12 +187,19 @@ export default function ParticipantImportPage({
   const { id: eventId } = use(params);
   const { t } = useTranslations();
 
+  const [tab, setTab] = useState<SourceTab>("paste");
+
   const [pasteText, setPasteText] = useState("");
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapping, setMapping] = useState<FieldTarget[]>([]);
-  const [dataLines, setDataLines] = useState<string[]>([]);
+  const [cellRows, setCellRows] = useState<string[][]>([]);
   const [existingParticipants, setExistingParticipants] = useState<ExistingParticipant[]>([]);
   const [rowOverrides, setRowOverrides] = useState<Record<number, RowAction>>({});
+
+  const [spreadsheetIdInput, setSpreadsheetIdInput] = useState("");
+  const [sheetsLoading, setSheetsLoading] = useState(false);
+  const [sheetsError, setSheetsError] = useState<string | null>(null);
+  const [serviceAccountEmail, setServiceAccountEmail] = useState("");
 
   const [importing, setImporting] = useState(false);
   const [createdCount, setCreatedCount] = useState(0);
@@ -202,20 +215,58 @@ export default function ParticipantImportPage({
       .catch(() => {});
   }, [eventId]);
 
-  function handlePasteChange(value: string) {
-    setPasteText(value);
+  useEffect(() => {
+    fetch("/api/config/drive-account")
+      .then((r) => (r.ok ? r.json() : { email: "" }))
+      .then((d) => setServiceAccountEmail(d.email || ""))
+      .catch(() => {});
+  }, []);
+
+  function loadFromCellRows(rows: string[][]) {
     setRowOverrides({});
-    const lines = value.split(/\r?\n/).filter((l) => l.length > 0);
-    if (lines.length === 0) {
+    if (rows.length === 0) {
       setHeaders([]);
       setMapping([]);
-      setDataLines([]);
+      setCellRows([]);
       return;
     }
-    const headerCells = lines[0].split("\t");
+    const headerCells = rows[0];
     setHeaders(headerCells);
     setMapping(headerCells.map(guessTarget));
-    setDataLines(lines.slice(1));
+    setCellRows(rows.slice(1));
+  }
+
+  function handlePasteChange(value: string) {
+    setPasteText(value);
+    const lines = value.split(/\r?\n/).filter((l) => l.length > 0);
+    loadFromCellRows(lines.map((line) => line.split("\t")));
+  }
+
+  async function handleLoadSheet() {
+    if (!spreadsheetIdInput.trim()) return;
+    setSheetsLoading(true);
+    setSheetsError(null);
+    try {
+      const res = await fetch(`/api/events/${eventId}/health/participants/sheets-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spreadsheetId: spreadsheetIdInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSheetsError(
+          data.error === "sheet_read_failed"
+            ? t("participantImportPage.sheetsShareError", { email: data.serviceAccountEmail || serviceAccountEmail })
+            : t("participantImportPage.sheetsLoadError")
+        );
+        return;
+      }
+      loadFromCellRows([data.headers, ...data.rows]);
+    } catch {
+      setSheetsError(t("participantImportPage.sheetsLoadError"));
+    } finally {
+      setSheetsLoading(false);
+    }
   }
 
   function updateMapping(index: number, target: FieldTarget) {
@@ -224,8 +275,8 @@ export default function ParticipantImportPage({
   }
 
   const rows = useMemo(
-    () => buildRows(dataLines, headers, mapping, existingParticipants),
-    [dataLines, headers, mapping, existingParticipants]
+    () => buildRows(cellRows, headers, mapping, existingParticipants),
+    [cellRows, headers, mapping, existingParticipants]
   );
 
   function actionFor(row: ParsedRow): RowAction {
@@ -383,14 +434,63 @@ export default function ParticipantImportPage({
       </a>
 
       <h1 className="mb-2 mt-2 text-[22px] font-semibold text-ink">{t("participantImportPage.title")}</h1>
-      <p className="mb-4 text-[14px] text-ink-secondary">{t("participantImportPage.instructions")}</p>
 
-      <textarea
-        value={pasteText}
-        onChange={(e) => handlePasteChange(e.target.value)}
-        placeholder={t("participantImportPage.pastePlaceholder")}
-        className="mb-4 h-40 w-full rounded-lg border border-mist bg-paper-2 p-3 font-mono text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-      />
+      <div className="mb-4 flex gap-1 border-b border-mist">
+        <button
+          onClick={() => setTab("paste")}
+          className={
+            "px-3 py-2 text-[13px] font-medium " +
+            (tab === "paste" ? "border-b-2 border-ember text-ink" : "text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("participantImportPage.tabPaste")}
+        </button>
+        <button
+          onClick={() => setTab("sheets")}
+          className={
+            "px-3 py-2 text-[13px] font-medium " +
+            (tab === "sheets" ? "border-b-2 border-ember text-ink" : "text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("participantImportPage.tabSheets")}
+        </button>
+      </div>
+
+      {tab === "paste" ? (
+        <>
+          <p className="mb-4 text-[14px] text-ink-secondary">{t("participantImportPage.instructions")}</p>
+          <textarea
+            value={pasteText}
+            onChange={(e) => handlePasteChange(e.target.value)}
+            placeholder={t("participantImportPage.pastePlaceholder")}
+            className="mb-4 h-40 w-full rounded-lg border border-mist bg-paper-2 p-3 font-mono text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+          />
+        </>
+      ) : (
+        <>
+          <p className="mb-2 text-[14px] text-ink-secondary">{t("participantImportPage.sheetsInstructions")}</p>
+          <p className="mb-3 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
+            {serviceAccountEmail || "…"}
+          </p>
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row">
+            <input
+              type="text"
+              value={spreadsheetIdInput}
+              onChange={(e) => setSpreadsheetIdInput(e.target.value)}
+              placeholder={t("participantImportPage.sheetsIdPlaceholder")}
+              className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+            />
+            <button
+              onClick={handleLoadSheet}
+              disabled={sheetsLoading || !spreadsheetIdInput.trim()}
+              className="rounded-lg bg-ember px-4 py-2 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50"
+            >
+              {sheetsLoading ? t("common.loading") : t("participantImportPage.sheetsLoadButton")}
+            </button>
+          </div>
+          {sheetsError && <p className="mb-4 text-[13px] text-red-600">{sheetsError}</p>}
+        </>
+      )}
 
       {headers.length > 0 && (
         <>

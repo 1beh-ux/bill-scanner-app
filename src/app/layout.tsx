@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "Bill Scanner V2",
-  description: "Pionýrská skupina Záře — bill and receipt management",
+  description: "Pionýrská skupina Záře — camp organizing helper: bills, health records, mail",
 };
 
 // Runs before React hydrates, so the correct theme class is already on <html>

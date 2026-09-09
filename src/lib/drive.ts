@@ -270,6 +270,20 @@ export async function createManifestSheet(
   return spreadsheetId;
 }
 
+/**
+ * Reads a Sheet's raw cell values by spreadsheet ID (the id in the Sheets
+ * URL, not a Drive file — same service-account-impersonation client as the
+ * write path). The Sheet must be shared with the service account email
+ * (getDriveServiceAccountEmail()) or this throws a permission error.
+ */
+export async function readSheetValues(spreadsheetId: string, range = "A1:ZZ2000"): Promise<string[][]> {
+  return withRetry(async () => {
+    const sheets = await getSheetsClient();
+    const res = await sheets.spreadsheets.values.get({ spreadsheetId, range });
+    return (res.data.values ?? []).map((row) => row.map((cell) => String(cell ?? "")));
+  }, `read sheet values ${spreadsheetId}`);
+}
+
 export async function writeManifestValues(
   spreadsheetId: string,
   rows: (string | number)[][]

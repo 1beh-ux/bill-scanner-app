@@ -17,7 +17,7 @@ import {
   X,
   Sun,
   Moon,
-  Receipt,
+  Tent,
   Upload,
   HeartPulse,
   Pill,
@@ -157,7 +157,7 @@ export default function AppSidebar() {
     <div className="flex h-full flex-col gap-1 px-3 py-4">
       <div className="flex items-center gap-2 px-1 pb-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ember">
-          <Receipt size={16} className="text-night" aria-hidden="true" />
+          <Tent size={16} className="text-night" aria-hidden="true" />
         </div>
         <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
       </div>
@@ -275,11 +275,14 @@ export default function AppSidebar() {
         {sidebarContent}
       </aside>
 
-      <header className="flex items-center justify-between border-b border-night-border bg-night px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-night-border bg-night px-4 py-3 md:hidden">
         <button onClick={() => setDrawerOpen(true)} aria-label={t("nav.openMenu")} className="text-paper">
           <Menu size={20} aria-hidden="true" />
         </button>
-        <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+        <div className="flex items-center gap-2">
+          <Tent size={16} className="text-ember" aria-hidden="true" />
+          <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+        </div>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label={t("nav.toggleTheme")}
