@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { effectiveAmountCzk } from "@/lib/bill-amount";
 
 export async function GET(
   req: NextRequest,
@@ -54,13 +55,14 @@ const { id: eventId } = await params;
       count: 0,
       items: [],
     };
-    if (bill.amountCzk !== null) {
-      entry.total = entry.total.plus(bill.amountCzk);
+    const amountCzk = effectiveAmountCzk(bill);
+    if (amountCzk !== null) {
+      entry.total = entry.total.plus(amountCzk);
     }
     entry.count += 1;
     entry.items.push({
       merchantName: bill.merchantName,
-      amountCzk: bill.amountCzk !== null ? bill.amountCzk.toString() : null,
+      amountCzk: amountCzk !== null ? amountCzk.toString() : null,
     });
     byAuthor.set(bill.payerAuthorId, entry);
   }

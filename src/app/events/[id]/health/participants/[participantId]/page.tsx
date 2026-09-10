@@ -71,9 +71,6 @@ export default function ParticipantDetailPage({
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
-  const [editName, setEditName] = useState("");
-  const [editGroup, setEditGroup] = useState("");
-  const [editDob, setEditDob] = useState("");
   const [editAllergies, setEditAllergies] = useState("");
   const [editMedsNotes, setEditMedsNotes] = useState("");
   const [editChronicIssues, setEditChronicIssues] = useState("");
@@ -203,9 +200,6 @@ export default function ParticipantDetailPage({
   function startEdit() {
     if (!participant) return;
     setError(null);
-    setEditName(participant.name);
-    setEditGroup(participant.groupName ?? "");
-    setEditDob(participant.dateOfBirth ? participant.dateOfBirth.slice(0, 10) : "");
     setEditAllergies(participant.allergies ?? "");
     setEditMedsNotes(participant.medsNotes ?? "");
     setEditChronicIssues(participant.chronicIssues ?? "");
@@ -228,16 +222,12 @@ export default function ParticipantDetailPage({
 
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editName.trim()) return;
     setSavingEdit(true);
     setError(null);
     const res = await fetch(`/api/participants/${participantId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: editName.trim(),
-        groupName: editGroup.trim() || null,
-        dateOfBirth: editDob || null,
         allergies: editAllergies.trim() || null,
         medsNotes: editMedsNotes.trim() || null,
         chronicIssues: editChronicIssues.trim() || null,
@@ -330,8 +320,11 @@ export default function ParticipantDetailPage({
           >
             {t("participantDetail.downloadPdfButton")}
           </a>
+          <a href={`/events/${eventId}/participants?edit=${participantId}`} className="text-[13px] text-ember hover:underline">
+            {t("participantsPage.editCoreDetailsLink")}
+          </a>
           <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
-            {t("common.edit")}
+            {t("participantDetail.editNotesButton")}
           </button>
           <button
             onClick={handleDeleteParticipant}
@@ -622,38 +615,15 @@ export default function ParticipantDetailPage({
       {editing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
-            <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("common.edit")}</h2>
+            <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("participantDetail.editNotesButton")}</h2>
             <form onSubmit={saveEdit} className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder={t("common.name")}
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className={inputClass}
-                autoFocus
-              />
-              <input
-                type="text"
-                placeholder={t("participantsPage.colGroup")}
-                value={editGroup}
-                onChange={(e) => setEditGroup(e.target.value)}
-                className={inputClass}
-              />
-              <label className="text-[13px] text-ink-secondary">
-                {t("participantsPage.dobLabel")}
-                <input
-                  type="date"
-                  value={editDob}
-                  onChange={(e) => setEditDob(e.target.value)}
-                  className={inputClass + " mt-1"}
-                />
-              </label>
               <textarea
                 placeholder={t("participantDetail.allergiesLabel")}
                 value={editAllergies}
                 onChange={(e) => setEditAllergies(e.target.value)}
                 className={inputClass}
                 rows={2}
+                autoFocus
               />
               <textarea
                 placeholder={t("participantDetail.medsNotesLabel")}

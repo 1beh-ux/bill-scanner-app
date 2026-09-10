@@ -144,7 +144,7 @@ export default function UsersPage() {
   if (!roleLoaded || currentUserRole !== "admin") return null;
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("usersPage.title")}</h1>
 
       <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">

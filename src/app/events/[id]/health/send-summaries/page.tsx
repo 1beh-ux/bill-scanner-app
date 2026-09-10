@@ -103,7 +103,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div className="mx-auto max-w-4xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("participantsPage.title")}
       </a>

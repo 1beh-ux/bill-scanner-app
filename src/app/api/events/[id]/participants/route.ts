@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 
 type GuardianInput = {
@@ -20,7 +20,9 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
+  // The central "Seznam účastníků" section is reachable by health or mail
+  // grants alike -- this is now the shared roster endpoint for both.
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const participants = await prisma.participant.findMany({
@@ -62,7 +64,9 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
+  // The central "Seznam účastníků" section is reachable by health or mail
+  // grants alike -- this is now the shared roster endpoint for both.
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();

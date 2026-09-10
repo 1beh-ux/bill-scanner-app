@@ -262,7 +262,7 @@ export default function EventDetailPage({
   const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim());
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href="/events" className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("eventDetail.back")}
       </a>

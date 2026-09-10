@@ -92,15 +92,22 @@ export default function AppSidebar() {
     { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
   ];
 
+  const participantsNavItems = [
+    ...(moduleAccess.health || moduleAccess.mail
+      ? [
+          {
+            href: eventId ? `/events/${eventId}/participants` : "/events",
+            label: t("participantsPage.centralTitle"),
+            icon: Users,
+          },
+        ]
+      : []),
+  ];
+
   const healthNavItems = [
     ...(moduleAccess.health
       ? [
           { href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse },
-          {
-            href: eventId ? `/events/${eventId}/health/participants/import` : "/events",
-            label: t("participantsPage.importButton"),
-            icon: Upload,
-          },
           {
             href: eventId ? `/events/${eventId}/health/meds` : "/events",
             label: t("medChecklistPage.title"),
@@ -112,7 +119,14 @@ export default function AppSidebar() {
 
   const mailNavItems = [
     ...(moduleAccess.mail
-      ? [{ href: eventId ? `/events/${eventId}/mail` : "/events", label: t("nav.mail"), icon: Mail }]
+      ? [
+          { href: eventId ? `/events/${eventId}/mail` : "/events", label: t("nav.mail"), icon: Mail },
+          {
+            href: eventId ? `/events/${eventId}/mail/participants` : "/events",
+            label: t("participantsPage.mailListTitle"),
+            icon: Users,
+          },
+        ]
       : []),
   ];
 
@@ -190,6 +204,20 @@ export default function AppSidebar() {
           <NavLink key={item.label} {...item} />
         ))}
       </nav>
+
+      {participantsNavItems.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-night-border" />
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.sectionParticipants")}
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {participantsNavItems.map((item) => (
+              <NavLink key={item.label} {...item} />
+            ))}
+          </nav>
+        </>
+      )}
 
       <div className="my-3 h-px bg-night-border" />
 

@@ -36,6 +36,9 @@ export default function EventPaymentsPage({
 
   const [qrDataUrls, setQrDataUrls] = useState<Record<string, string>>({});
   const [ibans, setIbans] = useState<Record<string, string | null>>({});
+  const [qrUnavailableReason, setQrUnavailableReason] = useState<
+    Record<string, "no_bank" | "bad_bank" | "zero_amount">
+  >({});
 
   const [editingAuthorId, setEditingAuthorId] = useState<string | null>(null);
   const [editBankAccountNumber, setEditBankAccountNumber] = useState("");
@@ -65,18 +68,26 @@ export default function EventPaymentsPage({
     async function generate() {
       const newUrls: Record<string, string> = {};
       const newIbans: Record<string, string | null> = {};
+      const newReasons: Record<string, "no_bank" | "bad_bank" | "zero_amount"> = {};
 
       for (const row of rows) {
         if (!row.bankAccountNumber || !row.bankCode) {
           newIbans[row.authorId] = null;
+          newReasons[row.authorId] = "no_bank";
           continue;
         }
         const iban = czechAccountToIban(row.bankAccountNumber, row.bankCode);
         newIbans[row.authorId] = iban;
-        if (!iban) continue;
+        if (!iban) {
+          newReasons[row.authorId] = "bad_bank";
+          continue;
+        }
 
         const amount = parseFloat(row.unpaidTotalCzk || "0");
-        if (amount <= 0) continue;
+        if (amount <= 0) {
+          newReasons[row.authorId] = "zero_amount";
+          continue;
+        }
 
         const itemized = buildItemizedMessage(
           row.items
@@ -97,6 +108,7 @@ export default function EventPaymentsPage({
       if (!cancelled) {
         setQrDataUrls(newUrls);
         setIbans(newIbans);
+        setQrUnavailableReason(newReasons);
       }
     }
 
@@ -159,7 +171,7 @@ export default function EventPaymentsPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href={`/events/${id}`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("billsPage.back")}
       </a>
@@ -271,7 +283,15 @@ export default function EventPaymentsPage({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={qrDataUrls[row.authorId]} alt="QR Platba" width={180} height={180} className="mx-auto" />
                 ) : (
-                  <div className="text-[13px] text-ink-secondary">{t("paymentsPage.qrUnavailable")}</div>
+                  <div className="text-[13px] text-ink-secondary">
+                    {t(
+                      qrUnavailableReason[row.authorId] === "zero_amount"
+                        ? "paymentsPage.qrUnavailableZeroAmount"
+                        : qrUnavailableReason[row.authorId] === "no_bank"
+                          ? "paymentsPage.noBankDetails"
+                          : "paymentsPage.qrUnavailable"
+                    )}
+                  </div>
                 )}
               </div>
             </div>

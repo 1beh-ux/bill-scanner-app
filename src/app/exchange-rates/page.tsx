@@ -111,7 +111,7 @@ export default function ExchangeRatesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("rates.title")}</h1>
       <p className="mb-5 text-[14px] text-ink-secondary">{t("rates.subtitle")}</p>
 

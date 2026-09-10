@@ -201,6 +201,12 @@ export default function ParticipantImportPage({
   const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [serviceAccountEmail, setServiceAccountEmail] = useState("");
 
+  // Persisted connection (Seznam účastníků import settings) -- set up once,
+  // reused on every future import instead of re-pasting and remapping.
+  const [savedMapping, setSavedMapping] = useState<Record<string, FieldTarget>>({});
+  const [savingConnection, setSavingConnection] = useState(false);
+  const [connectionSaved, setConnectionSaved] = useState(false);
+
   const [importing, setImporting] = useState(false);
   const [createdCount, setCreatedCount] = useState(0);
   const [mergedCount, setMergedCount] = useState(0);
@@ -222,7 +228,26 @@ export default function ParticipantImportPage({
       .catch(() => {});
   }, []);
 
-  function loadFromCellRows(rows: string[][]) {
+  // Prefill from the saved connection, if there is one, and load it
+  // straight away -- that's the point of saving it in the first place.
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/participants/sheet-settings`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        const mapping = (d.participantsColumnMapping || {}) as Record<string, FieldTarget>;
+        setSavedMapping(mapping);
+        if (d.participantsSheetId) {
+          setTab("sheets");
+          setSpreadsheetIdInput(d.participantsSheetId);
+          loadSheet(d.participantsSheetId);
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
+
+  function loadFromCellRows(rows: string[][], mappingOverride?: Record<string, FieldTarget>) {
     setRowOverrides({});
     if (rows.length === 0) {
       setHeaders([]);
@@ -231,8 +256,9 @@ export default function ParticipantImportPage({
       return;
     }
     const headerCells = rows[0];
+    const remembered = mappingOverride ?? savedMapping;
     setHeaders(headerCells);
-    setMapping(headerCells.map(guessTarget));
+    setMapping(headerCells.map((h) => remembered[h.trim()] ?? guessTarget(h)));
     setCellRows(rows.slice(1));
   }
 
@@ -242,15 +268,15 @@ export default function ParticipantImportPage({
     loadFromCellRows(lines.map((line) => line.split("\t")));
   }
 
-  async function handleLoadSheet() {
-    if (!spreadsheetIdInput.trim()) return;
+  async function loadSheet(spreadsheetId: string, mappingOverride?: Record<string, FieldTarget>) {
+    if (!spreadsheetId.trim()) return;
     setSheetsLoading(true);
     setSheetsError(null);
     try {
       const res = await fetch(`/api/events/${eventId}/health/participants/sheets-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ spreadsheetId: spreadsheetIdInput.trim() }),
+        body: JSON.stringify({ spreadsheetId: spreadsheetId.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -261,7 +287,7 @@ export default function ParticipantImportPage({
         );
         return;
       }
-      loadFromCellRows([data.headers, ...data.rows]);
+      loadFromCellRows([data.headers, ...data.rows], mappingOverride);
     } catch {
       setSheetsError(t("participantImportPage.sheetsLoadError"));
     } finally {
@@ -272,6 +298,29 @@ export default function ParticipantImportPage({
   function updateMapping(index: number, target: FieldTarget) {
     setRowOverrides({});
     setMapping((prev) => prev.map((v, i) => (i === index ? target : v)));
+    setConnectionSaved(false);
+  }
+
+  async function saveConnection() {
+    if (!spreadsheetIdInput.trim() || headers.length === 0) return;
+    setSavingConnection(true);
+    const columnMapping: Record<string, FieldTarget> = {};
+    headers.forEach((h, i) => {
+      if (mapping[i] !== "ignore") columnMapping[h.trim()] = mapping[i];
+    });
+    const res = await fetch(`/api/events/${eventId}/participants/sheet-settings`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        participantsSheetId: spreadsheetIdInput.trim(),
+        participantsColumnMapping: columnMapping,
+      }),
+    });
+    setSavingConnection(false);
+    if (res.ok) {
+      setSavedMapping(columnMapping);
+      setConnectionSaved(true);
+    }
   }
 
   const rows = useMemo(
@@ -420,7 +469,7 @@ export default function ParticipantImportPage({
             {t("participantImportPage.doneFailures", { count: String(failedCount) })}
           </p>
         )}
-        <a href={`/events/${eventId}/health`} className="text-[14px] text-ember hover:underline">
+        <a href={`/events/${eventId}/participants`} className="text-[14px] text-ember hover:underline">
           {t("participantImportPage.goToParticipants")}
         </a>
       </div>
@@ -429,8 +478,8 @@ export default function ParticipantImportPage({
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
-        ← {t("participantsPage.title")}
+      <a href={`/events/${eventId}/participants`} className="text-[13px] text-ink-secondary hover:text-ink">
+        ← {t("participantsPage.centralTitle")}
       </a>
 
       <h1 className="mb-2 mt-2 text-[22px] font-semibold text-ink">{t("participantImportPage.title")}</h1>
@@ -481,7 +530,7 @@ export default function ParticipantImportPage({
               className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
             />
             <button
-              onClick={handleLoadSheet}
+              onClick={() => loadSheet(spreadsheetIdInput)}
               disabled={sheetsLoading || !spreadsheetIdInput.trim()}
               className="rounded-lg bg-ember px-4 py-2 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50"
             >
@@ -513,6 +562,19 @@ export default function ParticipantImportPage({
               </div>
             ))}
           </div>
+
+          {tab === "sheets" && (
+            <div className="mb-4 flex items-center gap-2">
+              <button
+                onClick={saveConnection}
+                disabled={savingConnection || !spreadsheetIdInput.trim()}
+                className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
+              >
+                {savingConnection ? t("common.loading") : t("participantImportPage.saveConnectionButton")}
+              </button>
+              {connectionSaved && <span className="text-[13px] text-pine">{t("participantImportPage.connectionSaved")}</span>}
+            </div>
+          )}
 
           <p className="mb-2 text-[13px] text-ink-secondary">
             {t("participantImportPage.previewSummary", {

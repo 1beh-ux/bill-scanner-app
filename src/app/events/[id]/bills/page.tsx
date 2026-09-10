@@ -535,7 +535,8 @@ export default function EventBillsPage({
       ) : (
         <>
           {/* Desktop / tablet: table */}
-          <table className="hidden w-full min-w-[880px] border-collapse md:table">
+          <div className="hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[880px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="w-8 p-2">
@@ -619,6 +620,7 @@ export default function EventBillsPage({
               </tr>
             </tfoot>
           </table>
+          </div>
 
           {/* Mobile: cards */}
           <div className="flex flex-col gap-2 md:hidden">

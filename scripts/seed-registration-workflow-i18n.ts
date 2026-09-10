@@ -43,6 +43,36 @@ async function main() {
     },
     { key: "composeEmailModal.sendButton", cs: "Odeslat ({count})", en: "Send ({count})" },
     { key: "composeEmailModal.sendDone", cs: "Odesláno {sent}, selhalo {failed}.", en: "Sent {sent}, failed {failed}." },
+    {
+      key: "paymentsPage.qrUnavailableZeroAmount",
+      cs: "Částka je 0 Kč — QR kód se negeneruje.",
+      en: "Amount is 0 CZK — no QR code to generate.",
+    },
+    { key: "participantsPage.centralTitle", cs: "Seznam účastníků", en: "Participant list" },
+    { key: "participantsPage.manageButton", cs: "Spravovat účastníky", en: "Manage participants" },
+    { key: "participantsPage.mailListTitle", cs: "Seznam účastníků — pošta", en: "Participant list — mail" },
+    { key: "participantsPage.editCoreDetailsLink", cs: "Upravit údaje", en: "Edit details" },
+    { key: "participantsPage.editHealthDetailsLink", cs: "Zdravotní poznámky →", en: "Health notes →" },
+    { key: "participantsPage.statusPending", cs: "Čeká", en: "Pending" },
+    { key: "participantsPage.docReceived", cs: "Doručeno", en: "Received" },
+    { key: "participantsPage.docMissing", cs: "Chybí", en: "Missing" },
+    {
+      key: "participantsPage.toggleDocumentHint",
+      cs: "Kliknutím ručně označit jako doručené/chybějící",
+      en: "Click to manually mark received/missing",
+    },
+    { key: "nav.sectionParticipants", cs: "Účastníci", en: "Participants" },
+    { key: "participantDetail.editNotesButton", cs: "Upravit poznámky", en: "Edit notes" },
+    {
+      key: "participantImportPage.saveConnectionButton",
+      cs: "Zapamatovat toto propojení",
+      en: "Remember this connection",
+    },
+    {
+      key: "participantImportPage.connectionSaved",
+      cs: "Uloženo — příště se načte automaticky.",
+      en: "Saved — loads automatically next time.",
+    },
   ];
 
   for (const row of rows) {

@@ -178,6 +178,14 @@ model Event {
   statusExportLastSyncedAt DateTime? @map("status_export_last_synced_at")
   mailDoneLabelName        String?   @map("mail_done_label_name")
   mailQuestionnaireUrl     String?   @map("mail_questionnaire_url")
+  // Persisted registration-sheet connection (Seznam účastníků import
+  // settings) -- set once, reused on every future import instead of
+  // re-pasting the sheet id and remapping columns each time. Mapping is
+  // stored keyed by header name (not column index), since sheet columns can
+  // be reordered between imports; unrecognized headers fall back to the
+  // same guess-from-header-text heuristic as before.
+  participantsSheetId      String?   @map("participants_sheet_id")
+  participantsColumnMapping Json?    @map("participants_column_mapping")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 

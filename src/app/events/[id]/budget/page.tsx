@@ -46,7 +46,7 @@ export default function EventBudgetPage({
   const totalActual = rows.reduce((sum, r) => sum + parseFloat(r.actualCzk || "0"), 0);
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-8">
+    <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href={`/events/${id}`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("billsPage.back")}
       </a>

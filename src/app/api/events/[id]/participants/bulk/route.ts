@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 
 interface FailureDetail {
@@ -20,7 +20,7 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "health");
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();
