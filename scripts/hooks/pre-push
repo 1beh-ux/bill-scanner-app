@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+dir="$(git rev-parse --show-toplevel)"
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$local_sha" = "$zero" ] && continue # deleting a remote ref
+
+  if [ "$remote_sha" = "$zero" ]; then
+    range="$local_sha"
+    changed_files="$(git diff --name-only --diff-filter=ACMR "$(git hash-object -t tree /dev/null)" "$range")"
+  else
+    changed_files="$(git diff --name-only --diff-filter=ACMR "$remote_sha" "$local_sha")"
+  fi
+
+  echo "$changed_files" | "$dir/scripts/hooks/check-schema-migration.sh" || exit 1
+done
