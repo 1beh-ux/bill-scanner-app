@@ -21,6 +21,10 @@ type EventDetail = {
   statusExportEnabled: boolean;
   statusExportSheetId: string | null;
   statusExportLastSyncedAt: string | null;
+  memberPriceCzk: number | null;
+  nonMemberPriceCzk: number | null;
+  registrationBankAccountNumber: string | null;
+  registrationBankCode: string | null;
 };
 
 type Category = {
@@ -88,6 +92,13 @@ export default function EventDetailPage({
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSaving, setDriveSaving] = useState(false);
 
+  const [memberPriceCzk, setMemberPriceCzk] = useState("");
+  const [nonMemberPriceCzk, setNonMemberPriceCzk] = useState("");
+  const [registrationBankAccountNumber, setRegistrationBankAccountNumber] = useState("");
+  const [registrationBankCode, setRegistrationBankCode] = useState("");
+  const [feeError, setFeeError] = useState<string | null>(null);
+  const [feeSaving, setFeeSaving] = useState(false);
+
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
@@ -130,8 +141,34 @@ export default function EventDetailPage({
     if (event) {
       setIngestFolderId(event.driveIngestFolderId ?? "");
       setExportFolderId(event.driveExportFolderId ?? "");
+      setMemberPriceCzk(event.memberPriceCzk != null ? String(event.memberPriceCzk) : "");
+      setNonMemberPriceCzk(event.nonMemberPriceCzk != null ? String(event.nonMemberPriceCzk) : "");
+      setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
+      setRegistrationBankCode(event.registrationBankCode ?? "");
     }
   }, [event?.id]);
+
+  async function handleSaveFeeSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setFeeError(null);
+    setFeeSaving(true);
+    const res = await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        memberPriceCzk: memberPriceCzk.trim() === "" ? null : Number(memberPriceCzk),
+        nonMemberPriceCzk: nonMemberPriceCzk.trim() === "" ? null : Number(nonMemberPriceCzk),
+        registrationBankAccountNumber: registrationBankAccountNumber.trim() || null,
+        registrationBankCode: registrationBankCode.trim() || null,
+      }),
+    });
+    setFeeSaving(false);
+    if (!res.ok) {
+      setFeeError(t("feeSettings.errorSaveFailed"));
+      return;
+    }
+    load();
+  }
 
   function startEdit(cat: Category) {
     setEditingId(cat.id);
@@ -406,6 +443,45 @@ export default function EventDetailPage({
               {t("senderEmailField.connectErrorBanner")}
             </p>
           )}
+          <div>
+            <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
+            {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
+            <form onSubmit={handleSaveFeeSettings} className="flex max-w-md flex-col gap-2">
+              <input
+                type="number"
+                placeholder={t("feeSettings.memberPriceLabel")}
+                value={memberPriceCzk}
+                onChange={(e) => setMemberPriceCzk(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="number"
+                placeholder={t("feeSettings.nonMemberPriceLabel")}
+                value={nonMemberPriceCzk}
+                onChange={(e) => setNonMemberPriceCzk(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("feeSettings.bankAccountLabel")}
+                value={registrationBankAccountNumber}
+                onChange={(e) => setRegistrationBankAccountNumber(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("feeSettings.bankCodeLabel")}
+                value={registrationBankCode}
+                onChange={(e) => setRegistrationBankCode(e.target.value)}
+                className={inputClass}
+              />
+              <div className="mt-1 flex justify-end">
+                <button type="submit" disabled={feeSaving} className={btnPrimary}>
+                  {t("common.save")}
+                </button>
+              </div>
+            </form>
+          </div>
           <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
           <SenderEmailField eventId={id} purpose="mail" />
           <EmailTemplateAdmin

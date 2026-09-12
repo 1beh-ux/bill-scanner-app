@@ -7,6 +7,7 @@ const DRIVE_SA_EMAIL = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL;
 const SCOPES = [
   "https://www.googleapis.com/auth/drive",
   "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/documents",
 ];
 
 const DRIVE_TIMEOUT_MS = 60_000;
@@ -82,6 +83,11 @@ export async function getDriveClient() {
 export async function getSheetsClient() {
   const auth = await getImpersonatedClient();
   return google.sheets({ version: "v4", auth: auth as any });
+}
+
+export async function getDocsClient() {
+  const auth = await getImpersonatedClient();
+  return google.docs({ version: "v1", auth: auth as any });
 }
 
 export function getDriveServiceAccountEmail(): string {

@@ -10,6 +10,11 @@ export type DocumentTypeData = {
   displayName?: string;
   expectedValue?: string;
   filenameSuffix?: string;
+  // Registration-document merge (src/lib/document-merge.ts) -- Google Doc
+  // template to merge + export on acceptance, and whether to do so by
+  // default (per-send opt-out happens in ComposeEmailModal, not here).
+  templateGoogleDocId?: string;
+  autoAttachOnAccept?: boolean;
 };
 
 export type DocumentListItem = {

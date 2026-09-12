@@ -40,7 +40,17 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, startDate, endDate, driveIngestFolderId, driveExportFolderId } = body;
+  const {
+    name,
+    startDate,
+    endDate,
+    driveIngestFolderId,
+    driveExportFolderId,
+    memberPriceCzk,
+    nonMemberPriceCzk,
+    registrationBankAccountNumber,
+    registrationBankCode,
+  } = body;
   const event = await prisma.event.update({
     where: { id },
     data: {
@@ -49,6 +59,10 @@ export async function PATCH(
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
       ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),
       ...(driveExportFolderId !== undefined && { driveExportFolderId }),
+      ...(memberPriceCzk !== undefined && { memberPriceCzk }),
+      ...(nonMemberPriceCzk !== undefined && { nonMemberPriceCzk }),
+      ...(registrationBankAccountNumber !== undefined && { registrationBankAccountNumber }),
+      ...(registrationBankCode !== undefined && { registrationBankCode }),
     },
   });
   return NextResponse.json(event);

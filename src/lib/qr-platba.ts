@@ -74,10 +74,11 @@ function spaydSanitize(input: string, maxLength: number): string {
 }
 
 /** Builds a Czech QR Platba (SPAYD) payload string for a single payment. */
-export function buildSpaydString(iban: string, amountCzk: number, message: string): string {
+export function buildSpaydString(iban: string, amountCzk: number, message: string, variableSymbol?: string): string {
   const amount = amountCzk.toFixed(2);
   const msg = spaydSanitize(message, 60);
-  return `SPD*1.0*ACC:${iban}*AM:${amount}*CC:CZK*MSG:${msg}`;
+  const vs = variableSymbol ? `*X-VS:${variableSymbol.replace(/\D/g, "").slice(0, 10)}` : "";
+  return `SPD*1.0*ACC:${iban}*AM:${amount}*CC:CZK*MSG:${msg}${vs}`;
 }
 
 /**

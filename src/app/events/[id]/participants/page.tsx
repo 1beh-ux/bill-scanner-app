@@ -16,6 +16,11 @@ type Participant = {
   registrationStatus: "pending" | "accepted";
   documentsTotal: number;
   documentsReceived: number;
+  address: string | null;
+  healthInsurance: string | null;
+  gender: string | null;
+  isMember: boolean;
+  releasePersons: string | null;
 };
 
 type GuardianDraft = { name: string; email: string; relationship: string };
@@ -55,6 +60,11 @@ export default function EventParticipantsPage({
   const [editName, setEditName] = useState("");
   const [editGroup, setEditGroup] = useState("");
   const [editDob, setEditDob] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editHealthInsurance, setEditHealthInsurance] = useState("");
+  const [editGender, setEditGender] = useState("");
+  const [editIsMember, setEditIsMember] = useState(false);
+  const [editReleasePersons, setEditReleasePersons] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -160,6 +170,11 @@ export default function EventParticipantsPage({
     setEditName(p.name);
     setEditGroup(p.groupName ?? "");
     setEditDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
+    setEditAddress(p.address ?? "");
+    setEditHealthInsurance(p.healthInsurance ?? "");
+    setEditGender(p.gender ?? "");
+    setEditIsMember(p.isMember);
+    setEditReleasePersons(p.releasePersons ?? "");
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -174,6 +189,11 @@ export default function EventParticipantsPage({
         name: editName.trim(),
         groupName: editGroup.trim() || null,
         dateOfBirth: editDob || null,
+        address: editAddress.trim() || null,
+        healthInsurance: editHealthInsurance.trim() || null,
+        gender: editGender.trim() || null,
+        isMember: editIsMember,
+        releasePersons: editReleasePersons.trim() || null,
       }),
     });
     setSavingEdit(false);
@@ -490,6 +510,38 @@ export default function EventParticipantsPage({
                   onChange={(e) => setEditDob(e.target.value)}
                   className={inputClass + " mt-1"}
                 />
+              </label>
+              <input
+                type="text"
+                placeholder={t("participantDetail.addressLabel")}
+                value={editAddress}
+                onChange={(e) => setEditAddress(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("participantDetail.healthInsuranceLabel")}
+                value={editHealthInsurance}
+                onChange={(e) => setEditHealthInsurance(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("participantDetail.genderLabel")}
+                value={editGender}
+                onChange={(e) => setEditGender(e.target.value)}
+                className={inputClass}
+              />
+              <input
+                type="text"
+                placeholder={t("participantDetail.releasePersonsLabel")}
+                value={editReleasePersons}
+                onChange={(e) => setEditReleasePersons(e.target.value)}
+                className={inputClass}
+              />
+              <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
+                <input type="checkbox" checked={editIsMember} onChange={(e) => setEditIsMember(e.target.checked)} />
+                {t("participantDetail.isMemberLabel")}
               </label>
 
               {moduleAccess.health && (

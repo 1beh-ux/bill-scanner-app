@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = String(form.get("body") || "").trim();
   const purposeKey = String(form.get("purposeKey") || PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY);
   const markAccepted = form.get("markAccepted") === "true";
+  const autoAttachDocumentTypeIds: string[] | undefined = form.get("autoAttachDocumentTypeIds")
+    ? JSON.parse(String(form.get("autoAttachDocumentTypeIds")))
+    : undefined;
   const file = form.get("attachment");
 
   if (participantIds.length === 0 || !subject || !body) {
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     sentByUserId: user.id,
     markAccepted,
     attachment,
+    autoAttachDocumentTypeIds,
   });
   const sentCount = results.filter((r) => r.status === "sent").length;
   const failedCount = results.filter((r) => r.status === "failed").length;

@@ -14,6 +14,8 @@ const btnPrimary =
 
 type Mode = "acceptance" | "freeform";
 
+type AutoAttachDocType = { id: string; name: string };
+
 export default function ComposeEmailModal({
   eventId,
   participantIds,
@@ -36,6 +38,8 @@ export default function ComposeEmailModal({
   const [loading, setLoading] = useState(mode === "acceptance");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sentCount: number; failedCount: number } | null>(null);
+  const [autoAttachDocTypes, setAutoAttachDocTypes] = useState<AutoAttachDocType[]>([]);
+  const [selectedDocTypeIds, setSelectedDocTypeIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (mode !== "acceptance") return;
@@ -48,6 +52,14 @@ export default function ComposeEmailModal({
         }
       })
       .finally(() => setLoading(false));
+    fetch(`/api/events/${eventId}/list-items?kind=document&all=false`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: { id: string; name: string; data?: { templateGoogleDocId?: string; autoAttachOnAccept?: boolean } | null }[]) => {
+        const eligible = items.filter((i) => i.data?.templateGoogleDocId);
+        setAutoAttachDocTypes(eligible.map((i) => ({ id: i.id, name: i.name })));
+        setSelectedDocTypeIds(new Set(eligible.filter((i) => i.data?.autoAttachOnAccept).map((i) => i.id)));
+      })
+      .catch(() => {});
   }, [eventId, mode, purposeKey]);
 
   async function handleSend() {
@@ -60,6 +72,9 @@ export default function ComposeEmailModal({
     form.set("body", body);
     form.set("purposeKey", purposeKey);
     form.set("markAccepted", String(mode === "acceptance"));
+    if (mode === "acceptance") {
+      form.set("autoAttachDocumentTypeIds", JSON.stringify(Array.from(selectedDocTypeIds)));
+    }
     if (attachment) form.set("attachment", attachment);
 
     try {
@@ -71,6 +86,15 @@ export default function ComposeEmailModal({
     } finally {
       setSending(false);
     }
+  }
+
+  function toggleDocType(id: string) {
+    setSelectedDocTypeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   return (
@@ -115,6 +139,21 @@ export default function ComposeEmailModal({
               className={inputClass}
               rows={8}
             />
+            {mode === "acceptance" && autoAttachDocTypes.length > 0 && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-[13px] text-ink-secondary">{t("composeEmailModal.autoAttachDocumentsLabel")}</p>
+                {autoAttachDocTypes.map((docType) => (
+                  <label key={docType.id} className="flex items-center gap-2 text-[13px] text-ink">
+                    <input
+                      type="checkbox"
+                      checked={selectedDocTypeIds.has(docType.id)}
+                      onChange={() => toggleDocType(docType.id)}
+                    />
+                    {docType.name}
+                  </label>
+                ))}
+              </div>
+            )}
             <label className="text-[13px] text-ink-secondary">
               {t("composeEmailModal.attachmentLabel")}
               <input

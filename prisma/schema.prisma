@@ -186,6 +186,13 @@ model Event {
   // same guess-from-header-text heuristic as before.
   participantsSheetId      String?   @map("participants_sheet_id")
   participantsColumnMapping Json?    @map("participants_column_mapping")
+  // Camp-fee collection, used by the registration-document merge (price +
+  // QR payment code) -- deliberately separate from any bill/reimbursement
+  // bank account elsewhere in the app; this is the org's own fee account.
+  memberPriceCzk               Int?    @map("member_price_czk")
+  nonMemberPriceCzk             Int?    @map("non_member_price_czk")
+  registrationBankAccountNumber String? @map("registration_bank_account_number")
+  registrationBankCode          String? @map("registration_bank_code")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -258,6 +265,29 @@ model Translation {
   en  String
 
   @@map("translations")
+}
+
+enum MergeVariableSourceType {
+  participant_field
+  guardian_field
+  event_field
+  computed
+}
+
+// Registry for {{variable}} placeholders used by the registration-document
+// merge (src/lib/document-variables.ts, src/lib/document-merge.ts) --
+// admin-editable (like Translation above) so a template's variables can be
+// renamed/remapped without a code deploy. `sourceField` is either a
+// Participant/ParticipantGuardian/Event property name (allowlisted in code)
+// or, for `computed`, one of a small fixed set of resolver ids.
+model MergeVariable {
+  key        String                  @id
+  sourceType MergeVariableSourceType @map("source_type")
+  sourceField String                 @map("source_field")
+  label      String
+  active     Boolean                 @default(true)
+
+  @@map("merge_variables")
 }
 
 model Bill {
@@ -372,6 +402,17 @@ model Participant {
   chronicIssues String?   @map("chronic_issues")
   otherNotes    String?   @map("other_notes")
   registrationStatus RegistrationStatus @default(pending) @map("registration_status")
+  // Registration-document merge fields (Google Docs template variables) --
+  // not Health-specific, kept generic so they stay usable if Participant
+  // moves out of the Health module later (see docs/participants-restructure.md).
+  address           String?   @map("address")
+  healthInsurance   String?   @map("health_insurance")
+  gender            String?   @map("gender")
+  isMember          Boolean   @default(false) @map("is_member")
+  releasePersons    String?   @map("release_persons")
+  // Camp-fee variable symbol -- assigned once, at acceptance (see
+  // src/lib/document-variables.ts), stable afterwards. Null until accepted.
+  registrationNumber Int?     @map("registration_number")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])
@@ -383,6 +424,7 @@ model Participant {
   documents    ParticipantDocument[]
   mailActionLogs MailActionLog[]
 
+  @@unique([eventId, registrationNumber])
   @@map("participants")
 }
 
@@ -392,6 +434,7 @@ model ParticipantGuardian {
   name                   String?
   email                  String
   relationship           String?
+  phone                  String?
   receivesCommunications Boolean @default(true) @map("receives_communications")
 
   participant Participant      @relation(fields: [participantId], references: [id])

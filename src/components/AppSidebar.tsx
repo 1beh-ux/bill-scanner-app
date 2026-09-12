@@ -143,6 +143,9 @@ export default function AppSidebar() {
     ...(role === "admin"
       ? [{ href: "/translations", label: t("nav.translations"), icon: Languages }]
       : []),
+    ...(role === "admin"
+      ? [{ href: "/document-variables", label: t("nav.documentVariables"), icon: FileText }]
+      : []),
   ];
 
   function isActive(href: string) {

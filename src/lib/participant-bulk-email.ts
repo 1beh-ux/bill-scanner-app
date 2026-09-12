@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { resolveVariables, ensureRegistrationNumber } from "@/lib/document-variables";
+import { mergeAndExportDocument } from "@/lib/document-merge";
+import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
   participantId: string;
@@ -11,9 +14,61 @@ export interface BulkEmailResult {
 }
 
 /**
+ * Generates the acceptance-send's auto-attach documents for one
+ * participant: assigns a stable registration number (payment variable
+ * symbol) the first time this runs for them, resolves merge variables, and
+ * merges every event document type flagged autoAttachOnAccept (further
+ * filtered by whichever ones the admin left checked in the send dialog --
+ * `allowedDocumentTypeIds`, undefined meaning "all"). A single template
+ * failing to merge is logged and skipped rather than blocking the send.
+ */
+async function buildAutoAttachDocuments(
+  participant: Awaited<ReturnType<typeof loadParticipant>>,
+  event: { id: string; name: string; memberPriceCzk: number | null; nonMemberPriceCzk: number | null; registrationBankAccountNumber: string | null; registrationBankCode: string | null },
+  allowedDocumentTypeIds?: string[]
+): Promise<{ buffer: Buffer; filename: string; mimeType: string }[]> {
+  if (!participant) return [];
+
+  await ensureRegistrationNumber(participant.id, event.id);
+  const refreshed = await prisma.participant.findUnique({ where: { id: participant.id } });
+  if (!refreshed) return [];
+
+  const documentTypes = await prisma.eventListItem.findMany({
+    where: { eventId: event.id, kind: "document", active: true },
+  });
+
+  const attachments: { buffer: Buffer; filename: string; mimeType: string }[] = [];
+  const { text, images } = await resolveVariables({ ...refreshed, guardians: participant.guardians }, event);
+
+  for (const docType of documentTypes) {
+    const data = docType.data as DocumentTypeData | null;
+    if (!data?.templateGoogleDocId) continue;
+    if (!data.autoAttachOnAccept) continue;
+    if (allowedDocumentTypeIds && !allowedDocumentTypeIds.includes(docType.id)) continue;
+
+    try {
+      const buffer = await mergeAndExportDocument(data.templateGoogleDocId, text, images);
+      attachments.push({ buffer, filename: `${docType.name}.pdf`, mimeType: "application/pdf" });
+    } catch (err) {
+      console.log(`[participant-bulk-email] failed to merge document "${docType.name}" for participant ${participant.id}:`, String(err));
+    }
+  }
+
+  return attachments;
+}
+
+function loadParticipant(participantId: string) {
+  return prisma.participant.findUnique({
+    where: { id: participantId },
+    include: { guardians: { where: { receivesCommunications: true } } },
+  });
+}
+
+/**
  * Sends the same subject/body (with {{participant_name}}/{{camp_name}}/
  * {{sender_name}} substituted per participant) to every receiving guardian
- * of the given participants, with an optional shared attachment. Backs both
+ * of the given participants, with an optional shared manual attachment plus
+ * (on acceptance sends) auto-generated registration documents. Backs both
  * the registration-acceptance send and the freeform "open email" feature --
  * same mechanics, only the subject/body/purposeKey/markAccepted differ.
  *
@@ -30,6 +85,7 @@ export async function sendBulkParticipantEmail(opts: {
   sentByUserId: string;
   markAccepted: boolean;
   attachment?: { buffer: Buffer; filename: string; mimeType: string };
+  autoAttachDocumentTypeIds?: string[];
 }): Promise<BulkEmailResult[]> {
   const event = await prisma.event.findUnique({ where: { id: opts.eventId } });
   if (!event) throw new Error("event_not_found");
@@ -41,15 +97,17 @@ export async function sendBulkParticipantEmail(opts: {
   const results: BulkEmailResult[] = [];
 
   for (const participantId of opts.participantIds) {
-    const participant = await prisma.participant.findUnique({
-      where: { id: participantId },
-      include: { guardians: { where: { receivesCommunications: true } } },
-    });
+    const participant = await loadParticipant(participantId);
     if (!participant) continue;
 
     const vars = { participant_name: participant.name, camp_name: event.name, sender_name: senderDisplayName };
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
+
+    const generatedAttachments = opts.markAccepted
+      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds)
+      : [];
+    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generatedAttachments];
 
     for (const guardian of participant.guardians) {
       if (!senderEmail) {
@@ -80,7 +138,7 @@ export async function sendBulkParticipantEmail(opts: {
           senderEmail,
           subject,
           body,
-          attachment: opts.attachment,
+          attachments,
         });
         await prisma.parentEmailLog.create({
           data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId },

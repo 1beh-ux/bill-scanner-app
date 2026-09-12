@@ -20,6 +20,8 @@ export type DocumentTypeData = {
   displayName?: string;
   expectedValue?: string;
   filenameSuffix?: string;
+  templateGoogleDocId?: string;
+  autoAttachOnAccept?: boolean;
 };
 
 export type DocumentType = {

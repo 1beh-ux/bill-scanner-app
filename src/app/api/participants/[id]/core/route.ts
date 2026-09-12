@@ -23,7 +23,19 @@ export async function GET(
   const { id } = await params;
   const participant = await prisma.participant.findUnique({
     where: { id },
-    select: { id: true, eventId: true, name: true, groupName: true, dateOfBirth: true, registrationStatus: true },
+    select: {
+      id: true,
+      eventId: true,
+      name: true,
+      groupName: true,
+      dateOfBirth: true,
+      registrationStatus: true,
+      address: true,
+      healthInsurance: true,
+      gender: true,
+      isMember: true,
+      releasePersons: true,
+    },
   });
   if (!participant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -51,7 +63,7 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth } = body;
+  const { name, groupName, dateOfBirth, address, healthInsurance, gender, isMember, releasePersons } = body;
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -63,8 +75,24 @@ export async function PATCH(
       ...(name !== undefined && { name: name.trim() }),
       ...(groupName !== undefined && { groupName: groupName || null }),
       ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
+      ...(address !== undefined && { address: address || null }),
+      ...(healthInsurance !== undefined && { healthInsurance: healthInsurance || null }),
+      ...(gender !== undefined && { gender: gender || null }),
+      ...(isMember !== undefined && { isMember }),
+      ...(releasePersons !== undefined && { releasePersons: releasePersons || null }),
     },
-    select: { id: true, name: true, groupName: true, dateOfBirth: true, registrationStatus: true },
+    select: {
+      id: true,
+      name: true,
+      groupName: true,
+      dateOfBirth: true,
+      registrationStatus: true,
+      address: true,
+      healthInsurance: true,
+      gender: true,
+      isMember: true,
+      releasePersons: true,
+    },
   });
 
   return NextResponse.json(updated);

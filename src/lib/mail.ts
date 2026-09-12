@@ -102,20 +102,30 @@ export async function sendPlainTextEmail(opts: {
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
 }
 
-// Generalized version of buildRawMessage's attachment path -- an arbitrary
-// user-uploaded file instead of a hardcoded generated PDF. Used by the
+// Generalized version of buildRawMessage's attachment path -- arbitrary
+// files (user-uploaded and/or generated, e.g. merged registration
+// documents) instead of a hardcoded generated PDF. Used by the
 // registration-acceptance and open-email sends (src/lib/participant-bulk-email.ts).
-function buildAttachmentRawMessage(opts: {
+function buildAttachmentsRawMessage(opts: {
   to: string;
   fromName: string;
   senderEmail: string;
   subject: string;
   body: string;
-  attachment: { buffer: Buffer; filename: string; mimeType: string };
+  attachments: { buffer: Buffer; filename: string; mimeType: string }[];
 }): string {
   const boundary = newMimeBoundary("mixed");
   const bodyBase64 = chunk76(Buffer.from(opts.body, "utf-8").toString("base64"));
-  const attachmentBase64 = chunk76(opts.attachment.buffer.toString("base64"));
+
+  const attachmentParts = opts.attachments.flatMap((attachment) => [
+    `--${boundary}`,
+    `Content-Type: ${attachment.mimeType}; name="${attachment.filename}"`,
+    `Content-Disposition: attachment; filename="${attachment.filename}"`,
+    `Content-Transfer-Encoding: base64`,
+    ``,
+    chunk76(attachment.buffer.toString("base64")),
+    ``,
+  ]);
 
   const message = [
     `From: ${encodeHeaderValue(opts.fromName)} <${opts.senderEmail}>`,
@@ -130,31 +140,26 @@ function buildAttachmentRawMessage(opts: {
     ``,
     bodyBase64,
     ``,
-    `--${boundary}`,
-    `Content-Type: ${opts.attachment.mimeType}; name="${opts.attachment.filename}"`,
-    `Content-Disposition: attachment; filename="${opts.attachment.filename}"`,
-    `Content-Transfer-Encoding: base64`,
-    ``,
-    attachmentBase64,
-    ``,
+    ...attachmentParts,
     `--${boundary}--`,
   ].join("\r\n");
 
   return base64UrlEncode(Buffer.from(message, "utf-8"));
 }
 
-/** Like sendPlainTextEmail, but with an optional arbitrary file attached. */
+/** Like sendPlainTextEmail, but with zero or more arbitrary files attached. */
 export async function sendEmailWithOptionalAttachment(opts: {
   to: string;
   fromName: string;
   senderEmail: string;
   subject: string;
   body: string;
-  attachment?: { buffer: Buffer; filename: string; mimeType: string };
+  attachments?: { buffer: Buffer; filename: string; mimeType: string }[];
 }): Promise<void> {
   const gmail = await getGmailClient(opts.senderEmail);
-  const raw = opts.attachment
-    ? buildAttachmentRawMessage({ ...opts, attachment: opts.attachment })
-    : buildPlainTextRawMessage(opts);
+  const raw =
+    opts.attachments && opts.attachments.length > 0
+      ? buildAttachmentsRawMessage({ ...opts, attachments: opts.attachments })
+      : buildPlainTextRawMessage(opts);
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
 }

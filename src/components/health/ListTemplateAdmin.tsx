@@ -20,6 +20,8 @@ type DocumentData = {
   displayName?: string;
   expectedValue?: string;
   filenameSuffix?: string;
+  templateGoogleDocId?: string;
+  autoAttachOnAccept?: boolean;
 };
 
 type Item = {
@@ -65,6 +67,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const [displayName, setDisplayName] = useState("");
   const [expectedValue, setExpectedValue] = useState("");
   const [filenameSuffix, setFilenameSuffix] = useState("");
+  const [templateGoogleDocId, setTemplateGoogleDocId] = useState("");
+  const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
@@ -107,6 +111,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setDisplayName("");
     setExpectedValue("");
     setFilenameSuffix("");
+    setTemplateGoogleDocId("");
+    setAutoAttachOnAccept(true);
     setEditingId(null);
   }
 
@@ -129,6 +135,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setDisplayName((item.data as DocumentData | null)?.displayName ?? "");
     setExpectedValue((item.data as DocumentData | null)?.expectedValue ?? "");
     setFilenameSuffix((item.data as DocumentData | null)?.filenameSuffix ?? "");
+    setTemplateGoogleDocId((item.data as DocumentData | null)?.templateGoogleDocId ?? "");
+    setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
     setFormOpen(true);
   }
 
@@ -151,6 +159,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
           displayName: displayName.trim() || undefined,
           expectedValue: expectedValue.trim() || undefined,
           filenameSuffix: filenameSuffix.trim() || undefined,
+          templateGoogleDocId: scope === "event" ? templateGoogleDocId.trim() || undefined : undefined,
+          autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
         }
       : undefined;
 
@@ -330,6 +340,25 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
                 onChange={(e) => setFilenameSuffix(e.target.value)}
                 className={inputClass}
               />
+              {scope === "event" && (
+                <>
+                  <input
+                    type="text"
+                    placeholder={t("listTemplateAdmin.templateGoogleDocIdLabel")}
+                    value={templateGoogleDocId}
+                    onChange={(e) => setTemplateGoogleDocId(e.target.value)}
+                    className={inputClass}
+                  />
+                  <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={autoAttachOnAccept}
+                      onChange={(e) => setAutoAttachOnAccept(e.target.checked)}
+                    />
+                    {t("listTemplateAdmin.autoAttachOnAcceptLabel")}
+                  </label>
+                </>
+              )}
             </>
           )}
           <div className="mt-1 flex justify-end gap-2">
