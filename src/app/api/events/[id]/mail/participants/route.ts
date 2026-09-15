@@ -32,6 +32,7 @@ export async function GET(
       name: true,
       dateOfBirth: true,
       registrationStatus: true,
+      customFieldValues: true,
       guardians: {
         select: { id: true, name: true, email: true, receivesCommunications: true },
       },

@@ -205,6 +205,7 @@ model Event {
   eventListItems       EventListItem[]
   eventEmailTemplates  EventEmailTemplate[]
   mailActionLogs       MailActionLog[]
+  eventParticipantFields EventParticipantField[]
 
   @@map("events")
 }
@@ -272,6 +273,7 @@ enum MergeVariableSourceType {
   guardian_field
   event_field
   computed
+  participant_custom_field
 }
 
 // Registry for {{variable}} placeholders used by the registration-document
@@ -402,14 +404,13 @@ model Participant {
   chronicIssues String?   @map("chronic_issues")
   otherNotes    String?   @map("other_notes")
   registrationStatus RegistrationStatus @default(pending) @map("registration_status")
-  // Registration-document merge fields (Google Docs template variables) --
-  // not Health-specific, kept generic so they stay usable if Participant
-  // moves out of the Health module later (see docs/participants-restructure.md).
-  address           String?   @map("address")
-  healthInsurance   String?   @map("health_insurance")
-  gender            String?   @map("gender")
-  isMember          Boolean   @default(false) @map("is_member")
-  releasePersons    String?   @map("release_persons")
+  // Admin-defined participant fields (address, health insurance, camp-fee
+  // membership, etc.) -- Record<fieldKey, string>, keyed by
+  // EventParticipantField.key. Not a fixed set of columns: which fields
+  // exist, their type, and which screens show them are all admin-editable
+  // (see ParticipantFieldTemplate/EventParticipantField below and
+  // src/lib/document-variables.ts's participant_custom_field resolver).
+  customFieldValues Json?     @map("custom_field_values")
   // Camp-fee variable symbol -- assigned once, at acceptance (see
   // src/lib/document-variables.ts), stable afterwards. Null until accepted.
   registrationNumber Int?     @map("registration_number")
@@ -441,6 +442,58 @@ model ParticipantGuardian {
   emailLogs   ParentEmailLog[]
 
   @@map("participant_guardians")
+}
+
+enum ParticipantFieldType {
+  text
+  number
+  date
+  boolean
+  select
+}
+
+// Deliberately distinct from ModuleKey -- "list" (the central Seznam
+// účastníků roster) isn't an access-controlled module, it's a display
+// surface within the roster. A genuinely new module gets a new surface
+// value here the same way ModuleKey itself grows when a module ships.
+enum ParticipantFieldSurface {
+  list
+  health
+  mail
+}
+
+// Org-wide field definition, synced into EventParticipantField the same
+// way CategoryTemplate syncs into EventCategory (see
+// src/app/api/events/[id]/participant-fields/sync/route.ts). `key` is the
+// stable {{key}} used both in customFieldValues and, via a matching
+// MergeVariable row (participant_custom_field), in document templates --
+// immutable after creation, same convention as MergeVariable.key.
+model ParticipantFieldTemplate {
+  key       String               @id
+  label     String
+  fieldType ParticipantFieldType @map("field_type")
+  options   Json?
+  active    Boolean              @default(true)
+
+  @@map("participant_field_templates")
+}
+
+model EventParticipantField {
+  id             String                    @id @default(uuid())
+  eventId        String                    @map("event_id")
+  key            String
+  label          String
+  fieldType      ParticipantFieldType      @map("field_type")
+  options        Json?
+  surfaces       ParticipantFieldSurface[]
+  sortOrder      Int?                      @map("sort_order")
+  active         Boolean                   @default(true)
+  isFromTemplate Boolean                   @default(false) @map("is_from_template")
+
+  event Event @relation(fields: [eventId], references: [id])
+
+  @@unique([eventId, key])
+  @@map("event_participant_fields")
 }
 
 model Incident {

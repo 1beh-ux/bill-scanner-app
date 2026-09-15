@@ -30,11 +30,7 @@ export async function GET(
       groupName: true,
       dateOfBirth: true,
       registrationStatus: true,
-      address: true,
-      healthInsurance: true,
-      gender: true,
-      isMember: true,
-      releasePersons: true,
+      customFieldValues: true,
     },
   });
   if (!participant) {
@@ -63,11 +59,19 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth, address, healthInsurance, gender, isMember, releasePersons } = body;
+  const { name, groupName, dateOfBirth, customFieldValues } = body;
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
   }
+
+  // Merge rather than replace -- the edit form only ever submits every
+  // active field's value together, but merging keeps this route safe for
+  // any future caller that only wants to touch one key.
+  const mergedCustomFieldValues =
+    customFieldValues !== undefined
+      ? { ...((existing.customFieldValues as Record<string, string> | null) ?? {}), ...customFieldValues }
+      : undefined;
 
   const updated = await prisma.participant.update({
     where: { id },
@@ -75,11 +79,7 @@ export async function PATCH(
       ...(name !== undefined && { name: name.trim() }),
       ...(groupName !== undefined && { groupName: groupName || null }),
       ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
-      ...(address !== undefined && { address: address || null }),
-      ...(healthInsurance !== undefined && { healthInsurance: healthInsurance || null }),
-      ...(gender !== undefined && { gender: gender || null }),
-      ...(isMember !== undefined && { isMember }),
-      ...(releasePersons !== undefined && { releasePersons: releasePersons || null }),
+      ...(mergedCustomFieldValues !== undefined && { customFieldValues: mergedCustomFieldValues }),
     },
     select: {
       id: true,
@@ -87,11 +87,7 @@ export async function PATCH(
       groupName: true,
       dateOfBirth: true,
       registrationStatus: true,
-      address: true,
-      healthInsurance: true,
-      gender: true,
-      isMember: true,
-      releasePersons: true,
+      customFieldValues: true,
     },
   });
 

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
+import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import ComposeEmailModal from "@/components/health/ComposeEmailModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 
@@ -16,11 +17,7 @@ type Participant = {
   registrationStatus: "pending" | "accepted";
   documentsTotal: number;
   documentsReceived: number;
-  address: string | null;
-  healthInsurance: string | null;
-  gender: string | null;
-  isMember: boolean;
-  releasePersons: string | null;
+  customFieldValues: Record<string, string> | null;
 };
 
 type GuardianDraft = { name: string; email: string; relationship: string };
@@ -60,12 +57,15 @@ export default function EventParticipantsPage({
   const [editName, setEditName] = useState("");
   const [editGroup, setEditGroup] = useState("");
   const [editDob, setEditDob] = useState("");
-  const [editAddress, setEditAddress] = useState("");
-  const [editHealthInsurance, setEditHealthInsurance] = useState("");
-  const [editGender, setEditGender] = useState("");
-  const [editIsMember, setEditIsMember] = useState(false);
-  const [editReleasePersons, setEditReleasePersons] = useState("");
+  const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+
+  // All active event fields (any surface) -- what the edit modal offers,
+  // since editing a value shouldn't depend on where it happens to be
+  // displayed. `listFields` is the surface-filtered subset for this page's
+  // own table columns.
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
+  const listFields = useMemo(() => fields.filter((f) => f.surfaces.includes("list")), [fields]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -78,12 +78,14 @@ export default function EventParticipantsPage({
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes] = await Promise.all([
+    const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/participants`),
+      fetch(`/api/events/${id}/participant-fields`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
+    if (fieldsRes.ok) setFields(await fieldsRes.json());
     setLoading(false);
   }
 
@@ -170,11 +172,11 @@ export default function EventParticipantsPage({
     setEditName(p.name);
     setEditGroup(p.groupName ?? "");
     setEditDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
-    setEditAddress(p.address ?? "");
-    setEditHealthInsurance(p.healthInsurance ?? "");
-    setEditGender(p.gender ?? "");
-    setEditIsMember(p.isMember);
-    setEditReleasePersons(p.releasePersons ?? "");
+    setEditCustomFieldValues({ ...(p.customFieldValues ?? {}) });
+  }
+
+  function setEditFieldValue(key: string, value: string) {
+    setEditCustomFieldValues((prev) => ({ ...prev, [key]: value }));
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -189,11 +191,7 @@ export default function EventParticipantsPage({
         name: editName.trim(),
         groupName: editGroup.trim() || null,
         dateOfBirth: editDob || null,
-        address: editAddress.trim() || null,
-        healthInsurance: editHealthInsurance.trim() || null,
-        gender: editGender.trim() || null,
-        isMember: editIsMember,
-        releasePersons: editReleasePersons.trim() || null,
+        customFieldValues: editCustomFieldValues,
       }),
     });
     setSavingEdit(false);
@@ -350,6 +348,9 @@ export default function EventParticipantsPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
+                {listFields.map((f) => (
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                ))}
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -389,6 +390,11 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
                     </td>
+                    {listFields.map((f) => (
+                      <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
+                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                      </td>
+                    ))}
                     <td className="whitespace-nowrap p-2 text-right">
                       <button onClick={() => startEdit(p)} className="text-[13px] text-ember hover:underline">
                         {t("common.edit")}
@@ -511,38 +517,14 @@ export default function EventParticipantsPage({
                   className={inputClass + " mt-1"}
                 />
               </label>
-              <input
-                type="text"
-                placeholder={t("participantDetail.addressLabel")}
-                value={editAddress}
-                onChange={(e) => setEditAddress(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="text"
-                placeholder={t("participantDetail.healthInsuranceLabel")}
-                value={editHealthInsurance}
-                onChange={(e) => setEditHealthInsurance(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="text"
-                placeholder={t("participantDetail.genderLabel")}
-                value={editGender}
-                onChange={(e) => setEditGender(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="text"
-                placeholder={t("participantDetail.releasePersonsLabel")}
-                value={editReleasePersons}
-                onChange={(e) => setEditReleasePersons(e.target.value)}
-                className={inputClass}
-              />
-              <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
-                <input type="checkbox" checked={editIsMember} onChange={(e) => setEditIsMember(e.target.checked)} />
-                {t("participantDetail.isMemberLabel")}
-              </label>
+              {fields.map((f) => (
+                <FieldInput
+                  key={f.id}
+                  field={f}
+                  value={editCustomFieldValues[f.key] ?? ""}
+                  onChange={(v) => setEditFieldValue(f.key, v)}
+                />
+              ))}
 
               {moduleAccess.health && (
                 <a
@@ -594,5 +576,49 @@ export default function EventParticipantsPage({
         <BulkStatusModal eventId={id} eventName={event.name} onClose={() => setStatusModalOpen(false)} />
       )}
     </div>
+  );
+}
+
+// Renders one admin-defined field by its type. Values are always stored as
+// plain strings in Participant.customFieldValues (see
+// src/lib/document-variables.ts's participant_custom_field resolver) --
+// boolean fields round-trip as the literal strings "true"/"false".
+function FieldInput({
+  field,
+  value,
+  onChange,
+}: {
+  field: ParticipantFieldDef;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  if (field.fieldType === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
+        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} />
+        {field.label}
+      </label>
+    );
+  }
+  if (field.fieldType === "select") {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+        <option value="">{field.label}</option>
+        {(field.options ?? []).map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  return (
+    <input
+      type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}
+      placeholder={field.label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={inputClass}
+    />
   );
 }

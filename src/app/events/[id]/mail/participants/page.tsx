@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
+import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 
 type EventBasic = { id: string; name: string };
 
@@ -14,6 +15,7 @@ type Participant = {
   dateOfBirth: string | null;
   registrationStatus: "pending" | "accepted";
   documents: DocStatus[];
+  customFieldValues: Record<string, string> | null;
 };
 
 export default function MailParticipantsPage({
@@ -29,15 +31,18 @@ export default function MailParticipantsPage({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes] = await Promise.all([
+    const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/mail/participants?withDocuments=1`),
+      fetch(`/api/events/${id}/participant-fields?surface=mail`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
+    if (fieldsRes.ok) setFields(await fieldsRes.json());
     setLoading(false);
   }
 
@@ -108,6 +113,9 @@ export default function MailParticipantsPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
+                {fields.map((f) => (
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                ))}
                 {documentColumns.map((d) => (
                   <th key={d.id} className="p-2 text-[12px] font-medium text-ink-secondary">{d.name}</th>
                 ))}
@@ -131,6 +139,11 @@ export default function MailParticipantsPage({
                         </span>
                       )}
                     </td>
+                    {fields.map((f) => (
+                      <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
+                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                      </td>
+                    ))}
                     {p.documents.map((d) => {
                       const key = `${p.id}:${d.eventListItemId}`;
                       return (

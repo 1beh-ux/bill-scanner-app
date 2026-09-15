@@ -76,6 +76,21 @@ export async function POST(req: NextRequest) {
       ],
     });
 
+    const fieldTemplates = await tx.participantFieldTemplate.findMany({ where: { active: true } });
+    if (fieldTemplates.length > 0) {
+      await tx.eventParticipantField.createMany({
+        data: fieldTemplates.map((f) => ({
+          eventId: created.id,
+          key: f.key,
+          label: f.label,
+          fieldType: f.fieldType,
+          options: f.options ?? undefined,
+          surfaces: ["list"],
+          isFromTemplate: true,
+        })),
+      });
+    }
+
     return created;
   });
 

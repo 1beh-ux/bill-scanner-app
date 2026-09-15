@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
+import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import IncidentFormModal from "@/components/health/IncidentFormModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 
@@ -15,6 +16,7 @@ type Participant = {
   dateOfBirth: string | null;
   documentsTotal: number;
   documentsReceived: number;
+  customFieldValues: Record<string, string> | null;
 };
 
 export default function EventHealthPage({
@@ -33,15 +35,18 @@ export default function EventHealthPage({
   const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
   const [statusModalOpen, setStatusModalOpen] = useState(false);
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes] = await Promise.all([
+    const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/participants`),
+      fetch(`/api/events/${id}/participant-fields?surface=health`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
+    if (fieldsRes.ok) setFields(await fieldsRes.json());
     setLoading(false);
   }
 
@@ -124,6 +129,9 @@ export default function EventHealthPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
+                {fields.map((f) => (
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                ))}
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -142,6 +150,11 @@ export default function EventHealthPage({
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
                     </td>
+                    {fields.map((f) => (
+                      <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
+                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                      </td>
+                    ))}
                     <td className="whitespace-nowrap p-2 text-right">
                       <button
                         onClick={() => setIncidentParticipantId(p.id)}

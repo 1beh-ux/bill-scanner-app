@@ -5,14 +5,16 @@ import QRCode from "qrcode";
 export type ParticipantForMerge = {
   name: string;
   dateOfBirth: Date | null;
-  address: string | null;
-  healthInsurance: string | null;
-  gender: string | null;
-  isMember: boolean;
-  releasePersons: string | null;
+  customFieldValues: Record<string, string> | null;
   registrationNumber: number | null;
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null }[];
 };
+
+// Camp-fee membership is a plain admin-defined custom field, not a typed
+// column -- pricing needs to read it by a well-known key. If this field is
+// ever renamed/deleted from /templates or an event's Účastníci tab,
+// pricing silently falls back to non-member (see effectivePriceCzk below).
+const MEMBERSHIP_FIELD_KEY = "clenstvi_zare";
 
 export type EventForMerge = {
   name: string;
@@ -34,19 +36,18 @@ function firstGuardian(p: ParticipantForMerge) {
   return p.guardians[0] ?? { name: "", email: "", relationship: "", phone: "" };
 }
 
+function isMember(p: ParticipantForMerge): boolean {
+  return p.customFieldValues?.[MEMBERSHIP_FIELD_KEY] === "true";
+}
+
 function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): number | null {
-  return p.isMember ? e.memberPriceCzk : e.nonMemberPriceCzk;
+  return isMember(p) ? e.memberPriceCzk : e.nonMemberPriceCzk;
 }
 
 /** Field-backed resolvers -- the allowlist of what an admin can point a `{{variable}}` at. */
 const PARTICIPANT_FIELDS: Record<string, (p: ParticipantForMerge) => string> = {
   name: (p) => p.name,
   dateOfBirth: (p) => formatDate(p.dateOfBirth),
-  address: (p) => p.address ?? "",
-  healthInsurance: (p) => p.healthInsurance ?? "",
-  gender: (p) => p.gender ?? "",
-  isMember: (p) => (p.isMember ? "Ano" : "Ne"),
-  releasePersons: (p) => p.releasePersons ?? "",
 };
 
 const GUARDIAN_FIELDS: Record<string, (p: ParticipantForMerge) => string> = {
@@ -106,6 +107,13 @@ export async function resolveVariables(
     } else if (v.sourceType === "event_field") {
       const fn = EVENT_FIELDS[v.sourceField];
       if (fn) text[v.key] = fn(event);
+    } else if (v.sourceType === "participant_custom_field") {
+      // Values are stored as plain strings regardless of the field's
+      // declared type (see EventParticipantField.fieldType) -- "true"/
+      // "false" for boolean fields is rendered Ano/Ne to match every other
+      // boolean-ish value in this file, everything else passes through.
+      const raw = participant.customFieldValues?.[v.sourceField];
+      text[v.key] = raw === "true" ? "Ano" : raw === "false" ? "Ne" : raw ?? "";
     } else if (v.sourceType === "computed") {
       if (v.sourceField === "payment_qr_image") {
         const image = await resolvePaymentQrImage(participant, event);

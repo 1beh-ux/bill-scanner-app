@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
+import ParticipantFieldAdmin from "@/components/health/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
@@ -61,7 +62,7 @@ const inputClass =
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-type Tab = "categories" | "drive" | "access" | "health" | "mail" | "modules";
+type Tab = "categories" | "drive" | "access" | "health" | "mail" | "modules" | "participants";
 
 export default function EventDetailPage({
   params,
@@ -128,6 +129,7 @@ export default function EventDetailPage({
   useEffect(() => {
     if (tab === "health" && !moduleAccess.health) setTab("categories");
     if (tab === "mail" && !moduleAccess.mail) setTab("categories");
+    if (tab === "participants" && !moduleAccess.health && !moduleAccess.mail) setTab("categories");
   }, [tab, moduleAccess]);
 
   useEffect(() => {
@@ -385,6 +387,17 @@ export default function EventDetailPage({
             {t("eventSettings.tabMail")}
           </button>
         )}
+        {(moduleAccess.health || moduleAccess.mail) && (
+          <button
+            onClick={() => setTab("participants")}
+            className={
+              "border-b-2 px-3 py-2 text-[13px] font-medium " +
+              (tab === "participants" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+            }
+          >
+            {t("eventSettings.tabParticipants")}
+          </button>
+        )}
         <button
           onClick={() => setTab("modules")}
           className={
@@ -497,6 +510,10 @@ export default function EventDetailPage({
             </a>
           </div>
         </div>
+      )}
+
+      {tab === "participants" && (
+        <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
       )}
 
       {tab === "categories" && (

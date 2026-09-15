@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
+import ParticipantFieldAdmin from "@/components/health/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
@@ -15,7 +16,7 @@ const btnPrimary =
 
 export default function TemplatesPage() {
   const { t } = useTranslations();
-  const [tab, setTab] = useState<"health" | "mail" | "bills">("health");
+  const [tab, setTab] = useState<"health" | "mail" | "bills" | "participants">("health");
 
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-8">
@@ -49,11 +50,21 @@ export default function TemplatesPage() {
         >
           {t("templatesPage.tabBills")}
         </button>
+        <button
+          onClick={() => setTab("participants")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "participants" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("templatesPage.tabParticipants")}
+        </button>
       </div>
 
       {tab === "health" && <HealthTemplatesTab />}
       {tab === "mail" && <ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} />}
       {tab === "bills" && <BillsTemplatesTab />}
+      {tab === "participants" && <ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} />}
     </div>
   );
 }

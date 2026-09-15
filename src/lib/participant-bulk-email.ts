@@ -38,7 +38,14 @@ async function buildAutoAttachDocuments(
   });
 
   const attachments: { buffer: Buffer; filename: string; mimeType: string }[] = [];
-  const { text, images } = await resolveVariables({ ...refreshed, guardians: participant.guardians }, event);
+  const { text, images } = await resolveVariables(
+    {
+      ...refreshed,
+      customFieldValues: refreshed.customFieldValues as Record<string, string> | null,
+      guardians: participant.guardians,
+    },
+    event
+  );
 
   for (const docType of documentTypes) {
     const data = docType.data as DocumentTypeData | null;

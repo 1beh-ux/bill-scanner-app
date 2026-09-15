@@ -15,11 +15,15 @@ async function main() {
   const rows: { key: string; sourceType: string; sourceField: string; label: string }[] = [
     { key: "Name", sourceType: "participant_field", sourceField: "name", label: "Jméno a příjmení dítěte" },
     { key: "datum_narozeni", sourceType: "participant_field", sourceField: "dateOfBirth", label: "Datum narození" },
-    { key: "adresa", sourceType: "participant_field", sourceField: "address", label: "Adresa trvalého bydliště" },
-    { key: "pojistovna", sourceType: "participant_field", sourceField: "healthInsurance", label: "Zdravotní pojišťovna" },
-    { key: "pohlavi", sourceType: "participant_field", sourceField: "gender", label: "Pohlaví" },
-    { key: "clenstvi_zare", sourceType: "participant_field", sourceField: "isMember", label: "Členství v organizaci (Ano/Ne)" },
-    { key: "vydani_osoby", sourceType: "participant_field", sourceField: "releasePersons", label: "Osoby, kterým lze dítě vydat" },
+    // These five are admin-defined custom fields, not typed Participant
+    // columns -- sourceField is the ParticipantFieldTemplate/
+    // EventParticipantField key (see scripts/seed-participant-field-templates.ts),
+    // matched 1:1 with the merge-variable key for directness.
+    { key: "adresa", sourceType: "participant_custom_field", sourceField: "adresa", label: "Adresa trvalého bydliště" },
+    { key: "pojistovna", sourceType: "participant_custom_field", sourceField: "pojistovna", label: "Zdravotní pojišťovna" },
+    { key: "pohlavi", sourceType: "participant_custom_field", sourceField: "pohlavi", label: "Pohlaví" },
+    { key: "clenstvi_zare", sourceType: "participant_custom_field", sourceField: "clenstvi_zare", label: "Členství v organizaci (Ano/Ne)" },
+    { key: "vydani_osoby", sourceType: "participant_custom_field", sourceField: "vydani_osoby", label: "Osoby, kterým lze dítě vydat" },
     { key: "zast_jmeno", sourceType: "guardian_field", sourceField: "name", label: "Jméno zákonného zástupce" },
     { key: "zak_zast_jmeno", sourceType: "guardian_field", sourceField: "name", label: "Jméno zákonného zástupce (posudek)" },
     { key: "vztah", sourceType: "guardian_field", sourceField: "relationship", label: "Vztah k dítěti" },
