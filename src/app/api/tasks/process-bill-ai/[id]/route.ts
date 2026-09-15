@@ -8,8 +8,21 @@ import { processBillWithAi } from "@/lib/process-bill-ai";
 // the exchange-rate cron endpoint (src/app/api/cron/exchange-rates).
 function authorized(req: NextRequest): boolean {
   const expected = process.env.TASKS_SECRET;
-  if (!expected) return false;
-  return req.headers.get("x-tasks-secret") === expected;
+  const provided = req.headers.get("x-tasks-secret");
+  const ok = !!expected && provided === expected;
+  if (!ok) {
+    // Deliberately no secret values here, just enough to tell apart "env
+    // var missing/empty in this container" from "header missing/wrong
+    // length" from "both present but not equal" without ever logging
+    // either raw value.
+    console.log("[process-bill-ai] auth failed", {
+      hasExpected: !!expected,
+      expectedLength: expected?.length ?? 0,
+      hasProvided: !!provided,
+      providedLength: provided?.length ?? 0,
+    });
+  }
+  return ok;
 }
 
 // Generous ceiling for a single bill's extraction (GCS download + AI call,
