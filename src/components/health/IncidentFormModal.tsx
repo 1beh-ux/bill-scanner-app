@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import BodyMapPicker, { type BodyMapValue } from "./BodyMapPicker";
+import { type ParticipantFieldDef } from "@/lib/participant-fields";
 
 type IncidentCategory = "illness" | "injury" | "parasite" | "medication" | "other";
 
@@ -26,10 +27,7 @@ export type IncidentClientData = {
 
 type ParticipantSummary = {
   name: string;
-  allergies: string | null;
-  medsNotes: string | null;
-  chronicIssues: string | null;
-  otherNotes: string | null;
+  customFieldValues: Record<string, string> | null;
 };
 
 function todayIso(): string {
@@ -136,6 +134,7 @@ export default function IncidentFormModal({
 
   const [participantSummary, setParticipantSummary] = useState<ParticipantSummary | null>(null);
   const [showParticipantSummary, setShowParticipantSummary] = useState(false);
+  const [summaryFields, setSummaryFields] = useState<ParticipantFieldDef[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -152,6 +151,10 @@ export default function IncidentFormModal({
     fetch(`/api/participants/${participantId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setParticipantSummary)
+      .catch(() => {});
+    fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setSummaryFields)
       .catch(() => {});
   }, [eventId, participantId]);
 
@@ -259,24 +262,17 @@ export default function IncidentFormModal({
             </button>
             {showParticipantSummary && (
               <div className="mt-2 flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink">
-                {participantSummary.allergies && (
-                  <p><strong>{t("participantDetail.allergiesLabel")}:</strong> {participantSummary.allergies}</p>
+                {summaryFields.map(
+                  (f) =>
+                    participantSummary.customFieldValues?.[f.key] && (
+                      <p key={f.id}>
+                        <strong>{f.label}:</strong> {participantSummary.customFieldValues[f.key]}
+                      </p>
+                    )
                 )}
-                {participantSummary.medsNotes && (
-                  <p><strong>{t("participantDetail.medsNotesLabel")}:</strong> {participantSummary.medsNotes}</p>
+                {!summaryFields.some((f) => participantSummary.customFieldValues?.[f.key]) && (
+                  <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
                 )}
-                {participantSummary.chronicIssues && (
-                  <p><strong>{t("participantDetail.chronicIssuesLabel")}:</strong> {participantSummary.chronicIssues}</p>
-                )}
-                {participantSummary.otherNotes && (
-                  <p><strong>{t("participantDetail.otherNotesLabel")}:</strong> {participantSummary.otherNotes}</p>
-                )}
-                {!participantSummary.allergies &&
-                  !participantSummary.medsNotes &&
-                  !participantSummary.chronicIssues &&
-                  !participantSummary.otherNotes && (
-                    <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
-                  )}
               </div>
             )}
           </div>

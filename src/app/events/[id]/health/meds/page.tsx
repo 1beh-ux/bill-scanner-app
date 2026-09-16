@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import PdfExportControls from "@/components/health/PdfExportControls";
+import { type ParticipantFieldDef } from "@/lib/participant-fields";
 
 type EventBasic = { id: string; name: string; startDate: string; endDate: string };
 type Slot = { id: string; name: string };
@@ -19,10 +20,7 @@ type GridRow = {
 type GridResponse = { slots: Slot[]; days: string[]; rows: GridRow[] };
 
 type ParticipantNotes = {
-  allergies: string | null;
-  medsNotes: string | null;
-  chronicIssues: string | null;
-  otherNotes: string | null;
+  customFieldValues: Record<string, string> | null;
 };
 
 type Preset = "today" | "week" | "event" | "custom";
@@ -85,11 +83,16 @@ export default function MedChecklistPage({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
   const [notesCache, setNotesCache] = useState<Record<string, ParticipantNotes>>({});
+  const [notesFields, setNotesFields] = useState<ParticipantFieldDef[]>([]);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setEvent);
+    fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setNotesFields)
+      .catch(() => {});
   }, [eventId]);
 
   function applyPreset(p: Preset, ev: EventBasic) {
@@ -241,15 +244,19 @@ export default function MedChecklistPage({
 
   function NotesPanel({ participantId }: { participantId: string }) {
     const notes = notesCache[participantId];
-    const hasNotes = notes && (notes.allergies || notes.medsNotes || notes.chronicIssues || notes.otherNotes);
+    const hasNotes = notesFields.some((f) => notes?.customFieldValues?.[f.key]);
     return (
       <div className="rounded-lg bg-paper-2 p-2 text-[12px] text-ink">
         {hasNotes ? (
           <>
-            {notes?.allergies && <p><strong>{t("participantDetail.allergiesLabel")}:</strong> {notes.allergies}</p>}
-            {notes?.medsNotes && <p><strong>{t("participantDetail.medsNotesLabel")}:</strong> {notes.medsNotes}</p>}
-            {notes?.chronicIssues && <p><strong>{t("participantDetail.chronicIssuesLabel")}:</strong> {notes.chronicIssues}</p>}
-            {notes?.otherNotes && <p><strong>{t("participantDetail.otherNotesLabel")}:</strong> {notes.otherNotes}</p>}
+            {notesFields.map(
+              (f) =>
+                notes?.customFieldValues?.[f.key] && (
+                  <p key={f.id}>
+                    <strong>{f.label}:</strong> {notes.customFieldValues[f.key]}
+                  </p>
+                )
+            )}
           </>
         ) : (
           <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>

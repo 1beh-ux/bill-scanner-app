@@ -2,55 +2,35 @@
 
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { type ParticipantFieldDef } from "@/lib/participant-fields";
 
-type FieldTarget =
-  | "name"
-  | "groupName"
-  | "dateOfBirth"
-  | "allergies"
-  | "medsNotes"
-  | "chronicIssues"
-  | "otherNotes"
-  | "guardianName"
-  | "guardianEmail"
-  | "ignore";
-
-const FIELD_TARGETS: FieldTarget[] = [
-  "ignore",
-  "name",
-  "groupName",
-  "dateOfBirth",
-  "allergies",
-  "medsNotes",
-  "chronicIssues",
-  "otherNotes",
-  "guardianName",
-  "guardianEmail",
-];
-
-// Fields where mapping more than one column labels each value with its own
-// column header before joining ("Poznámka 1: ... | Poznámka 2: ...") so
-// context isn't lost. Name-like fields stay plain concatenation.
-const LABELED_MERGE_TARGETS: FieldTarget[] = ["allergies", "medsNotes", "chronicIssues", "otherNotes"];
+// Fixed targets are structural (name/guardian identity) -- everything
+// else is whatever active fields this event has (see fields state below),
+// fetched rather than hardcoded so a newly added custom field is
+// immediately mappable without a code change. FieldTarget is deliberately
+// a bare string, not a closed union, for the same reason.
+type FieldTarget = string;
+const IGNORE = "ignore";
+const FIXED_TARGETS = ["name", "groupName", "dateOfBirth", "guardianName", "guardianEmail"] as const;
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const DATE_SEP_RE = /^(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{4})$/;
 
-function guessTarget(header: string): FieldTarget {
+function guessTarget(header: string, fields: ParticipantFieldDef[]): FieldTarget {
   const h = header.trim().toLowerCase();
-  if (!h) return "ignore";
+  if (!h) return IGNORE;
   if (h.includes("narozen") || h.includes("datum nar") || h.includes("dob") || h.includes("birth")) return "dateOfBirth";
   if (h.includes("rodič") || h.includes("rodic") || h.includes("zástupce") || h.includes("zastupce") || h.includes("guardian"))
     return "guardianName";
   if (h.includes("jméno") || h.includes("jmeno") || h.includes("name")) return "name";
   if (h.includes("skupina") || h.includes("oddíl") || h.includes("oddil") || h.includes("group")) return "groupName";
-  if (h.includes("alergi")) return "allergies";
-  if (h.includes("lék") || h.includes("lek") || h.includes("medikace") || h.includes("meds")) return "medsNotes";
-  if (h.includes("chronic")) return "chronicIssues";
-  if (h.includes("poznámk") || h.includes("poznamk") || h.includes("other") || h.includes("ostatní") || h.includes("ostatni"))
-    return "otherNotes";
   if (h.includes("e-mail") || h.includes("email") || h.includes("kontakt")) return "guardianEmail";
-  return "ignore";
+  // Fall back to a substring match against each active custom field's own
+  // label -- covers e.g. a column literally named "Velikost trika"
+  // without needing a bespoke heuristic per field.
+  const byLabel = fields.find((f) => h.includes(f.label.toLowerCase()));
+  if (byLabel) return byLabel.key;
+  return IGNORE;
 }
 
 function normalizeName(name: string): string {
@@ -59,8 +39,11 @@ function normalizeName(name: string): string {
 
 // Every column mapped to a target is combined, not just the first -- lets
 // e.g. separate "Jméno" and "Příjmení" columns both map to "name". For
-// notes-type targets, more than one source column gets labeled with its own
-// header so the merged text still says which column said what.
+// custom-field targets (never for the fixed identity ones), more than one
+// source column gets labeled with its own header so the merged text still
+// says which column said what -- covers free-text fields like allergies
+// where losing provenance would be confusing; harmless for short fields
+// like a t-shirt size, which realistically never map from >1 column.
 function resolveField(
   cells: string[],
   headers: string[],
@@ -74,7 +57,8 @@ function resolveField(
     if (v) matches.push({ header: headers[i]?.trim() || `#${i + 1}`, value: v });
   });
   if (matches.length === 0) return "";
-  if (matches.length === 1 || !LABELED_MERGE_TARGETS.includes(target)) {
+  const isCustomField = !(FIXED_TARGETS as readonly string[]).includes(target);
+  if (matches.length === 1 || !isCustomField) {
     return matches.map((m) => m.value).join(" ");
   }
   return matches.map((m) => `${m.header}: ${m.value}`).join(" | ");
@@ -124,12 +108,9 @@ type ParsedRow = {
   groupName: string;
   dateOfBirthRaw: string;
   dateOfBirthIso: string | undefined;
-  allergies: string;
-  medsNotes: string;
-  chronicIssues: string;
-  otherNotes: string;
   guardianName: string;
   guardianEmail: string;
+  customFieldValues: Record<string, string>;
   errors: string[];
   duplicateOf: ExistingParticipant | null;
 };
@@ -144,7 +125,8 @@ function buildRows(
   cellRows: string[][],
   headers: string[],
   mapping: FieldTarget[],
-  existingParticipants: ExistingParticipant[]
+  existingParticipants: ExistingParticipant[],
+  fields: ParticipantFieldDef[]
 ): ParsedRow[] {
   const nonEmptyRows = cellRows.filter((cells) => cells.some((c) => c.trim()));
   const rawDobs = nonEmptyRows.map((cells) => resolveField(cells, headers, mapping, "dateOfBirth"));
@@ -158,6 +140,11 @@ function buildRows(
     const errors: string[] = [];
     if (!name) errors.push("missing_name");
     if (guardianEmail && !EMAIL_RE.test(guardianEmail)) errors.push("invalid_email");
+    const customFieldValues: Record<string, string> = {};
+    for (const f of fields) {
+      const v = resolveField(cells, headers, mapping, f.key);
+      if (v) customFieldValues[f.key] = v;
+    }
     return {
       index,
       cells,
@@ -165,12 +152,9 @@ function buildRows(
       groupName: resolveField(cells, headers, mapping, "groupName"),
       dateOfBirthRaw,
       dateOfBirthIso: formatDob(dateOfBirthRaw, dateOrder),
-      allergies: resolveField(cells, headers, mapping, "allergies"),
-      medsNotes: resolveField(cells, headers, mapping, "medsNotes"),
-      chronicIssues: resolveField(cells, headers, mapping, "chronicIssues"),
-      otherNotes: resolveField(cells, headers, mapping, "otherNotes"),
       guardianName: resolveField(cells, headers, mapping, "guardianName"),
       guardianEmail,
+      customFieldValues,
       errors,
       duplicateOf: name ? (existingByName.get(normalizeName(name)) ?? null) : null,
     };
@@ -214,10 +198,20 @@ export default function ParticipantImportPage({
   const [failedCount, setFailedCount] = useState(0);
   const [done, setDone] = useState(false);
 
+  // Every active field this event has -- unfiltered by surface, since
+  // import mapping is a value-entry operation, not a display one (same
+  // reasoning as the central roster's edit modal).
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
+  const allTargets = useMemo(() => [IGNORE, ...FIXED_TARGETS, ...fields.map((f) => f.key)], [fields]);
+
   useEffect(() => {
     fetch(`/api/events/${eventId}/participants`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setExistingParticipants)
+      .catch(() => {});
+    fetch(`/api/events/${eventId}/participant-fields`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setFields)
       .catch(() => {});
   }, [eventId]);
 
@@ -258,7 +252,7 @@ export default function ParticipantImportPage({
     const headerCells = rows[0];
     const remembered = mappingOverride ?? savedMapping;
     setHeaders(headerCells);
-    setMapping(headerCells.map((h) => remembered[h.trim()] ?? guessTarget(h)));
+    setMapping(headerCells.map((h) => remembered[h.trim()] ?? guessTarget(h, fields)));
     setCellRows(rows.slice(1));
   }
 
@@ -323,9 +317,16 @@ export default function ParticipantImportPage({
     }
   }
 
+  function targetLabel(target: FieldTarget): string {
+    if (target === IGNORE || (FIXED_TARGETS as readonly string[]).includes(target)) {
+      return t(`participantImportPage.field.${target}`);
+    }
+    return fields.find((f) => f.key === target)?.label ?? target;
+  }
+
   const rows = useMemo(
-    () => buildRows(cellRows, headers, mapping, existingParticipants),
-    [cellRows, headers, mapping, existingParticipants]
+    () => buildRows(cellRows, headers, mapping, existingParticipants, fields),
+    [cellRows, headers, mapping, existingParticipants, fields]
   );
 
   function actionFor(row: ParsedRow): RowAction {
@@ -349,8 +350,8 @@ export default function ParticipantImportPage({
   }
 
   // Merges an import row into an existing participant: structured fields
-  // (group, date of birth) only fill in if currently empty; notes-type
-  // fields append the new text after whatever's already there so nothing
+  // (group, date of birth) only fill in if currently empty; every custom
+  // field appends the new text after whatever's already there so nothing
   // typed in manually is ever lost. A new guardian is added only if its
   // email isn't already on the existing record.
   async function mergeIntoExisting(row: ParsedRow, existingId: string): Promise<boolean> {
@@ -362,13 +363,13 @@ export default function ParticipantImportPage({
     if (!existing.groupName && row.groupName) patch.groupName = row.groupName;
     if (!existing.dateOfBirth && row.dateOfBirthIso) patch.dateOfBirth = row.dateOfBirthIso;
 
-    const noteFields = ["allergies", "medsNotes", "chronicIssues", "otherNotes"] as const;
-    for (const field of noteFields) {
-      const incoming = row[field];
-      if (!incoming) continue;
-      const current = existing[field] as string | null;
-      patch[field] = current ? `${current} | ${incoming}` : incoming;
+    const existingCustom = (existing.customFieldValues ?? {}) as Record<string, string>;
+    const mergedCustom: Record<string, string> = {};
+    for (const [key, incoming] of Object.entries(row.customFieldValues)) {
+      const current = existingCustom[key];
+      mergedCustom[key] = current ? `${current} | ${incoming}` : incoming;
     }
+    if (Object.keys(mergedCustom).length > 0) patch.customFieldValues = mergedCustom;
 
     if (Object.keys(patch).length > 0) {
       const patchRes = await fetch(`/api/participants/${existingId}`, {
@@ -423,10 +424,7 @@ export default function ParticipantImportPage({
               name: row.name,
               groupName: row.groupName || undefined,
               dateOfBirth: row.dateOfBirthIso || undefined,
-              allergies: row.allergies || undefined,
-              medsNotes: row.medsNotes || undefined,
-              chronicIssues: row.chronicIssues || undefined,
-              otherNotes: row.otherNotes || undefined,
+              customFieldValues: row.customFieldValues,
               guardians: row.guardianEmail
                 ? [{ name: row.guardianName || undefined, email: row.guardianEmail }]
                 : [],
@@ -553,9 +551,9 @@ export default function ParticipantImportPage({
                   onChange={(e) => updateMapping(i, e.target.value as FieldTarget)}
                   className="rounded-lg border border-mist bg-paper px-2 py-1 text-[13px] text-ink"
                 >
-                  {FIELD_TARGETS.map((target) => (
+                  {allTargets.map((target) => (
                     <option key={target} value={target}>
-                      {t(`participantImportPage.field.${target}`)}
+                      {targetLabel(target)}
                     </option>
                   ))}
                 </select>

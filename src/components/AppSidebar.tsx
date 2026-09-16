@@ -289,13 +289,22 @@ export default function AppSidebar() {
             EN
           </button>
         </div>
-        <button
-          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          aria-label={t("nav.toggleTheme")}
-          className="rounded p-1.5 text-night-muted hover:bg-night-2 hover:text-paper"
-        >
-          {theme === "dark" ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
-        </button>
+        <div className="flex items-center gap-1">
+          <Link
+            href="/settings"
+            aria-label={t("nav.personalSettings")}
+            className="rounded p-1.5 text-night-muted hover:bg-night-2 hover:text-paper"
+          >
+            <Settings size={15} aria-hidden="true" />
+          </Link>
+          <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            aria-label={t("nav.toggleTheme")}
+            className="rounded p-1.5 text-night-muted hover:bg-night-2 hover:text-paper"
+          >
+            {theme === "dark" ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+          </button>
+        </div>
       </div>
     </div>
   );

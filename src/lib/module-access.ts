@@ -71,3 +71,47 @@ export async function getEnabledModules(eventId: string): Promise<ModuleKey[]> {
   });
   return rows.map((r) => r.moduleKey);
 }
+
+/**
+ * Every custom participant field now lives in one shared JSON blob
+ * (Participant.customFieldValues), which means the DB query alone can no
+ * longer keep health-only field values away from a mail-only grant the
+ * way separate typed columns used to (see /api/participants/[id]/core's
+ * own comment on this exact boundary). This is the shared filter: a
+ * field surfaced only for health (health_list/health_detail) requires
+ * health access; a field surfaced for mail_list requires mail access;
+ * a field carrying the general `list` surface (or no surfaces at all --
+ * not yet configured) is visible to anyone who reached the central
+ * roster at all, i.e. has health or mail. Called from every route that
+ * reads or writes customFieldValues for a mixed health-or-mail-gated
+ * page (the central roster and its supporting endpoints).
+ */
+export async function allowedParticipantFieldKeys(
+  user: User,
+  eventId: string
+): Promise<Set<string>> {
+  if (user.role === "admin") {
+    const all = await prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true } });
+    return new Set(all.map((f) => f.key));
+  }
+
+  const [hasHealth, hasMail] = await Promise.all([
+    hasModuleAccess(user, eventId, "health"),
+    hasModuleAccess(user, eventId, "mail"),
+  ]);
+
+  const fields = await prisma.eventParticipantField.findMany({
+    where: { eventId },
+    select: { key: true, surfaces: true },
+  });
+
+  const allowed = new Set<string>();
+  for (const f of fields) {
+    const isHealthOnly = f.surfaces.every((s) => s === "health_list" || s === "health_detail");
+    const isMailOnly = f.surfaces.length > 0 && f.surfaces.every((s) => s === "mail_list");
+    if (isHealthOnly && !hasHealth) continue;
+    if (isMailOnly && !hasMail) continue;
+    allowed.add(f.key);
+  }
+  return allowed;
+}

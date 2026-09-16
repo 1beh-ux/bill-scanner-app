@@ -3,6 +3,7 @@ import type { ModuleKey } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { syncParticipantFieldsForEvent } from "@/lib/participant-field-sync";
 
 const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail"];
 
@@ -49,11 +50,22 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
+  const before = await prisma.eventModule.findUnique({ where: { eventId_moduleKey: { eventId, moduleKey } } });
+  const wasEnabled = before?.enabled ?? false;
+
   const updated = await prisma.eventModule.upsert({
     where: { eventId_moduleKey: { eventId, moduleKey } },
     create: { eventId, moduleKey, enabled },
     update: { enabled },
   });
+
+  // Newly enabled: pull in any org-template participant fields meant for
+  // this module (see src/lib/participant-field-sync.ts) so they show up
+  // with sensible defaults immediately instead of the Účastníci tab
+  // looking empty for a module that was just turned on.
+  if (enabled && !wasEnabled) {
+    await syncParticipantFieldsForEvent(eventId, moduleKey);
+  }
 
   return NextResponse.json(updated);
 }

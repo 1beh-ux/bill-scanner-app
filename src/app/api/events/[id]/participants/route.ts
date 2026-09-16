@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 
 type GuardianInput = {
@@ -25,20 +25,28 @@ export async function GET(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const participants = await prisma.participant.findMany({
-    where: { eventId },
-    orderBy: { name: "asc" },
-  });
+  const [participants, allowedKeys] = await Promise.all([
+    prisma.participant.findMany({ where: { eventId }, orderBy: { name: "asc" } }),
+    allowedParticipantFieldKeys(user, eventId),
+  ]);
+  const scopedParticipants = participants.map((p) => ({
+    ...p,
+    customFieldValues: Object.fromEntries(
+      Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
+        allowedKeys.has(key)
+      )
+    ),
+  }));
 
   // Documents-status summary for the list view: one extra query total (not
   // per-participant) -- how many of the event's active document types each
   // participant already has a ParticipantDocument row for.
   const documentTypes = await getActiveDocumentTypes(eventId);
   const receivedCounts: Record<string, number> = {};
-  if (documentTypes.length > 0 && participants.length > 0) {
+  if (documentTypes.length > 0 && scopedParticipants.length > 0) {
     const rows = await prisma.participantDocument.findMany({
       where: {
-        participantId: { in: participants.map((p) => p.id) },
+        participantId: { in: scopedParticipants.map((p) => p.id) },
         eventListItemId: { in: documentTypes.map((d) => d.id) },
       },
       select: { participantId: true },
@@ -46,7 +54,7 @@ export async function GET(
     for (const r of rows) receivedCounts[r.participantId] = (receivedCounts[r.participantId] ?? 0) + 1;
   }
 
-  const withDocuments = participants.map((p) => ({
+  const withDocuments = scopedParticipants.map((p) => ({
     ...p,
     documentsTotal: documentTypes.length,
     documentsReceived: receivedCounts[p.id] ?? 0,
@@ -70,7 +78,7 @@ export async function POST(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth, allergies, medsNotes, chronicIssues, otherNotes } = body;
+  const { name, groupName, dateOfBirth, customFieldValues } = body;
   const guardians: GuardianInput[] = Array.isArray(body.guardians) ? body.guardians : [];
 
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -89,10 +97,7 @@ export async function POST(
         name: name.trim(),
         groupName: groupName || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
-        allergies: allergies || null,
-        medsNotes: medsNotes || null,
-        chronicIssues: chronicIssues || null,
-        otherNotes: otherNotes || null,
+        customFieldValues: customFieldValues ?? undefined,
       },
     });
 

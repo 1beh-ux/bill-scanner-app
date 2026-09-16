@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 
 // Core-identity view of a participant (name/group/dob/registration status)
 // for the central "Seznam účastníků" section, reachable by health OR mail
-// grants. Deliberately separate from /api/participants/[id], which also
-// returns health-specific fields (allergies/medsNotes/chronicIssues/
-// otherNotes) and stays gated to "health" only -- a mail-only grant must
-// never see those (see that route's mail-participants sibling for the same
-// rule). Editing health-specific fields still happens on the Health
-// participant detail page, unchanged.
+// grants. All custom fields -- health notes included -- now share one JSON
+// blob (Participant.customFieldValues) rather than separate typed columns,
+// so the boundary that used to come for free from a narrow `select` has to
+// be enforced explicitly here: allowedParticipantFieldKeys strips out any
+// key whose field is surfaced for health only when the caller lacks health
+// access (see that function's own comment for the exact rule).
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -39,7 +39,17 @@ export async function GET(
   const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  return NextResponse.json(participant);
+  const allowedKeys = await allowedParticipantFieldKeys(user, participant.eventId);
+  const scoped = {
+    ...participant,
+    customFieldValues: Object.fromEntries(
+      Object.entries((participant.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
+        allowedKeys.has(key)
+      )
+    ),
+  };
+
+  return NextResponse.json(scoped);
 }
 
 export async function PATCH(
@@ -65,12 +75,21 @@ export async function PATCH(
     return NextResponse.json({ error: "name_required" }, { status: 400 });
   }
 
+  const allowedKeys = await allowedParticipantFieldKeys(user, existing.eventId);
+
   // Merge rather than replace -- the edit form only ever submits every
   // active field's value together, but merging keeps this route safe for
-  // any future caller that only wants to touch one key.
+  // any future caller that only wants to touch one key. Keys outside the
+  // caller's allowed set are silently dropped rather than erroring -- a
+  // mail-only caller's own edit form never renders them in the first
+  // place, so this only guards against a crafted request, not a normal
+  // partial edit.
   const mergedCustomFieldValues =
     customFieldValues !== undefined
-      ? { ...((existing.customFieldValues as Record<string, string> | null) ?? {}), ...customFieldValues }
+      ? {
+          ...((existing.customFieldValues as Record<string, string> | null) ?? {}),
+          ...Object.fromEntries(Object.entries(customFieldValues).filter(([key]) => allowedKeys.has(key))),
+        }
       : undefined;
 
   const updated = await prisma.participant.update({
@@ -91,7 +110,16 @@ export async function PATCH(
     },
   });
 
-  return NextResponse.json(updated);
+  const scoped = {
+    ...updated,
+    customFieldValues: Object.fromEntries(
+      Object.entries((updated.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
+        allowedKeys.has(key)
+      )
+    ),
+  };
+
+  return NextResponse.json(scoped);
 }
 
 export async function DELETE(

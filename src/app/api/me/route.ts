@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -11,5 +12,39 @@ export async function GET() {
     email: user.email,
     displayName: user.displayName,
     role: user.role,
+    preferredLang: user.preferredLang,
+    preferredTheme: user.preferredTheme,
+    landingPath: user.landingPath,
+  });
+}
+
+// Personal preferences (src/lib/i18n.tsx, src/app/settings/page.tsx) --
+// localStorage still seeds the instant paint before this loads (see
+// I18nProvider's own comment), this is what makes a choice follow the
+// person across devices/browsers instead of resetting every time.
+export async function PATCH(req: NextRequest) {
+  const user = await getCurrentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  const { preferredLang, preferredTheme, landingPath } = await req.json();
+
+  const updated = await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      ...(preferredLang !== undefined && { preferredLang }),
+      ...(preferredTheme !== undefined && { preferredTheme }),
+      ...(landingPath !== undefined && { landingPath: landingPath || null }),
+    },
+  });
+
+  return NextResponse.json({
+    id: updated.id,
+    email: updated.email,
+    displayName: updated.displayName,
+    role: updated.role,
+    preferredLang: updated.preferredLang,
+    preferredTheme: updated.preferredTheme,
+    landingPath: updated.landingPath,
   });
 }

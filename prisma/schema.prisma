@@ -108,6 +108,16 @@ enum MailActionStatus {
   error
 }
 
+enum UserLang {
+  cs
+  en
+}
+
+enum UserTheme {
+  light
+  dark
+}
+
 model User {
   id          String   @id @default(uuid())
   email       String   @unique
@@ -115,6 +125,12 @@ model User {
   role        UserRole
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+  // Personal preferences (src/app/api/me/route.ts, src/lib/i18n.tsx) --
+  // localStorage still seeds the instant paint before this loads, then
+  // reconciles to these once /api/me resolves.
+  preferredLang   UserLang  @default(cs) @map("preferred_lang")
+  preferredTheme  UserTheme @default(light) @map("preferred_theme")
+  landingPath     String?   @map("landing_path")
 
   moduleAccess       UserEventModuleAccess[]
   billsCreated       Bill[]           @relation("BillCreatedBy")
@@ -399,10 +415,6 @@ model Participant {
   groupName     String?   @map("group_name")
   dateOfBirth   DateTime? @map("date_of_birth") @db.Date
   active        Boolean   @default(true)
-  allergies     String?
-  medsNotes     String?   @map("meds_notes")
-  chronicIssues String?   @map("chronic_issues")
-  otherNotes    String?   @map("other_notes")
   registrationStatus RegistrationStatus @default(pending) @map("registration_status")
   // Admin-defined participant fields (address, health insurance, camp-fee
   // membership, etc.) -- Record<fieldKey, string>, keyed by
@@ -457,9 +469,10 @@ enum ParticipantFieldType {
 // surface within the roster. A genuinely new module gets a new surface
 // value here the same way ModuleKey itself grows when a module ships.
 enum ParticipantFieldSurface {
-  list
-  health
-  mail
+  list          // Seznam účastníků (central roster) columns
+  health_list   // Zdraví page columns
+  health_detail // Zdraví participant detail page fields
+  mail_list     // Mail participants page columns
 }
 
 // Org-wide field definition, synced into EventParticipantField the same
@@ -469,11 +482,16 @@ enum ParticipantFieldSurface {
 // MergeVariable row (participant_custom_field), in document templates --
 // immutable after creation, same convention as MergeVariable.key.
 model ParticipantFieldTemplate {
-  key       String               @id
-  label     String
-  fieldType ParticipantFieldType @map("field_type")
-  options   Json?
-  active    Boolean              @default(true)
+  key             String                    @id
+  label           String
+  fieldType       ParticipantFieldType      @map("field_type")
+  options         Json?
+  // Suggested surfaces applied when this template is synced into an event
+  // (manually, at event creation, or when a module the surfaces belong to
+  // gets enabled -- see .../participant-fields/sync/route.ts and the
+  // modules PATCH route's enable hook).
+  defaultSurfaces ParticipantFieldSurface[] @map("default_surfaces")
+  active          Boolean                   @default(true)
 
   @@map("participant_field_templates")
 }

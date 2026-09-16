@@ -26,7 +26,7 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { label, fieldType, options, surfaces, sortOrder, active } = body;
+  const { label, fieldType, options, surfaces, sortOrder, active, includeInDocuments } = body;
   if (label !== undefined && (typeof label !== "string" || !label.trim())) {
     return NextResponse.json({ error: "label_required" }, { status: 400 });
   }
@@ -42,6 +42,16 @@ export async function PATCH(
       ...(active !== undefined && { active }),
     },
   });
+
+  if (label !== undefined || includeInDocuments !== undefined) {
+    await prisma.mergeVariable.updateMany({
+      where: { key: existing.key },
+      data: {
+        ...(label !== undefined && { label: label.trim() }),
+        ...(includeInDocuments !== undefined && { active: includeInDocuments }),
+      },
+    });
+  }
 
   return NextResponse.json(updated);
 }

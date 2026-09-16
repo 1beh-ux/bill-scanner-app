@@ -38,7 +38,7 @@ export default function MailParticipantsPage({
     const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/mail/participants?withDocuments=1`),
-      fetch(`/api/events/${id}/participant-fields?surface=mail`),
+      fetch(`/api/events/${id}/participant-fields?surface=mail_list`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());

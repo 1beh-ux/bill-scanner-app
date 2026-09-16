@@ -43,11 +43,18 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth, allergies, medsNotes, chronicIssues, otherNotes, active } = body;
+  const { name, groupName, dateOfBirth, customFieldValues, active } = body;
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
   }
+
+  // Merge rather than replace -- see the identical note in
+  // /api/participants/[id]/core/route.ts.
+  const mergedCustomFieldValues =
+    customFieldValues !== undefined
+      ? { ...((existing.customFieldValues as Record<string, string> | null) ?? {}), ...customFieldValues }
+      : undefined;
 
   const updated = await prisma.participant.update({
     where: { id },
@@ -55,10 +62,7 @@ export async function PATCH(
       ...(name !== undefined && { name: name.trim() }),
       ...(groupName !== undefined && { groupName: groupName || null }),
       ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
-      ...(allergies !== undefined && { allergies: allergies || null }),
-      ...(medsNotes !== undefined && { medsNotes: medsNotes || null }),
-      ...(chronicIssues !== undefined && { chronicIssues: chronicIssues || null }),
-      ...(otherNotes !== undefined && { otherNotes: otherNotes || null }),
+      ...(mergedCustomFieldValues !== undefined && { customFieldValues: mergedCustomFieldValues }),
       ...(active !== undefined && { active }),
     },
     include: { guardians: true },

@@ -32,8 +32,21 @@ function readCachedTranslations(): TranslationsMap {
   }
 }
 
+// Seeded from localStorage so a hard reload shows the right language
+// immediately, before /api/me's real (per-user, cross-device) value comes
+// back and reconciles it -- same instant-paint idea as the theme
+// no-flash script in layout.tsx, just done in React state since language
+// doesn't need to avoid a paint flash the way a dark/light class does.
+function readCachedLang(): Lang {
+  try {
+    return localStorage.getItem("lang") === "en" ? "en" : "cs";
+  } catch {
+    return "cs";
+  }
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>("cs");
+  const [lang, setLangState] = useState<Lang>(readCachedLang);
   const [currentEventId, setCurrentEventId] = useState<string | null>(null);
   // Seeded from sessionStorage so a hard navigation shows real text instead of
   // raw i18n keys while the fresh fetch below is still in flight.
@@ -51,7 +64,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  function setTheme(t: Theme) {
+  function setTheme(t: Theme, persistToServer = true) {
     setThemeState(t);
     if (t === "dark") {
       document.documentElement.classList.add("dark");
@@ -61,14 +74,42 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem("theme", t);
     } catch {}
+    if (persistToServer) {
+      fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredTheme: t }),
+      }).catch(() => {});
+    }
+  }
+
+  function setLang(l: Lang, persistToServer = true) {
+    setLangState(l);
+    try {
+      localStorage.setItem("lang", l);
+    } catch {}
+    if (persistToServer) {
+      fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferredLang: l }),
+      }).catch(() => {});
+    }
   }
 
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role } | null) => setRole(data?.role ?? null))
+      .then((data: { role: Role; preferredLang?: Lang; preferredTheme?: Theme } | null) => {
+        setRole(data?.role ?? null);
+        // Reconcile to the server's values without re-PATCHing them right
+        // back -- this is the server telling the client, not a user action.
+        if (data?.preferredLang) setLang(data.preferredLang, false);
+        if (data?.preferredTheme) setTheme(data.preferredTheme, false);
+      })
       .catch(() => setRole(null))
       .finally(() => setRoleLoaded(true));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

@@ -38,7 +38,12 @@ export default function LoginPage() {
         body: JSON.stringify({ idToken }),
       });
       if (res.ok) {
-        router.push("/");
+        // Personal landing-page preference (src/app/settings/page.tsx) --
+        // falls back to "/" (which itself redirects to /events) when unset.
+        const me = await fetch("/api/me")
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null);
+        router.push(me?.landingPath || "/");
       } else {
         setError("Tento účet nemá přístup do aplikace. Přístup uděluje Pavel — napište mu, ať vás přidá.");
       }

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ParticipantFieldSurface } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 
-const ALLOWED_SURFACES: ParticipantFieldSurface[] = ["list", "health", "mail"];
+const ALLOWED_SURFACES: ParticipantFieldSurface[] = ["list", "health_list", "health_detail", "mail_list"];
 
 // Participant fields aren't gated to a single module the way
 // ListTemplateKind is (med/situation -> health, document -> mail) -- the
@@ -30,16 +30,30 @@ export async function GET(
     return NextResponse.json({ error: "invalid_surface" }, { status: 400 });
   }
 
-  const fields = await prisma.eventParticipantField.findMany({
-    where: {
-      eventId,
-      ...(all ? {} : { active: true }),
-      ...(surface ? { surfaces: { has: surface } } : {}),
-    },
-    orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
-  });
+  const [fields, allowedKeys] = await Promise.all([
+    prisma.eventParticipantField.findMany({
+      where: {
+        eventId,
+        ...(all ? {} : { active: true }),
+        ...(surface ? { surfaces: { has: surface } } : {}),
+      },
+      orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+    }),
+    allowedParticipantFieldKeys(user, eventId),
+  ]);
 
-  return NextResponse.json(fields);
+  // Field *definitions* get the same health/mail boundary as their
+  // values (see allowedParticipantFieldKeys) -- a mail-only grant
+  // shouldn't see that a health-only field even exists.
+  const visible = fields.filter((f) => allowedKeys.has(f.key));
+
+  const variables = await prisma.mergeVariable.findMany({
+    where: { key: { in: visible.map((f) => f.key) } },
+    select: { key: true, active: true },
+  });
+  const activeByKey = new Map(variables.map((v) => [v.key, v.active]));
+
+  return NextResponse.json(visible.map((f) => ({ ...f, includeInDocuments: activeByKey.get(f.key) ?? false })));
 }
 
 // Adds a field directly to this event (not synced from an org template --
@@ -57,7 +71,7 @@ export async function POST(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const { key, label, fieldType, options, surfaces, sortOrder } = await req.json();
+  const { key, label, fieldType, options, surfaces, sortOrder, includeInDocuments } = await req.json();
   if (!key || !label || !fieldType) {
     return NextResponse.json({ error: "key, label, and fieldType are required" }, { status: 400 });
   }
@@ -80,8 +94,8 @@ export async function POST(
     });
     await tx.mergeVariable.upsert({
       where: { key },
-      update: { sourceType: "participant_custom_field", sourceField: key, label },
-      create: { key, sourceType: "participant_custom_field", sourceField: key, label },
+      update: { sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
+      create: { key, sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
     });
     return created;
   });

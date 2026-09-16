@@ -11,8 +11,18 @@ export async function GET() {
   const templates = await prisma.participantFieldTemplate.findMany({
     orderBy: { key: "asc" },
   });
+  // "Include in documents" is just MergeVariable.active, read back here so
+  // the same admin screen can show/toggle it (see Part 6 -- one setting,
+  // not a separate flag to keep in sync).
+  const variables = await prisma.mergeVariable.findMany({
+    where: { key: { in: templates.map((t) => t.key) } },
+    select: { key: true, active: true },
+  });
+  const activeByKey = new Map(variables.map((v) => [v.key, v.active]));
 
-  return NextResponse.json(templates);
+  return NextResponse.json(
+    templates.map((t) => ({ ...t, includeInDocuments: activeByKey.get(t.key) ?? false }))
+  );
 }
 
 // Creating an org-wide field template also registers a matching
@@ -29,7 +39,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const { key, label, fieldType, options } = await req.json();
+  const { key, label, fieldType, options, defaultSurfaces, includeInDocuments } = await req.json();
   if (!key || !label || !fieldType) {
     return NextResponse.json({ error: "key, label, and fieldType are required" }, { status: 400 });
   }
@@ -39,12 +49,12 @@ export async function POST(req: NextRequest) {
 
   const template = await prisma.$transaction(async (tx) => {
     const created = await tx.participantFieldTemplate.create({
-      data: { key, label, fieldType, options: options ?? undefined },
+      data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [] },
     });
     await tx.mergeVariable.upsert({
       where: { key },
-      update: { sourceType: "participant_custom_field", sourceField: key, label },
-      create: { key, sourceType: "participant_custom_field", sourceField: key, label },
+      update: { sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
+      create: { key, sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
     });
     return created;
   });

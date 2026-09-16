@@ -1,5 +1,5 @@
 export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select";
-export type ParticipantFieldSurface = "list" | "health" | "mail";
+export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list";
 
 export type ParticipantFieldDef = {
   id: string;

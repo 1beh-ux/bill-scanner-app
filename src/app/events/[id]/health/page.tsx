@@ -42,7 +42,7 @@ export default function EventHealthPage({
     const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/participants`),
-      fetch(`/api/events/${id}/participant-fields?surface=health`),
+      fetch(`/api/events/${id}/participant-fields?surface=health_list`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());

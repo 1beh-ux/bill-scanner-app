@@ -8,6 +8,7 @@ import IncidentDetailModal from "@/components/health/IncidentDetailModal";
 import SendSummaryModal from "@/components/health/SendSummaryModal";
 import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import { calculateAge } from "@/lib/age";
+import { type ParticipantFieldDef } from "@/lib/participant-fields";
 
 type Guardian = {
   id: string;
@@ -23,10 +24,7 @@ type ParticipantDetail = {
   name: string;
   groupName: string | null;
   dateOfBirth: string | null;
-  allergies: string | null;
-  medsNotes: string | null;
-  chronicIssues: string | null;
-  otherNotes: string | null;
+  customFieldValues: Record<string, string> | null;
   guardians: Guardian[];
 };
 
@@ -71,10 +69,8 @@ export default function ParticipantDetailPage({
   const [error, setError] = useState<string | null>(null);
 
   const [editing, setEditing] = useState(false);
-  const [editAllergies, setEditAllergies] = useState("");
-  const [editMedsNotes, setEditMedsNotes] = useState("");
-  const [editChronicIssues, setEditChronicIssues] = useState("");
-  const [editOtherNotes, setEditOtherNotes] = useState("");
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
+  const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [addingGuardian, setAddingGuardian] = useState(false);
@@ -159,6 +155,11 @@ export default function ParticipantDetailPage({
     setLoading(false);
   }
 
+  async function loadFields() {
+    const res = await fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`);
+    if (res.ok) setFields(await res.json());
+  }
+
   async function loadIncidents() {
     const res = await fetch(`/api/participants/${participantId}/incidents`);
     if (res.ok) setIncidents(await res.json());
@@ -178,6 +179,7 @@ export default function ParticipantDetailPage({
 
   useEffect(() => {
     load();
+    loadFields();
     loadIncidents();
     loadMedPlans();
     loadEmailLogs();
@@ -200,11 +202,12 @@ export default function ParticipantDetailPage({
   function startEdit() {
     if (!participant) return;
     setError(null);
-    setEditAllergies(participant.allergies ?? "");
-    setEditMedsNotes(participant.medsNotes ?? "");
-    setEditChronicIssues(participant.chronicIssues ?? "");
-    setEditOtherNotes(participant.otherNotes ?? "");
+    setEditCustomFieldValues({ ...(participant.customFieldValues ?? {}) });
     setEditing(true);
+  }
+
+  function setEditFieldValue(key: string, value: string) {
+    setEditCustomFieldValues((prev) => ({ ...prev, [key]: value }));
   }
 
   async function handleDeleteParticipant() {
@@ -228,10 +231,7 @@ export default function ParticipantDetailPage({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        allergies: editAllergies.trim() || null,
-        medsNotes: editMedsNotes.trim() || null,
-        chronicIssues: editChronicIssues.trim() || null,
-        otherNotes: editOtherNotes.trim() || null,
+        customFieldValues: editCustomFieldValues,
       }),
     });
     setSavingEdit(false);
@@ -287,8 +287,7 @@ export default function ParticipantDetailPage({
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!participant) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
-  const hasNotes =
-    participant.allergies || participant.medsNotes || participant.chronicIssues || participant.otherNotes;
+  const hasNotes = fields.some((f) => participant.customFieldValues?.[f.key]);
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">
@@ -341,17 +340,13 @@ export default function ParticipantDetailPage({
       <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
       {hasNotes ? (
         <div className="mb-6 flex flex-col gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
-          {participant.allergies && (
-            <p><strong>{t("participantDetail.allergiesLabel")}:</strong> {participant.allergies}</p>
-          )}
-          {participant.medsNotes && (
-            <p><strong>{t("participantDetail.medsNotesLabel")}:</strong> {participant.medsNotes}</p>
-          )}
-          {participant.chronicIssues && (
-            <p><strong>{t("participantDetail.chronicIssuesLabel")}:</strong> {participant.chronicIssues}</p>
-          )}
-          {participant.otherNotes && (
-            <p><strong>{t("participantDetail.otherNotesLabel")}:</strong> {participant.otherNotes}</p>
+          {fields.map(
+            (f) =>
+              participant.customFieldValues?.[f.key] && (
+                <p key={f.id}>
+                  <strong>{f.label}:</strong> {participant.customFieldValues[f.key]}
+                </p>
+              )
           )}
         </div>
       ) : (
@@ -617,35 +612,15 @@ export default function ParticipantDetailPage({
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
             <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("participantDetail.editNotesButton")}</h2>
             <form onSubmit={saveEdit} className="flex flex-col gap-3">
-              <textarea
-                placeholder={t("participantDetail.allergiesLabel")}
-                value={editAllergies}
-                onChange={(e) => setEditAllergies(e.target.value)}
-                className={inputClass}
-                rows={2}
-                autoFocus
-              />
-              <textarea
-                placeholder={t("participantDetail.medsNotesLabel")}
-                value={editMedsNotes}
-                onChange={(e) => setEditMedsNotes(e.target.value)}
-                className={inputClass}
-                rows={2}
-              />
-              <textarea
-                placeholder={t("participantDetail.chronicIssuesLabel")}
-                value={editChronicIssues}
-                onChange={(e) => setEditChronicIssues(e.target.value)}
-                className={inputClass}
-                rows={2}
-              />
-              <textarea
-                placeholder={t("participantDetail.otherNotesLabel")}
-                value={editOtherNotes}
-                onChange={(e) => setEditOtherNotes(e.target.value)}
-                className={inputClass}
-                rows={2}
-              />
+              {fields.map((f, i) => (
+                <HealthFieldInput
+                  key={f.id}
+                  field={f}
+                  value={editCustomFieldValues[f.key] ?? ""}
+                  onChange={(v) => setEditFieldValue(f.key, v)}
+                  autoFocus={i === 0}
+                />
+              ))}
 
               <div className="mt-2 flex justify-end gap-2">
                 <button type="button" onClick={() => setEditing(false)} className="text-[13px] text-ink-secondary hover:underline">
@@ -660,5 +635,64 @@ export default function ParticipantDetailPage({
         </div>
       )}
     </div>
+  );
+}
+
+// Text-type fields render as a multi-line textarea here specifically --
+// this page is about longer clinical notes, unlike the central roster's
+// single-line FieldInput (src/app/events/[id]/participants/page.tsx),
+// which is a different screen with a different typical field shape.
+function HealthFieldInput({
+  field,
+  value,
+  onChange,
+  autoFocus,
+}: {
+  field: ParticipantFieldDef;
+  value: string;
+  onChange: (value: string) => void;
+  autoFocus?: boolean;
+}) {
+  if (field.fieldType === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
+        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} autoFocus={autoFocus} />
+        {field.label}
+      </label>
+    );
+  }
+  if (field.fieldType === "select") {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} autoFocus={autoFocus}>
+        <option value="">{field.label}</option>
+        {(field.options ?? []).map((opt) => (
+          <option key={opt} value={opt}>
+            {opt}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (field.fieldType === "number" || field.fieldType === "date") {
+    return (
+      <input
+        type={field.fieldType}
+        placeholder={field.label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass}
+        autoFocus={autoFocus}
+      />
+    );
+  }
+  return (
+    <textarea
+      placeholder={field.label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={inputClass}
+      rows={2}
+      autoFocus={autoFocus}
+    />
   );
 }

@@ -17,7 +17,7 @@ export async function PATCH(
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
   const body = await req.json();
-  const { label, fieldType, options, active } = body;
+  const { label, fieldType, options, defaultSurfaces, active, includeInDocuments } = body;
 
   const template = await prisma.$transaction(async (tx) => {
     const updated = await tx.participantFieldTemplate.update({
@@ -26,11 +26,18 @@ export async function PATCH(
         ...(label !== undefined && { label }),
         ...(fieldType !== undefined && { fieldType }),
         ...(options !== undefined && { options }),
+        ...(defaultSurfaces !== undefined && { defaultSurfaces }),
         ...(active !== undefined && { active }),
       },
     });
-    if (label !== undefined) {
-      await tx.mergeVariable.updateMany({ where: { key: decodedKey }, data: { label } });
+    if (label !== undefined || includeInDocuments !== undefined) {
+      await tx.mergeVariable.updateMany({
+        where: { key: decodedKey },
+        data: {
+          ...(label !== undefined && { label }),
+          ...(includeInDocuments !== undefined && { active: includeInDocuments }),
+        },
+      });
     }
     return updated;
   });
