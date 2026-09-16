@@ -42,7 +42,13 @@ export async function GET(req: NextRequest) {
   const purpose = purposeParam === "mail" ? "mail" : "health";
 
   const nonce = crypto.randomBytes(16).toString("hex");
-  const redirectUri = `${req.nextUrl.origin}/api/mail-oauth/callback`;
+  // req.nextUrl.origin can't be trusted here -- behind Cloud Run's proxy it
+  // resolves to the container's internal bind address (0.0.0.0:8080), not
+  // the public URL, which Google rejects outright (not a redirect_uri
+  // mismatch -- a generic "doesn't comply with OAuth 2.0 policy" block).
+  // APP_BASE_URL is the same already-correct source of truth cloud-tasks.ts
+  // uses for this exact problem.
+  const redirectUri = `${process.env.APP_BASE_URL}/api/mail-oauth/callback`;
   const oauth2Client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET, redirectUri);
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
