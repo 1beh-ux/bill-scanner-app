@@ -2,26 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { visibleNavSections } from "@/lib/nav-sections";
 
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
-// Only event-independent destinations -- an eventId baked into a landing
-// path would go stale the moment that event closes or access changes.
-function landingOptions(role: string | null): { path: string; labelKey: string }[] {
-  return [
-    { path: "/events", labelKey: "nav.events" },
-    { path: "/authors", labelKey: "nav.authors" },
-    { path: "/exchange-rates", labelKey: "nav.exchangeRates" },
-    { path: "/templates", labelKey: "nav.templates" },
-    ...(role === "admin" ? [{ path: "/users", labelKey: "nav.users" }] : []),
-  ];
-}
-
 export default function SettingsPage() {
-  const { t, roleLoaded, role } = useTranslations();
+  const { t, roleLoaded, role, lang, setLang, theme, setTheme } = useTranslations();
   const [landingPath, setLandingPath] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,6 +42,32 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-xl p-4 md:p-8">
       <h1 className="mb-6 text-[22px] font-semibold text-ink">{t("nav.personalSettings")}</h1>
 
+      <div className="mb-6 flex flex-col gap-3 border-b border-mist pb-6">
+        <label className="text-[13px] text-ink-secondary">
+          {t("settingsPage.languageLabel")}
+          <select
+            value={lang}
+            onChange={(e) => setLang(e.target.value as "cs" | "en")}
+            className={inputClass + " mt-1"}
+          >
+            <option value="cs">Čeština</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+
+        <label className="text-[13px] text-ink-secondary">
+          {t("settingsPage.themeLabel")}
+          <select
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as "light" | "dark")}
+            className={inputClass + " mt-1"}
+          >
+            <option value="light">{t("settingsPage.themeLight")}</option>
+            <option value="dark">{t("settingsPage.themeDark")}</option>
+          </select>
+        </label>
+      </div>
+
       <form onSubmit={save} className="flex flex-col gap-3">
         <label className="text-[13px] text-ink-secondary">
           {t("settingsPage.landingPathLabel")}
@@ -62,10 +77,14 @@ export default function SettingsPage() {
             className={inputClass + " mt-1"}
           >
             <option value="">{t("settingsPage.landingPathDefault")}</option>
-            {landingOptions(role).map((o) => (
-              <option key={o.path} value={o.path}>
-                {t(o.labelKey)}
-              </option>
+            {visibleNavSections(role).map((section) => (
+              <optgroup key={section.sectionLabelKey} label={t(section.sectionLabelKey)}>
+                {section.items.map((item) => (
+                  <option key={item.path} value={item.path}>
+                    {t(item.labelKey)}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -77,8 +96,6 @@ export default function SettingsPage() {
           {saved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
         </div>
       </form>
-
-      <p className="mt-6 text-[13px] text-ink-secondary">{t("settingsPage.langThemeHint")}</p>
     </div>
   );
 }

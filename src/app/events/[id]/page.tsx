@@ -413,7 +413,7 @@ export default function EventDetailPage({
 
       {tab === "modules" && <ModulesTab eventId={id} t={t} />}
 
-      {tab === "health" && (
+      {tab === "health" && moduleAccess.health && (
         <div className="flex flex-col gap-6">
           {mailConnect === "connected" && (
             <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
@@ -444,7 +444,7 @@ export default function EventDetailPage({
         </div>
       )}
 
-      {tab === "mail" && (
+      {tab === "mail" && moduleAccess.mail && (
         <div className="flex flex-col gap-6">
           {mailConnect === "connected" && (
             <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
@@ -512,7 +512,7 @@ export default function EventDetailPage({
         </div>
       )}
 
-      {tab === "participants" && (
+      {tab === "participants" && (moduleAccess.health || moduleAccess.mail) && (
         <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
       )}
 

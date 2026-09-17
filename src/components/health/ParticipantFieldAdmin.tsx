@@ -238,7 +238,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       ) : (
         <ul className="mb-4 list-none p-0">
           {fields.map((field) => {
-            const shownSurfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
+            // Filter to visibleSurfaces so a field's stored health/mail
+            // surfaces don't show as text once that module is disabled for
+            // this event -- the data isn't lost (see toggleSurface/submit),
+            // it's just not worth displaying until the module is back on.
+            const allSurfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
+            const shownSurfaces = isEvent ? allSurfaces.filter((s) => visibleSurfaces.includes(s)) : allSurfaces;
             return (
               <li
                 key={isEvent ? field.id : field.key}

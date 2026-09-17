@@ -9,10 +9,7 @@ import {
   BarChart3,
   QrCode,
   Settings,
-  Calendar,
   Users,
-  Landmark,
-  UserCog,
   Menu,
   X,
   Sun,
@@ -21,11 +18,10 @@ import {
   Upload,
   HeartPulse,
   Pill,
-  LayoutTemplate,
-  Languages,
   Mail,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
+import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
 
 type EventOption = { id: string; name: string; status: string };
 
@@ -88,8 +84,7 @@ export default function AppSidebar() {
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
-    { href: "/authors", label: t("nav.authors"), icon: Users },
-    { href: "/exchange-rates", label: t("nav.exchangeRates"), icon: Landmark },
+    ...NAV_SECTIONS.bills.items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })),
   ];
 
   const participantsNavItems = [
@@ -136,17 +131,9 @@ export default function AppSidebar() {
     icon: Settings,
   };
 
-  const orgNavItems = [
-    { href: "/events", label: t("nav.events"), icon: Calendar },
-    ...(role === "admin" ? [{ href: "/users", label: t("nav.users"), icon: UserCog }] : []),
-    { href: "/templates", label: t("nav.templates"), icon: LayoutTemplate },
-    ...(role === "admin"
-      ? [{ href: "/translations", label: t("nav.translations"), icon: Languages }]
-      : []),
-    ...(role === "admin"
-      ? [{ href: "/document-variables", label: t("nav.documentVariables"), icon: FileText }]
-      : []),
-  ];
+  const orgNavItems = visibleNavSections(role)
+    .find((s) => s.sectionLabelKey === NAV_SECTIONS.organization.sectionLabelKey)!
+    .items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon }));
 
   function isActive(href: string) {
     return pathname === href;
@@ -222,16 +209,19 @@ export default function AppSidebar() {
         </>
       )}
 
-      <div className="my-3 h-px bg-night-border" />
-
-      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-        {t("nav.sectionHealth")}
-      </div>
-      <nav className="flex flex-col gap-0.5">
-        {healthNavItems.map((item) => (
-          <NavLink key={item.label} {...item} />
-        ))}
-      </nav>
+      {healthNavItems.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-night-border" />
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.sectionHealth")}
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {healthNavItems.map((item) => (
+              <NavLink key={item.label} {...item} />
+            ))}
+          </nav>
+        </>
+      )}
 
       {mailNavItems.length > 0 && (
         <>

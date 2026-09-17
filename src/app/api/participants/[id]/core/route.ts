@@ -84,11 +84,13 @@ export async function PATCH(
   // mail-only caller's own edit form never renders them in the first
   // place, so this only guards against a crafted request, not a normal
   // partial edit.
-  const mergedCustomFieldValues =
+  const mergedCustomFieldValues: Record<string, string> | undefined =
     customFieldValues !== undefined
       ? {
           ...((existing.customFieldValues as Record<string, string> | null) ?? {}),
-          ...Object.fromEntries(Object.entries(customFieldValues).filter(([key]) => allowedKeys.has(key))),
+          ...Object.fromEntries(
+            Object.entries(customFieldValues as Record<string, string>).filter(([key]) => allowedKeys.has(key))
+          ),
         }
       : undefined;
 
