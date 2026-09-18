@@ -4,7 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 
-const ALLOWED_SURFACES: ParticipantFieldSurface[] = ["list", "health_list", "health_detail", "mail_list"];
+const ALLOWED_SURFACES: ParticipantFieldSurface[] = [
+  "list",
+  "health_list",
+  "health_detail",
+  "mail_list",
+  "documents",
+  "import",
+];
 
 // Participant fields aren't gated to a single module the way
 // ListTemplateKind is (med/situation -> health, document -> mail) -- the
@@ -47,18 +54,11 @@ export async function GET(
   // shouldn't see that a health-only field even exists.
   const visible = fields.filter((f) => allowedKeys.has(f.key));
 
-  const variables = await prisma.mergeVariable.findMany({
-    where: { key: { in: visible.map((f) => f.key) } },
-    select: { key: true, active: true },
-  });
-  const activeByKey = new Map(variables.map((v) => [v.key, v.active]));
-
-  return NextResponse.json(visible.map((f) => ({ ...f, includeInDocuments: activeByKey.get(f.key) ?? false })));
+  return NextResponse.json(visible.map((f) => ({ ...f, includeInDocuments: f.surfaces.includes("documents") })));
 }
 
 // Adds a field directly to this event (not synced from an org template --
-// use .../participant-fields/sync for that). Also upserts a matching
-// MergeVariable row, same auto-link as org-template creation.
+// use .../participant-fields/sync for that).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -71,7 +71,7 @@ export async function POST(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const { key, label, fieldType, options, surfaces, sortOrder, includeInDocuments } = await req.json();
+  const { key, label, fieldType, options, surfaces, sortOrder } = await req.json();
   if (!key || !label || !fieldType) {
     return NextResponse.json({ error: "key, label, and fieldType are required" }, { status: 400 });
   }
@@ -79,25 +79,17 @@ export async function POST(
     return NextResponse.json({ error: "invalid_key" }, { status: 400 });
   }
 
-  const field = await prisma.$transaction(async (tx) => {
-    const created = await tx.eventParticipantField.create({
-      data: {
-        eventId,
-        key,
-        label,
-        fieldType,
-        options: options ?? undefined,
-        surfaces: surfaces ?? [],
-        sortOrder: sortOrder ?? null,
-        isFromTemplate: false,
-      },
-    });
-    await tx.mergeVariable.upsert({
-      where: { key },
-      update: { sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
-      create: { key, sourceType: "participant_custom_field", sourceField: key, label, active: includeInDocuments ?? true },
-    });
-    return created;
+  const field = await prisma.eventParticipantField.create({
+    data: {
+      eventId,
+      key,
+      label,
+      fieldType,
+      options: options ?? undefined,
+      surfaces: surfaces ?? [],
+      sortOrder: sortOrder ?? null,
+      isFromTemplate: false,
+    },
   });
 
   return NextResponse.json(field, { status: 201 });

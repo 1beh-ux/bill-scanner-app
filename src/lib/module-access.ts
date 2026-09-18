@@ -107,8 +107,16 @@ export async function allowedParticipantFieldKeys(
 
   const allowed = new Set<string>();
   for (const f of fields) {
-    const isHealthOnly = f.surfaces.every((s) => s === "health_list" || s === "health_detail");
-    const isMailOnly = f.surfaces.length > 0 && f.surfaces.every((s) => s === "mail_list");
+    // `documents`/`import` are orthogonal to which screen shows a field --
+    // ignore them here so a field that's health_detail-only but also
+    // document-mergeable doesn't leak to a mail-only grant just because it
+    // has a second surface. Also fixes a latent bug: an empty surfaces
+    // array (not yet configured) used to vacuously satisfy "every surface
+    // is health_list/health_detail" and hide the field from mail-only
+    // grants, contradicting the comment above about unconfigured fields.
+    const gateSurfaces = f.surfaces.filter((s) => s !== "documents" && s !== "import");
+    const isHealthOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "health_list" || s === "health_detail");
+    const isMailOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "mail_list");
     if (isHealthOnly && !hasHealth) continue;
     if (isMailOnly && !hasMail) continue;
     allowed.add(f.key);

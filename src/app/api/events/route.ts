@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -85,7 +86,10 @@ export async function POST(req: NextRequest) {
           label: f.label,
           fieldType: f.fieldType,
           options: f.options ?? undefined,
-          surfaces: ["list"],
+          // Was hardcoded to ["list"], ignoring the template's own
+          // defaultSurfaces -- inconsistent with syncParticipantFieldsForEvent,
+          // which already gets this right.
+          surfaces: f.defaultSurfaces,
           isFromTemplate: true,
         })),
       });
@@ -93,6 +97,8 @@ export async function POST(req: NextRequest) {
 
     return created;
   });
+
+  await seedFixedParticipantFields(event.id);
 
   return NextResponse.json(event, { status: 201 });
 }

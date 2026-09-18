@@ -3,11 +3,13 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
+import { effectivePriceCzk, buildVariableSymbol } from "@/lib/document-variables";
 
 type GuardianInput = {
   name?: string;
   email: string;
   relationship?: string;
+  phone?: string;
   receivesCommunications?: boolean;
 };
 
@@ -25,18 +27,36 @@ export async function GET(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const [participants, allowedKeys] = await Promise.all([
-    prisma.participant.findMany({ where: { eventId }, orderBy: { name: "asc" } }),
+  const [participants, allowedKeys, event] = await Promise.all([
+    prisma.participant.findMany({
+      where: { eventId },
+      orderBy: { name: "asc" },
+      include: { guardians: { where: { receivesCommunications: true }, take: 1 } },
+    }),
     allowedParticipantFieldKeys(user, eventId),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
   ]);
-  const scopedParticipants = participants.map((p) => ({
-    ...p,
-    customFieldValues: Object.fromEntries(
-      Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
-        allowedKeys.has(key)
-      )
-    ),
-  }));
+  // Computed columns (price/variable symbol) reuse the same formulas as
+  // document merge -- resolved here, not lazily on the client, so the
+  // roster's optional "computed" columns (see fixed-participant-fields.ts)
+  // show the real value instead of duplicating the formula in a component.
+  const scopedParticipants = participants.map((p) => {
+    const { guardians, ...rest } = p;
+    const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
+    return {
+      ...rest,
+      customFieldValues: Object.fromEntries(
+        Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
+          allowedKeys.has(key)
+        )
+      ),
+      guardian: guardians[0] ?? null,
+      computed: {
+        price: effectivePriceCzk(forMerge, event),
+        var_symb: buildVariableSymbol(forMerge, event),
+      },
+    };
+  });
 
   // Documents-status summary for the list view: one extra query total (not
   // per-participant) -- how many of the event's active document types each
@@ -108,6 +128,7 @@ export async function POST(
           name: g.name?.trim() || null,
           email: g.email.trim(),
           relationship: g.relationship?.trim() || null,
+          phone: g.phone?.trim() || null,
           receivesCommunications: g.receivesCommunications ?? true,
         })),
       });

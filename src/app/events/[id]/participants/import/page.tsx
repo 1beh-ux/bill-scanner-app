@@ -3,15 +3,30 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { type ParticipantFieldDef } from "@/lib/participant-fields";
+import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 
-// Fixed targets are structural (name/guardian identity) -- everything
-// else is whatever active fields this event has (see fields state below),
-// fetched rather than hardcoded so a newly added custom field is
-// immediately mappable without a code change. FieldTarget is deliberately
-// a bare string, not a closed union, for the same reason.
+// Import targets are now fully data-driven: every field flagged with the
+// `import` surface (builtin/guardian/custom -- see
+// src/lib/fixed-participant-fields.ts) is fetched and offered, replacing
+// the old hardcoded 5-item FIXED_TARGETS list. Structural targets (name,
+// group, DOB, guardian identity) are still resolved by key, but the key
+// itself is looked up from FIXED_PARTICIPANT_FIELDS instead of hardcoded,
+// so it stays correct if those fixed keys ever change. FieldTarget is
+// deliberately a bare string, not a closed union, since custom field keys
+// aren't known at compile time.
 type FieldTarget = string;
 const IGNORE = "ignore";
-const FIXED_TARGETS = ["name", "groupName", "dateOfBirth", "guardianName", "guardianEmail"] as const;
+
+function fixedKey(match: (f: (typeof FIXED_PARTICIPANT_FIELDS)[number]) => boolean): string {
+  return FIXED_PARTICIPANT_FIELDS.find(match)?.key ?? "";
+}
+const NAME_FIELD = fixedKey((f) => f.builtinProp === "name");
+const GROUP_FIELD = fixedKey((f) => f.builtinProp === "groupName");
+const DOB_FIELD = fixedKey((f) => f.builtinProp === "dateOfBirth");
+const GUARDIAN_NAME_FIELD = fixedKey((f) => f.guardianProp === "name");
+const GUARDIAN_EMAIL_FIELD = fixedKey((f) => f.guardianProp === "email");
+const GUARDIAN_RELATIONSHIP_FIELD = fixedKey((f) => f.guardianProp === "relationship");
+const GUARDIAN_PHONE_FIELD = fixedKey((f) => f.guardianProp === "phone");
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
 const DATE_SEP_RE = /^(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{4})$/;
@@ -19,13 +34,15 @@ const DATE_SEP_RE = /^(\d{1,2})\s*[.\-/]\s*(\d{1,2})\s*[.\-/]\s*(\d{4})$/;
 function guessTarget(header: string, fields: ParticipantFieldDef[]): FieldTarget {
   const h = header.trim().toLowerCase();
   if (!h) return IGNORE;
-  if (h.includes("narozen") || h.includes("datum nar") || h.includes("dob") || h.includes("birth")) return "dateOfBirth";
+  if (h.includes("narozen") || h.includes("datum nar") || h.includes("dob") || h.includes("birth")) return DOB_FIELD;
+  if (h.includes("telefon") || h.includes("phone")) return GUARDIAN_PHONE_FIELD;
+  if (h.includes("vztah") || h.includes("relationship")) return GUARDIAN_RELATIONSHIP_FIELD;
   if (h.includes("rodič") || h.includes("rodic") || h.includes("zástupce") || h.includes("zastupce") || h.includes("guardian"))
-    return "guardianName";
-  if (h.includes("jméno") || h.includes("jmeno") || h.includes("name")) return "name";
-  if (h.includes("skupina") || h.includes("oddíl") || h.includes("oddil") || h.includes("group")) return "groupName";
-  if (h.includes("e-mail") || h.includes("email") || h.includes("kontakt")) return "guardianEmail";
-  // Fall back to a substring match against each active custom field's own
+    return GUARDIAN_NAME_FIELD;
+  if (h.includes("jméno") || h.includes("jmeno") || h.includes("name")) return NAME_FIELD;
+  if (h.includes("skupina") || h.includes("oddíl") || h.includes("oddil") || h.includes("group")) return GROUP_FIELD;
+  if (h.includes("e-mail") || h.includes("email") || h.includes("kontakt")) return GUARDIAN_EMAIL_FIELD;
+  // Fall back to a substring match against each importable field's own
   // label -- covers e.g. a column literally named "Velikost trika"
   // without needing a bespoke heuristic per field.
   const byLabel = fields.find((f) => h.includes(f.label.toLowerCase()));
@@ -39,7 +56,7 @@ function normalizeName(name: string): string {
 
 // Every column mapped to a target is combined, not just the first -- lets
 // e.g. separate "Jméno" and "Příjmení" columns both map to "name". For
-// custom-field targets (never for the fixed identity ones), more than one
+// custom-field targets (never for builtin/guardian ones), more than one
 // source column gets labeled with its own header so the merged text still
 // says which column said what -- covers free-text fields like allergies
 // where losing provenance would be confusing; harmless for short fields
@@ -48,7 +65,8 @@ function resolveField(
   cells: string[],
   headers: string[],
   mapping: FieldTarget[],
-  target: FieldTarget
+  target: FieldTarget,
+  fields: ParticipantFieldDef[]
 ): string {
   const matches: { header: string; value: string }[] = [];
   mapping.forEach((m, i) => {
@@ -57,7 +75,7 @@ function resolveField(
     if (v) matches.push({ header: headers[i]?.trim() || `#${i + 1}`, value: v });
   });
   if (matches.length === 0) return "";
-  const isCustomField = !(FIXED_TARGETS as readonly string[]).includes(target);
+  const isCustomField = fields.find((f) => f.key === target)?.kind === "custom";
   if (matches.length === 1 || !isCustomField) {
     return matches.map((m) => m.value).join(" ");
   }
@@ -110,6 +128,8 @@ type ParsedRow = {
   dateOfBirthIso: string | undefined;
   guardianName: string;
   guardianEmail: string;
+  guardianRelationship: string;
+  guardianPhone: string;
   customFieldValues: Record<string, string>;
   errors: string[];
   duplicateOf: ExistingParticipant | null;
@@ -128,32 +148,39 @@ function buildRows(
   existingParticipants: ExistingParticipant[],
   fields: ParticipantFieldDef[]
 ): ParsedRow[] {
+  const resolve = (cells: string[], target: FieldTarget) => resolveField(cells, headers, mapping, target, fields);
   const nonEmptyRows = cellRows.filter((cells) => cells.some((c) => c.trim()));
-  const rawDobs = nonEmptyRows.map((cells) => resolveField(cells, headers, mapping, "dateOfBirth"));
+  const rawDobs = nonEmptyRows.map((cells) => resolve(cells, DOB_FIELD));
   const dateOrder = detectDateOrder(rawDobs);
   const existingByName = new Map(existingParticipants.map((p) => [normalizeName(p.name), p]));
 
   return nonEmptyRows.map((cells, index) => {
-    const name = resolveField(cells, headers, mapping, "name");
-    const guardianEmail = resolveField(cells, headers, mapping, "guardianEmail");
-    const dateOfBirthRaw = resolveField(cells, headers, mapping, "dateOfBirth");
+    const name = resolve(cells, NAME_FIELD);
+    const guardianEmail = resolve(cells, GUARDIAN_EMAIL_FIELD);
+    const dateOfBirthRaw = resolve(cells, DOB_FIELD);
     const errors: string[] = [];
     if (!name) errors.push("missing_name");
     if (guardianEmail && !EMAIL_RE.test(guardianEmail)) errors.push("invalid_email");
+    // Only kind=custom fields store into customFieldValues -- builtin
+    // (name/group/DOB) and guardian fields are resolved into their own
+    // ParsedRow properties above/below instead.
     const customFieldValues: Record<string, string> = {};
     for (const f of fields) {
-      const v = resolveField(cells, headers, mapping, f.key);
+      if (f.kind !== "custom") continue;
+      const v = resolve(cells, f.key);
       if (v) customFieldValues[f.key] = v;
     }
     return {
       index,
       cells,
       name,
-      groupName: resolveField(cells, headers, mapping, "groupName"),
+      groupName: resolve(cells, GROUP_FIELD),
       dateOfBirthRaw,
       dateOfBirthIso: formatDob(dateOfBirthRaw, dateOrder),
-      guardianName: resolveField(cells, headers, mapping, "guardianName"),
+      guardianName: resolve(cells, GUARDIAN_NAME_FIELD),
       guardianEmail,
+      guardianRelationship: resolve(cells, GUARDIAN_RELATIONSHIP_FIELD),
+      guardianPhone: resolve(cells, GUARDIAN_PHONE_FIELD),
       customFieldValues,
       errors,
       duplicateOf: name ? (existingByName.get(normalizeName(name)) ?? null) : null,
@@ -198,18 +225,19 @@ export default function ParticipantImportPage({
   const [failedCount, setFailedCount] = useState(0);
   const [done, setDone] = useState(false);
 
-  // Every active field this event has -- unfiltered by surface, since
-  // import mapping is a value-entry operation, not a display one (same
-  // reasoning as the central roster's edit modal).
+  // Every field flagged for the `import` surface -- builtin, guardian, and
+  // custom alike (see src/lib/fixed-participant-fields.ts). Data-driven
+  // instead of a hardcoded target list, so a newly added importable field
+  // is immediately mappable without a code change.
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  const allTargets = useMemo(() => [IGNORE, ...FIXED_TARGETS, ...fields.map((f) => f.key)], [fields]);
+  const allTargets = useMemo(() => [IGNORE, ...fields.map((f) => f.key)], [fields]);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}/participants`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setExistingParticipants)
       .catch(() => {});
-    fetch(`/api/events/${eventId}/participant-fields`)
+    fetch(`/api/events/${eventId}/participant-fields?surface=import`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setFields)
       .catch(() => {});
@@ -318,9 +346,7 @@ export default function ParticipantImportPage({
   }
 
   function targetLabel(target: FieldTarget): string {
-    if (target === IGNORE || (FIXED_TARGETS as readonly string[]).includes(target)) {
-      return t(`participantImportPage.field.${target}`);
-    }
+    if (target === IGNORE) return t("participantImportPage.field.ignore");
     return fields.find((f) => f.key === target)?.label ?? target;
   }
 
@@ -388,7 +414,12 @@ export default function ParticipantImportPage({
         await fetch(`/api/participants/${existingId}/guardians`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: row.guardianName || undefined, email: row.guardianEmail }),
+          body: JSON.stringify({
+            name: row.guardianName || undefined,
+            email: row.guardianEmail,
+            relationship: row.guardianRelationship || undefined,
+            phone: row.guardianPhone || undefined,
+          }),
         });
       }
     }
@@ -426,7 +457,14 @@ export default function ParticipantImportPage({
               dateOfBirth: row.dateOfBirthIso || undefined,
               customFieldValues: row.customFieldValues,
               guardians: row.guardianEmail
-                ? [{ name: row.guardianName || undefined, email: row.guardianEmail }]
+                ? [
+                    {
+                      name: row.guardianName || undefined,
+                      email: row.guardianEmail,
+                      relationship: row.guardianRelationship || undefined,
+                      phone: row.guardianPhone || undefined,
+                    },
+                  ]
                 : [],
             }),
           });

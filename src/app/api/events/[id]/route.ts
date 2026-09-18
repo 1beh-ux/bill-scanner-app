@@ -50,6 +50,10 @@ export async function PATCH(
     nonMemberPriceCzk,
     registrationBankAccountNumber,
     registrationBankCode,
+    vsEventType,
+    vsOrderInYear,
+    vsMembershipFieldKey,
+    participantsListColumns,
   } = body;
   const event = await prisma.event.update({
     where: { id },
@@ -63,6 +67,10 @@ export async function PATCH(
       ...(nonMemberPriceCzk !== undefined && { nonMemberPriceCzk }),
       ...(registrationBankAccountNumber !== undefined && { registrationBankAccountNumber }),
       ...(registrationBankCode !== undefined && { registrationBankCode }),
+      ...(vsEventType !== undefined && { vsEventType }),
+      ...(vsOrderInYear !== undefined && { vsOrderInYear }),
+      ...(vsMembershipFieldKey !== undefined && { vsMembershipFieldKey }),
+      ...(participantsListColumns !== undefined && { participantsListColumns }),
     },
   });
   return NextResponse.json(event);

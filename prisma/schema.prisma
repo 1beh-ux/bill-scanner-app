@@ -209,6 +209,20 @@ model Event {
   nonMemberPriceCzk             Int?    @map("non_member_price_czk")
   registrationBankAccountNumber String? @map("registration_bank_account_number")
   registrationBankCode          String? @map("registration_bank_code")
+  // Variable-symbol formula config (computed field, see
+  // src/lib/document-variables.ts's buildVariableSymbol): year comes from
+  // startDate, vsEventType/vsOrderInYear are admin-typed single digits,
+  // vsMembershipFieldKey names the boolean custom field whose "true" value
+  // sets the membership digit to 1 (else 0). Null vsMembershipFieldKey means
+  // no membership digit is configured -- always 0.
+  vsEventType          Int?     @map("vs_event_type")
+  vsOrderInYear        Int?     @map("vs_order_in_year")
+  vsMembershipFieldKey String?  @map("vs_membership_field_key")
+  // Ordered EventParticipantField keys chosen for the central roster's
+  // columns (Name is always first and isn't included here). Null means not
+  // configured yet -- falls back to every active field with the `list`
+  // surface, in API order (the old, always-on behavior).
+  participantsListColumns Json? @map("participants_list_columns")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -282,30 +296,6 @@ model Translation {
   en  String
 
   @@map("translations")
-}
-
-enum MergeVariableSourceType {
-  participant_field
-  guardian_field
-  event_field
-  computed
-  participant_custom_field
-}
-
-// Registry for {{variable}} placeholders used by the registration-document
-// merge (src/lib/document-variables.ts, src/lib/document-merge.ts) --
-// admin-editable (like Translation above) so a template's variables can be
-// renamed/remapped without a code deploy. `sourceField` is either a
-// Participant/ParticipantGuardian/Event property name (allowlisted in code)
-// or, for `computed`, one of a small fixed set of resolver ids.
-model MergeVariable {
-  key        String                  @id
-  sourceType MergeVariableSourceType @map("source_type")
-  sourceField String                 @map("source_field")
-  label      String
-  active     Boolean                 @default(true)
-
-  @@map("merge_variables")
 }
 
 model Bill {
@@ -462,25 +452,58 @@ enum ParticipantFieldType {
   date
   boolean
   select
+  image
 }
 
 // Deliberately distinct from ModuleKey -- "list" (the central Seznam
 // účastníků roster) isn't an access-controlled module, it's a display
 // surface within the roster. A genuinely new module gets a new surface
 // value here the same way ModuleKey itself grows when a module ships.
+// `documents` and `import` were folded in from the old standalone
+// MergeVariable/"Include in documents" mechanism and the participant-import
+// screen's hardcoded target list -- both are now just more surfaces a field
+// can be flagged for, same UI as the display surfaces. They're a11y-neutral
+// to module gating (see allowedParticipantFieldKeys) since a field can be
+// document-mergeable regardless of which module it's otherwise scoped to.
 enum ParticipantFieldSurface {
   list          // Seznam účastníků (central roster) columns
   health_list   // Zdraví page columns
   health_detail // Zdraví participant detail page fields
   mail_list     // Mail participants page columns
+  documents     // usable as {{key}} in document/mail merge
+  import        // offered as a target column when importing participants
+}
+
+// Which participant-connected thing a field actually is. `custom` is the
+// only kind ParticipantFieldTemplate ever holds (org-wide admin-defined
+// fields); `builtin`/`guardian`/`computed` only ever exist as fixed,
+// non-deletable EventParticipantField rows seeded per event (see
+// src/lib/participant-field-seed.ts's seedFixedParticipantFields) so their
+// surfaces are configurable from the same admin screen as custom fields,
+// without a template layer that makes no sense for a field type can't add
+// or remove.
+enum ParticipantFieldKind {
+  custom
+  builtin
+  guardian
+  computed
+}
+
+// Only set when kind = computed -- which fixed formula resolves the value.
+// A new computed type needs a code change in src/lib/document-variables.ts
+// regardless (the formula itself can't be admin-authored), this just says
+// which one a given fixed row maps to.
+enum ComputedFieldType {
+  effective_price
+  variable_symbol
+  payment_qr_image
 }
 
 // Org-wide field definition, synced into EventParticipantField the same
 // way CategoryTemplate syncs into EventCategory (see
 // src/app/api/events/[id]/participant-fields/sync/route.ts). `key` is the
-// stable {{key}} used both in customFieldValues and, via a matching
-// MergeVariable row (participant_custom_field), in document templates --
-// immutable after creation, same convention as MergeVariable.key.
+// stable {{key}} used both in customFieldValues and, once its `documents`
+// surface is on, in document templates -- immutable after creation.
 model ParticipantFieldTemplate {
   key             String                    @id
   label           String
@@ -507,6 +530,11 @@ model EventParticipantField {
   sortOrder      Int?                      @map("sort_order")
   active         Boolean                   @default(true)
   isFromTemplate Boolean                   @default(false) @map("is_from_template")
+  // custom rows (the default) are fully admin-managed, same as before.
+  // builtin/guardian/computed rows are fixed system rows seeded per event --
+  // their key/fieldType/kind/computedType aren't editable, only surfaces/active.
+  kind           ParticipantFieldKind      @default(custom)
+  computedType   ComputedFieldType?        @map("computed_type")
 
   event Event @relation(fields: [eventId], references: [id])
 

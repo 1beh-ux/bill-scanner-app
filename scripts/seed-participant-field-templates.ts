@@ -25,7 +25,7 @@ async function main() {
     await prisma.participantFieldTemplate.upsert({
       where: { key: row.key },
       update: { label: row.label, fieldType: row.fieldType as never },
-      create: { ...row, fieldType: row.fieldType as never },
+      create: { ...row, fieldType: row.fieldType as never, defaultSurfaces: [] },
     });
     console.log(`  ok: ${row.key}`);
   }

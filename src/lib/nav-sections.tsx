@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, FileText, Users, Landmark } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark } from "lucide-react";
 
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
@@ -26,7 +26,6 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       { path: "/users", labelKey: "nav.users", icon: UserCog, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
-      { path: "/document-variables", labelKey: "nav.documentVariables", icon: FileText, adminOnly: true },
     ],
   },
 };

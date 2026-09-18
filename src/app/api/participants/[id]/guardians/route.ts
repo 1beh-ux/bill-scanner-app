@@ -20,7 +20,7 @@ export async function POST(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, email, relationship, receivesCommunications } = body;
+  const { name, email, relationship, phone, receivesCommunications } = body;
 
   if (!email || typeof email !== "string" || !email.trim()) {
     return NextResponse.json({ error: "guardian_email_required" }, { status: 400 });
@@ -32,6 +32,7 @@ export async function POST(
       name: name?.trim() || null,
       email: email.trim(),
       relationship: relationship?.trim() || null,
+      phone: phone?.trim() || null,
       receivesCommunications: receivesCommunications ?? true,
     },
   });

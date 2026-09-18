@@ -1,5 +1,6 @@
-export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select";
-export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list";
+export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
+export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
+export type ParticipantFieldKind = "custom" | "builtin" | "guardian" | "computed";
 
 export type ParticipantFieldDef = {
   id: string;
@@ -8,6 +9,7 @@ export type ParticipantFieldDef = {
   fieldType: ParticipantFieldType;
   options: string[] | null;
   surfaces: ParticipantFieldSurface[];
+  kind: ParticipantFieldKind;
 };
 
 // "Ano"/"Ne" hardcoded rather than translated -- matches the existing

@@ -26,9 +26,15 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { label, fieldType, options, surfaces, sortOrder, active, includeInDocuments } = body;
+  const { label, fieldType, options, surfaces, sortOrder, active } = body;
   if (label !== undefined && (typeof label !== "string" || !label.trim())) {
     return NextResponse.json({ error: "label_required" }, { status: 400 });
+  }
+  // builtin/guardian/computed rows are fixed system fields (see
+  // src/lib/fixed-participant-fields.ts) -- only where they're shown/used
+  // and whether they're active is admin-editable, not their key/type/label.
+  if (existing.kind !== "custom" && (label !== undefined || fieldType !== undefined || options !== undefined)) {
+    return NextResponse.json({ error: "fixed_field_not_editable" }, { status: 400 });
   }
 
   const updated = await prisma.eventParticipantField.update({
@@ -42,16 +48,6 @@ export async function PATCH(
       ...(active !== undefined && { active }),
     },
   });
-
-  if (label !== undefined || includeInDocuments !== undefined) {
-    await prisma.mergeVariable.updateMany({
-      where: { key: existing.key },
-      data: {
-        ...(label !== undefined && { label: label.trim() }),
-        ...(includeInDocuments !== undefined && { active: includeInDocuments }),
-      },
-    });
-  }
 
   return NextResponse.json(updated);
 }
@@ -71,6 +67,9 @@ export async function DELETE(
   }
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
+  if (existing.kind !== "custom") {
+    return NextResponse.json({ error: "fixed_field_not_deletable" }, { status: 400 });
+  }
 
   // Unlike EventListItem (referenced by ParticipantDocument's FK), nothing
   // references EventParticipantField by foreign key -- values live in

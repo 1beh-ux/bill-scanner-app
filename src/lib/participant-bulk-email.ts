@@ -24,7 +24,18 @@ export interface BulkEmailResult {
  */
 async function buildAutoAttachDocuments(
   participant: Awaited<ReturnType<typeof loadParticipant>>,
-  event: { id: string; name: string; memberPriceCzk: number | null; nonMemberPriceCzk: number | null; registrationBankAccountNumber: string | null; registrationBankCode: string | null },
+  event: {
+    id: string;
+    name: string;
+    startDate: Date;
+    memberPriceCzk: number | null;
+    nonMemberPriceCzk: number | null;
+    registrationBankAccountNumber: string | null;
+    registrationBankCode: string | null;
+    vsEventType: number | null;
+    vsOrderInYear: number | null;
+    vsMembershipFieldKey: string | null;
+  },
   allowedDocumentTypeIds?: string[]
 ): Promise<{ buffer: Buffer; filename: string; mimeType: string }[]> {
   if (!participant) return [];

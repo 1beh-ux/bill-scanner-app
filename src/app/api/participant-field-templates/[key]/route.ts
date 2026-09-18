@@ -17,29 +17,17 @@ export async function PATCH(
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
   const body = await req.json();
-  const { label, fieldType, options, defaultSurfaces, active, includeInDocuments } = body;
+  const { label, fieldType, options, defaultSurfaces, active } = body;
 
-  const template = await prisma.$transaction(async (tx) => {
-    const updated = await tx.participantFieldTemplate.update({
-      where: { key: decodedKey },
-      data: {
-        ...(label !== undefined && { label }),
-        ...(fieldType !== undefined && { fieldType }),
-        ...(options !== undefined && { options }),
-        ...(defaultSurfaces !== undefined && { defaultSurfaces }),
-        ...(active !== undefined && { active }),
-      },
-    });
-    if (label !== undefined || includeInDocuments !== undefined) {
-      await tx.mergeVariable.updateMany({
-        where: { key: decodedKey },
-        data: {
-          ...(label !== undefined && { label }),
-          ...(includeInDocuments !== undefined && { active: includeInDocuments }),
-        },
-      });
-    }
-    return updated;
+  const template = await prisma.participantFieldTemplate.update({
+    where: { key: decodedKey },
+    data: {
+      ...(label !== undefined && { label }),
+      ...(fieldType !== undefined && { fieldType }),
+      ...(options !== undefined && { options }),
+      ...(defaultSurfaces !== undefined && { defaultSurfaces }),
+      ...(active !== undefined && { active }),
+    },
   });
 
   return NextResponse.json(template);
@@ -48,9 +36,8 @@ export async function PATCH(
 // Deletes the org template only -- events that already synced this field
 // keep their own EventParticipantField row (same as deleting a
 // CategoryTemplate/ListTemplate doesn't touch events that already synced
-// it). Leaves the matching MergeVariable row in place too, since existing
-// EventParticipantField rows (and any customFieldValues already saved
-// under this key) still rely on it resolving in templates.
+// it), including its own `documents`/`import` surfaces and any
+// customFieldValues already saved under this key.
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ key: string }> }

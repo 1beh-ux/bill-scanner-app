@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
+import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import ComposeEmailModal from "@/components/health/ComposeEmailModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 
-type EventBasic = { id: string; name: string };
+type EventBasic = { id: string; name: string; participantsListColumns: string[] | null };
 
 type Participant = {
   id: string;
@@ -18,7 +19,26 @@ type Participant = {
   documentsTotal: number;
   documentsReceived: number;
   customFieldValues: Record<string, string> | null;
+  guardian: { name: string | null; email: string; relationship: string | null; phone: string | null } | null;
+  computed: { price: number | null; var_symb: string };
 };
+
+// Resolves a guardian/computed field's display value for the roster --
+// custom fields already go through customFieldValues, builtin fields never
+// reach here (excluded from the column picker, see dynamicListFields below).
+function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string {
+  if (field.kind === "guardian") {
+    const prop = FIXED_PARTICIPANT_FIELDS.find((f) => f.key === field.key)?.guardianProp;
+    const raw = prop ? p.guardian?.[prop] : undefined;
+    return raw || "—";
+  }
+  if (field.kind === "computed") {
+    if (field.key === "price") return p.computed.price != null ? `${p.computed.price} Kč` : "—";
+    if (field.key === "var_symb") return p.computed.var_symb || "—";
+    return "—";
+  }
+  return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType as "text" | "number" | "date" | "boolean" | "select");
+}
 
 type GuardianDraft = { name: string; email: string; relationship: string };
 
@@ -62,10 +82,30 @@ export default function EventParticipantsPage({
 
   // All active event fields (any surface) -- what the edit modal offers,
   // since editing a value shouldn't depend on where it happens to be
-  // displayed. `listFields` is the surface-filtered subset for this page's
-  // own table columns.
+  // displayed (custom fields only -- guardian/computed values aren't
+  // editable here, and builtin fields already have their own dedicated
+  // inputs above).
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  const listFields = useMemo(() => fields.filter((f) => f.surfaces.includes("list")), [fields]);
+  const editableFields = useMemo(() => fields.filter((f) => f.kind === "custom"), [fields]);
+  // Every non-builtin field with the `list` surface -- candidates for the
+  // roster's optional columns. builtin fields (Name/Group/DOB/status) are
+  // excluded: they're always shown via the dedicated columns below, so
+  // offering them here would just be a second, disconnected toggle for the
+  // same thing.
+  const dynamicListFields = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.surfaces.includes("list")), [fields]);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [columnOrder, setColumnOrder] = useState<string[]>([]);
+  const [savingColumns, setSavingColumns] = useState(false);
+  // The actually-displayed columns: the saved order, filtered to fields
+  // still eligible (deactivated/removed fields drop out silently), falling
+  // back to "every eligible field, API order" when nothing's configured
+  // yet -- the old always-on behavior.
+  const activeColumns = useMemo(() => {
+    const eligibleKeys = new Set(dynamicListFields.map((f) => f.key));
+    const saved = (event?.participantsListColumns ?? []).filter((k) => eligibleKeys.has(k));
+    const keys = saved.length > 0 ? saved : dynamicListFields.map((f) => f.key);
+    return keys.map((k) => dynamicListFields.find((f) => f.key === k)!).filter(Boolean);
+  }, [dynamicListFields, event]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -288,6 +328,114 @@ export default function EventParticipantsPage({
         >
           {t("participantsPage.importButton")}
         </a>
+        {dynamicListFields.length > 0 && (
+          <div className="relative">
+            <button
+              onClick={() => {
+                setColumnOrder(activeColumns.map((f) => f.key));
+                setColumnsOpen((v) => !v);
+              }}
+              className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
+            >
+              {t("participantsPage.columnsButton")}
+            </button>
+            {columnsOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-mist bg-paper-2 p-3 shadow-lg">
+                <p className="mb-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.columnsPickerTitle")}</p>
+                <ul className="mb-3 flex flex-col gap-1">
+                  {columnOrder.map((key, i) => {
+                    const f = dynamicListFields.find((x) => x.key === key);
+                    if (!f) return null;
+                    return (
+                      <li key={key} className="flex items-center gap-2 text-[13px] text-ink">
+                        <button
+                          type="button"
+                          disabled={i === 0}
+                          onClick={() => setColumnOrder((prev) => {
+                            const next = [...prev];
+                            [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                            return next;
+                          })}
+                          className="text-ink-secondary hover:text-ink disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          disabled={i === columnOrder.length - 1}
+                          onClick={() => setColumnOrder((prev) => {
+                            const next = [...prev];
+                            [next[i + 1], next[i]] = [next[i], next[i + 1]];
+                            return next;
+                          })}
+                          className="text-ink-secondary hover:text-ink disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                        <span className="flex-1">{f.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => setColumnOrder((prev) => prev.filter((k) => k !== key))}
+                          className="text-red-600 hover:underline"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {dynamicListFields.filter((f) => !columnOrder.includes(f.key)).length > 0 && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) setColumnOrder((prev) => [...prev, e.target.value]);
+                      e.target.value = "";
+                    }}
+                    className="mb-3 w-full rounded-lg border border-mist bg-paper px-2 py-1.5 text-[13px] text-ink"
+                  >
+                    <option value="" disabled>
+                      {t("participantsPage.columnsAddPlaceholder")}
+                    </option>
+                    {dynamicListFields
+                      .filter((f) => !columnOrder.includes(f.key))
+                      .map((f) => (
+                        <option key={f.key} value={f.key}>
+                          {f.label}
+                        </option>
+                      ))}
+                  </select>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setColumnsOpen(false)}
+                    className="text-[13px] text-ink-secondary hover:underline"
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={savingColumns}
+                    onClick={async () => {
+                      setSavingColumns(true);
+                      await fetch(`/api/events/${id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ participantsListColumns: columnOrder }),
+                      });
+                      setSavingColumns(false);
+                      setColumnsOpen(false);
+                      load();
+                    }}
+                    className={btnPrimary}
+                  >
+                    {savingColumns ? t("common.loading") : t("common.save")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         {moduleAccess.mail && (
           <button
             onClick={() => setStatusModalOpen(true)}
@@ -348,7 +496,7 @@ export default function EventParticipantsPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
-                {listFields.map((f) => (
+                {activeColumns.map((f) => (
                   <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
                 ))}
                 <th className="p-2"></th>
@@ -390,9 +538,9 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
                     </td>
-                    {listFields.map((f) => (
+                    {activeColumns.map((f) => (
                       <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
-                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                        {resolveDynamicValue(f, p)}
                       </td>
                     ))}
                     <td className="whitespace-nowrap p-2 text-right">
@@ -517,7 +665,7 @@ export default function EventParticipantsPage({
                   className={inputClass + " mt-1"}
                 />
               </label>
-              {fields.map((f) => (
+              {editableFields.map((f) => (
                 <FieldInput
                   key={f.id}
                   field={f}
