@@ -95,6 +95,10 @@ enum ParentEmailStatus {
 enum MailDocReceivedVia {
   email
   manual
+  // System-generated (the registration-document merge on acceptance send,
+  // see src/lib/document-merge.ts + src/lib/participant-document-store.ts)
+  // rather than something a guardian sent in.
+  generated
 }
 
 enum MailActionType {
@@ -131,6 +135,11 @@ model User {
   preferredLang   UserLang  @default(cs) @map("preferred_lang")
   preferredTheme  UserTheme @default(light) @map("preferred_theme")
   landingPath     String?   @map("landing_path")
+  // Overrides {{sender_name}} in outgoing emails (src/lib/parent-email-send.ts,
+  // src/lib/mail-bulk-status-send.ts, src/lib/participant-bulk-email.ts) --
+  // an Outlook-signature-style personal setting, falling back to
+  // displayName when unset.
+  emailSignature  String?   @map("email_signature")
 
   moduleAccess       UserEventModuleAccess[]
   billsCreated       Bill[]           @relation("BillCreatedBy")

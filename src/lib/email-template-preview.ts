@@ -45,14 +45,24 @@ export function templateVariablesFor(purposeKey: string): readonly string[] {
   return VARIABLES_BY_PURPOSE[purposeKey] ?? VARIABLES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY];
 }
 
+// `extraDummyValues` covers the dynamic participant fields (custom/
+// builtin/guardian/computed, anything with the `documents` surface --
+// see src/lib/fixed-participant-fields.ts) that EmailTemplateAdmin adds
+// to the fixed purpose-specific list below, keyed by field key with the
+// field's own label as a readable placeholder (there's no real
+// participant to preview against while editing a template).
 export function substituteDummyTemplateValues(
   text: string,
-  purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY
+  purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY,
+  extraDummyValues: Record<string, string> = {}
 ): string {
   const variables = templateVariablesFor(purposeKey);
-  const dummyValues = DUMMY_VALUES_BY_PURPOSE[purposeKey] ?? DUMMY_VALUES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY];
+  const dummyValues = {
+    ...(DUMMY_VALUES_BY_PURPOSE[purposeKey] ?? DUMMY_VALUES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY]),
+    ...extraDummyValues,
+  };
   let out = text;
-  for (const key of variables) {
+  for (const key of [...variables, ...Object.keys(extraDummyValues)]) {
     out = out.replaceAll(`{{${key}}}`, dummyValues[key] ?? "");
   }
   return out;

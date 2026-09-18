@@ -26,6 +26,7 @@ type EventDetail = {
   nonMemberPriceCzk: number | null;
   registrationBankAccountNumber: string | null;
   registrationBankCode: string | null;
+  mailQuestionnaireUrl: string | null;
 };
 
 type Category = {
@@ -100,6 +101,10 @@ export default function EventDetailPage({
   const [feeError, setFeeError] = useState<string | null>(null);
   const [feeSaving, setFeeSaving] = useState(false);
 
+  const [mailQuestionnaireUrl, setMailQuestionnaireUrl] = useState("");
+  const [questionnaireSaving, setQuestionnaireSaving] = useState(false);
+  const [questionnaireSaved, setQuestionnaireSaved] = useState(false);
+
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
@@ -147,8 +152,22 @@ export default function EventDetailPage({
       setNonMemberPriceCzk(event.nonMemberPriceCzk != null ? String(event.nonMemberPriceCzk) : "");
       setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
       setRegistrationBankCode(event.registrationBankCode ?? "");
+      setMailQuestionnaireUrl(event.mailQuestionnaireUrl ?? "");
     }
   }, [event?.id]);
+
+  async function handleSaveQuestionnaireUrl(e: React.FormEvent) {
+    e.preventDefault();
+    setQuestionnaireSaving(true);
+    setQuestionnaireSaved(false);
+    await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mailQuestionnaireUrl: mailQuestionnaireUrl.trim() || null }),
+    });
+    setQuestionnaireSaving(false);
+    setQuestionnaireSaved(true);
+  }
 
   async function handleSaveFeeSettings(e: React.FormEvent) {
     e.preventDefault();
@@ -496,6 +515,28 @@ export default function EventDetailPage({
             </form>
           </div>
           <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
+          <div>
+            <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("mailTab.questionnaireTitle")}</h3>
+            <p className="mb-2 text-[12px] text-ink-secondary">{t("mailTab.questionnaireHint")}</p>
+            <form onSubmit={handleSaveQuestionnaireUrl} className="flex max-w-md flex-col gap-2">
+              <input
+                type="url"
+                placeholder={t("mailTab.questionnaireUrlLabel")}
+                value={mailQuestionnaireUrl}
+                onChange={(e) => {
+                  setMailQuestionnaireUrl(e.target.value);
+                  setQuestionnaireSaved(false);
+                }}
+                className={inputClass}
+              />
+              <div className="mt-1 flex items-center gap-3">
+                <button type="submit" disabled={questionnaireSaving} className={btnPrimary}>
+                  {questionnaireSaving ? t("common.loading") : t("common.save")}
+                </button>
+                {questionnaireSaved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
+              </div>
+            </form>
+          </div>
           <SenderEmailField eventId={id} purpose="mail" />
           <EmailTemplateAdmin
             scope="event"

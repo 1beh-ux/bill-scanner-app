@@ -28,7 +28,30 @@ export default function EmailTemplateAdmin({
   const { t } = useTranslations();
   const baseUrl = scope === "org" ? "/api/email-templates" : `/api/events/${eventId}/email-template`;
   const url = `${baseUrl}?purposeKey=${encodeURIComponent(purposeKey)}`;
-  const variables = templateVariablesFor(purposeKey);
+  const purposeVariables = templateVariablesFor(purposeKey);
+
+  // Every participant field flagged for documents/mail merge (custom,
+  // builtin, guardian, computed) is insertable here too, on top of the
+  // fixed purpose-specific ones above -- same {{key}}, same resolver
+  // (src/lib/document-variables.ts) the real send uses. Event scope reads
+  // the event's actual fields; org scope (no event yet) reads the org
+  // templates' defaultSurfaces as a preview of what a synced event would get.
+  const [extraVariables, setExtraVariables] = useState<{ key: string; label: string }[]>([]);
+  useEffect(() => {
+    const url =
+      scope === "event"
+        ? `/api/events/${eventId}/participant-fields?surface=documents`
+        : "/api/participant-field-templates";
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: { key: string; label: string; surfaces?: string[]; defaultSurfaces?: string[] }[]) => {
+        const rows = scope === "event" ? data : data.filter((f) => f.defaultSurfaces?.includes("documents"));
+        setExtraVariables(rows.map((f) => ({ key: f.key, label: f.label })));
+      })
+      .catch(() => setExtraVariables([]));
+  }, [scope, eventId]);
+  const variables = [...purposeVariables, ...extraVariables.map((f) => f.key)];
+  const extraDummyValues = Object.fromEntries(extraVariables.map((f) => [f.key, `[${f.label}]`]));
 
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -163,8 +186,8 @@ export default function EmailTemplateAdmin({
         <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">
           {t("emailTemplateAdmin.previewTitle")}
         </p>
-        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey)}</p>
-        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey)}</p>
+        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey, extraDummyValues)}</p>
+        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey, extraDummyValues)}</p>
       </div>
 
       <div className="flex justify-end">

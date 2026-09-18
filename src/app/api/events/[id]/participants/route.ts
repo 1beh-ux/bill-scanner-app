@@ -60,7 +60,9 @@ export async function GET(
 
   // Documents-status summary for the list view: one extra query total (not
   // per-participant) -- how many of the event's active document types each
-  // participant already has a ParticipantDocument row for.
+  // participant already has actually RECEIVED back. Excludes `generated`
+  // rows (a document we sent them, not one they returned -- see
+  // getReceivedItemIds's own comment on the same distinction).
   const documentTypes = await getActiveDocumentTypes(eventId);
   const receivedCounts: Record<string, number> = {};
   if (documentTypes.length > 0 && scopedParticipants.length > 0) {
@@ -68,6 +70,7 @@ export async function GET(
       where: {
         participantId: { in: scopedParticipants.map((p) => p.id) },
         eventListItemId: { in: documentTypes.map((d) => d.id) },
+        receivedVia: { not: "generated" },
       },
       select: { participantId: true },
     });

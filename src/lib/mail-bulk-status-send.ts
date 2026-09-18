@@ -3,6 +3,7 @@ import { resolveEmailTemplate, substituteVariables, MAIL_HELPER_BULK_STATUS_PURP
 import { sendPlainTextEmail } from "@/lib/mail";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
+import { resolveVariables } from "@/lib/document-variables";
 
 export interface BulkStatusSendResult {
   participantId: string;
@@ -26,7 +27,7 @@ export async function sendBulkStatusUpdates(
   const senderEmail = event.senderEmail;
   const documentTypes = await getActiveDocumentTypes(eventId);
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
-  const senderDisplayName = sentByUser?.displayName ?? "Pošta tábora";
+  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Pošta tábora";
 
   const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
     eventId,
@@ -43,7 +44,12 @@ export async function sendBulkStatusUpdates(
     if (!participant || participant.guardians.length === 0) continue;
 
     const receivedItemIds = await getReceivedItemIds(participantId);
+    const { text: fieldVars } = await resolveVariables(
+      { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+      event
+    );
     const vars = {
+      ...fieldVars,
       participant_name: participant.name,
       camp_name: event.name,
       document_checklist: buildDocumentChecklistText(documentTypes, receivedItemIds),

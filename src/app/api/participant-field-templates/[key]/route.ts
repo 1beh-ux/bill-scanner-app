@@ -17,11 +17,26 @@ export async function PATCH(
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
   const body = await req.json();
-  const { label, fieldType, options, defaultSurfaces, active } = body;
+  const { key: newKey, label, fieldType, options, defaultSurfaces, active } = body;
+
+  // Renaming only touches this org template -- it never retroactively
+  // renames already-synced EventParticipantField rows (sync only adds
+  // missing keys, same as everywhere else), so it's safe with no data
+  // migration, unlike the event-scope rename in .../participant-fields/[fieldId].
+  if (newKey !== undefined && newKey !== decodedKey) {
+    if (typeof newKey !== "string" || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(newKey)) {
+      return NextResponse.json({ error: "invalid_key" }, { status: 400 });
+    }
+    const conflict = await prisma.participantFieldTemplate.findUnique({ where: { key: newKey } });
+    if (conflict) {
+      return NextResponse.json({ error: "key_taken" }, { status: 409 });
+    }
+  }
 
   const template = await prisma.participantFieldTemplate.update({
     where: { key: decodedKey },
     data: {
+      ...(newKey !== undefined && newKey !== decodedKey && { key: newKey }),
       ...(label !== undefined && { label }),
       ...(fieldType !== undefined && { fieldType }),
       ...(options !== undefined && { options }),

@@ -12,6 +12,7 @@ const inputClass =
 export default function SettingsPage() {
   const { t, roleLoaded, role, lang, setLang, theme, setTheme } = useTranslations();
   const [landingPath, setLandingPath] = useState("");
+  const [emailSignature, setEmailSignature] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -19,7 +20,10 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch("/api/me")
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => setLandingPath(data?.landingPath ?? ""))
+      .then((data) => {
+        setLandingPath(data?.landingPath ?? "");
+        setEmailSignature(data?.emailSignature ?? "");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -30,7 +34,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ landingPath: landingPath || null }),
+      body: JSON.stringify({ landingPath: landingPath || null, emailSignature: emailSignature || null }),
     });
     setSaving(false);
     if (res.ok) setSaved(true);
@@ -87,6 +91,18 @@ export default function SettingsPage() {
               </optgroup>
             ))}
           </select>
+        </label>
+
+        <label className="text-[13px] text-ink-secondary">
+          {t("settingsPage.emailSignatureLabel")}
+          <input
+            type="text"
+            value={emailSignature}
+            onChange={(e) => setEmailSignature(e.target.value)}
+            placeholder={t("settingsPage.emailSignaturePlaceholder")}
+            className={inputClass + " mt-1"}
+          />
+          <span className="mt-1 block text-[11.5px] text-ink-secondary">{t("settingsPage.emailSignatureHint")}</span>
         </label>
 
         <div className="mt-2 flex items-center gap-3">

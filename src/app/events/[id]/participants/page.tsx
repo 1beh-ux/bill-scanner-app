@@ -94,6 +94,7 @@ export default function EventParticipantsPage({
   // same thing.
   const dynamicListFields = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.surfaces.includes("list")), [fields]);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>([]);
   const [savingColumns, setSavingColumns] = useState(false);
   // The actually-displayed columns: the saved order, filtered to fields
@@ -341,69 +342,66 @@ export default function EventParticipantsPage({
             </button>
             {columnsOpen && (
               <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-mist bg-paper-2 p-3 shadow-lg">
-                <p className="mb-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.columnsPickerTitle")}</p>
-                <ul className="mb-3 flex flex-col gap-1">
+                <p className="mb-1 text-[12px] font-medium text-ink-secondary">{t("participantsPage.columnsPickerTitle")}</p>
+                <p className="mb-2 text-[11px] text-ink-secondary">{t("participantsPage.columnsDragHint")}</p>
+                <ul className="mb-1 flex flex-col gap-0.5">
                   {columnOrder.map((key, i) => {
                     const f = dynamicListFields.find((x) => x.key === key);
                     if (!f) return null;
                     return (
-                      <li key={key} className="flex items-center gap-2 text-[13px] text-ink">
-                        <button
-                          type="button"
-                          disabled={i === 0}
-                          onClick={() => setColumnOrder((prev) => {
+                      <li
+                        key={key}
+                        draggable
+                        onDragStart={() => setDragIndex(i)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => {
+                          if (dragIndex === null || dragIndex === i) return;
+                          setColumnOrder((prev) => {
                             const next = [...prev];
-                            [next[i - 1], next[i]] = [next[i], next[i - 1]];
+                            const [moved] = next.splice(dragIndex, 1);
+                            next.splice(i, 0, moved);
                             return next;
-                          })}
-                          className="text-ink-secondary hover:text-ink disabled:opacity-30"
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          disabled={i === columnOrder.length - 1}
-                          onClick={() => setColumnOrder((prev) => {
-                            const next = [...prev];
-                            [next[i + 1], next[i]] = [next[i], next[i + 1]];
-                            return next;
-                          })}
-                          className="text-ink-secondary hover:text-ink disabled:opacity-30"
-                        >
-                          ↓
-                        </button>
+                          });
+                          setDragIndex(null);
+                        }}
+                        onDragEnd={() => setDragIndex(null)}
+                        className={
+                          "flex cursor-grab items-center gap-2 rounded px-1 py-1 text-[13px] text-ink active:cursor-grabbing " +
+                          (dragIndex === i ? "opacity-40" : "hover:bg-paper")
+                        }
+                      >
+                        <span className="select-none text-ink-secondary">⠿</span>
+                        <input
+                          type="checkbox"
+                          checked
+                          onChange={() => setColumnOrder((prev) => prev.filter((k) => k !== key))}
+                        />
                         <span className="flex-1">{f.label}</span>
-                        <button
-                          type="button"
-                          onClick={() => setColumnOrder((prev) => prev.filter((k) => k !== key))}
-                          className="text-red-600 hover:underline"
-                        >
-                          {t("common.delete")}
-                        </button>
                       </li>
                     );
                   })}
                 </ul>
                 {dynamicListFields.filter((f) => !columnOrder.includes(f.key)).length > 0 && (
-                  <select
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value) setColumnOrder((prev) => [...prev, e.target.value]);
-                      e.target.value = "";
-                    }}
-                    className="mb-3 w-full rounded-lg border border-mist bg-paper px-2 py-1.5 text-[13px] text-ink"
-                  >
-                    <option value="" disabled>
-                      {t("participantsPage.columnsAddPlaceholder")}
-                    </option>
-                    {dynamicListFields
-                      .filter((f) => !columnOrder.includes(f.key))
-                      .map((f) => (
-                        <option key={f.key} value={f.key}>
-                          {f.label}
-                        </option>
-                      ))}
-                  </select>
+                  <>
+                    <p className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-secondary">
+                      {t("participantsPage.columnsNotShown")}
+                    </p>
+                    <ul className="mb-3 flex flex-col gap-0.5">
+                      {dynamicListFields
+                        .filter((f) => !columnOrder.includes(f.key))
+                        .map((f) => (
+                          <li key={f.key} className="flex items-center gap-2 px-1 py-1 text-[13px] text-ink-secondary">
+                            <span className="select-none opacity-30">⠿</span>
+                            <input
+                              type="checkbox"
+                              checked={false}
+                              onChange={() => setColumnOrder((prev) => [...prev, f.key])}
+                            />
+                            <span className="flex-1">{f.label}</span>
+                          </li>
+                        ))}
+                    </ul>
+                  </>
                 )}
                 <div className="flex justify-end gap-2">
                   <button

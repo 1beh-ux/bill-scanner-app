@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 import { generateParticipantSummaryPdf } from "@/lib/parent-summary-pdf";
 import { sendParentSummaryEmail } from "@/lib/mail";
+import { resolveVariables } from "@/lib/document-variables";
 
 export interface GuardianSendResult {
   guardianId: string;
@@ -23,7 +24,7 @@ export async function resolveEmailPreview(
 ): Promise<{ subject: string; body: string }> {
   const participant = await prisma.participant.findUnique({
     where: { id: participantId },
-    include: { event: true },
+    include: { event: true, guardians: true },
   });
   if (!participant) throw new Error("participant_not_found");
 
@@ -31,7 +32,15 @@ export async function resolveEmailPreview(
     participant.eventId,
     PARENT_SUMMARY_PURPOSE_KEY
   );
+  // Every documents-flagged participant field (custom/builtin/guardian/
+  // computed) is usable here too, same {{key}} as document merge -- the
+  // fixed vars below take precedence on any collision.
+  const { text: fieldVars } = await resolveVariables(
+    { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+    participant.event
+  );
   const vars = {
+    ...fieldVars,
     child_name: participant.name,
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
@@ -87,13 +96,18 @@ export async function sendSummaryToGuardians(
   }
 
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
-  const senderDisplayName = sentByUser?.displayName ?? "Zdravotník";
+  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Zdravotník";
 
   const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
     participant.eventId,
     PARENT_SUMMARY_PURPOSE_KEY
   );
+  const { text: fieldVars } = await resolveVariables(
+    { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+    participant.event
+  );
   const vars = {
+    ...fieldVars,
     child_name: participant.name,
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),

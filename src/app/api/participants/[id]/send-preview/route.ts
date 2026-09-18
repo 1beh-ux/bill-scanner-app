@@ -23,7 +23,7 @@ export async function GET(
   const denied = await requireModuleAccess(user, participant.eventId, "health");
   if (denied) return denied;
 
-  const { subject, body } = await resolveEmailPreview(participantId, user.displayName);
+  const { subject, body } = await resolveEmailPreview(participantId, user.emailSignature || user.displayName);
   return NextResponse.json({
     subject,
     body,

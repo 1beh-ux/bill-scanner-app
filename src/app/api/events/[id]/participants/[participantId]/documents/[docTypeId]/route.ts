@@ -23,7 +23,19 @@ export async function POST(
   const existing = await prisma.participantDocument.findFirst({
     where: { participantId, eventListItemId: docTypeId },
   });
-  if (existing) return NextResponse.json(existing);
+  // A `generated` row (we sent them a blank form, see
+  // participant-document-store.ts) isn't actually "received" yet -- if
+  // staff are marking this received (e.g. a parent handed in a printout
+  // personally), upgrade it in place instead of the usual no-op, or the
+  // toggle would silently do nothing.
+  if (existing && existing.receivedVia !== "generated") return NextResponse.json(existing);
+  if (existing) {
+    const updated = await prisma.participantDocument.update({
+      where: { id: existing.id },
+      data: { receivedVia: "manual", receivedByUserId: user.id, receivedAt: new Date() },
+    });
+    return NextResponse.json(updated);
+  }
 
   const created = await prisma.participantDocument.create({
     data: {

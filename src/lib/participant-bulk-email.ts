@@ -3,6 +3,7 @@ import { substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { resolveVariables, ensureRegistrationNumber } from "@/lib/document-variables";
 import { mergeAndExportDocument } from "@/lib/document-merge";
+import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
@@ -35,8 +36,10 @@ async function buildAutoAttachDocuments(
     vsEventType: number | null;
     vsOrderInYear: number | null;
     vsMembershipFieldKey: string | null;
+    mailQuestionnaireUrl: string | null;
   },
-  allowedDocumentTypeIds?: string[]
+  allowedDocumentTypeIds: string[] | undefined,
+  generatedByUserId: string
 ): Promise<{ buffer: Buffer; filename: string; mimeType: string }[]> {
   if (!participant) return [];
 
@@ -66,7 +69,24 @@ async function buildAutoAttachDocuments(
 
     try {
       const buffer = await mergeAndExportDocument(data.templateGoogleDocId, text, images);
-      attachments.push({ buffer, filename: `${docType.name}.pdf`, mimeType: "application/pdf" });
+      const filename = `${docType.name}.pdf`;
+      attachments.push({ buffer, filename, mimeType: "application/pdf" });
+      // Persisted the same way a received document is (see
+      // participant-document-store.ts's own comment) -- a save failure
+      // here shouldn't block the email, which already has the attachment
+      // in hand, so it's logged and skipped rather than thrown.
+      try {
+        await saveGeneratedParticipantDocument({
+          eventId: event.id,
+          participantId: participant.id,
+          eventListItemId: docType.id,
+          buffer,
+          filename,
+          generatedByUserId,
+        });
+      } catch (err) {
+        console.log(`[participant-bulk-email] failed to save generated document "${docType.name}" for participant ${participant.id}:`, String(err));
+      }
     } catch (err) {
       console.log(`[participant-bulk-email] failed to merge document "${docType.name}" for participant ${participant.id}:`, String(err));
     }
@@ -110,7 +130,7 @@ export async function sendBulkParticipantEmail(opts: {
 
   const senderEmail = event.senderEmail;
   const sentByUser = await prisma.user.findUnique({ where: { id: opts.sentByUserId } });
-  const senderDisplayName = sentByUser?.displayName ?? "Tábor";
+  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Tábor";
 
   const results: BulkEmailResult[] = [];
 
@@ -118,12 +138,16 @@ export async function sendBulkParticipantEmail(opts: {
     const participant = await loadParticipant(participantId);
     if (!participant) continue;
 
-    const vars = { participant_name: participant.name, camp_name: event.name, sender_name: senderDisplayName };
+    const { text: fieldVars } = await resolveVariables(
+      { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+      event
+    );
+    const vars = { ...fieldVars, participant_name: participant.name, camp_name: event.name, sender_name: senderDisplayName };
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 
     const generatedAttachments = opts.markAccepted
-      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds)
+      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
       : [];
     const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generatedAttachments];
 

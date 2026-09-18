@@ -15,6 +15,7 @@ export async function GET() {
     preferredLang: user.preferredLang,
     preferredTheme: user.preferredTheme,
     landingPath: user.landingPath,
+    emailSignature: user.emailSignature,
   });
 }
 
@@ -27,7 +28,7 @@ export async function PATCH(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const { preferredLang, preferredTheme, landingPath } = await req.json();
+  const { preferredLang, preferredTheme, landingPath, emailSignature } = await req.json();
 
   const updated = await prisma.user.update({
     where: { id: user.id },
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest) {
       ...(preferredLang !== undefined && { preferredLang }),
       ...(preferredTheme !== undefined && { preferredTheme }),
       ...(landingPath !== undefined && { landingPath: landingPath || null }),
+      ...(emailSignature !== undefined && { emailSignature: emailSignature || null }),
     },
   });
 
@@ -46,5 +48,6 @@ export async function PATCH(req: NextRequest) {
     preferredLang: updated.preferredLang,
     preferredTheme: updated.preferredTheme,
     landingPath: updated.landingPath,
+    emailSignature: updated.emailSignature,
   });
 }

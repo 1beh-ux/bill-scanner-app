@@ -49,9 +49,25 @@ export async function GET(
     participant_name: "Jméno dítěte",
     document_checklist: buildDocumentChecklistText(documentTypes, new Set()),
   };
+  // No real participant for a bulk preview -- show each documents-flagged
+  // field's own label as a bracketed placeholder instead, same convention
+  // EmailTemplateAdmin uses while editing (src/lib/email-template-preview.ts).
+  const mergeFields = await prisma.eventParticipantField.findMany({
+    where: { eventId, active: true, surfaces: { has: "documents" } },
+    select: { key: true, label: true },
+  });
+  const extraDummyValues = Object.fromEntries(mergeFields.map((f) => [f.key, `[${f.label}]`]));
   const templatePreview = {
-    subject: substituteDummyTemplateValues(substituteVariables(subject, previewVars), MAIL_HELPER_BULK_STATUS_PURPOSE_KEY),
-    body: substituteDummyTemplateValues(substituteVariables(body, previewVars), MAIL_HELPER_BULK_STATUS_PURPOSE_KEY),
+    subject: substituteDummyTemplateValues(
+      substituteVariables(subject, previewVars),
+      MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+      extraDummyValues
+    ),
+    body: substituteDummyTemplateValues(
+      substituteVariables(body, previewVars),
+      MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+      extraDummyValues
+    ),
   };
 
   return NextResponse.json({

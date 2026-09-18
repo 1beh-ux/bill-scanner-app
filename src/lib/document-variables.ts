@@ -30,6 +30,7 @@ export type EventForMerge = {
   vsEventType: number | null;
   vsOrderInYear: number | null;
   vsMembershipFieldKey: string | null;
+  mailQuestionnaireUrl: string | null;
 };
 
 function formatDate(d: Date | null): string {
@@ -99,12 +100,6 @@ async function resolvePaymentQrImage(p: ParticipantForMerge, e: EventForMerge): 
   return QRCode.toBuffer(spayd, { type: "png", margin: 1, width: 400 });
 }
 
-// The one field genuinely not participant-scoped -- resolved unconditionally
-// (not an EventParticipantField row, nothing to toggle) rather than living
-// in the same list as everything else. Never seeded in production before
-// this redesign, so the key is free to pick.
-const EVENT_NAME_KEY = "nazev_akce";
-
 export async function resolveVariables(
   participant: ParticipantForMerge,
   event: EventForMerge
@@ -112,7 +107,15 @@ export async function resolveVariables(
   const fields = await prisma.eventParticipantField.findMany({
     where: { eventId: event.id, active: true, surfaces: { has: "documents" } },
   });
-  const text: Record<string, string> = { [EVENT_NAME_KEY]: event.name };
+  // Event-level fields -- not participant-scoped, so not an
+  // EventParticipantField row, always resolved regardless of surfaces.
+  // Same keys as the fixed per-purpose email variables in
+  // src/lib/email-template-preview.ts, so {{camp_name}}/{{questionnaire_url}}
+  // resolve the same way in both document merge and email templates.
+  const text: Record<string, string> = {
+    camp_name: event.name,
+    questionnaire_url: event.mailQuestionnaireUrl ?? "",
+  };
   const images: Record<string, Buffer> = {};
 
   for (const f of fields) {

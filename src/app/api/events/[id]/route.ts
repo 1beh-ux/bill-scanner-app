@@ -54,6 +54,7 @@ export async function PATCH(
     vsOrderInYear,
     vsMembershipFieldKey,
     participantsListColumns,
+    mailQuestionnaireUrl,
   } = body;
   const event = await prisma.event.update({
     where: { id },
@@ -71,6 +72,7 @@ export async function PATCH(
       ...(vsOrderInYear !== undefined && { vsOrderInYear }),
       ...(vsMembershipFieldKey !== undefined && { vsMembershipFieldKey }),
       ...(participantsListColumns !== undefined && { participantsListColumns }),
+      ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
     },
   });
   return NextResponse.json(event);
