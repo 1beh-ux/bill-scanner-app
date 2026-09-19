@@ -18,6 +18,7 @@ type EventDetail = {
   closedAt: string | null;
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
+  driveParticipantsFolderId: string | null;
   driveDocSyncEnabled: boolean;
   statusExportEnabled: boolean;
   statusExportSheetId: string | null;
@@ -94,6 +95,7 @@ export default function EventDetailPage({
   const [driveConnectedEmail, setDriveConnectedEmail] = useState<string | null>(null);
   const [ingestFolderId, setIngestFolderId] = useState("");
   const [exportFolderId, setExportFolderId] = useState("");
+  const [participantsFolderId, setParticipantsFolderId] = useState("");
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSaving, setDriveSaving] = useState(false);
 
@@ -154,6 +156,7 @@ export default function EventDetailPage({
     if (event) {
       setIngestFolderId(event.driveIngestFolderId ?? "");
       setExportFolderId(event.driveExportFolderId ?? "");
+      setParticipantsFolderId(event.driveParticipantsFolderId ?? "");
       setMemberPriceCzk(event.memberPriceCzk != null ? String(event.memberPriceCzk) : "");
       setNonMemberPriceCzk(event.nonMemberPriceCzk != null ? String(event.nonMemberPriceCzk) : "");
       setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
@@ -267,6 +270,7 @@ export default function EventDetailPage({
       body: JSON.stringify({
         driveIngestFolderId: ingestFolderId.trim() || null,
         driveExportFolderId: exportFolderId.trim() || null,
+        driveParticipantsFolderId: participantsFolderId.trim() || null,
       }),
     });
     setDriveSaving(false);
@@ -323,7 +327,7 @@ export default function EventDetailPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
-  const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim());
+  const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim() || participantsFolderId.trim());
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -707,6 +711,16 @@ export default function EventDetailPage({
                 className={inputClass + " mt-1"}
               />
             </label>
+            <label className="text-[13px] text-ink-secondary">
+              {t("driveSettings.participantsFolderLabel")}
+              <input
+                type="text"
+                value={participantsFolderId}
+                onChange={(e) => setParticipantsFolderId(e.target.value)}
+                className={inputClass + " mt-1"}
+              />
+            </label>
+            <p className="text-[12px] text-ink-secondary">{t("driveSettings.participantsFolderHint")}</p>
             <p className="text-[12px] text-ink-secondary">{t("driveSettings.folderIdHint")}</p>
 
             {driveError && <p className="text-[13px] text-red-600">{driveError}</p>}

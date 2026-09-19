@@ -46,6 +46,7 @@ export async function PATCH(
     endDate,
     driveIngestFolderId,
     driveExportFolderId,
+    driveParticipantsFolderId,
     memberPriceCzk,
     nonMemberPriceCzk,
     registrationBankAccountNumber,
@@ -56,14 +57,33 @@ export async function PATCH(
     participantsListColumns,
     mailQuestionnaireUrl,
   } = body;
+  // Everything already exported/synced was written to the *old* folder, and
+  // the manifest sheet id is remembered per event -- so after a folder change
+  // the export would report "already exported" and keep updating the old
+  // sheet. Forget all of that so the next export/sync starts fresh in the new
+  // folder. (Files already in the old folder are left alone.)
+  const before =
+    driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined
+      ? await prisma.event.findUnique({ where: { id }, select: { driveExportFolderId: true, driveParticipantsFolderId: true } })
+      : null;
+  const nextExport = driveExportFolderId !== undefined ? driveExportFolderId : before?.driveExportFolderId;
+  const nextParticipants = driveParticipantsFolderId !== undefined ? driveParticipantsFolderId : before?.driveParticipantsFolderId;
+  const exportFolderChanged = before !== null && (before.driveExportFolderId ?? null) !== (nextExport ?? null);
+  // Participant files go to the participants folder, else the export folder.
+  const participantsTargetChanged =
+    before !== null &&
+    (before.driveParticipantsFolderId ?? before.driveExportFolderId ?? null) !== (nextParticipants ?? nextExport ?? null);
+
   const event = await prisma.event.update({
     where: { id },
     data: {
+      ...(exportFolderChanged && { driveManifestSpreadsheetId: null }),
       ...(name !== undefined && { name }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
       ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),
       ...(driveExportFolderId !== undefined && { driveExportFolderId }),
+      ...(driveParticipantsFolderId !== undefined && { driveParticipantsFolderId }),
       ...(memberPriceCzk !== undefined && { memberPriceCzk }),
       ...(nonMemberPriceCzk !== undefined && { nonMemberPriceCzk }),
       ...(registrationBankAccountNumber !== undefined && { registrationBankAccountNumber }),
@@ -75,6 +95,18 @@ export async function PATCH(
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
     },
   });
+  if (exportFolderChanged) {
+    await prisma.bill.updateMany({
+      where: { eventId: id, OR: [{ exportFilename: { not: null } }, { exportedAt: { not: null } }] },
+      data: { exportFilename: null, exportedAt: null },
+    });
+  }
+  if (participantsTargetChanged) {
+    await prisma.participantDocument.updateMany({
+      where: { participant: { eventId: id }, driveFileId: { not: null } },
+      data: { driveFileId: null, driveSyncedAt: null },
+    });
+  }
   return NextResponse.json(event);
 }
 

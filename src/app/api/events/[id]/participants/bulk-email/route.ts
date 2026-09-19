@@ -56,5 +56,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const sentCount = results.filter((r) => r.status === "sent").length;
   const failedCount = results.filter((r) => r.status === "failed").length;
 
-  return NextResponse.json({ sentCount, failedCount, results });
+  // Distinct names of documents that couldn't be generated (email went out
+  // without them) -- surfaced so that isn't silent.
+  const documentFailures = [...new Set(results.flatMap((r) => r.documentFailures ?? []))];
+
+  return NextResponse.json({ sentCount, failedCount, documentFailures, results });
 }

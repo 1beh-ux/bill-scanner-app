@@ -91,6 +91,11 @@ async function getOAuthClient() {
   return client;
 }
 
+/** True when a connected Google account (not the service account) is doing the Drive work. */
+export async function usingConnectedDriveAccount(): Promise<boolean> {
+  return (await getOAuthClient()) !== null;
+}
+
 async function getAuth() {
   // googleapis bundles its own google-auth-library copy; ours (for the
   // Impersonated class) is structurally the same but typed as distinct --

@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
@@ -93,6 +94,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [checkingTemplates, setCheckingTemplates] = useState(false);
   // Which existing row's edit panel is expanded, directly under that row
   // (accordion -- at most one at a time). Separate from `adding`, which
   // controls the "new field" panel at the top of the list.
@@ -580,6 +582,14 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         <div className="flex items-center gap-3">
           {isEvent && (
             <button
+              onClick={() => setCheckingTemplates(true)}
+              className="text-[13px] text-ink-secondary hover:text-ink"
+            >
+              {t("templateCheck.button")}
+            </button>
+          )}
+          {isEvent && (
+            <button
               onClick={syncFromTemplates}
               disabled={syncing}
               className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
@@ -694,6 +704,9 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             </tbody>
           </table>
         </div>
+      )}
+      {checkingTemplates && (
+        <TemplateCheckModal eventId={eventId!} onClose={() => setCheckingTemplates(false)} onApplied={load} />
       )}
     </div>
   );

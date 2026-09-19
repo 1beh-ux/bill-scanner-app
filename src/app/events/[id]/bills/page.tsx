@@ -403,7 +403,7 @@ export default function EventBillsPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-8">
+    <div className="mx-auto max-w-[1088px] p-4 md:p-8">
       <h1 className="mb-5 text-[22px] font-semibold text-ink">
         {event.name} — {t("billsPage.title")}
       </h1>
@@ -536,7 +536,7 @@ export default function EventBillsPage({
         <>
           {/* Desktop / tablet: table */}
           <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[880px] border-collapse">
+          <table className="w-full min-w-[760px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="w-8 p-2">
@@ -562,7 +562,7 @@ export default function EventBillsPage({
                       disabled={isAiLocked(b)}
                     />
                   </td>
-                  <td className="p-2 text-[14px]">
+                  <td className="p-2 text-[14px] [overflow-wrap:anywhere]">
                     {isAiLocked(b) ? (
                       <span className="text-ink-secondary">{b.originalFilename}</span>
                     ) : (
@@ -576,8 +576,8 @@ export default function EventBillsPage({
                       {statusLabels[b.status] || b.status}
                     </span>
                   </td>
-                  <td className="p-2 text-[14px] text-ink">{b.merchantName || "—"}</td>
-                  <td className="p-2 text-[14px] text-ink">{b.payerAuthor?.canonicalName ?? "Akce"}</td>
+                  <td className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">{b.merchantName || "—"}</td>
+                  <td className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">{b.payerAuthor?.canonicalName ?? "Akce"}</td>
                   <td className="p-2 text-[13px] text-ink-secondary">
                     {b.categories.length > 0 ? b.categories.map((c) => c.eventCategory.name).join(", ") : "—"}
                   </td>

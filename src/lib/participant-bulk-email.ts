@@ -4,6 +4,7 @@ import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { resolveVariables, ensureRegistrationNumber } from "@/lib/document-variables";
 import { mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
+import { participantsRootFolderId, syncParticipantDocumentToDrive } from "@/lib/mail-drive-sync";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
@@ -12,6 +13,9 @@ export interface BulkEmailResult {
   guardianEmail: string;
   status: "sent" | "failed";
   errorMessage?: string;
+  // Auto-attach documents that could not be generated for this participant
+  // (the email still went out without them).
+  documentFailures?: string[];
 }
 
 /**
@@ -37,15 +41,18 @@ async function buildAutoAttachDocuments(
     vsOrderInYear: number | null;
     vsMembershipFieldKey: string | null;
     mailQuestionnaireUrl: string | null;
+    driveParticipantsFolderId: string | null;
+    driveExportFolderId: string | null;
   },
   allowedDocumentTypeIds: string[] | undefined,
   generatedByUserId: string
-): Promise<{ buffer: Buffer; filename: string; mimeType: string }[]> {
-  if (!participant) return [];
+): Promise<{ attachments: { buffer: Buffer; filename: string; mimeType: string }[]; failedDocuments: string[] }> {
+  const failedDocuments: string[] = [];
+  if (!participant) return { attachments: [], failedDocuments };
 
   await ensureRegistrationNumber(participant.id, event.id);
   const refreshed = await prisma.participant.findUnique({ where: { id: participant.id } });
-  if (!refreshed) return [];
+  if (!refreshed) return { attachments: [], failedDocuments };
 
   const documentTypes = await prisma.eventListItem.findMany({
     where: { eventId: event.id, kind: "document", active: true },
@@ -76,7 +83,7 @@ async function buildAutoAttachDocuments(
       // here shouldn't block the email, which already has the attachment
       // in hand, so it's logged and skipped rather than thrown.
       try {
-        await saveGeneratedParticipantDocument({
+        const documentId = await saveGeneratedParticipantDocument({
           eventId: event.id,
           participantId: participant.id,
           eventListItemId: docType.id,
@@ -84,15 +91,24 @@ async function buildAutoAttachDocuments(
           filename,
           generatedByUserId,
         });
+        // Straight into the participant's Drive folder when one is
+        // configured; if Drive fails the row stays pending for the sync button.
+        const rootFolderId = participantsRootFolderId(event);
+        if (rootFolderId) {
+          await syncParticipantDocumentToDrive(documentId, rootFolderId).catch((err) =>
+            console.log(`[participant-bulk-email] Drive upload of "${docType.name}" for participant ${participant.id} failed (sync button will retry):`, String(err))
+          );
+        }
       } catch (err) {
         console.log(`[participant-bulk-email] failed to save generated document "${docType.name}" for participant ${participant.id}:`, String(err));
       }
     } catch (err) {
+      failedDocuments.push(docType.name);
       console.log(`[participant-bulk-email] failed to merge document "${docType.name}" for participant ${participant.id}:`, String(err));
     }
   }
 
-  return attachments;
+  return { attachments, failedDocuments };
 }
 
 function loadParticipant(participantId: string) {
@@ -146,10 +162,11 @@ export async function sendBulkParticipantEmail(opts: {
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 
-    const generatedAttachments = opts.markAccepted
+    const generated = opts.markAccepted
       ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
-      : [];
-    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generatedAttachments];
+      : { attachments: [], failedDocuments: [] as string[] };
+    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
+    const documentFailures = generated.failedDocuments.length > 0 ? generated.failedDocuments : undefined;
 
     for (const guardian of participant.guardians) {
       if (!senderEmail) {
@@ -185,7 +202,7 @@ export async function sendBulkParticipantEmail(opts: {
         await prisma.parentEmailLog.create({
           data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId },
         });
-        results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent" });
+        results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent", documentFailures });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         await prisma.parentEmailLog.create({

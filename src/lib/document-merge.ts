@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { docs_v1 } from "googleapis";
-import { getDriveClient, getDocsClient } from "@/lib/drive";
+import { getDriveClient, getDocsClient, usingConnectedDriveAccount } from "@/lib/drive";
 import { billsBucket } from "@/lib/gcs";
 
 /**
@@ -58,7 +58,7 @@ async function uploadTempImage(buffer: Buffer): Promise<{ path: string; url: str
 // Accepts either a bare doc ID or a full Google Docs URL -- same shape a
 // user would paste from their browser bar. Mirrors extractSpreadsheetId in
 // the Sheets-import route (src/app/api/events/[id]/health/participants/sheets-preview/route.ts).
-function extractGoogleDocId(input: string): string {
+export function extractGoogleDocId(input: string): string {
   const urlMatch = input.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
   return (urlMatch ? urlMatch[1] : input).trim();
 }
@@ -81,9 +81,14 @@ export async function mergeAndExportDocument(
   const drive = await getDriveClient();
   const docs = await getDocsClient();
 
+  // With a connected account the scratch copy goes to *its own* My Drive
+  // root, not next to the template: the template's folder may be a Shared
+  // Drive where that account can create but not delete/trash, which left
+  // merge-scratch-* files piling up beside the templates.
+  const scratchParents = (await usingConnectedDriveAccount()) ? ["root"] : undefined;
   const copy = await drive.files.copy({
     fileId: docId,
-    requestBody: { name: `merge-scratch-${Date.now()}` },
+    requestBody: { name: `merge-scratch-${Date.now()}`, ...(scratchParents && { parents: scratchParents }) },
     supportsAllDrives: true,
     fields: "id",
   });

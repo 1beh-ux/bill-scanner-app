@@ -201,6 +201,10 @@ model Event {
   driveIngestFolderId String?     @map("drive_ingest_folder_id")
   driveExportFolderId String?     @map("drive_export_folder_id")
   driveManifestSpreadsheetId String? @map("drive_manifest_spreadsheet_id")
+  // Where per-participant folders (registration documents, received/generated
+  // files) live -- separate from the bills export folder above. Null falls
+  // back to driveExportFolderId (the old shared behavior).
+  driveParticipantsFolderId String? @map("drive_participants_folder_id")
   senderEmail         String?     @map("sender_email")
   driveDocSyncEnabled      Boolean   @default(true) @map("drive_doc_sync_enabled")
   statusExportEnabled      Boolean   @default(true) @map("status_export_enabled")

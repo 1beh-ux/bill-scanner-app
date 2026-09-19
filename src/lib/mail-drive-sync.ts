@@ -12,51 +12,64 @@ const MIME_BY_EXT: Record<string, string> = {
   ".heic": "image/heic",
 };
 
-// One-way mirror of received documents into the event's Drive export
-// folder: root folder -> per-participant subfolder, named
-// {ParticipantName}_{DocumentTypeSuffix}{ext} -- the old app's exact
-// folder organization (see docs/mail-helper-module-design.md
-// "Infrastructure"). Only rows with a saved file (gcsPath set) have
-// anything to mirror -- flag-only confirmations never had a file.
+type EventFolders = { driveParticipantsFolderId: string | null; driveExportFolderId: string | null };
+
+/** Where per-participant folders live: the participants folder, else the export folder. */
+export function participantsRootFolderId(event: EventFolders): string | null {
+  return event.driveParticipantsFolderId ?? event.driveExportFolderId ?? null;
+}
+
+// Uploads one stored document into {root}/{participant name}/ and records the
+// Drive file id. Shared by the sync button (received documents, retries) and
+// the acceptance send (generated documents go out right after they're saved).
+export async function syncParticipantDocumentToDrive(documentId: string, rootFolderId: string): Promise<void> {
+  const doc = await prisma.participantDocument.findUniqueOrThrow({
+    where: { id: documentId },
+    include: { participant: true, eventListItem: true },
+  });
+  if (!doc.gcsPath) return;
+
+  const [buffer] = await billsBucket.file(doc.gcsPath).download();
+  const participantFolderId = await getOrCreateSubfolder(rootFolderId, doc.participant.name);
+
+  const suffix = (doc.eventListItem.data as { filenameSuffix?: string } | null)?.filenameSuffix
+    || documentDisplayName({ id: doc.eventListItem.id, key: doc.eventListItem.key, name: doc.eventListItem.name, data: doc.eventListItem.data as { displayName?: string } | null });
+  const ext = doc.originalFilename ? path.extname(doc.originalFilename) : "";
+  const name = `${doc.participant.name}_${suffix}${ext}`;
+  const mimeType = MIME_BY_EXT[ext.toLowerCase()] || "application/octet-stream";
+
+  const driveFileId = await uploadFileToFolder(participantFolderId, name, buffer, mimeType);
+  await prisma.participantDocument.update({
+    where: { id: doc.id },
+    data: { driveFileId, driveSyncedAt: new Date() },
+  });
+}
+
+// One-way mirror of stored documents into the participants folder: root
+// folder -> per-participant subfolder, named {ParticipantName}_{DocumentTypeSuffix}{ext}
+// -- the old app's exact folder organization (see docs/mail-helper-module-design.md
+// "Infrastructure"). Only rows with a saved file (gcsPath set) have anything
+// to mirror -- flag-only confirmations never had a file.
 export async function syncParticipantDocumentsToDrive(eventId: string): Promise<{ synced: number; skipped: number }> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
-  if (!event?.driveExportFolderId) return { synced: 0, skipped: 0 };
+  const rootFolderId = event ? participantsRootFolderId(event) : null;
+  if (!rootFolderId) return { synced: 0, skipped: 0 };
 
   const pending = await prisma.participantDocument.findMany({
     where: { participant: { eventId }, driveFileId: null, gcsPath: { not: null } },
-    include: { participant: true, eventListItem: true },
+    select: { id: true },
   });
 
   let synced = 0;
   let skipped = 0;
-
   for (const doc of pending) {
-    if (!doc.gcsPath) {
-      skipped++;
-      continue;
-    }
     try {
-      const [buffer] = await billsBucket.file(doc.gcsPath).download();
-      const participantFolderId = await getOrCreateSubfolder(event.driveExportFolderId, doc.participant.name);
-
-      const suffix = (doc.eventListItem.data as { filenameSuffix?: string } | null)?.filenameSuffix
-        || documentDisplayName({ id: doc.eventListItem.id, key: doc.eventListItem.key, name: doc.eventListItem.name, data: doc.eventListItem.data as { displayName?: string } | null });
-      const ext = doc.originalFilename ? path.extname(doc.originalFilename) : "";
-      const name = `${doc.participant.name}_${suffix}${ext}`;
-      const mimeType = MIME_BY_EXT[ext.toLowerCase()] || "application/octet-stream";
-
-      const driveFileId = await uploadFileToFolder(participantFolderId, name, buffer, mimeType);
-
-      await prisma.participantDocument.update({
-        where: { id: doc.id },
-        data: { driveFileId, driveSyncedAt: new Date() },
-      });
+      await syncParticipantDocumentToDrive(doc.id, rootFolderId);
       synced++;
     } catch (err) {
       console.error(`[mail-drive-sync] failed for document ${doc.id}:`, err);
       skipped++;
     }
   }
-
   return { synced, skipped };
 }

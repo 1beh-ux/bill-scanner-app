@@ -112,6 +112,7 @@ export default function EventParticipantsPage({
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
+  const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
   const [composeModal, setComposeModal] = useState<{ mode: "acceptance" | "freeform"; participantIds: string[] } | null>(
     null
   );
@@ -302,6 +303,20 @@ export default function EventParticipantsPage({
       <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">
         {event.name} — {t("participantsPage.centralTitle")} ({participants.length})
       </h1>
+
+      {notice && (
+        <div
+          className={
+            "mb-4 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-[13px] " +
+            (notice.warn ? "border-amber-300 bg-amber-50 text-amber-800" : "border-pine/40 bg-pine/10 text-pine")
+          }
+        >
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} className="shrink-0 hover:underline">
+            {t("common.close")}
+          </button>
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
@@ -711,8 +726,17 @@ export default function EventParticipantsPage({
           participantIds={composeModal.participantIds}
           mode={composeModal.mode}
           onClose={() => setComposeModal(null)}
-          onSent={() => {
+          onSent={({ sentCount, failedCount, documentFailures }) => {
+            setComposeModal(null);
             setSelected(new Set());
+            setNotice({
+              warn: failedCount > 0 || documentFailures.length > 0,
+              text:
+                t("composeEmailModal.sendDone", { sent: String(sentCount), failed: String(failedCount) }) +
+                (documentFailures.length > 0
+                  ? " " + t("composeEmailModal.docsFailed", { docs: documentFailures.join(", ") })
+                  : ""),
+            });
             load();
           }}
         />

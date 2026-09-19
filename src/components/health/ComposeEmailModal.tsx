@@ -27,7 +27,7 @@ export default function ComposeEmailModal({
   participantIds: string[];
   mode: Mode;
   onClose: () => void;
-  onSent: () => void;
+  onSent: (result: { sentCount: number; failedCount: number; documentFailures: string[] }) => void;
 }) {
   const { t } = useTranslations();
   const purposeKey = mode === "acceptance" ? REGISTRATION_ACCEPTANCE_PURPOSE_KEY : PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY;
@@ -38,6 +38,7 @@ export default function ComposeEmailModal({
   const [loading, setLoading] = useState(mode === "acceptance");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sentCount: number; failedCount: number } | null>(null);
+  const [sendError, setSendError] = useState(false);
   const [autoAttachDocTypes, setAutoAttachDocTypes] = useState<AutoAttachDocType[]>([]);
   const [selectedDocTypeIds, setSelectedDocTypeIds] = useState<Set<string>>(new Set());
 
@@ -66,6 +67,7 @@ export default function ComposeEmailModal({
     if (!subject.trim() || !body.trim()) return;
     setSending(true);
     setResult(null);
+    setSendError(false);
     const form = new FormData();
     form.set("participantIds", JSON.stringify(participantIds));
     form.set("subject", subject);
@@ -79,10 +81,17 @@ export default function ComposeEmailModal({
 
     try {
       const res = await fetch(`/api/events/${eventId}/participants/bulk-email`, { method: "POST", body: form });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setSendError(true);
+        return;
+      }
       const data = await res.json();
       setResult({ sentCount: data.sentCount, failedCount: data.failedCount });
-      onSent();
+      // The parent shows the outcome and closes this window -- it must not
+      // rely on this component staying mounted (the parent reloads its list).
+      onSent({ sentCount: data.sentCount, failedCount: data.failedCount, documentFailures: data.documentFailures ?? [] });
+    } catch {
+      setSendError(true);
     } finally {
       setSending(false);
     }
@@ -164,6 +173,7 @@ export default function ComposeEmailModal({
             </label>
             <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>
 
+            {sendError && <p className="text-[13px] text-red-600">{t("composeEmailModal.sendFailed")}</p>}
             <div className="mt-2 flex justify-end">
               <button onClick={handleSend} disabled={sending || !subject.trim() || !body.trim()} className={btnPrimary}>
                 {sending

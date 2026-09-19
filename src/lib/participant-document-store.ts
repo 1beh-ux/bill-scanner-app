@@ -25,7 +25,7 @@ export async function saveGeneratedParticipantDocument(opts: {
   buffer: Buffer;
   filename: string;
   generatedByUserId: string;
-}): Promise<void> {
+}): Promise<string> {
   const hash = crypto.createHash("sha256").update(opts.buffer).digest("hex").slice(0, 16);
   const gcsPath = `events/${opts.eventId}/mail/documents/${opts.participantId}/${hash}-${sanitizeFilename(opts.filename)}`;
   await billsBucket.file(gcsPath).save(opts.buffer, { contentType: "application/pdf" });
@@ -45,9 +45,10 @@ export async function saveGeneratedParticipantDocument(opts: {
   };
   if (existing) {
     await prisma.participantDocument.update({ where: { id: existing.id }, data });
-  } else {
-    await prisma.participantDocument.create({
-      data: { participantId: opts.participantId, eventListItemId: opts.eventListItemId, ...data },
-    });
+    return existing.id;
   }
+  const created = await prisma.participantDocument.create({
+    data: { participantId: opts.participantId, eventListItemId: opts.eventListItemId, ...data },
+  });
+  return created.id;
 }

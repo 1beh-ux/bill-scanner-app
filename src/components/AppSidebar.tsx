@@ -52,7 +52,16 @@ export default function AppSidebar() {
     setDrawerOpen(false);
   }, [pathname]);
 
-  const eventId = currentEventId || events[0]?.id || null;
+  // Only active events are offered. A closed event stays listed only while
+  // you're actually on it (e.g. an admin opened it from the events page), so
+  // the dropdown never goes blank; a stale remembered closed event falls back
+  // to the first active one.
+  const pathEventId = pathname.match(/^\/events\/([^/]+)/)?.[1];
+  const selectableEvents = events.filter((ev) => ev.status === "active" || ev.id === pathEventId);
+  const eventId =
+    (selectableEvents.some((ev) => ev.id === currentEventId) ? currentEventId : selectableEvents[0]?.id) ||
+    currentEventId ||
+    null;
 
   useEffect(() => {
     if (!eventId) {
@@ -170,7 +179,7 @@ export default function AppSidebar() {
         <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
       </div>
 
-      {events.length > 0 && (
+      {selectableEvents.length > 0 && (
         <>
           <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
             {t("nav.currentEvent")}
@@ -180,7 +189,7 @@ export default function AppSidebar() {
             onChange={(e) => onEventChange(e.target.value)}
             className="mb-4 w-full rounded-lg border-0 bg-night-2 px-2.5 py-2 text-[13px] text-paper focus:outline-none focus:ring-1 focus:ring-ember"
           >
-            {events.map((ev) => (
+            {selectableEvents.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {ev.name}
                 {ev.status === "closed" ? ` (${t("common.statusClosed")})` : ""}
