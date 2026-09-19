@@ -249,6 +249,11 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
                 {item.name}
               </span>
               <div className="flex items-center gap-3">
+                {scope === "event" && isDocument && (item.data as DocumentData | null)?.templateGoogleDocId && (
+                  <a href={`/events/${eventId}/document-templates/${item.id}`} className="text-[13px] text-ember hover:underline">
+                    {t("templatePreview.button")}
+                  </a>
+                )}
                 <button onClick={() => toggleActive(item)} className="text-[12px] text-ink-secondary hover:text-ink">
                   {item.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
                 </button>
@@ -349,6 +354,21 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
                     onChange={(e) => setTemplateGoogleDocId(e.target.value)}
                     className={inputClass}
                   />
+                  {editingId && templateGoogleDocId.trim() && (
+                    <div className="flex gap-4 text-[13px]">
+                      <a href={`/events/${eventId}/document-templates/${editingId}`} className="text-ember hover:underline">
+                        {t("templatePreview.button")}
+                      </a>
+                      <a
+                        href={`https://docs.google.com/document/d/${templateGoogleDocId.match(/\/document\/d\/([a-zA-Z0-9-_]+)/)?.[1] ?? templateGoogleDocId.trim()}/edit`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-ember hover:underline"
+                      >
+                        {t("templatePreview.openInDocs")}
+                      </a>
+                    </div>
+                  )}
                   <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
                     <input
                       type="checkbox"

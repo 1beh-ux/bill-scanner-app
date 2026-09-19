@@ -113,6 +113,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [vsOrderInYear, setVsOrderInYear] = useState("0");
   const [vsMembershipFieldKey, setVsMembershipFieldKey] = useState("");
   const [vsSaving, setVsSaving] = useState(false);
+  const [qrSizeMm, setQrSizeMm] = useState("35");
+  const [qrSaving, setQrSaving] = useState(false);
 
   // Org scope has no module/event concept, no computed rows, no formula
   // config -- it only ever manages custom-field templates.
@@ -162,12 +164,14 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         vsEventType: number | null;
         vsOrderInYear: number | null;
         vsMembershipFieldKey: string | null;
+        qrSizeMm: number | null;
       } | null;
       if (ev) {
         setEventStartDate(ev.startDate);
         setVsEventType(String(ev.vsEventType ?? 0));
         setVsOrderInYear(String(ev.vsOrderInYear ?? 0));
         setVsMembershipFieldKey(ev.vsMembershipFieldKey ?? "");
+        setQrSizeMm(String(ev.qrSizeMm ?? 35));
       }
     }
     setLoading(false);
@@ -350,6 +354,17 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setExpandedId(null);
   }
 
+  async function saveQrSize() {
+    setQrSaving(true);
+    await fetch(`/api/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ qrSizeMm: Number(qrSizeMm) || 35 }),
+    });
+    setQrSaving(false);
+    setExpandedId(null);
+  }
+
   function pillsRow(field: Field) {
     const active = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
     return (
@@ -474,7 +489,33 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           )}
 
           {field.kind === "computed" && field.computedType === "payment_qr_image" && (
-            <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.qrConfigHint")}</p>
+            <div className="flex flex-col gap-3">
+              <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.qrConfigHint")}</p>
+              {isEvent && (
+                <>
+                  <label className="max-w-[220px] text-[12px] text-ink-secondary">
+                    {t("participantFieldAdmin.qrSizeLabel")}
+                    <input
+                      type="number"
+                      min={10}
+                      max={150}
+                      value={qrSizeMm}
+                      onChange={(e) => setQrSizeMm(e.target.value)}
+                      className={inputClass + " mt-1"}
+                    />
+                  </label>
+                  <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.qrSizeHint")}</p>
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                      {t("common.cancel")}
+                    </button>
+                    <button type="button" onClick={saveQrSize} disabled={qrSaving} className={btnPrimary}>
+                      {qrSaving ? t("common.loading") : t("participantFieldAdmin.vsSaveButton")}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           {isEvent && field.kind === "computed" && field.computedType === "variable_symbol" && (

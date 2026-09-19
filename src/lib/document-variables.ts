@@ -31,6 +31,7 @@ export type EventForMerge = {
   vsOrderInYear: number | null;
   vsMembershipFieldKey: string | null;
   mailQuestionnaireUrl: string | null;
+  qrSizeMm: number | null;
 };
 
 function formatDate(d: Date | null): string {
@@ -100,10 +101,14 @@ async function resolvePaymentQrImage(p: ParticipantForMerge, e: EventForMerge): 
   return QRCode.toBuffer(spayd, { type: "png", margin: 1, width: 400 });
 }
 
+// Default side length of the payment QR in documents: big enough to scan
+// from a printed page, small enough not to take over the form.
+export const DEFAULT_QR_SIZE_MM = 35;
+
 export async function resolveVariables(
   participant: ParticipantForMerge,
   event: EventForMerge
-): Promise<{ text: Record<string, string>; images: Record<string, Buffer> }> {
+): Promise<{ text: Record<string, string>; images: Record<string, Buffer>; imageSizesMm: Record<string, number> }> {
   const fields = await prisma.eventParticipantField.findMany({
     where: { eventId: event.id, active: true, surfaces: { has: "documents" } },
   });
@@ -117,6 +122,7 @@ export async function resolveVariables(
     questionnaire_url: event.mailQuestionnaireUrl ?? "",
   };
   const images: Record<string, Buffer> = {};
+  const imageSizesMm: Record<string, number> = {};
 
   for (const f of fields) {
     const fixedDef = FIXED_PARTICIPANT_FIELDS.find((d) => d.key === f.key);
@@ -136,7 +142,10 @@ export async function resolveVariables(
     } else if (f.kind === "computed") {
       if (f.computedType === "payment_qr_image") {
         const image = await resolvePaymentQrImage(participant, event);
-        if (image) images[f.key] = image;
+        if (image) {
+          images[f.key] = image;
+          imageSizesMm[f.key] = event.qrSizeMm ?? DEFAULT_QR_SIZE_MM;
+        }
       } else if (f.computedType === "effective_price") {
         const price = effectivePriceCzk(participant, event);
         text[f.key] = price != null ? `${price} Kč` : "";
@@ -146,7 +155,7 @@ export async function resolveVariables(
     }
   }
 
-  return { text, images };
+  return { text, images, imageSizesMm };
 }
 
 /**

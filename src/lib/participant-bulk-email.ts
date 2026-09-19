@@ -47,6 +47,7 @@ async function buildAutoAttachDocuments(
     vsOrderInYear: number | null;
     vsMembershipFieldKey: string | null;
     mailQuestionnaireUrl: string | null;
+    qrSizeMm: number | null;
     driveParticipantsFolderId: string | null;
     driveExportFolderId: string | null;
   },
@@ -66,7 +67,7 @@ async function buildAutoAttachDocuments(
   });
 
   const attachments: { buffer: Buffer; filename: string; mimeType: string }[] = [];
-  const { text, images } = await resolveVariables(
+  const { text, images, imageSizesMm } = await resolveVariables(
     {
       ...refreshed,
       customFieldValues: refreshed.customFieldValues as Record<string, string> | null,
@@ -97,7 +98,8 @@ async function buildAutoAttachDocuments(
         data.templateGoogleDocId,
         text,
         images,
-        participantFolderId ? { folderId: participantFolderId, name: documentFileBaseName(participant.name, docType) } : undefined
+        participantFolderId ? { folderId: participantFolderId, name: documentFileBaseName(participant.name, docType) } : undefined,
+        imageSizesMm
       );
       const filename = `${docType.name}.pdf`;
       attachments.push({ buffer, filename, mimeType: "application/pdf" });

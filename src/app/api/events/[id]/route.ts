@@ -56,6 +56,7 @@ export async function PATCH(
     vsMembershipFieldKey,
     participantsListColumns,
     mailQuestionnaireUrl,
+    qrSizeMm,
   } = body;
   // Everything already exported/synced was written to the *old* folder, and
   // the manifest sheet id is remembered per event -- so after a folder change
@@ -92,6 +93,7 @@ export async function PATCH(
       ...(vsOrderInYear !== undefined && { vsOrderInYear }),
       ...(vsMembershipFieldKey !== undefined && { vsMembershipFieldKey }),
       ...(participantsListColumns !== undefined && { participantsListColumns }),
+      ...(qrSizeMm !== undefined && { qrSizeMm: qrSizeMm === null ? null : Math.min(150, Math.max(10, Math.round(Number(qrSizeMm)) || 35)) }),
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
     },
   });

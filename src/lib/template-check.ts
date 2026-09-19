@@ -19,8 +19,9 @@ export interface TemplatePlaceholder {
 }
 
 export interface TemplateCheckResult {
-  templates: { docTypeId: string; name: string; error?: string; placeholders: TemplatePlaceholder[] }[];
-  // Fields marked for documents that no readable template uses.
+  templates: { docTypeId: string; name: string; docId?: string; error?: string; placeholders: TemplatePlaceholder[] }[];
+  // Fields marked for documents that no readable template uses (with a
+  // single-template check: that one template).
   unusedFields: { key: string; label: string }[];
 }
 
@@ -62,9 +63,9 @@ async function readPlaceholders(templateDocId: string): Promise<{ key: string; h
   return [...found].map(([key, hasSpaces]) => ({ key, hasSpaces }));
 }
 
-export async function checkEventTemplates(eventId: string): Promise<TemplateCheckResult> {
+export async function checkEventTemplates(eventId: string, opts: { docTypeId?: string } = {}): Promise<TemplateCheckResult> {
   const [docTypes, fields] = await Promise.all([
-    prisma.eventListItem.findMany({ where: { eventId, kind: "document", active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.eventListItem.findMany({ where: { eventId, kind: "document", active: true, ...(opts.docTypeId && { id: opts.docTypeId }) }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.eventParticipantField.findMany({ where: { eventId } }),
   ]);
   const byKey = new Map(fields.map((f) => [f.key, f]));
@@ -80,6 +81,7 @@ export async function checkEventTemplates(eventId: string): Promise<TemplateChec
       templates.push({
         docTypeId: dt.id,
         name: dt.name,
+        docId: extractGoogleDocId(templateId),
         placeholders: found.map(({ key, hasSpaces }) => {
           usedKeys.add(key);
           const field = byKey.get(key);

@@ -236,6 +236,9 @@ model Event {
   vsEventType          Int?     @map("vs_event_type")
   vsOrderInYear        Int?     @map("vs_order_in_year")
   vsMembershipFieldKey String?  @map("vs_membership_field_key")
+  // Side length (mm) of the payment QR image inserted into documents. Null
+  // means the default (DEFAULT_QR_SIZE_MM in src/lib/document-variables.ts).
+  qrSizeMm             Int?     @map("qr_size_mm")
   // Ordered EventParticipantField keys chosen for the central roster's
   // columns (Name is always first and isn't included here). Null means not
   // configured yet -- falls back to every active field with the `list`

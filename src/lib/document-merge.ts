@@ -81,7 +81,10 @@ export async function mergeAndExportDocument(
   // deleted after the export. An older doc with the same name is trashed
   // afterwards, best effort -- in a Shared Drive the connected account may
   // not be allowed to, in which case the old one just stays.
-  keep?: { folderId: string; name: string }
+  keep?: { folderId: string; name: string },
+  // Side length in mm per image key. Without an explicit size Google Docs
+  // inserts an image at its pixel size, which is huge for a QR code.
+  imageSizesMm: Record<string, number> = {}
 ): Promise<Buffer> {
   const docId = extractGoogleDocId(templateDocId);
   const drive = await getDriveClient();
@@ -125,6 +128,7 @@ export async function mergeAndExportDocument(
           console.log(`[document-merge] placeholder {{${key}}} not found in ${templateDocId}, skipping image`);
           continue;
         }
+        const sizePt = ((imageSizesMm[key] ?? 35) * 72) / 25.4; // mm -> pt
         const { path, url } = await uploadTempImage(buffer);
         tempImagePaths.push(path);
         await docs.documents.batchUpdate({
@@ -132,7 +136,16 @@ export async function mergeAndExportDocument(
           requestBody: {
             requests: [
               { deleteContentRange: { range: { startIndex: range.startIndex, endIndex: range.endIndex } } },
-              { insertInlineImage: { uri: url, location: { index: range.startIndex } } },
+              {
+                insertInlineImage: {
+                  uri: url,
+                  location: { index: range.startIndex },
+                  objectSize: {
+                    width: { magnitude: sizePt, unit: "PT" },
+                    height: { magnitude: sizePt, unit: "PT" },
+                  },
+                },
+              },
             ],
           },
         });
