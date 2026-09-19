@@ -79,7 +79,18 @@ export async function importBillsFromDrive(
   const authorsResolved: AuthorResolution[] = [];
   const skippedNativeGoogleFiles: { filename: string; subfolderName: string }[] = [];
   const candidateFileIds: string[] = [];
-const fileMeta = new Map<string, { subfolderName: string; authorId: string; name: string; mimeType: string }>();
+  const fileMeta = new Map<string, { authorId: string | null; name: string; mimeType: string }>();
+
+  function collect(files: Awaited<ReturnType<typeof listFilesInSubfolder>>, subfolderName: string, authorId: string | null) {
+    for (const file of files) {
+      if (isGoogleNativeFile(file.mimeType)) {
+        skippedNativeGoogleFiles.push({ filename: file.name, subfolderName });
+        continue;
+      }
+      candidateFileIds.push(file.id);
+      fileMeta.set(file.id, { authorId, name: file.name, mimeType: file.mimeType });
+    }
+  }
 
   for (const subfolder of subfolders) {
     const { author, created } = await findOrCreateAuthorForSubfolder(subfolder.name);
@@ -91,21 +102,12 @@ const fileMeta = new Map<string, { subfolderName: string; authorId: string; name
       created,
     });
 
-    const files = await listFilesInSubfolder(subfolder.id);
-    for (const file of files) {
-      if (isGoogleNativeFile(file.mimeType)) {
-        skippedNativeGoogleFiles.push({ filename: file.name, subfolderName: subfolder.name });
-        continue;
-      }
-      candidateFileIds.push(file.id);
-      fileMeta.set(file.id, {
-        subfolderName: subfolder.name,
-        authorId: author.id,
-        name: file.name,
-        mimeType: file.mimeType,
-      });
-    }
+    collect(await listFilesInSubfolder(subfolder.id), subfolder.name, author.id);
   }
+
+  // Files directly in the ingest folder have no author subfolder -- imported
+  // as event-paid bills (no payer), same as a plain upload.
+  collect(await listFilesInSubfolder(event.driveIngestFolderId), "", null);
 
   // Skip files already brought in by a previous import run, without downloading
   // them again — this is what driveSourceFileId was reserved for.
@@ -130,7 +132,7 @@ const fileMeta = new Map<string, { subfolderName: string; authorId: string; name
         buffer,
         contentType: meta.mimeType,
         driveSourceFileId: fileId,
-        payerAuthorId: meta.authorId,
+        payerAuthorId: meta.authorId ?? undefined,
       });
     } catch (err) {
       // One file's download exhausting all retries no longer aborts every

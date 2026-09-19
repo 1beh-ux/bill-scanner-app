@@ -47,6 +47,12 @@ export default function EventImportPage({
 
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
+  const [info, setInfo] = useState<string | null>(null);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [merging, setMerging] = useState(false);
+  const [preview, setPreview] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -121,6 +127,14 @@ export default function EventImportPage({
     }
 
     const data = await res.json();
+    setInfo(
+      data.ingest.created.length === 0
+        ? t("importPage.driveNothingNew", {
+            already: String(data.skippedAlreadyImported),
+            native: String(data.skippedNativeGoogleFiles.length),
+          })
+        : null
+    );
     const newBills = data.ingest.created as {
       id: string;
       originalFilename: string;
@@ -149,6 +163,57 @@ export default function EventImportPage({
       setOverrides((o) => ({ ...o, ...driveOverrides }));
       setUnlocked((prev) => new Set([...prev, ...driveUnlockedIds]));
     }
+  }
+
+  function showPreview(e: React.MouseEvent, bill: CreatedBill) {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    const { clientX, clientY } = e;
+    previewTimer.current = setTimeout(
+      () => setPreview({ id: bill.id, name: bill.originalFilename, x: clientX, y: clientY }),
+      250
+    );
+  }
+
+  function hidePreview() {
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    setPreview(null);
+  }
+
+  function toggleSelected(billId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(billId)) next.add(billId);
+      return next;
+    });
+  }
+
+  async function handleMerge() {
+    // Table order, not click order -- that's the page order in the merged PDF.
+    const ids = createdBills.filter((b) => selected.has(b.id)).map((b) => b.id);
+    setMerging(true);
+    setError(null);
+    const res = await fetch(`/api/events/${eventId}/bills/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billIds: ids }),
+    });
+    setMerging(false);
+    if (!res.ok) {
+      setError(t("importPage.mergeFailed"));
+      return;
+    }
+    const merged = (await res.json()) as { id: string; originalFilename: string; payerAuthorId: string | null };
+    const firstIndex = createdBills.findIndex((b) => selected.has(b.id));
+    setCreatedBills((prev) => {
+      const rest = prev.filter((b) => !selected.has(b.id));
+      rest.splice(firstIndex, 0, { id: merged.id, originalFilename: merged.originalFilename });
+      return rest;
+    });
+    if (merged.payerAuthorId) {
+      setOverrides((o) => ({ ...o, [merged.id]: { ...EMPTY_DRAFT, authorId: merged.payerAuthorId! } }));
+      setUnlocked((prev) => new Set([...prev, merged.id]));
+    }
+    setSelected(new Set());
   }
 
   function effectiveFor(billId: string): DraftFields {
@@ -308,6 +373,7 @@ export default function EventImportPage({
           </button>
         </div>
         {uploading && <p className="mt-2 text-[13px] text-ink-secondary">{t("common.loading")}</p>}
+        {info && <p className="mt-2 text-[13px] text-amber-700">{info}</p>}
       </div>
 
       {(duplicateCount > 0 || splitCount > 0 || failureCount > 0) && (
@@ -384,10 +450,21 @@ export default function EventImportPage({
             </label>
           </div>
 
+          {selected.size >= 2 && (
+            <button
+              onClick={handleMerge}
+              disabled={merging}
+              className="mb-3 rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
+            >
+              {merging ? t("common.loading") : t("importPage.mergeSelected", { count: String(selected.size) })}
+            </button>
+          )}
+
           <div className="mb-4 overflow-x-auto">
             <table className="w-full min-w-[700px] border-collapse">
               <thead>
                 <tr className="border-b border-mist text-left">
+                  <th className="w-8 p-2"></th>
                   <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("importPage.colFile")}</th>
                   <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("importPage.colMerchant")}</th>
                   <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("importPage.colAuthor")}</th>
@@ -403,11 +480,20 @@ export default function EventImportPage({
                   const values = effectiveFor(bill.id);
                   return (
                     <tr key={bill.id} className="border-b border-mist/60">
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={selected.has(bill.id)}
+                          onChange={() => toggleSelected(bill.id)}
+                        />
+                      </td>
                       <td className="p-2 text-[14px]">
                         <a
                           href={`/api/bills/${bill.id}/file`}
                           target="_blank"
                           rel="noreferrer"
+                          onMouseEnter={(e) => showPreview(e, bill)}
+                          onMouseLeave={hidePreview}
                           className="text-ember hover:underline"
                         >
                           {bill.originalFilename}
@@ -503,6 +589,28 @@ export default function EventImportPage({
             {confirming ? t("common.loading") : t("importPage.confirmButton")}
           </button>
         </>
+      )}
+      {preview && (
+        <div
+          className="pointer-events-none fixed z-50 overflow-hidden rounded-lg border border-mist bg-paper shadow-lg"
+          style={{
+            width: 360,
+            height: 480,
+            left: Math.min(preview.x + 16, window.innerWidth - 376),
+            top: Math.max(8, Math.min(preview.y - 40, window.innerHeight - 488)),
+          }}
+        >
+          {/\.pdf$/i.test(preview.name) ? (
+            <iframe
+              src={`/api/bills/${preview.id}/file#toolbar=0&navpanes=0&view=FitH`}
+              title={preview.name}
+              className="h-full w-full border-0"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={`/api/bills/${preview.id}/file`} alt={preview.name} className="h-full w-full object-contain" />
+          )}
+        </div>
       )}
     </div>
   );
