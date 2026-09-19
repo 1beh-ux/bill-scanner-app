@@ -71,7 +71,8 @@ export default function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
+  const isAdmin = role === "admin";
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const mailConnect = searchParams.get("mailConnect");
@@ -380,6 +381,7 @@ export default function EventDetailPage({
         >
           {t("eventSettings.tabDrive")}
         </button>
+        {isAdmin && (
         <button
           onClick={() => setTab("access")}
           className={
@@ -389,6 +391,7 @@ export default function EventDetailPage({
         >
           {t("eventSettings.tabAccess")}
         </button>
+        )}
         {moduleAccess.health && (
           <button
             onClick={() => setTab("health")}
@@ -422,6 +425,7 @@ export default function EventDetailPage({
             {t("eventSettings.tabParticipants")}
           </button>
         )}
+        {isAdmin && (
         <button
           onClick={() => setTab("modules")}
           className={
@@ -431,11 +435,12 @@ export default function EventDetailPage({
         >
           {t("eventSettings.tabModules")}
         </button>
+        )}
       </div>
 
-      {tab === "access" && <AccessTab eventId={id} t={t} />}
+      {tab === "access" && isAdmin && <AccessTab eventId={id} t={t} />}
 
-      {tab === "modules" && <ModulesTab eventId={id} t={t} />}
+      {tab === "modules" && isAdmin && <ModulesTab eventId={id} t={t} />}
 
       {tab === "health" && moduleAccess.health && (
         <div className="flex flex-col gap-6">

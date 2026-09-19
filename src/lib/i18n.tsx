@@ -17,6 +17,8 @@ interface I18nContextValue {
   t: (key: string, vars?: Record<string, string>) => string;
   role: Role | null;
   roleLoaded: boolean;
+  hiddenModules: string[];
+  setHiddenModules: (m: string[]) => void;
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -53,6 +55,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);
   const [role, setRole] = useState<Role | null>(null);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
   // script in layout.tsx already set the real class on <html> before this
   // ever runs, so the effect below reads that back rather than guessing.
@@ -100,8 +103,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role; preferredLang?: Lang; preferredTheme?: Theme } | null) => {
+      .then((data: { role: Role; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
         setRole(data?.role ?? null);
+        setHiddenModules(data?.hiddenModules ?? []);
         // Reconcile to the server's values without re-PATCHing them right
         // back -- this is the server telling the client, not a user action.
         if (data?.preferredLang) setLang(data.preferredLang, false);
@@ -141,7 +145,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return (
     <I18nContext.Provider
-      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded }}
+      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, hiddenModules, setHiddenModules }}
     >
       {children}
     </I18nContext.Provider>

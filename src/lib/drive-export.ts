@@ -136,6 +136,9 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
         data: { exportFilename, exportedAt: new Date() },
       });
 
+      // `bills` was loaded before this loop -- keep it in step, or the
+      // manifest below shows an empty Soubor/Odkaz for this run's uploads.
+      bill.exportFilename = exportFilename;
       newlyExported++;
     } catch (err) {
       // One bill's upload exhausting all retries no longer aborts export

@@ -140,6 +140,10 @@ model User {
   // an Outlook-signature-style personal setting, falling back to
   // displayName when unset.
   emailSignature  String?   @map("email_signature")
+  // Second settings layer: modules a person has chosen to hide from their own
+  // sidebar. Admin decides what they *have* (UserEventModuleAccess); this only
+  // narrows their own view, never grants anything.
+  hiddenModules   ModuleKey[] @default([]) @map("hidden_modules")
 
   moduleAccess       UserEventModuleAccess[]
   driveAccountsConnected DriveAccount[] @relation("DriveAccountConnectedBy")

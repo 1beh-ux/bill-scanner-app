@@ -26,7 +26,7 @@ import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
 type EventOption = { id: string; name: string; status: string };
 
 export default function AppSidebar() {
-  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role } =
+  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, hiddenModules } =
     useTranslations();
   const pathname = usePathname();
   const router = useRouter();
@@ -87,8 +87,12 @@ export default function AppSidebar() {
     ...NAV_SECTIONS.bills.items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })),
   ];
 
+  // Own-view layer on top of the admin-granted access (see User.hiddenModules).
+  const showHealth = moduleAccess.health && !hiddenModules.includes("health");
+  const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
+
   const participantsNavItems = [
-    ...(moduleAccess.health || moduleAccess.mail
+    ...(showHealth || showMail
       ? [
           {
             href: eventId ? `/events/${eventId}/participants` : "/events",
@@ -100,7 +104,7 @@ export default function AppSidebar() {
   ];
 
   const healthNavItems = [
-    ...(moduleAccess.health
+    ...(showHealth
       ? [
           { href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse },
           {
@@ -113,7 +117,7 @@ export default function AppSidebar() {
   ];
 
   const mailNavItems = [
-    ...(moduleAccess.mail
+    ...(showMail
       ? [
           { href: eventId ? `/events/${eventId}/mail` : "/events", label: t("nav.mail"), icon: Mail },
           {

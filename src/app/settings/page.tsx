@@ -10,7 +10,7 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 export default function SettingsPage() {
-  const { t, roleLoaded, role, lang, setLang, theme, setTheme } = useTranslations();
+  const { t, roleLoaded, role, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules } = useTranslations();
   const [landingPath, setLandingPath] = useState("");
   const [emailSignature, setEmailSignature] = useState("");
   const [loading, setLoading] = useState(true);
@@ -26,6 +26,16 @@ export default function SettingsPage() {
       })
       .finally(() => setLoading(false));
   }, []);
+
+  function toggleModule(key: string, shown: boolean) {
+    const next = shown ? hiddenModules.filter((m) => m !== key) : [...hiddenModules, key];
+    setHiddenModules(next);
+    fetch("/api/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hiddenModules: next }),
+    }).catch(() => {});
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -70,6 +80,21 @@ export default function SettingsPage() {
             <option value="dark">{t("settingsPage.themeDark")}</option>
           </select>
         </label>
+
+        <div className="text-[13px] text-ink-secondary">
+          <p className="mb-1">{t("settingsPage.modulesLabel")}</p>
+          {(["health", "mail"] as const).map((key) => (
+            <label key={key} className="mr-4 inline-flex items-center gap-2 text-ink">
+              <input
+                type="checkbox"
+                checked={!hiddenModules.includes(key)}
+                onChange={(e) => toggleModule(key, e.target.checked)}
+              />
+              {t(`nav.${key}`)}
+            </label>
+          ))}
+          <span className="mt-1 block text-[11.5px]">{t("settingsPage.modulesHint")}</span>
+        </div>
       </div>
 
       <form onSubmit={save} className="flex flex-col gap-3">

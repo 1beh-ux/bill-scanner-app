@@ -22,6 +22,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
+
   const body = await req.json();
   const { name, startDate, endDate } = body;
 

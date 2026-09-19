@@ -22,9 +22,9 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
   organization: {
     sectionLabelKey: "nav.organization",
     items: [
-      { path: "/events", labelKey: "nav.events", icon: Calendar },
+      { path: "/events", labelKey: "nav.events", icon: Calendar, adminOnly: true },
       { path: "/users", labelKey: "nav.users", icon: UserCog, adminOnly: true },
-      { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate },
+      { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
     ],
   },

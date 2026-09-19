@@ -86,6 +86,10 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   // Checked explicitly, not just inferred from a caught constraint error —
