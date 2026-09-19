@@ -136,8 +136,8 @@ export default function AppSidebar() {
   };
 
   const orgNavItems = visibleNavSections(role)
-    .find((s) => s.sectionLabelKey === NAV_SECTIONS.organization.sectionLabelKey)!
-    .items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon }));
+    .find((s) => s.sectionLabelKey === NAV_SECTIONS.organization.sectionLabelKey)
+    ?.items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })) ?? [];
 
   function isActive(href: string) {
     return pathname === href;
@@ -247,16 +247,20 @@ export default function AppSidebar() {
         <NavLink {...eventSettingsItem} />
       </nav>
 
-      <div className="my-3 h-px bg-night-border" />
+      {orgNavItems.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-night-border" />
 
-      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-        {t("nav.organization")}
-      </div>
-      <nav className="flex flex-col gap-0.5">
-        {orgNavItems.map((item) => (
-          <NavLink key={item.label} {...item} />
-        ))}
-      </nav>
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.organization")}
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {orgNavItems.map((item) => (
+              <NavLink key={item.label} {...item} />
+            ))}
+          </nav>
+        </>
+      )}
 
       <div className="flex-1" />
 
