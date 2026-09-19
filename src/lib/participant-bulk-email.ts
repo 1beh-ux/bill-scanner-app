@@ -4,7 +4,8 @@ import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { resolveVariables, ensureRegistrationNumber } from "@/lib/document-variables";
 import { mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
-import { participantsRootFolderId, syncParticipantDocumentToDrive } from "@/lib/mail-drive-sync";
+import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
+import { getOrCreateSubfolder } from "@/lib/drive";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
@@ -13,9 +14,14 @@ export interface BulkEmailResult {
   guardianEmail: string;
   status: "sent" | "failed";
   errorMessage?: string;
-  // Auto-attach documents that could not be generated for this participant
-  // (the email still went out without them).
-  documentFailures?: string[];
+}
+
+export interface BulkSendOutcome {
+  results: BulkEmailResult[];
+  documentsGenerated: number;
+  // Distinct names of documents that couldn't be generated (an email, if
+  // sent, still went out without them) -- surfaced so that isn't silent.
+  documentFailures: string[];
 }
 
 /**
@@ -46,13 +52,14 @@ async function buildAutoAttachDocuments(
   },
   allowedDocumentTypeIds: string[] | undefined,
   generatedByUserId: string
-): Promise<{ attachments: { buffer: Buffer; filename: string; mimeType: string }[]; failedDocuments: string[] }> {
+): Promise<{ attachments: { buffer: Buffer; filename: string; mimeType: string }[]; failedDocuments: string[]; generatedCount: number }> {
+  let generatedCount = 0;
   const failedDocuments: string[] = [];
-  if (!participant) return { attachments: [], failedDocuments };
+  if (!participant) return { attachments: [], failedDocuments, generatedCount };
 
   await ensureRegistrationNumber(participant.id, event.id);
   const refreshed = await prisma.participant.findUnique({ where: { id: participant.id } });
-  if (!refreshed) return { attachments: [], failedDocuments };
+  if (!refreshed) return { attachments: [], failedDocuments, generatedCount };
 
   const documentTypes = await prisma.eventListItem.findMany({
     where: { eventId: event.id, kind: "document", active: true },
@@ -68,6 +75,17 @@ async function buildAutoAttachDocuments(
     event
   );
 
+  // The participant's Drive folder, when one is configured: the merged Google
+  // Doc is kept there next to the PDF so it can be edited and re-created.
+  const rootFolderId = participantsRootFolderId(event);
+  let participantFolderId: string | null = null;
+  if (rootFolderId) {
+    participantFolderId = await getOrCreateSubfolder(rootFolderId, participant.name).catch((err) => {
+      console.log(`[participant-bulk-email] couldn't open Drive folder for participant ${participant.id}:`, String(err));
+      return null;
+    });
+  }
+
   for (const docType of documentTypes) {
     const data = docType.data as DocumentTypeData | null;
     if (!data?.templateGoogleDocId) continue;
@@ -75,15 +93,21 @@ async function buildAutoAttachDocuments(
     if (allowedDocumentTypeIds && !allowedDocumentTypeIds.includes(docType.id)) continue;
 
     try {
-      const buffer = await mergeAndExportDocument(data.templateGoogleDocId, text, images);
+      const buffer = await mergeAndExportDocument(
+        data.templateGoogleDocId,
+        text,
+        images,
+        participantFolderId ? { folderId: participantFolderId, name: documentFileBaseName(participant.name, docType) } : undefined
+      );
       const filename = `${docType.name}.pdf`;
       attachments.push({ buffer, filename, mimeType: "application/pdf" });
+      generatedCount++;
       // Persisted the same way a received document is (see
       // participant-document-store.ts's own comment) -- a save failure
       // here shouldn't block the email, which already has the attachment
       // in hand, so it's logged and skipped rather than thrown.
       try {
-        const documentId = await saveGeneratedParticipantDocument({
+        const saved = await saveGeneratedParticipantDocument({
           eventId: event.id,
           participantId: participant.id,
           eventListItemId: docType.id,
@@ -92,10 +116,10 @@ async function buildAutoAttachDocuments(
           generatedByUserId,
         });
         // Straight into the participant's Drive folder when one is
-        // configured; if Drive fails the row stays pending for the sync button.
-        const rootFolderId = participantsRootFolderId(event);
+        // configured (replacing the previous PDF in place on a regenerate);
+        // if Drive fails the row stays pending for the sync button.
         if (rootFolderId) {
-          await syncParticipantDocumentToDrive(documentId, rootFolderId).catch((err) =>
+          await syncParticipantDocumentToDrive(saved.id, rootFolderId, { replaceFileId: saved.previousDriveFileId }).catch((err) =>
             console.log(`[participant-bulk-email] Drive upload of "${docType.name}" for participant ${participant.id} failed (sync button will retry):`, String(err))
           );
         }
@@ -108,7 +132,7 @@ async function buildAutoAttachDocuments(
     }
   }
 
-  return { attachments, failedDocuments };
+  return { attachments, failedDocuments, generatedCount };
 }
 
 function loadParticipant(participantId: string) {
@@ -140,7 +164,9 @@ export async function sendBulkParticipantEmail(opts: {
   markAccepted: boolean;
   attachment?: { buffer: Buffer; filename: string; mimeType: string };
   autoAttachDocumentTypeIds?: string[];
-}): Promise<BulkEmailResult[]> {
+  // false = only (re)create the documents -- no email, no send log.
+  sendEmail?: boolean;
+}): Promise<BulkSendOutcome> {
   const event = await prisma.event.findUnique({ where: { id: opts.eventId } });
   if (!event) throw new Error("event_not_found");
 
@@ -149,6 +175,9 @@ export async function sendBulkParticipantEmail(opts: {
   const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Tábor";
 
   const results: BulkEmailResult[] = [];
+  const sendEmail = opts.sendEmail !== false;
+  let documentsGenerated = 0;
+  const failedDocs = new Set<string>();
 
   for (const participantId of opts.participantIds) {
     const participant = await loadParticipant(participantId);
@@ -164,11 +193,12 @@ export async function sendBulkParticipantEmail(opts: {
 
     const generated = opts.markAccepted
       ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
-      : { attachments: [], failedDocuments: [] as string[] };
+      : { attachments: [], failedDocuments: [] as string[], generatedCount: 0 };
     const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
-    const documentFailures = generated.failedDocuments.length > 0 ? generated.failedDocuments : undefined;
+    documentsGenerated += generated.generatedCount;
+    generated.failedDocuments.forEach((d) => failedDocs.add(d));
 
-    for (const guardian of participant.guardians) {
+    for (const guardian of sendEmail ? participant.guardians : []) {
       if (!senderEmail) {
         await prisma.parentEmailLog.create({
           data: {
@@ -202,7 +232,7 @@ export async function sendBulkParticipantEmail(opts: {
         await prisma.parentEmailLog.create({
           data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId },
         });
-        results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent", documentFailures });
+        results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent" });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
         await prisma.parentEmailLog.create({
@@ -231,5 +261,5 @@ export async function sendBulkParticipantEmail(opts: {
     });
   }
 
-  return results;
+  return { results, documentsGenerated, documentFailures: [...failedDocs] };
 }

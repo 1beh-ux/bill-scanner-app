@@ -1,7 +1,7 @@
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { billsBucket } from "@/lib/gcs";
-import { getOrCreateSubfolder, uploadFileToFolder } from "@/lib/drive";
+import { getOrCreateSubfolder, uploadFileToFolder, updateFileContent } from "@/lib/drive";
 import { documentDisplayName } from "@/lib/mail-reply-template";
 
 const MIME_BY_EXT: Record<string, string> = {
@@ -19,10 +19,27 @@ export function participantsRootFolderId(event: EventFolders): string | null {
   return event.driveParticipantsFolderId ?? event.driveExportFolderId ?? null;
 }
 
+/** {Participant}_{DocumentTypeSuffix} -- the Drive name (without extension) for a participant's document. */
+export function documentFileBaseName(
+  participantName: string,
+  listItem: { id: string; key: string | null; name: string; data: unknown }
+): string {
+  const suffix = (listItem.data as { filenameSuffix?: string } | null)?.filenameSuffix
+    || documentDisplayName({ id: listItem.id, key: listItem.key, name: listItem.name, data: listItem.data as { displayName?: string } | null });
+  return `${participantName}_${suffix}`;
+}
+
 // Uploads one stored document into {root}/{participant name}/ and records the
 // Drive file id. Shared by the sync button (received documents, retries) and
-// the acceptance send (generated documents go out right after they're saved).
-export async function syncParticipantDocumentToDrive(documentId: string, rootFolderId: string): Promise<void> {
+// the acceptance send / regenerate (generated documents go out right after
+// they're saved). `replaceFileId` overwrites that Drive file in place instead
+// of adding a second copy (a regenerated PDF); if that fails it falls back to
+// uploading a new file.
+export async function syncParticipantDocumentToDrive(
+  documentId: string,
+  rootFolderId: string,
+  opts: { replaceFileId?: string | null } = {}
+): Promise<void> {
   const doc = await prisma.participantDocument.findUniqueOrThrow({
     where: { id: documentId },
     include: { participant: true, eventListItem: true },
@@ -30,15 +47,26 @@ export async function syncParticipantDocumentToDrive(documentId: string, rootFol
   if (!doc.gcsPath) return;
 
   const [buffer] = await billsBucket.file(doc.gcsPath).download();
-  const participantFolderId = await getOrCreateSubfolder(rootFolderId, doc.participant.name);
-
-  const suffix = (doc.eventListItem.data as { filenameSuffix?: string } | null)?.filenameSuffix
-    || documentDisplayName({ id: doc.eventListItem.id, key: doc.eventListItem.key, name: doc.eventListItem.name, data: doc.eventListItem.data as { displayName?: string } | null });
   const ext = doc.originalFilename ? path.extname(doc.originalFilename) : "";
-  const name = `${doc.participant.name}_${suffix}${ext}`;
+  // A guardian-returned file gets "_prijato" so it can't be mistaken for (or
+  // collide with) the blank document we generated under the same base name.
+  const receivedMarker = doc.receivedVia === "generated" ? "" : "_prijato";
+  const name = `${documentFileBaseName(doc.participant.name, doc.eventListItem)}${receivedMarker}${ext}`;
   const mimeType = MIME_BY_EXT[ext.toLowerCase()] || "application/octet-stream";
 
-  const driveFileId = await uploadFileToFolder(participantFolderId, name, buffer, mimeType);
+  let driveFileId: string | null = null;
+  if (opts.replaceFileId) {
+    try {
+      await updateFileContent(opts.replaceFileId, buffer, mimeType);
+      driveFileId = opts.replaceFileId;
+    } catch (err) {
+      console.log(`[mail-drive-sync] couldn't update ${opts.replaceFileId} in place, uploading a new copy:`, String(err));
+    }
+  }
+  if (!driveFileId) {
+    const participantFolderId = await getOrCreateSubfolder(rootFolderId, doc.participant.name);
+    driveFileId = await uploadFileToFolder(participantFolderId, name, buffer, mimeType);
+  }
   await prisma.participantDocument.update({
     where: { id: doc.id },
     data: { driveFileId, driveSyncedAt: new Date() },

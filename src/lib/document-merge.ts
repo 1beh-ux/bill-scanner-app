@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { docs_v1 } from "googleapis";
-import { getDriveClient, getDocsClient, usingConnectedDriveAccount } from "@/lib/drive";
+import { getDriveClient, getDocsClient, usingConnectedDriveAccount, findFileInFolder } from "@/lib/drive";
 import { billsBucket } from "@/lib/gcs";
 
 /**
@@ -75,7 +75,13 @@ export function extractGoogleDocId(input: string): string {
 export async function mergeAndExportDocument(
   templateDocId: string,
   text: Record<string, string>,
-  images: Record<string, Buffer> = {}
+  images: Record<string, Buffer> = {},
+  // When given, the merged Google Doc is kept in this folder under `name`
+  // (so it can be edited and the PDF re-created later) instead of being
+  // deleted after the export. An older doc with the same name is trashed
+  // afterwards, best effort -- in a Shared Drive the connected account may
+  // not be allowed to, in which case the old one just stays.
+  keep?: { folderId: string; name: string }
 ): Promise<Buffer> {
   const docId = extractGoogleDocId(templateDocId);
   const drive = await getDriveClient();
@@ -85,10 +91,11 @@ export async function mergeAndExportDocument(
   // root, not next to the template: the template's folder may be a Shared
   // Drive where that account can create but not delete/trash, which left
   // merge-scratch-* files piling up beside the templates.
-  const scratchParents = (await usingConnectedDriveAccount()) ? ["root"] : undefined;
+  const scratchParents = keep ? [keep.folderId] : (await usingConnectedDriveAccount()) ? ["root"] : undefined;
+  const previousDoc = keep ? await findFileInFolder(keep.folderId, keep.name, "application/vnd.google-apps.document") : null;
   const copy = await drive.files.copy({
     fileId: docId,
-    requestBody: { name: `merge-scratch-${Date.now()}`, ...(scratchParents && { parents: scratchParents }) },
+    requestBody: { name: keep ? keep.name : `merge-scratch-${Date.now()}`, ...(scratchParents && { parents: scratchParents }) },
     supportsAllDrives: true,
     fields: "id",
   });
@@ -138,9 +145,16 @@ export async function mergeAndExportDocument(
       { fileId: scratchId, mimeType: "application/pdf" },
       { responseType: "arraybuffer" }
     );
+    if (previousDoc) {
+      await drive.files.update({ fileId: previousDoc.id, requestBody: { trashed: true }, supportsAllDrives: true }).catch(() => {});
+    }
     return Buffer.from(exported.data as ArrayBuffer);
+  } catch (err) {
+    // A kept doc is only worth keeping if the whole merge worked.
+    if (keep) await drive.files.delete({ fileId: scratchId, supportsAllDrives: true }).catch(() => {});
+    throw err;
   } finally {
-    await drive.files.delete({ fileId: scratchId, supportsAllDrives: true }).catch(() => {});
+    if (!keep) await drive.files.delete({ fileId: scratchId, supportsAllDrives: true }).catch(() => {});
     await Promise.all(tempImagePaths.map((p) => billsBucket.file(p).delete().catch(() => {})));
   }
 }

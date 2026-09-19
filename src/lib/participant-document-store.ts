@@ -25,13 +25,15 @@ export async function saveGeneratedParticipantDocument(opts: {
   buffer: Buffer;
   filename: string;
   generatedByUserId: string;
-}): Promise<string> {
+}): Promise<{ id: string; previousDriveFileId: string | null }> {
   const hash = crypto.createHash("sha256").update(opts.buffer).digest("hex").slice(0, 16);
   const gcsPath = `events/${opts.eventId}/mail/documents/${opts.participantId}/${hash}-${sanitizeFilename(opts.filename)}`;
   await billsBucket.file(gcsPath).save(opts.buffer, { contentType: "application/pdf" });
 
+  // Only ever the *generated* row: a document a guardian returned (email/
+  // manual) is a separate row and must survive a regeneration untouched.
   const existing = await prisma.participantDocument.findFirst({
-    where: { participantId: opts.participantId, eventListItemId: opts.eventListItemId },
+    where: { participantId: opts.participantId, eventListItemId: opts.eventListItemId, receivedVia: "generated" },
   });
   const data = {
     gcsPath,
@@ -45,10 +47,10 @@ export async function saveGeneratedParticipantDocument(opts: {
   };
   if (existing) {
     await prisma.participantDocument.update({ where: { id: existing.id }, data });
-    return existing.id;
+    return { id: existing.id, previousDriveFileId: existing.driveFileId };
   }
   const created = await prisma.participantDocument.create({
     data: { participantId: opts.participantId, eventListItemId: opts.eventListItemId, ...data },
   });
-  return created.id;
+  return { id: created.id, previousDriveFileId: null };
 }

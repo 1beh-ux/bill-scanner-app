@@ -20,18 +20,19 @@ export async function POST(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const existing = await prisma.participantDocument.findFirst({
+  const rows = await prisma.participantDocument.findMany({
     where: { participantId, eventListItemId: docTypeId },
   });
-  // A `generated` row (we sent them a blank form, see
-  // participant-document-store.ts) isn't actually "received" yet -- if
-  // staff are marking this received (e.g. a parent handed in a printout
-  // personally), upgrade it in place instead of the usual no-op, or the
-  // toggle would silently do nothing.
-  if (existing && existing.receivedVia !== "generated") return NextResponse.json(existing);
-  if (existing) {
+  // A guardian-returned row wins. Otherwise a `generated` row (we sent them a
+  // blank form, see participant-document-store.ts) isn't "received" yet -- if
+  // staff are marking this received (e.g. a printout handed in personally),
+  // upgrade it in place, or the toggle would silently do nothing.
+  const received = rows.find((r) => r.receivedVia !== "generated");
+  if (received) return NextResponse.json(received);
+  const generated = rows[0];
+  if (generated) {
     const updated = await prisma.participantDocument.update({
-      where: { id: existing.id },
+      where: { id: generated.id },
       data: { receivedVia: "manual", receivedByUserId: user.id, receivedAt: new Date() },
     });
     return NextResponse.json(updated);

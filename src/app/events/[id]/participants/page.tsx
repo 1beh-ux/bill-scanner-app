@@ -113,7 +113,7 @@ export default function EventParticipantsPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
-  const [composeModal, setComposeModal] = useState<{ mode: "acceptance" | "freeform"; participantIds: string[] } | null>(
+  const [composeModal, setComposeModal] = useState<{ mode: "acceptance" | "freeform"; participantIds: string[]; alreadyAccepted?: boolean } | null>(
     null
   );
   const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -468,7 +468,13 @@ export default function EventParticipantsPage({
             {t("participantsPage.selectedCount", { count: String(selected.size) })}
           </span>
           <button
-            onClick={() => setComposeModal({ mode: "acceptance", participantIds: Array.from(selected) })}
+            onClick={() =>
+              setComposeModal({
+                mode: "acceptance",
+                participantIds: Array.from(selected),
+                alreadyAccepted: participants.filter((p) => selected.has(p.id)).every((p) => p.registrationStatus === "accepted"),
+              })
+            }
             className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
           >
             {t("participantsPage.bulkAcceptButton")}
@@ -536,9 +542,13 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
                     <td className="p-2 text-[13px]">
                       {p.registrationStatus === "accepted" ? (
-                        <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">
+                        <button
+                          onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id], alreadyAccepted: true })}
+                          title={t("participantsPage.regenerateHint")}
+                          className="rounded-full bg-pine/15 px-2 py-0.5 text-pine hover:bg-pine/25"
+                        >
                           {t("participantsPage.statusAccepted")}
-                        </span>
+                        </button>
                       ) : (
                         <button
                           onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id] })}
@@ -725,14 +735,17 @@ export default function EventParticipantsPage({
           eventId={id}
           participantIds={composeModal.participantIds}
           mode={composeModal.mode}
+          alreadyAccepted={composeModal.alreadyAccepted}
           onClose={() => setComposeModal(null)}
-          onSent={({ sentCount, failedCount, documentFailures }) => {
+          onSent={({ sentCount, failedCount, documentsGenerated, documentFailures, emailSkipped }) => {
             setComposeModal(null);
             setSelected(new Set());
             setNotice({
               warn: failedCount > 0 || documentFailures.length > 0,
               text:
-                t("composeEmailModal.sendDone", { sent: String(sentCount), failed: String(failedCount) }) +
+                (emailSkipped
+                  ? t("composeEmailModal.docsRegenerated", { count: String(documentsGenerated) })
+                  : t("composeEmailModal.sendDone", { sent: String(sentCount), failed: String(failedCount) })) +
                 (documentFailures.length > 0
                   ? " " + t("composeEmailModal.docsFailed", { docs: documentFailures.join(", ") })
                   : ""),

@@ -24,9 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const autoAttachDocumentTypeIds: string[] | undefined = form.get("autoAttachDocumentTypeIds")
     ? JSON.parse(String(form.get("autoAttachDocumentTypeIds")))
     : undefined;
+  const sendEmail = form.get("sendEmail") !== "false";
   const file = form.get("attachment");
 
-  if (participantIds.length === 0 || !subject || !body) {
+  if (participantIds.length === 0 || (sendEmail && (!subject || !body))) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
@@ -42,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     };
   }
 
-  const results = await sendBulkParticipantEmail({
+  const { results, documentsGenerated, documentFailures } = await sendBulkParticipantEmail({
     eventId,
     participantIds,
     subject,
@@ -52,13 +53,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     markAccepted,
     attachment,
     autoAttachDocumentTypeIds,
+    sendEmail,
   });
   const sentCount = results.filter((r) => r.status === "sent").length;
   const failedCount = results.filter((r) => r.status === "failed").length;
 
-  // Distinct names of documents that couldn't be generated (email went out
-  // without them) -- surfaced so that isn't silent.
-  const documentFailures = [...new Set(results.flatMap((r) => r.documentFailures ?? []))];
-
-  return NextResponse.json({ sentCount, failedCount, documentFailures, results });
+  return NextResponse.json({ sentCount, failedCount, documentsGenerated, documentFailures, results });
 }

@@ -60,6 +60,7 @@ export default function ParticipantDetailPage({
   params: Promise<{ id: string; participantId: string }>;
 }) {
   const { id: eventId, participantId } = use(params);
+  const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
   const { t } = useTranslations();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -284,6 +285,22 @@ export default function ParticipantDetailPage({
     load();
   }
 
+  async function openDriveFolder() {
+    // Opened up front, then pointed at the folder: a window opened only after
+    // the request would be blocked as an unrequested popup.
+    const win = window.open("", "_blank");
+    setDriveFolderError(null);
+    const res = await fetch(`/api/participants/${participantId}/drive-folder`, { method: "POST" });
+    if (!res.ok) {
+      win?.close();
+      const data = await res.json().catch(() => ({}));
+      setDriveFolderError(t(data.error === "no_participants_folder" ? "participantDetail.driveFolderNotSet" : "participantDetail.driveFolderFailed"));
+      return;
+    }
+    const { url } = await res.json();
+    if (win) win.location.href = url;
+  }
+
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!participant) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
@@ -308,6 +325,10 @@ export default function ParticipantDetailPage({
               .filter(Boolean)
               .join(" · ")}
           </p>
+          <button onClick={openDriveFolder} className="mt-1 text-[13px] text-ember hover:underline">
+            {t("participantDetail.openDriveFolder")}
+          </button>
+          {driveFolderError && <p className="mt-1 text-[12px] text-red-600">{driveFolderError}</p>}
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setSendModalOpen(true)} className="text-[13px] text-ember hover:underline">

@@ -226,6 +226,18 @@ export async function uploadFileToFolder(
   }, `upload file ${name}`);
 }
 
+/** Replaces a file's content in place (same Drive file id, so links keep working). */
+export async function updateFileContent(fileId: string, buffer: Buffer, mimeType: string): Promise<void> {
+  await withRetry(async () => {
+    const drive = await getDriveClient();
+    await drive.files.update({
+      fileId,
+      media: { mimeType, body: Readable.from(buffer) },
+      supportsAllDrives: true,
+    });
+  }, `update file ${fileId}`);
+}
+
 export async function getOrCreateSubfolder(parentFolderId: string, name: string): Promise<string> {
   const existing = await findFileInFolder(parentFolderId, name, FOLDER_MIME_TYPE);
   if (existing) return existing.id;

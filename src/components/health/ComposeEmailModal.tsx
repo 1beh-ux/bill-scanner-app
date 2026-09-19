@@ -20,14 +20,19 @@ export default function ComposeEmailModal({
   eventId,
   participantIds,
   mode,
+  alreadyAccepted = false,
   onClose,
   onSent,
 }: {
   eventId: string;
   participantIds: string[];
   mode: Mode;
+  // Everyone selected is already accepted: this is a regenerate, so the email
+  // starts out unticked (change something in the database, recreate the
+  // documents, don't mail the family again).
+  alreadyAccepted?: boolean;
   onClose: () => void;
-  onSent: (result: { sentCount: number; failedCount: number; documentFailures: string[] }) => void;
+  onSent: (result: { sentCount: number; failedCount: number; documentsGenerated: number; documentFailures: string[]; emailSkipped: boolean }) => void;
 }) {
   const { t } = useTranslations();
   const purposeKey = mode === "acceptance" ? REGISTRATION_ACCEPTANCE_PURPOSE_KEY : PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY;
@@ -39,6 +44,9 @@ export default function ComposeEmailModal({
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sentCount: number; failedCount: number } | null>(null);
   const [sendError, setSendError] = useState(false);
+  const [sendEmail, setSendEmail] = useState(!(mode === "acceptance" && alreadyAccepted));
+  // Freeform mode has no documents to make, so it always sends.
+  const emailOn = mode === "freeform" || sendEmail;
   const [autoAttachDocTypes, setAutoAttachDocTypes] = useState<AutoAttachDocType[]>([]);
   const [selectedDocTypeIds, setSelectedDocTypeIds] = useState<Set<string>>(new Set());
 
@@ -64,7 +72,7 @@ export default function ComposeEmailModal({
   }, [eventId, mode, purposeKey]);
 
   async function handleSend() {
-    if (!subject.trim() || !body.trim()) return;
+    if (emailOn && (!subject.trim() || !body.trim())) return;
     setSending(true);
     setResult(null);
     setSendError(false);
@@ -74,6 +82,7 @@ export default function ComposeEmailModal({
     form.set("body", body);
     form.set("purposeKey", purposeKey);
     form.set("markAccepted", String(mode === "acceptance"));
+    form.set("sendEmail", String(emailOn));
     if (mode === "acceptance") {
       form.set("autoAttachDocumentTypeIds", JSON.stringify(Array.from(selectedDocTypeIds)));
     }
@@ -89,7 +98,13 @@ export default function ComposeEmailModal({
       setResult({ sentCount: data.sentCount, failedCount: data.failedCount });
       // The parent shows the outcome and closes this window -- it must not
       // rely on this component staying mounted (the parent reloads its list).
-      onSent({ sentCount: data.sentCount, failedCount: data.failedCount, documentFailures: data.documentFailures ?? [] });
+      onSent({
+        sentCount: data.sentCount,
+        failedCount: data.failedCount,
+        documentsGenerated: data.documentsGenerated ?? 0,
+        documentFailures: data.documentFailures ?? [],
+        emailSkipped: !emailOn,
+      });
     } catch {
       setSendError(true);
     } finally {
@@ -111,7 +126,9 @@ export default function ComposeEmailModal({
       <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-y-auto rounded-lg bg-paper p-5">
         <div className="mb-1 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-ink">
-            {mode === "acceptance" ? t("composeEmailModal.titleAcceptance") : t("composeEmailModal.titleFreeform")}
+            {mode === "acceptance"
+              ? t(alreadyAccepted ? "composeEmailModal.titleRegenerate" : "composeEmailModal.titleAcceptance")
+              : t("composeEmailModal.titleFreeform")}
           </h2>
           <button onClick={onClose} className="text-[13px] text-ink-secondary hover:underline">
             {t("common.close")}
@@ -134,20 +151,30 @@ export default function ComposeEmailModal({
           </div>
         ) : (
           <div className="flex flex-col gap-3">
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              placeholder={t("composeEmailModal.subjectPlaceholder")}
-              className={inputClass}
-            />
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder={t("composeEmailModal.bodyPlaceholder")}
-              className={inputClass}
-              rows={8}
-            />
+            {emailOn && (
+              <>
+                <input
+                  type="text"
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder={t("composeEmailModal.subjectPlaceholder")}
+                  className={inputClass}
+                />
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder={t("composeEmailModal.bodyPlaceholder")}
+                  className={inputClass}
+                  rows={8}
+                />
+              </>
+            )}
+            {mode === "acceptance" && (
+              <label className="flex items-center gap-2 text-[13px] text-ink">
+                <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+                {t("composeEmailModal.sendEmailLabel")}
+              </label>
+            )}
             {mode === "acceptance" && autoAttachDocTypes.length > 0 && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-[13px] text-ink-secondary">{t("composeEmailModal.autoAttachDocumentsLabel")}</p>
@@ -163,6 +190,7 @@ export default function ComposeEmailModal({
                 ))}
               </div>
             )}
+            {emailOn && (
             <label className="text-[13px] text-ink-secondary">
               {t("composeEmailModal.attachmentLabel")}
               <input
@@ -171,14 +199,21 @@ export default function ComposeEmailModal({
                 className="mt-1 block w-full text-[13px]"
               />
             </label>
-            <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>
+            )}
+            {emailOn && <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>}
 
             {sendError && <p className="text-[13px] text-red-600">{t("composeEmailModal.sendFailed")}</p>}
             <div className="mt-2 flex justify-end">
-              <button onClick={handleSend} disabled={sending || !subject.trim() || !body.trim()} className={btnPrimary}>
+              <button
+                onClick={handleSend}
+                disabled={sending || (emailOn && (!subject.trim() || !body.trim())) || (!emailOn && selectedDocTypeIds.size === 0)}
+                className={btnPrimary}
+              >
                 {sending
                   ? t("common.loading")
-                  : t("composeEmailModal.sendButton", { count: String(participantIds.length) })}
+                  : emailOn
+                    ? t("composeEmailModal.sendButton", { count: String(participantIds.length) })
+                    : t("composeEmailModal.generateButton", { count: String(participantIds.length) })}
               </button>
             </div>
           </div>
