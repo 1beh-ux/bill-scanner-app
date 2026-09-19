@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { google } from "googleapis";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess, requireModuleAccess } from "@/lib/module-access";
 
 const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
 const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
@@ -12,6 +12,12 @@ const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
 // scope needs to reconnect; consent is scope-specific and doesn't
 // retroactively expand. MailSenderAccount.scope records what was actually
 // granted so the UI can detect and prompt for this (see SenderEmailField).
+const DRIVE_SCOPES = [
+  "https://www.googleapis.com/auth/drive",
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/documents",
+  "https://www.googleapis.com/auth/userinfo.email",
+];
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/userinfo.email",
@@ -35,11 +41,16 @@ export async function GET(req: NextRequest) {
   if (!eventId) {
     return NextResponse.json({ error: "event_id_required" }, { status: 400 });
   }
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
-  if (denied) return denied;
-
   const purposeParam = req.nextUrl.searchParams.get("purpose");
-  const purpose = purposeParam === "mail" ? "mail" : "health";
+  // "drive" connects the app-wide Drive account (see DriveAccount in the
+  // schema) instead of a mailbox -- reuses this route and callback so no
+  // new redirect URI needs registering with Google.
+  const purpose = purposeParam === "drive" ? "drive" : purposeParam === "mail" ? "mail" : "health";
+  const denied =
+    purpose === "drive"
+      ? await requireModuleAccess(user, eventId, "bills")
+      : await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  if (denied) return denied;
 
   const nonce = crypto.randomBytes(16).toString("hex");
   // req.nextUrl.origin can't be trusted here -- behind Cloud Run's proxy it
@@ -53,7 +64,7 @@ export async function GET(req: NextRequest) {
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     prompt: "consent",
-    scope: SCOPES,
+    scope: purpose === "drive" ? DRIVE_SCOPES : SCOPES,
     state: nonce,
   });
 

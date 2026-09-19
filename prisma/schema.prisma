@@ -142,6 +142,7 @@ model User {
   emailSignature  String?   @map("email_signature")
 
   moduleAccess       UserEventModuleAccess[]
+  driveAccountsConnected DriveAccount[] @relation("DriveAccountConnectedBy")
   billsCreated       Bill[]           @relation("BillCreatedBy")
   billsApproved      Bill[]           @relation("BillApprovedBy")
   billsPaid          Bill[]           @relation("BillPaidBy")
@@ -713,6 +714,24 @@ model MailSenderAccount {
   connectedByUser User @relation("MailAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
   @@map("mail_sender_accounts")
+}
+
+// The Google account whose own Drive quota/permissions the app uses for all
+// Drive/Sheets/Docs calls (src/lib/drive.ts) -- a service account has no
+// storage quota, so it can't create files in a normal My Drive folder. App-
+// wide, latest connection wins; without one drive.ts falls back to the
+// service account (fine inside a Shared Drive).
+model DriveAccount {
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  refreshTokenEncrypted String   @map("refresh_token_encrypted")
+  scope                 String?
+  connectedByUserId     String   @map("connected_by_user_id")
+  connectedAt           DateTime @default(now()) @map("connected_at")
+
+  connectedByUser User @relation("DriveAccountConnectedBy", fields: [connectedByUserId], references: [id])
+
+  @@map("drive_accounts")
 }
 
 model ParentEmailLog {

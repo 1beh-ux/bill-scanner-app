@@ -75,6 +75,7 @@ export default function EventDetailPage({
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const mailConnect = searchParams.get("mailConnect");
+  const driveConnect = searchParams.get("driveConnect");
 
   const [tab, setTab] = useState<Tab>(requestedTab === "health" ? "health" : "categories");
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
@@ -89,6 +90,7 @@ export default function EventDetailPage({
   const [syncingCategories, setSyncingCategories] = useState(false);
 
   const [driveAccountEmail, setDriveAccountEmail] = useState("");
+  const [driveConnectedEmail, setDriveConnectedEmail] = useState<string | null>(null);
   const [ingestFolderId, setIngestFolderId] = useState("");
   const [exportFolderId, setExportFolderId] = useState("");
   const [driveError, setDriveError] = useState<string | null>(null);
@@ -140,7 +142,10 @@ export default function EventDetailPage({
   useEffect(() => {
     fetch("/api/config/drive-account")
       .then((r) => r.json())
-      .then((d) => setDriveAccountEmail(d.email || ""))
+      .then((d) => {
+        setDriveAccountEmail(d.email || "");
+        setDriveConnectedEmail(d.connectedEmail ?? null);
+      })
       .catch(() => {});
   }, []);
 
@@ -653,6 +658,24 @@ export default function EventDetailPage({
       {tab === "drive" && (
         <>
           <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("driveSettings.title")}</h2>
+
+          <div className="mb-6 rounded-lg border border-mist bg-paper-2 p-3">
+            <p className="mb-1 text-[14px] font-medium text-ink">{t("driveSettings.connectTitle")}</p>
+            <p className="mb-2 text-[13px] text-ink-secondary">{t("driveSettings.connectHint")}</p>
+            {driveConnect === "connected" && <p className="mb-2 text-[13px] text-pine">{t("driveSettings.connectDone")}</p>}
+            {driveConnect === "error" && <p className="mb-2 text-[13px] text-red-600">{t("driveSettings.connectError")}</p>}
+            <p className="mb-2 text-[13px] text-ink">
+              {driveConnectedEmail
+                ? t("driveSettings.connectedAs", { email: driveConnectedEmail })
+                : t("driveSettings.notConnected")}
+            </p>
+            <a
+              href={`/api/mail-oauth/authorize?eventId=${id}&purpose=drive`}
+              className="inline-block rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
+            >
+              {driveConnectedEmail ? t("driveSettings.reconnect") : t("driveSettings.connect")}
+            </a>
+          </div>
 
           <p className="mb-1 text-[14px] text-ink-secondary">{t("driveSettings.instructionsIntro")}</p>
           <p className="mb-2 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">

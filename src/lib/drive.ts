@@ -1,6 +1,8 @@
 import { GoogleAuth, Impersonated } from "google-auth-library";
 import { google } from "googleapis";
 import { Readable } from "stream";
+import { prisma } from "@/lib/prisma";
+import { decryptMailToken } from "@/lib/mail-token-crypto";
 
 const DRIVE_SA_EMAIL = process.env.DRIVE_SERVICE_ACCOUNT_EMAIL;
 
@@ -71,23 +73,49 @@ async function getImpersonatedClient(): Promise<Impersonated> {
   return cachedClient;
 }
 
+// A connected DriveAccount (OAuth, see /api/mail-oauth purpose=drive) wins
+// over the service account: files it creates count against that person's
+// quota, which a service account (zero quota) can't do outside a Shared
+// Drive. Cached briefly so the per-call lookup isn't a query every time.
+let cachedOAuth: { at: number; client: InstanceType<typeof google.auth.OAuth2> | null } | null = null;
+
+async function getOAuthClient() {
+  if (cachedOAuth && Date.now() - cachedOAuth.at < 60_000) return cachedOAuth.client;
+  const account = await prisma.driveAccount.findFirst({ orderBy: { connectedAt: "desc" } });
+  let client: InstanceType<typeof google.auth.OAuth2> | null = null;
+  if (account) {
+    client = new google.auth.OAuth2(process.env.MAIL_OAUTH_CLIENT_ID, process.env.MAIL_OAUTH_CLIENT_SECRET);
+    client.setCredentials({ refresh_token: decryptMailToken(account.refreshTokenEncrypted) });
+  }
+  cachedOAuth = { at: Date.now(), client };
+  return client;
+}
+
+async function getAuth() {
+  // googleapis bundles its own google-auth-library copy; ours (for the
+  // Impersonated class) is structurally the same but typed as distinct --
+  // safe, deliberate cast, no runtime difference.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (await getOAuthClient()) ?? ((await getImpersonatedClient()) as any);
+}
+
 export async function getDriveClient() {
-  const auth = await getImpersonatedClient();
+  const auth = await getAuth();
   // googleapis bundles its own internal copy of google-auth-library. Ours
   // (installed directly, for the Impersonated class) is structurally the
   // same but TypeScript treats them as distinct types because of a private
   // field. Safe, deliberate cast — no behavior difference at runtime.
-  return google.drive({ version: "v3", auth: auth as any });
+  return google.drive({ version: "v3", auth });
 }
 
 export async function getSheetsClient() {
-  const auth = await getImpersonatedClient();
-  return google.sheets({ version: "v4", auth: auth as any });
+  const auth = await getAuth();
+  return google.sheets({ version: "v4", auth });
 }
 
 export async function getDocsClient() {
-  const auth = await getImpersonatedClient();
-  return google.docs({ version: "v1", auth: auth as any });
+  const auth = await getAuth();
+  return google.docs({ version: "v1", auth });
 }
 
 export function getDriveServiceAccountEmail(): string {

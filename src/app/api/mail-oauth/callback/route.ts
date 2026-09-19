@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess, requireModuleAccess } from "@/lib/module-access";
 import { encryptMailToken } from "@/lib/mail-token-crypto";
 
 const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
@@ -11,11 +11,13 @@ const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
 function redirectToEvent(
   origin: string,
   eventId: string,
-  purpose: "health" | "mail",
+  purpose: "health" | "mail" | "drive",
   result: "connected" | "error"
 ): NextResponse {
   const target =
-    purpose === "mail"
+    purpose === "drive"
+      ? `${origin}/events/${eventId}?tab=drive&driveConnect=${result}`
+      : purpose === "mail"
       ? `${origin}/events/${eventId}/mail?mailConnect=${result}`
       : `${origin}/events/${eventId}?tab=health&mailConnect=${result}`;
   const response = NextResponse.redirect(target);
@@ -43,12 +45,16 @@ export async function GET(req: NextRequest) {
   if (!cookieNonce || !eventId || !redirectUri || cookieNonce !== state) {
     return NextResponse.json({ error: "state_mismatch" }, { status: 400 });
   }
-  const purpose: "health" | "mail" = purposeRaw === "mail" ? "mail" : "health";
+  const purpose: "health" | "mail" | "drive" =
+    purposeRaw === "drive" ? "drive" : purposeRaw === "mail" ? "mail" : "health";
   // Same origin the authorize step actually used (see the cookie comment
   // there) -- req.nextUrl.origin can't be trusted to match it here.
   const origin = new URL(redirectUri).origin;
 
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied =
+    purpose === "drive"
+      ? await requireModuleAccess(user, eventId, "bills")
+      : await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const oauth2Client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET, redirectUri);
@@ -67,6 +73,17 @@ export async function GET(req: NextRequest) {
     const { data } = await oauth2.userinfo.get();
     const email = data.email;
     if (!email) throw new Error("no_email_in_userinfo");
+
+    if (purpose === "drive") {
+      const data = {
+        refreshTokenEncrypted: encryptMailToken(tokens.refresh_token),
+        connectedByUserId: user.id,
+        scope: tokens.scope ?? null,
+        connectedAt: new Date(),
+      };
+      await prisma.driveAccount.upsert({ where: { email }, update: data, create: { email, ...data } });
+      return redirectToEvent(origin, eventId, purpose, "connected");
+    }
 
     await prisma.mailSenderAccount.upsert({
       where: { email },
