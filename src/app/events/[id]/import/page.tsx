@@ -122,6 +122,7 @@ export default function EventImportPage({
         ),
       ],
       splits: (data.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
+      blankPages: (data.blankPagesSkipped ?? []).map((b: { originalFilename: string; pageNumbers: number[] }) => ({ name: b.originalFilename, pageNumbers: b.pageNumbers })),
     });
 
     if (uploadInputRef.current) uploadInputRef.current.value = "";
@@ -191,6 +192,7 @@ export default function EventImportPage({
         ),
       ],
       splits: (data.ingest.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
+      blankPages: (data.ingest.blankPagesSkipped ?? []).map((b: { originalFilename: string; pageNumbers: number[] }) => ({ name: b.originalFilename, pageNumbers: b.pageNumbers })),
       payers: {
         matched: (data.authorsResolved ?? []).filter((a: { created: boolean }) => !a.created).map((a: { authorName: string }) => a.authorName),
         created: (data.authorsResolved ?? []).filter((a: { created: boolean }) => a.created).map((a: { authorName: string }) => a.authorName),

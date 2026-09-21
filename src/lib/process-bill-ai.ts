@@ -1,3 +1,4 @@
+import { humanAiFailureNote } from "@/lib/ai-failure-note";
 import { Prisma } from "@/generated/prisma";
 import type { Bill, Currency } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
@@ -76,6 +77,13 @@ export async function processBillWithAi(billId: string): Promise<ProcessBillAiRe
         ? "to_review"
         : "failed";
 
+  // A failed extraction must not put the AI's raw (English) text into the
+  // user-visible note: log it here, show a translated human message instead.
+  if (newStatus === "failed" && data.notes) {
+    console.log(`[process-bill-ai] extraction failed for bill ${billId}: ${data.notes}`);
+  }
+  const noteText = newStatus === "failed" ? humanAiFailureNote(data.notes) : data.notes;
+
   const currency = (
     data.currency && VALID_CURRENCIES.includes(data.currency) ? data.currency : "CZK"
   ) as Currency;
@@ -112,7 +120,7 @@ export async function processBillWithAi(billId: string): Promise<ProcessBillAiRe
         amountCzk,
         exchangeRateUsed,
         exchangeRateDate,
-        notes: data.notes,
+        notes: noteText,
         aiConfidence: new Prisma.Decimal(data.confidence),
         aiRawResponse: aiResult as unknown as Prisma.InputJsonValue,
         status: newStatus,

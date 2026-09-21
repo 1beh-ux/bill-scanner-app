@@ -9,7 +9,13 @@ const nextConfig: NextConfig = {
   experimental: {
     proxyClientMaxBodySize: "200mb",
   },
-  serverExternalPackages: ["@google-cloud/tasks", "google-gax", "@grpc/grpc-js"],
+  // pdfjs-dist is loaded at runtime by src/lib/pdf-blank.ts (blank-page detection); it must not be bundled.
+  // pdfjs loads its worker with a dynamic import that file tracing cannot see, so the standalone
+  // build would ship without it and blank-page detection would silently fall back to "keep all".
+  outputFileTracingIncludes: {
+    "/api/**": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
+  },
+  serverExternalPackages: ["@google-cloud/tasks", "google-gax", "@grpc/grpc-js", "pdfjs-dist"],
 };
 
 export default nextConfig;

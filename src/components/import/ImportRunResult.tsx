@@ -13,6 +13,8 @@ export type RunResult = {
   rows: RunRow[];
   /** Multi-page PDFs that were split into one bill per page. */
   splits: { name: string; pageCount: number }[];
+  /** Blank pages that were left out when splitting (no bill created for them). */
+  blankPages?: { name: string; pageNumbers: number[] }[];
   /** Payers matched/created from Drive subfolder names (Drive import only). */
   payers?: { matched: string[]; created: string[] };
 };
@@ -61,6 +63,15 @@ export default function ImportRunResult({ result }: { result: RunResult }) {
             <li key={s.name}>{t("importPage.result.split", { name: s.name, count: String(s.pageCount) })}</li>
           ))}
         </ul>
+      )}
+
+      {result.blankPages && result.blankPages.length > 0 && (
+        <p className="mb-2 text-[13px] text-ink-secondary">
+          {t("importPage.result.blankSkipped", {
+            count: String(result.blankPages.reduce((n, b) => n + b.pageNumbers.length, 0)),
+            details: result.blankPages.map((b) => t("importPage.result.blankDetail", { pages: b.pageNumbers.join(", "), name: b.name })).join("; "),
+          })}
+        </p>
       )}
 
       {problems.length > 0 && (

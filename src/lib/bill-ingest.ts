@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import type { Bill, IngestChannel } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
+import { analyseBlankPages, planPdfPages } from "@/lib/pdf-blank";
 
 export interface RawFileInput {
   filename: string;
@@ -44,11 +45,18 @@ export interface FailureInfo {
   error: string;
 }
 
+export interface BlankPagesInfo {
+  originalFilename: string;
+  /** 1-based page numbers in the original file that were skipped as blank. */
+  pageNumbers: number[];
+}
+
 export interface IngestResult {
   created: Bill[];
   duplicates: DuplicateInfo[];
   splitInfo: SplitInfo[];
   failures: FailureInfo[];
+  blankPagesSkipped: BlankPagesInfo[];
 }
 
 const UPLOAD_CONCURRENCY = 5;
@@ -84,6 +92,7 @@ export async function ingestBillFiles(
 ): Promise<IngestResult> {
   const splitInfo: SplitInfo[] = [];
   const failures: FailureInfo[] = [];
+  const blankPagesSkipped: BlankPagesInfo[] = [];
   const items: WorkItem[] = [];
 
   for (const file of rawFiles) {
@@ -128,7 +137,15 @@ export async function ingestBillFiles(
     const baseName = file.filename.replace(/\.pdf$/i, "");
     const sourceHash = sha256(buffer);
 
-    for (let i = 0; i < pageCount; i++) {
+    // Blank pages (see pdf-blank.ts: no text AND no content image/drawing) don't
+    // become bills. Numbering keeps the ORIGINAL page numbers, so a gap is visible.
+    const verdicts = await analyseBlankPages(buffer);
+    const plan = planPdfPages(verdicts.map((v) => v.blank), pageCount);
+    if (plan.skipped.length > 0) {
+      blankPagesSkipped.push({ originalFilename: file.filename, pageNumbers: plan.skipped.map((i) => i + 1) });
+    }
+
+    for (const i of plan.keep) {
       const subDoc = await PDFDocument.create();
       const [copiedPage] = await subDoc.copyPages(pdfDoc, [i]);
       subDoc.addPage(copiedPage);
@@ -223,5 +240,5 @@ export async function ingestBillFiles(
     }
   });
 
-  return { created, duplicates, splitInfo, failures };
+  return { created, duplicates, splitInfo, failures, blankPagesSkipped };
 }

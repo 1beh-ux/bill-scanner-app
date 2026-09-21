@@ -88,6 +88,15 @@ wins, else Impersonated service account). Exported helpers and their callers (al
   `drive-import` now also returns `skippedAlreadyImportedFiles`, `identityEmail`, `serviceAccountEmail`.
 
 ## Part status (7-15)
+- Part 7 (blank pages): changed. `src/lib/pdf-blank.ts` (pdfjs-dist, already a dependency; no new one): blank = no text AND no vector drawing AND
+  (no image OR every image flat). Flat = pixels pooled to ~150 px wide by their WORST pixel, 2 % border ignored, >= 99.9 % background blocks
+  (deliberately stricter than the brief's 99.5 %: pooled blocks make a single line of text count; recorded here as a deviation).
+  Blank pages are skipped and reported (`blankPagesSkipped`, shown on the upload and Drive results); all-blank file keeps page 1; any analysis
+  error keeps every page. Page numbering keeps the ORIGINAL numbers. Failed-bill notes: raw English AI text is logged, the note is a fixed
+  Czech message (`ai-failure-note.ts`); `scripts/fix-failed-bill-notes.ts` (dry run/--apply) fixes old rows.
+  Found on the way: the standalone build did not ship `pdf.worker.mjs` (detection would silently do nothing) -> `outputFileTracingIncludes`
+  in next.config.ts; verified by running pdfjs from `.next/standalone`. Test: `scripts/test-blank-pages.ts` (16 checks with generated fixtures:
+  text page, scan without text layer, blank page, flat noisy scan, faint-border scan, vector-only page, small-text scan).
 - Part 8 (ConfirmDialog): changed. `src/components/ConfirmDialog.tsx` (`ConfirmProvider`, `useConfirm`, `useAlert`), mounted in
   `providers.tsx`. All 28 native pop-ups (`window.confirm`/`alert`) replaced; `grep` for `window.(confirm|alert|prompt)` is empty.
   New confirms: bulk approve (count + "lze vrátit Znovu otevřít"), bulk mark paid/unpaid, bill-detail paid toggle.

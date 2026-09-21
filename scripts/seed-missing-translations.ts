@@ -173,6 +173,10 @@ export const ROWS: Row[] = [
   { key: "adminOverview.valid", cs: "platné", en: "valid" },
   { key: "adminOverview.expired", cs: "vypršelo – nutné připojit znovu", en: "expired – reconnect needed" },
   { key: "adminOverview.inactiveUser", cs: "(neaktivní)", en: "(inactive)" },
+
+  // -- Part 7: blank pages when splitting PDFs ------------------------------------
+  { key: "importPage.result.blankSkipped", cs: "Přeskočeno prázdných stránek: {count} ({details})", en: "Blank pages skipped: {count} ({details})" },
+  { key: "importPage.result.blankDetail", cs: "strana {pages} v souboru {name}", en: "page {pages} of the file {name}" },
 ];
 
 async function main() {
