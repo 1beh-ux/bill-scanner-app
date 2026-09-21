@@ -11,7 +11,22 @@ type Author = {
   bankCode: string | null;
   active: boolean;
   mergedInto?: { canonicalName: string } | null;
+  eventAccess?: { event: { id: string; name: string } }[];
 };
+
+type AuditRow = {
+  id: string;
+  at: string;
+  byName: string;
+  eventName: string | null;
+  source: string;
+  old: { account: string | null; code: string | null };
+  new: { account: string | null; code: string | null };
+};
+
+function bankText(b: { account: string | null; code: string | null }): string {
+  return b.account ? `${b.account}${b.code ? "/" + b.code : ""}` : "—";
+}
 
 type EventItem = { id: string; name: string };
 
@@ -22,8 +37,10 @@ const inputClassSm =
 const linkBtn = "text-[13px] text-ember hover:underline";
 
 export default function AuthorsPage() {
-  const { t } = useTranslations();
+  const { t, role, roleLoaded } = useTranslations();
   const confirm = useConfirm();
+  const [historyId, setHistoryId] = useState<string | null>(null);
+  const [history, setHistory] = useState<AuditRow[]>([]);
   const [authors, setAuthors] = useState<Author[]>([]);
   const [allEvents, setAllEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +59,22 @@ export default function AuthorsPage() {
   const [mergingAuthorId, setMergingAuthorId] = useState<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergeSaving, setMergeSaving] = useState(false);
+
+  // API answers with stable codes (payers.error.*); older messages fall back to text.
+  function errorText(code: unknown, fallbackKey: string): string {
+    return typeof code === "string" && code.length > 0 && /^[a-z_]+$/.test(code) ? t(`payers.error.${code}`) : t(fallbackKey);
+  }
+
+  async function toggleHistory(authorId: string) {
+    if (historyId === authorId) {
+      setHistoryId(null);
+      return;
+    }
+    setHistoryId(authorId);
+    setHistory([]);
+    const res = await fetch(`/api/authors/${authorId}/bank-audit`);
+    if (res.ok) setHistory(await res.json());
+  }
 
   async function load() {
     setLoading(true);
@@ -74,8 +107,8 @@ export default function AuthorsPage() {
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error || t("authors.errorAddFailed"));
+      const data = await res.json().catch(() => ({}));
+      setError(errorText(data.error, "authors.errorAddFailed"));
       return;
     }
 
@@ -89,8 +122,8 @@ export default function AuthorsPage() {
     if (!(await confirm({ message: t("authors.confirmDelete", { name: authorName }), danger: true }))) return;
     const res = await fetch(`/api/authors/${id}`, { method: "DELETE" });
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error || t("authors.errorDeleteFailed"));
+      const data = await res.json().catch(() => ({}));
+      setError(typeof data.error === "string" && data.error.length > 0 ? data.error : t("authors.errorDeleteFailed"));
       return;
     }
     load();
@@ -164,8 +197,8 @@ export default function AuthorsPage() {
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error || t("authors.errorEditFailed"));
+      const data = await res.json().catch(() => ({}));
+      setError(errorText(data.error, "authors.errorEditFailed"));
       return;
     }
 
@@ -220,9 +253,14 @@ export default function AuthorsPage() {
     load();
   }
 
+  if (roleLoaded && role !== "admin") {
+    return <div className="p-8 text-[14px] text-ink-secondary">{t("common.adminOnly")}</div>;
+  }
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("authors.title")}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("authors.title")}</h1>
+      <p className="mb-4 text-[13px] text-ink-secondary">{t("authors.globalIntro")}</p>
 
       <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input
@@ -267,6 +305,7 @@ export default function AuthorsPage() {
               <tr className="border-b border-mist text-left">
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("authors.colAccount")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("authors.colEvents")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
                 <th className="p-2"></th>
               </tr>
@@ -318,7 +357,7 @@ export default function AuthorsPage() {
                     </tr>
                   ) : mergingAuthorId === a.id ? (
                     <tr className="border-b border-mist/60 bg-paper-2">
-                      <td colSpan={4} className="p-2">
+                      <td colSpan={5} className="p-2">
                         <div className="mb-1.5 text-[13px] text-ink">
                           {t("authors.mergeButton")}: <strong>{a.canonicalName}</strong>
                         </div>
@@ -365,6 +404,9 @@ export default function AuthorsPage() {
                           ? `${a.bankAccountNumber}${a.bankCode ? "/" + a.bankCode : ""}`
                           : "—"}
                       </td>
+                      <td className="p-2 text-[13px] text-ink-secondary">
+                        {a.eventAccess && a.eventAccess.length > 0 ? a.eventAccess.map((ea) => ea.event.name).join(", ") : "—"}
+                      </td>
                       <td className="p-2">
                         <button
                           onClick={() => toggleActive(a)}
@@ -388,6 +430,9 @@ export default function AuthorsPage() {
                         <button onClick={() => toggleExpand(a.id)} className={linkBtn + " mr-3"}>
                           {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
                         </button>
+                        <button onClick={() => toggleHistory(a.id)} className={linkBtn + " mr-3"}>
+                          {t("authors.bankHistory")}
+                        </button>
                         <button
                           onClick={() => handleDelete(a.id, a.canonicalName)}
                           className="text-[13px] text-red-600 hover:underline"
@@ -397,9 +442,31 @@ export default function AuthorsPage() {
                       </td>
                     </tr>
                   )}
+                  {historyId === a.id && (
+                    <tr>
+                      <td colSpan={5} className="bg-paper-2 p-3">
+                        <div className="mb-2 text-[13px] font-medium text-ink">{t("authors.bankHistory")}</div>
+                        {history.length === 0 ? (
+                          <p className="text-[13px] text-ink-secondary">{t("authors.bankHistoryEmpty")}</p>
+                        ) : (
+                          <ul className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+                            {history.map((h) => (
+                              <li key={h.id}>
+                                {new Date(h.at).toLocaleString("cs-CZ")} — {h.byName}: {bankText(h.old)} → {bankText(h.new)}{" "}
+                                <span className="text-[12px]">
+                                  ({t(`authors.auditSource.${h.source}`)}
+                                  {h.eventName ? `, ${h.eventName}` : ""})
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </td>
+                    </tr>
+                  )}
                   {expandedId === a.id && (
                     <tr>
-                      <td colSpan={4} className="bg-paper-2 p-3">
+                      <td colSpan={5} className="bg-paper-2 p-3">
                         <div className="mb-2 text-[13px] font-medium text-ink">{t("authors.eventAccessShow")}</div>
                         {allEvents.length === 0 ? (
                           <p className="text-[13px] text-ink-secondary">{t("authors.eventAccessEmpty")}</p>

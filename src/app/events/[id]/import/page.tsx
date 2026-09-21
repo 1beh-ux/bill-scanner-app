@@ -5,6 +5,11 @@ import { useTranslations } from "@/lib/i18n";
 
 type CreatedBill = { id: string; originalFilename: string };
 type Author = { id: string; canonicalName: string; active: boolean };
+
+// The event's payers (already active-only); `active` kept for the existing selects.
+function toAuthors(rows: { id: string; canonicalName: string }[]): Author[] {
+  return rows.map((r) => ({ id: r.id, canonicalName: r.canonicalName, active: true }));
+}
 type EventCategoryOption = { id: string; name: string };
 
 type DraftFields = {
@@ -58,9 +63,9 @@ export default function EventImportPage({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch(`/api/authors`)
+    fetch(`/api/events/${eventId}/payers`)
       .then((r) => (r.ok ? r.json() : []))
-      .then(setAuthors)
+      .then((rows) => setAuthors(toAuthors(rows)))
       .catch(() => {});
     fetch(`/api/events/${eventId}/categories`)
       .then((r) => (r.ok ? r.json() : []))
@@ -125,6 +130,11 @@ export default function EventImportPage({
       setError(t(`importPage.error.${data.error}`) || t("importPage.driveImportFailed"));
       return;
     }
+
+    fetch(`/api/events/${eventId}/payers`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => setAuthors(toAuthors(rows)))
+      .catch(() => {});
 
     const data = await res.json();
     setInfo(

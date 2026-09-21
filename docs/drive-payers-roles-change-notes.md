@@ -59,6 +59,12 @@ wins, else Impersonated service account). Exported helpers and their callers (al
 - Part 1: `/authors` and `/exchange-rates` (+ their APIs) are now admin-only; sidebar "bills" section hides them for non-admins.
 - Deploy order note: run `scripts/grant-accountants-bills-access.ts` (dry run, then `--apply`) BEFORE the new code is live.
 
+- Part 3: the "Všechny" payments tab now lists paid AND unpaid bills of any status (approved tab unchanged: unpaid+approved).
+  Payments rows are built from the event's bills, so a payer removed from the event's list is STILL shown while owed money
+  (flag `attached:false`, no bank-edit button) -- hiding owed money would be worse than the brief's "only payers attached".
+- Payers rename: 19 existing translation rows updated by `scripts/update-translations-payers.ts` (dry run by default, `--apply`);
+  `prisma/seed.ts` source values updated too. `scripts/seed-camp-helper-i18n.ts` did not contain these keys.
+
 ## Part status (7-15)
 - Part 8 (ConfirmDialog): changed. `src/components/ConfirmDialog.tsx` (`ConfirmProvider`, `useConfirm`, `useAlert`), mounted in
   `providers.tsx`. All 28 native pop-ups (`window.confirm`/`alert`) replaced; `grep` for `window.(confirm|alert|prompt)` is empty.

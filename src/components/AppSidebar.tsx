@@ -93,6 +93,7 @@ export default function AppSidebar() {
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
+    { href: eventId ? `/events/${eventId}/payers` : "/events", label: t("nav.payers"), icon: Users },
     ...NAV_SECTIONS.bills.items
       .filter((item) => !item.adminOnly || role === "admin")
       .map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })),

@@ -189,6 +189,46 @@ async function main() {
   r = await call(billsRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: bill2.id }, user: user1, body: { payerAuthorId: inA.id } });
   check("assigning a payer attached to the event works", r.status === 200, JSON.stringify(r.json));
 
+  console.log("\n== payments page data is scoped to the selected event");
+  const unpaidRoute = await import("../src/app/api/events/[id]/unpaid-summary/route");
+  const payerA = await prisma.author.create({ data: { canonicalName: `Pay A ${run}` } });
+  const payerB = await prisma.author.create({ data: { canonicalName: `Pay B ${run}` } });
+  await prisma.authorEventAccess.createMany({ data: [{ authorId: payerA.id, eventId: evA.id }, { authorId: payerB.id, eventId: evB.id }] });
+  const mkBill = (eventId: string, payerId: string, tag: string, paid: boolean, status: "approved" | "new" = "approved") =>
+    prisma.bill.create({
+      data: { eventId, gcsObjectPath: `test/${run}-${tag}.pdf`, originalFilename: `${tag}.pdf`, contentHash: `h-${run}-${tag}`, ingestChannel: "upload", createdByUserId: user1.id, payerAuthorId: payerId, paidToAuthor: paid, status, totalAmount: "100", amountCzk: "100", currency: "CZK", merchantName: tag },
+    });
+  await mkBill(evA.id, payerA.id, "a-unpaid", false);
+  await mkBill(evA.id, payerA.id, "a-paid", true);
+  await mkBill(evA.id, payerA.id, "a-new-unpaid", false, "new");
+  await mkBill(evB.id, payerB.id, "b-unpaid", false);
+  for (const who of [admin, exAcct]) {
+    r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=approved", params: A, user: who });
+    check(`payments (${who.role}) for event A shows only A's payer`, r.status === 200 && r.json.length === 1 && r.json[0].authorId === payerA.id, JSON.stringify(r.json?.map((x: { name: string }) => x.name)));
+  }
+  r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=approved", params: A, user: admin });
+  check("approved tab: unpaid approved bills only (1 bill)", r.json[0].unpaidBillCount === 1 && r.json[0].items.length === 1 && r.json[0].paidBillCount === 0, JSON.stringify(r.json[0]));
+  const rowOf = (json: { authorId: string }[], id: string) => json.find((x) => x.authorId === id) as
+    | { items: { paid: boolean }[]; unpaidTotalCzk: string; paidTotalCzk: string; lastBankChange: { byName: string } | null; attached: boolean }
+    | undefined;
+  r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=all", params: A, user: admin });
+  let rowA = rowOf(r.json, payerA.id);
+  check("all tab: lists paid AND unpaid bills of any status (3 items)", rowA?.items.length === 3 && rowA.items.some((i) => i.paid) && rowA.items.some((i) => !i.paid), JSON.stringify(rowA?.items));
+  check("all tab: unpaid total excludes the paid bill (200 Kč unpaid, 100 Kč paid)", parseFloat(rowA?.unpaidTotalCzk ?? "") === 200 && parseFloat(rowA?.paidTotalCzk ?? "") === 100, `${rowA?.unpaidTotalCzk}/${rowA?.paidTotalCzk}`);
+  check("all tab: nothing from event B leaks in", !rowOf(r.json, payerB.id));
+  r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=all", params: B, user: user1 });
+  check("event user has no payments access to event B", r.status === 403, String(r.status));
+  // bank hint data + removed-from-event flag
+  await call(payerRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { ...A, payerId: payerA.id }, user: user1, body: { bankAccountNumber: "123456789", bankCode: "0800" } });
+  r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=all", params: A, user: admin });
+  rowA = rowOf(r.json, payerA.id);
+  check("payments row carries the latest bank change (who/when)", rowA?.lastBankChange?.byName === user1.displayName, JSON.stringify(rowA?.lastBankChange));
+  check("payer attached to the event is flagged attached:true", rowA?.attached === true);
+  await prisma.authorEventAccess.delete({ where: { authorId_eventId: { authorId: payerA.id, eventId: evA.id } } });
+  r = await call(unpaidRoute.GET as unknown as Handler, { url: "/x?scope=all", params: A, user: admin });
+  rowA = rowOf(r.json, payerA.id);
+  check("payer removed from the event is still listed while owed, flagged attached:false", !!rowA && rowA.attached === false);
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 }

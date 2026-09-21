@@ -4,6 +4,9 @@ import { useEffect, useState, use, useCallback } from "react";
 import QRCode from "qrcode";
 import { useTranslations } from "@/lib/i18n";
 import { czechAccountToIban, buildSpaydString, buildItemizedMessage } from "@/lib/qr-platba";
+import { formatCzk } from "@/lib/format";
+import { pluralForm } from "@/lib/plural";
+import { updatePayer, isRecentBankChange } from "@/lib/payers-client";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
@@ -11,11 +14,16 @@ type EventBasic = { id: string; name: string; status: "active" | "closed" };
 type UnpaidRow = {
   authorId: string;
   name: string;
+  // false = the payer was removed from this event's list but is still owed here
+  attached: boolean;
   bankAccountNumber: string | null;
   bankCode: string | null;
+  lastBankChange: { at: string; byName: string } | null;
   unpaidTotalCzk: string;
   unpaidBillCount: number;
-  items: { merchantName: string | null; amountCzk: string | null }[];
+  paidTotalCzk: string;
+  paidBillCount: number;
+  items: { merchantName: string | null; amountCzk: string | null; paid: boolean }[];
 };
 
 const inputClassSm =
@@ -27,7 +35,7 @@ export default function EventPaymentsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
   const confirm = useConfirm();
 
   const [event, setEvent] = useState<EventBasic | null>(null);
@@ -93,7 +101,7 @@ export default function EventPaymentsPage({
 
         const itemized = buildItemizedMessage(
           row.items
-            .filter((it) => it.amountCzk !== null)
+            .filter((it) => !it.paid && it.amountCzk !== null)
             .map((it) => ({ label: it.merchantName || "Uctenka", amountCzk: parseFloat(it.amountCzk!) })),
           55
         );
@@ -129,17 +137,13 @@ export default function EventPaymentsPage({
   async function saveBankDetails(authorId: string) {
     setSavingBank(true);
     setError(null);
-    const res = await fetch(`/api/authors/${authorId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        bankAccountNumber: editBankAccountNumber.trim() || null,
-        bankCode: editBankCode.trim() || null,
-      }),
+    const res = await updatePayer(id, authorId, {
+      bankAccountNumber: editBankAccountNumber,
+      bankCode: editBankCode,
     });
     setSavingBank(false);
     if (!res.ok) {
-      setError(t("driveSettings.errorSaveFailed"));
+      setError(t(`payers.error.${res.error}`));
       return;
     }
     setEditingAuthorId(null);
@@ -206,23 +210,32 @@ export default function EventPaymentsPage({
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {rows.length === 0 ? (
-        <p className="text-[14px] text-ink-secondary">{t("paymentsPage.empty")}</p>
+        <p className="text-[14px] text-ink-secondary">{t(scope === "all" ? "paymentsPage.emptyAll" : "paymentsPage.empty")}</p>
       ) : (
         <div className="flex flex-col gap-4">
           {rows.map((row) => (
             <div key={row.authorId} className="flex flex-col gap-4 rounded-lg border border-mist bg-paper-2 p-4 sm:flex-row">
               <div className="flex-1">
                 <div className="text-[16px] font-semibold text-ink">{row.name}</div>
+                {!row.attached && (
+                  <div className="mb-1 text-[12px] text-amber-700">{t("paymentsPage.removedFromEvent")}</div>
+                )}
                 <div className="mb-2 text-[14px] text-ink-secondary">
-                  {parseFloat(row.unpaidTotalCzk).toLocaleString("cs-CZ")} Kč · {row.unpaidBillCount}{" "}
-                  {t("paymentsPage.colBillCount")}
+                  {formatCzk(row.unpaidTotalCzk)} · {row.unpaidBillCount}{" "}
+                  {t(`paymentsPage.bills.${pluralForm(row.unpaidBillCount, lang)}`)}
+                  {row.paidBillCount > 0 && (
+                    <span className="ml-2 text-[12px]">
+                      ({t("paymentsPage.alreadyPaidOut", { amount: formatCzk(row.paidTotalCzk), count: String(row.paidBillCount) })})
+                    </span>
+                  )}
                 </div>
 
                 <ul className="mb-2 list-disc pl-5 text-[12px] text-ink-secondary">
                   {row.items.map((it, i) => (
-                    <li key={i}>
+                    <li key={i} className={it.paid ? "text-ink-secondary/70 line-through" : ""}>
                       {it.merchantName || "—"}
-                      {it.amountCzk !== null && ` — ${parseFloat(it.amountCzk).toLocaleString("cs-CZ")} Kč`}
+                      {it.amountCzk !== null && ` — ${formatCzk(it.amountCzk)}`}
+                      {it.paid && ` (${t("paymentsPage.itemPaidOut")})`}
                     </li>
                   ))}
                 </ul>
@@ -257,11 +270,23 @@ export default function EventPaymentsPage({
                         {row.bankAccountNumber}/{row.bankCode}
                       </span>
                     ) : (
-                      <span className="text-[13px] text-red-600">{t("paymentsPage.noBankDetails")}</span>
+                      <a href={`/events/${id}/payers`} className="text-[13px] text-red-600 hover:underline">
+                        {t("paymentsPage.noBankDetails")}
+                      </a>
                     )}{" "}
-                    <button onClick={() => startEditBank(row)} className="text-[13px] text-ember hover:underline">
-                      {t("paymentsPage.editBankButton")}
-                    </button>
+                    {row.attached && (
+                      <button onClick={() => startEditBank(row)} className="text-[13px] text-ember hover:underline">
+                        {t("paymentsPage.editBankButton")}
+                      </button>
+                    )}
+                    {isRecentBankChange(row.lastBankChange && { ...row.lastBankChange, source: "" }) && row.lastBankChange && (
+                      <div className="text-[12px] text-amber-700">
+                        {t("payers.bankChanged", {
+                          date: new Date(row.lastBankChange.at).toLocaleDateString("cs-CZ"),
+                          name: row.lastBankChange.byName,
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -271,6 +296,7 @@ export default function EventPaymentsPage({
                   </div>
                 )}
 
+                {row.unpaidBillCount > 0 && (
                 <button
                   onClick={() => handleMarkPaid(row)}
                   disabled={markingPaidId === row.authorId || event.status === "closed"}
@@ -278,6 +304,7 @@ export default function EventPaymentsPage({
                 >
                   {t("paymentsPage.markPaidButton")}
                 </button>
+                )}
               </div>
 
               <div className="w-full text-center sm:w-[180px]">

@@ -6,9 +6,10 @@ import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
+import PayerCombobox from "@/components/payers/PayerCombobox";
+import type { Payer } from "@/lib/payers-client";
 
 type EventCategory = { id: string; name: string };
-type Author = { id: string; canonicalName: string; active: boolean };
 
 type BillCategoryRow = {
   id: string;
@@ -27,6 +28,7 @@ type BillDetail = {
   totalAmount: string | null;
   currency: string;
   payerAuthorId: string | null;
+  payerAuthor?: { id: string; canonicalName: string } | null;
   notes: string | null;
   originalGcsObjectPath: string | null;
   contentHash: string;
@@ -77,7 +79,7 @@ export default function BillDetailPage({
 
   const [bill, setBill] = useState<BillDetail | null>(null);
   const [eventCategories, setEventCategories] = useState<EventCategory[]>([]);
-  const [authors, setAuthors] = useState<Author[]>([]);
+  const [payers, setPayers] = useState<Payer[]>([]);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [adjacent, setAdjacent] = useState<{ prev: string | null; next: string | null }>({
     prev: null,
@@ -152,9 +154,9 @@ const [processingAi, setProcessingAi] = useState(false);
       .then((r) => (r.ok ? r.json() : []))
       .then(setEventCategories)
       .catch(() => {});
-    fetch(`/api/authors`)
+    fetch(`/api/events/${eventId}/payers`)
       .then((r) => (r.ok ? r.json() : []))
-      .then(setAuthors)
+      .then(setPayers)
       .catch(() => {});
     fetch(`/api/events`)
       .then((r) => (r.ok ? r.json() : []))
@@ -572,21 +574,15 @@ const statusLabel = t(
 
           <div>
             <label className={labelClass}>{t("billModal.payer")}</label>
-            <select
+            <PayerCombobox
+              eventId={eventId}
+              payers={payers}
               value={payerAuthorId}
-              onChange={(e) => setPayerAuthorId(e.target.value)}
+              currentPayer={bill.payerAuthor}
               disabled={isLocked}
-              className={inputClass}
-            >
-<option value="">{t("billModal.payerEvent")}</option>
-              {authors
-                .filter((a) => a.active)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.canonicalName}
-                  </option>
-                ))}
-            </select>
+              onChange={setPayerAuthorId}
+              onPayerCreated={(p) => setPayers((prev) => [...prev, p])}
+            />
           </div>
 
           {bill.payerAuthorId && (
