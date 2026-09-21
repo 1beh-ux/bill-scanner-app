@@ -9,6 +9,7 @@ import {
   findFileInFolder,
 } from "@/lib/drive";
 import { DriveError } from "@/lib/drive-errors";
+import { buildManifestRows } from "@/lib/manifest";
 
 export class DriveExportError extends Error {
   code: string;
@@ -62,14 +63,6 @@ async function convertImageToPdfBytes(imageBuffer: Buffer, isPng: boolean): Prom
   page.drawImage(embeddedImage, { x: 0, y: 0, width, height });
 
   return Buffer.from(await pdfDoc.save());
-}
-
-function proplacenoLabel(payerAuthorId: string | null, paidToAuthor: boolean): string {
-  // No payer means the event paid directly — nothing to reimburse, so "Akce"
-  // rather than a bare yes/no, matching the same convention already used in
-  // the Zaplatil column for this case.
-  if (!payerAuthorId) return "Akce";
-  return paidToAuthor ? "Ano" : "Ne";
 }
 
 /**
@@ -179,48 +172,27 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   }
 
   // Manifest reflects the full current set of approved bills every run, not
-  // just what changed this run — simpler and safer than incremental updates.
-  // Kategorie is last by design, to keep column order stable/consistent with
-  // the rest of the app's conventions rather than leading with it.
-  const header = ["Datum", "Obchod", "Částka", "Měna", "Částka Kč", "Zaplatil", "Proplaceno", "Soubor", "Odkaz", "Kategorie"];
-
-  const rows = await Promise.all(
+  // just what changed this run -- simpler and safer than incremental updates.
+  // Layout: src/lib/manifest.ts (fixed columns + one Kategorie/Částka pair per category).
+  //
+  // Each file's Drive id is looked up by its exact filename rather than stored,
+  // to avoid a second schema field for something cheaply derived. Safe here
+  // (unlike the manifest's own id) because this is a pure read.
+  const links = await Promise.all(
     bills.map(async (b) => {
-      const categoryLabel = b.categories.map((c) => c.eventCategory.name).join(", ");
-      const proplaceno = proplacenoLabel(b.payerAuthorId, b.paidToAuthor);
-
-      // Looking up each file's Drive id by its known exact filename, rather
-      // than storing it, to avoid a second schema field for something we can
-      // cheaply derive. Safe here (unlike the manifest's own id) because this
-      // is a pure read, never a search-then-create.
-      let link = "";
-      if (b.exportFilename) {
-        const found = await findFileInFolder(
-          eventId,
-          event.driveExportFolderId!,
-          b.exportFilename,
-          mimeTypeForExtension(path.extname(b.exportFilename))
-        );
-        if (found) link = `https://drive.google.com/file/d/${found.id}/view`;
-      }
-
-      return [
-        b.billDate ? b.billDate.toISOString().slice(0, 10) : "",
-        b.merchantName ?? "",
-        b.totalAmount?.toString() ?? "",
-        b.currency,
-        b.amountCzk?.toString() ?? "",
-        b.payerAuthor?.canonicalName ?? "Akce",
-        proplaceno,
-        b.exportFilename ?? "",
-        link,
-        categoryLabel,
-      ];
+      if (!b.exportFilename) return "";
+      const found = await findFileInFolder(
+        eventId,
+        event.driveExportFolderId!,
+        b.exportFilename,
+        mimeTypeForExtension(path.extname(b.exportFilename))
+      );
+      return found ? `https://drive.google.com/file/d/${found.id}/view` : "";
     })
   );
+  const manifestRows = buildManifestRows(bills, links);
 
   const manifestTitle = `Manifest - ${event.name}`;
-  const manifestRows = [header, ...rows];
 
   const manifestSpreadsheetId = await upsertManifest(eventId, {
     exportFolderId: event.driveExportFolderId,

@@ -179,6 +179,34 @@ async function main() {
   const moved = await prisma.bill.findUniqueOrThrow({ where: { id: b1.id } });
   check("moving into an active event with bills access works", rr.status === 200 && moved.eventId === mvOpen.id, JSON.stringify(rr.json));
 
+  console.log("\n== Part 14: manifest layout (one column pair per category)");
+  const mf = await import("../src/lib/manifest");
+  const dec = (n: string) => ({ toString: () => n });
+  const mkB = (over: Partial<import("../src/lib/manifest").ManifestBill>): import("../src/lib/manifest").ManifestBill => ({
+    billDate: new Date("2026-07-30T00:00:00Z"), merchantName: "Tesco", totalAmount: dec("900.00"), currency: "CZK", amountCzk: dec("900.00"),
+    payerAuthorId: "p1", payerAuthor: { canonicalName: "Jana" }, paidToAuthor: true, exportFilename: "f.pdf", categories: [], ...over,
+  });
+  const three = mkB({ categories: [
+    { amountCzk: dec("100.00"), eventCategory: { name: "Potraviny" } },
+    { amountCzk: dec("300.00"), eventCategory: { name: "Hry" } },
+    { amountCzk: dec("500.00"), eventCategory: { name: "Materiál" } },
+  ] });
+  const one = mkB({ merchantName: "Albert", totalAmount: dec("50.00"), amountCzk: dec("50.00"), payerAuthorId: null, payerAuthor: null, paidToAuthor: true, categories: [{ amountCzk: null, eventCategory: { name: "Potraviny" } }] });
+  const none = mkB({ merchantName: "Bez kategorie", paidToAuthor: false, categories: [] });
+  const table = mf.buildManifestRows([three, one, none], ["l1", "l2", "l3"]);
+  check("header: fixed columns (Plátce, not Zaplatil) then 3 category pairs", JSON.stringify(table[0]) === JSON.stringify(["Datum", "Obchod", "Částka", "Měna", "Částka Kč", "Plátce", "Proplaceno", "Soubor", "Odkaz", "Kategorie 1", "Částka kat. 1 (Kč)", "Kategorie 2", "Částka kat. 2 (Kč)", "Kategorie 3", "Částka kat. 3 (Kč)"]), JSON.stringify(table[0]));
+  check("no single joined 'Kategorie' column any more", !table[0].includes("Kategorie") && !table[0].includes("Zaplatil"));
+  check("3-category bill: pairs in stable (name) order with their own CZK amounts", JSON.stringify(table[1].slice(9)) === JSON.stringify(["Hry", "300.00", "Materiál", "500.00", "Potraviny", "100.00"]), JSON.stringify(table[1].slice(9)));
+  check("1-category bill: the pair equals the bill total (split row had no CZK amount)", table[2][9] === "Potraviny" && table[2][10] === "50.00" && table[2][11] === "" && table[2][12] === "" && table[2][13] === "" && table[2][14] === "", JSON.stringify(table[2].slice(9)));
+  check("bill without categories: every pair empty", table[3].slice(9).every((c) => c === ""));
+  check("every row has the same width as the header (no stale/short rows)", table.every((r) => r.length === table[0].length));
+  check("'Proplaceno': Ano / Ne / Akce hradí přímo (not a bare 'Akce')", table[1][6] === "Ano" && table[3][6] === "Ne" && table[2][6] === "Akce hradí přímo", `${table[1][6]}|${table[3][6]}|${table[2][6]}`);
+  check("payer column for an event-paid bill says so in words", table[2][5] === "Akce (bez proplacení)" && table[1][5] === "Jana");
+  check("links land in the 'Odkaz' column", table[1][8] === "l1" && table[2][8] === "l2");
+  const minimal = mf.buildManifestRows([none], [""]);
+  check("no bill has categories -> still one pair (minimum)", minimal[0].length === 11 && minimal[0][9] === "Kategorie 1");
+  check("empty event -> header only, one pair", mf.buildManifestRows([], []).length === 1 && mf.buildManifestRows([], [])[0].length === 11);
+
   void run;
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

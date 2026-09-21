@@ -88,6 +88,12 @@ wins, else Impersonated service account). Exported helpers and their callers (al
   `drive-import` now also returns `skippedAlreadyImportedFiles`, `identityEmail`, `serviceAccountEmail`.
 
 ## Part status (7-15)
+- Part 14 (manifest): changed. `src/lib/manifest.ts`; header = Datum, Obchod, Částka, Měna, Částka Kč, Plátce, Proplaceno, Soubor, Odkaz + `Kategorie n` /
+  `Částka kat. n (Kč)` pairs (max categories per bill, min 1; categories sorted by name; single category = bill total). "Proplaceno" = Ano / Ne /
+  "Akce hradí přímo"; the payer column says "Akce (bez proplacení)" for event-paid bills. `writeManifestValues` clear range is A1:ZZ10000 (was
+  A1:Z10000), so extra columns never leave stale cells. Nothing else reads manifest columns by position (`cleanup-manifest-duplicates.ts` only
+  deletes by title). The "+n" file-name suffix (`name.pdf`, `name_2.pdf`, ... for equal display names) is unchanged: it is not a bug, it makes
+  export names unique. Existing manifests get the new layout on the next export (the sheet is rewritten each run).
 - Part 7 (blank pages): changed. `src/lib/pdf-blank.ts` (pdfjs-dist, already a dependency; no new one): blank = no text AND no vector drawing AND
   (no image OR every image flat). Flat = pixels pooled to ~150 px wide by their WORST pixel, 2 % border ignored, >= 99.9 % background blocks
   (deliberately stricter than the brief's 99.5 %: pooled blocks make a single line of text count; recorded here as a deviation).
