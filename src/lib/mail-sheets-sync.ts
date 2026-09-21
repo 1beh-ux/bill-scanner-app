@@ -32,9 +32,9 @@ export async function syncStatusSheetExport(eventId: string): Promise<{ sheetId:
 
   let sheetId = event.statusExportSheetId;
   if (sheetId) {
-    await writeManifestValues(sheetId, rows);
+    await writeManifestValues(eventId, sheetId, rows);
   } else {
-    sheetId = await createManifestSheet(event.driveExportFolderId, `${event.name} – stav dokumentů`, rows);
+    sheetId = await createManifestSheet(eventId, event.driveExportFolderId, `${event.name} – stav dokumentů`, rows);
   }
 
   await prisma.event.update({

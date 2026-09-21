@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { importBillsFromDrive, DriveImportError } from "@/lib/drive-import";
+import { DriveError, httpStatusForDriveError } from "@/lib/drive-errors";
 
 export async function POST(
   req: NextRequest,
@@ -20,6 +21,9 @@ export async function POST(
     const summary = await importBillsFromDrive(eventId, user.id);
     return NextResponse.json(summary);
   } catch (err) {
+    if (err instanceof DriveError) {
+      return NextResponse.json({ error: err.code, ...err.params }, { status: httpStatusForDriveError(err.code) });
+    }
     if (err instanceof DriveImportError) {
       const status = err.code === "event_not_found" ? 404 : 400;
       return NextResponse.json({ error: err.code }, { status });

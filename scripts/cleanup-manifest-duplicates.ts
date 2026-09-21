@@ -7,12 +7,17 @@ async function main() {
 
   const exportFolderId = process.argv[2];
   const title = process.argv[3];
+  const eventId = process.argv[4];
   if (!exportFolderId || !title) {
-    console.error('Usage: npx tsx scripts/cleanup-manifest-duplicates.ts <exportFolderId> "<title>"');
+    console.error('Usage: npx tsx scripts/cleanup-manifest-duplicates.ts <exportFolderId> "<title>" <eventId>');
     process.exit(1);
   }
 
-  const drive = await getDriveClient();
+  if (!eventId) {
+    console.error('Usage: npx tsx scripts/cleanup-manifest-duplicates.ts <exportFolderId> "<title>" <eventId>');
+    process.exit(1);
+  }
+  const drive = await getDriveClient(eventId);
   const escapedTitle = title.replace(/'/g, "\\'");
   const res = await drive.files.list({
     q: `'${exportFolderId}' in parents and name = '${escapedTitle}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,

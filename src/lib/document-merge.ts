@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { docs_v1 } from "googleapis";
-import { getDriveClient, getDocsClient, usingConnectedDriveAccount, findFileInFolder } from "@/lib/drive";
+import { getDriveClient, getDocsClient, usingConnectedDriveAccount, findFileInFolder, toDriveError } from "@/lib/drive";
 import { billsBucket } from "@/lib/gcs";
 
 /**
@@ -73,6 +73,24 @@ export function extractGoogleDocId(input: string): string {
  * copy + any temp image uploads.
  */
 export async function mergeAndExportDocument(
+  eventId: string,
+  templateDocId: string,
+  text: Record<string, string>,
+  images: Record<string, Buffer> = {},
+  keep?: { folderId: string; name: string },
+  imageSizesMm: Record<string, number> = {}
+): Promise<Buffer> {
+  try {
+    return await mergeAndExportDocumentRaw(eventId, templateDocId, text, images, keep, imageSizesMm);
+  } catch (err) {
+    // Known Google failures come out as DriveError (with the event's identity in
+    // the message); a dead refresh token is recorded so the event falls back.
+    throw await toDriveError(eventId, err, { purpose: "write" });
+  }
+}
+
+async function mergeAndExportDocumentRaw(
+  eventId: string,
   templateDocId: string,
   text: Record<string, string>,
   images: Record<string, Buffer> = {},
@@ -87,15 +105,15 @@ export async function mergeAndExportDocument(
   imageSizesMm: Record<string, number> = {}
 ): Promise<Buffer> {
   const docId = extractGoogleDocId(templateDocId);
-  const drive = await getDriveClient();
-  const docs = await getDocsClient();
+  const drive = await getDriveClient(eventId);
+  const docs = await getDocsClient(eventId);
 
   // With a connected account the scratch copy goes to *its own* My Drive
   // root, not next to the template: the template's folder may be a Shared
   // Drive where that account can create but not delete/trash, which left
   // merge-scratch-* files piling up beside the templates.
-  const scratchParents = keep ? [keep.folderId] : (await usingConnectedDriveAccount()) ? ["root"] : undefined;
-  const previousDoc = keep ? await findFileInFolder(keep.folderId, keep.name, "application/vnd.google-apps.document") : null;
+  const scratchParents = keep ? [keep.folderId] : (await usingConnectedDriveAccount(eventId)) ? ["root"] : undefined;
+  const previousDoc = keep ? await findFileInFolder(eventId, keep.folderId, keep.name, "application/vnd.google-apps.document") : null;
   const copy = await drive.files.copy({
     fileId: docId,
     requestBody: { name: keep ? keep.name : `merge-scratch-${Date.now()}`, ...(scratchParents && { parents: scratchParents }) },

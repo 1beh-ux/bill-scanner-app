@@ -1,6 +1,7 @@
 import type { docs_v1 } from "googleapis";
 import { prisma } from "@/lib/prisma";
-import { getDocsClient } from "@/lib/drive";
+import { getDocsClient, toDriveError } from "@/lib/drive";
+import { DriveError, type DriveErrorParams } from "@/lib/drive-errors";
 import { extractGoogleDocId } from "@/lib/document-merge";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
@@ -19,7 +20,8 @@ export interface TemplatePlaceholder {
 }
 
 export interface TemplateCheckResult {
-  templates: { docTypeId: string; name: string; docId?: string; error?: string; placeholders: TemplatePlaceholder[] }[];
+  // `error` is a DriveErrorCode (rendered as driveSettings.error.<code> with errorParams)
+  templates: { docTypeId: string; name: string; docId?: string; error?: string; errorParams?: DriveErrorParams; placeholders: TemplatePlaceholder[] }[];
   // Fields marked for documents that no readable template uses (with a
   // single-template check: that one template).
   unusedFields: { key: string; label: string }[];
@@ -46,9 +48,14 @@ function collectTabs(tabs: docs_v1.Schema$Tab[] | undefined, out: string[]) {
   }
 }
 
-async function readPlaceholders(templateDocId: string): Promise<{ key: string; hasSpaces: boolean }[]> {
-  const docs = await getDocsClient();
-  const doc = await docs.documents.get({ documentId: extractGoogleDocId(templateDocId), includeTabsContent: true });
+async function readPlaceholders(eventId: string, templateDocId: string): Promise<{ key: string; hasSpaces: boolean }[]> {
+  const docs = await getDocsClient(eventId);
+  let doc;
+  try {
+    doc = await docs.documents.get({ documentId: extractGoogleDocId(templateDocId), includeTabsContent: true });
+  } catch (err) {
+    throw await toDriveError(eventId, err, { purpose: "read" });
+  }
   const paragraphs: string[] = [];
   collectTabs(doc.data.tabs, paragraphs);
   // Joined per paragraph, so a placeholder Google split across text runs
@@ -77,7 +84,7 @@ export async function checkEventTemplates(eventId: string, opts: { docTypeId?: s
     const templateId = (dt.data as DocumentTypeData | null)?.templateGoogleDocId;
     if (!templateId) continue;
     try {
-      const found = await readPlaceholders(templateId);
+      const found = await readPlaceholders(eventId, templateId);
       templates.push({
         docTypeId: dt.id,
         name: dt.name,
@@ -93,7 +100,15 @@ export async function checkEventTemplates(eventId: string, opts: { docTypeId?: s
         }),
       });
     } catch (err) {
-      templates.push({ docTypeId: dt.id, name: dt.name, error: String(err).slice(0, 200), placeholders: [] });
+      const known = err instanceof DriveError ? err : null;
+      if (!known) console.error("[template-check] unexpected error:", err);
+      templates.push({
+        docTypeId: dt.id,
+        name: dt.name,
+        error: known?.code ?? "drive_unknown",
+        errorParams: known?.params,
+        placeholders: [],
+      });
     }
   }
 

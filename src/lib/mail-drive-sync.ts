@@ -57,15 +57,15 @@ export async function syncParticipantDocumentToDrive(
   let driveFileId: string | null = null;
   if (opts.replaceFileId) {
     try {
-      await updateFileContent(opts.replaceFileId, buffer, mimeType);
+      await updateFileContent(doc.participant.eventId, opts.replaceFileId, buffer, mimeType);
       driveFileId = opts.replaceFileId;
     } catch (err) {
       console.log(`[mail-drive-sync] couldn't update ${opts.replaceFileId} in place, uploading a new copy:`, String(err));
     }
   }
   if (!driveFileId) {
-    const participantFolderId = await getOrCreateSubfolder(rootFolderId, doc.participant.name);
-    driveFileId = await uploadFileToFolder(participantFolderId, name, buffer, mimeType);
+    const participantFolderId = await getOrCreateSubfolder(doc.participant.eventId, rootFolderId, doc.participant.name, "participants");
+    driveFileId = await uploadFileToFolder(doc.participant.eventId, participantFolderId, name, buffer, mimeType, "participants");
   }
   await prisma.participantDocument.update({
     where: { id: doc.id },

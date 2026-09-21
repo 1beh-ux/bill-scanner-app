@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, requireModuleAccess } from "@/lib/module-access";
 import { encryptMailToken } from "@/lib/mail-token-crypto";
+import { invalidateDriveIdentity } from "@/lib/drive";
+import { Prisma } from "@/generated/prisma";
 
 const MAIL_OAUTH_CLIENT_ID = process.env.MAIL_OAUTH_CLIENT_ID;
 const MAIL_OAUTH_CLIENT_SECRET = process.env.MAIL_OAUTH_CLIENT_SECRET;
@@ -12,11 +14,13 @@ function redirectToEvent(
   origin: string,
   eventId: string,
   purpose: "health" | "mail" | "drive",
-  result: "connected" | "error"
+  result: "connected" | "error" | "in_use"
 ): NextResponse {
   const target =
     purpose === "drive"
-      ? `${origin}/events/${eventId}?tab=drive&driveConnect=${result}`
+      ? eventId === "-"
+        ? `${origin}/settings?driveConnect=${result}`
+        : `${origin}/events/${eventId}?tab=drive&driveConnect=${result}`
       : purpose === "mail"
       ? `${origin}/events/${eventId}/mail?mailConnect=${result}`
       : `${origin}/events/${eventId}?tab=health&mailConnect=${result}`;
@@ -53,7 +57,9 @@ export async function GET(req: NextRequest) {
 
   const denied =
     purpose === "drive"
-      ? await requireModuleAccess(user, eventId, "bills")
+      ? eventId === "-"
+        ? null
+        : await requireModuleAccess(user, eventId, "bills")
       : await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
@@ -75,13 +81,33 @@ export async function GET(req: NextRequest) {
     if (!email) throw new Error("no_email_in_userinfo");
 
     if (purpose === "drive") {
+      // One connection per user: reconnecting replaces THEIR row (and clears a
+      // dead-token mark), never anyone else's. The same Google account can't be
+      // held by two users at once (email is unique) -- that is reported, not stolen.
       const data = {
+        email,
         refreshTokenEncrypted: encryptMailToken(tokens.refresh_token),
-        connectedByUserId: user.id,
         scope: tokens.scope ?? null,
         connectedAt: new Date(),
+        tokenInvalidAt: null,
       };
-      await prisma.driveAccount.upsert({ where: { email }, update: data, create: { email, ...data } });
+      try {
+        await prisma.driveAccount.upsert({
+          where: { connectedByUserId: user.id },
+          update: data,
+          create: { ...data, connectedByUserId: user.id },
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+          return redirectToEvent(origin, eventId, purpose, "in_use");
+        }
+        throw err;
+      }
+      // From an event's Drive tab: become that event's Drive owner only if it has none yet.
+      if (eventId !== "-") {
+        await prisma.event.updateMany({ where: { id: eventId, driveConfiguredByUserId: null }, data: { driveConfiguredByUserId: user.id } });
+      }
+      invalidateDriveIdentity();
       return redirectToEvent(origin, eventId, purpose, "connected");
     }
 

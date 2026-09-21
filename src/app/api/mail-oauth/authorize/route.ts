@@ -37,18 +37,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "mail_oauth_not_configured" }, { status: 500 });
   }
 
-  const eventId = req.nextUrl.searchParams.get("eventId");
-  if (!eventId) {
+  const purposeParam = req.nextUrl.searchParams.get("purpose");
+  // "drive" connects the CALLER's own Google account (see DriveAccount in the
+  // schema) instead of a mailbox -- reuses this route and callback so no
+  // new redirect URI needs registering with Google. It can start from an
+  // event's Drive tab (eventId given) or from personal settings (no event).
+  const purpose = purposeParam === "drive" ? "drive" : purposeParam === "mail" ? "mail" : "health";
+  const eventIdParam = req.nextUrl.searchParams.get("eventId");
+  if (!eventIdParam && purpose !== "drive") {
     return NextResponse.json({ error: "event_id_required" }, { status: 400 });
   }
-  const purposeParam = req.nextUrl.searchParams.get("purpose");
-  // "drive" connects the app-wide Drive account (see DriveAccount in the
-  // schema) instead of a mailbox -- reuses this route and callback so no
-  // new redirect URI needs registering with Google.
-  const purpose = purposeParam === "drive" ? "drive" : purposeParam === "mail" ? "mail" : "health";
+  // "-" = no event (started from personal settings)
+  const eventId = eventIdParam ?? "-";
   const denied =
     purpose === "drive"
-      ? await requireModuleAccess(user, eventId, "bills")
+      ? eventIdParam
+        ? await requireModuleAccess(user, eventIdParam, "bills")
+        : null
       : await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 

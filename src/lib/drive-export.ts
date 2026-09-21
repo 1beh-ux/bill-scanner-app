@@ -8,6 +8,7 @@ import {
   writeManifestValues,
   findFileInFolder,
 } from "@/lib/drive";
+import { DriveError } from "@/lib/drive-errors";
 
 export class DriveExportError extends Error {
   code: string;
@@ -71,7 +72,7 @@ function proplacenoLabel(payerAuthorId: string | null, paidToAuthor: boolean): s
   return paidToAuthor ? "Ano" : "Ne";
 }
 
-export async function exportEventBills(eventId: string): Promise<ExportSummary> {
+export async function exportEventBills(eventId: string, opts: { recreateManifest?: boolean } = {}): Promise<ExportSummary> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) throw new DriveExportError("event_not_found");
   if (!event.driveExportFolderId) throw new DriveExportError("no_export_folder");
@@ -129,7 +130,7 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
       const uploadBuffer =
         sourceExt === ".pdf" ? buffer : await convertImageToPdfBytes(buffer, sourceExt === ".png");
 
-      await uploadFileToFolder(event.driveExportFolderId, exportFilename, uploadBuffer, "application/pdf");
+      await uploadFileToFolder(eventId, event.driveExportFolderId, exportFilename, uploadBuffer, "application/pdf", "export");
 
       await prisma.bill.update({
         where: { id: bill.id },
@@ -145,7 +146,11 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
       // for every other bill — it's reported and the rest continue. This
       // bill's exportFilename stays unset, so a future export run will
       // simply try it again from scratch.
-      exportFailures.push({ filename: bill.originalFilename, error: String(err) });
+      // A failure that hits every file for the same reason (no write access, dead
+      // token, quota...) is a setup problem, not a per-file one: stop and report
+      // it once, precisely, instead of N identical failures and a bogus manifest.
+      if (err instanceof DriveError && err.code !== "drive_unknown" && err.code !== "drive_unavailable" && err.code !== "drive_rate_limited") throw err;
+      exportFailures.push({ filename: bill.originalFilename, error: err instanceof DriveError ? err.code : "drive_unknown" });
     }
   }
 
@@ -167,6 +172,7 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
       let link = "";
       if (b.exportFilename) {
         const found = await findFileInFolder(
+          eventId,
           event.driveExportFolderId!,
           b.exportFilename,
           mimeTypeForExtension(path.extname(b.exportFilename))
@@ -199,16 +205,22 @@ export async function exportEventBills(eventId: string): Promise<ExportSummary> 
 
   if (manifestSpreadsheetId) {
     try {
-      await writeManifestValues(manifestSpreadsheetId, manifestRows);
-    } catch {
-      // Stale ID — deleted, or trashed (writeManifestValues checks this
-      // explicitly). Fall back to creating a fresh one.
-      manifestSpreadsheetId = null;
+      await writeManifestValues(eventId, manifestSpreadsheetId, manifestRows);
+    } catch (err) {
+      // The remembered sheet is gone (deleted) or not reachable by the
+      // identity now used. Don't silently create another one: tell the caller
+      // (manifest_missing) and let the user confirm, then recreate.
+      if (err instanceof DriveError && err.code === "not_found_or_no_access") {
+        if (!opts.recreateManifest) throw new DriveError("manifest_missing", { ...err.params, folderLabel: "export" }, err);
+        manifestSpreadsheetId = null;
+      } else {
+        throw err;
+      }
     }
   }
 
   if (!manifestSpreadsheetId) {
-    manifestSpreadsheetId = await createManifestSheet(event.driveExportFolderId, manifestTitle, manifestRows);
+    manifestSpreadsheetId = await createManifestSheet(eventId, event.driveExportFolderId, manifestTitle, manifestRows);
     await prisma.event.update({
       where: { id: eventId },
       data: { driveManifestSpreadsheetId: manifestSpreadsheetId },

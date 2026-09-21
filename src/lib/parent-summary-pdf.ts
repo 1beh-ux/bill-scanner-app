@@ -99,7 +99,7 @@ export async function generateParticipantSummaryPdf(
 
   if (participant.event.driveExportFolderId) {
     try {
-      await uploadFileToFolder(participant.event.driveExportFolderId, filename, buffer, "application/pdf");
+      await uploadFileToFolder(participant.eventId, participant.event.driveExportFolderId, filename, buffer, "application/pdf", "export");
     } catch (err) {
       // Archive copy is best-effort -- the GCS path + email log are the
       // record of truth, so a Drive hiccup shouldn't block the download/send.

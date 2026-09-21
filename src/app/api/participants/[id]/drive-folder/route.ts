@@ -25,7 +25,7 @@ export async function POST(
   if (!rootFolderId) return NextResponse.json({ error: "no_participants_folder" }, { status: 409 });
 
   try {
-    const folderId = await getOrCreateSubfolder(rootFolderId, participant.name);
+    const folderId = await getOrCreateSubfolder(participant.eventId, rootFolderId, participant.name, "participants");
     return NextResponse.json({ url: `https://drive.google.com/drive/folders/${folderId}` });
   } catch (err) {
     console.error("[drive-folder] failed:", err);

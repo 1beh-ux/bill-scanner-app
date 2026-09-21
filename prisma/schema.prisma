@@ -146,7 +146,8 @@ model User {
   hiddenModules   ModuleKey[] @default([]) @map("hidden_modules")
 
   moduleAccess       UserEventModuleAccess[]
-  driveAccountsConnected DriveAccount[] @relation("DriveAccountConnectedBy")
+  driveAccount           DriveAccount?     @relation("DriveAccountConnectedBy")
+  eventsDriveConfigured  Event[]           @relation("EventDriveConfiguredBy")
   authorBankAudits       AuthorBankAudit[] @relation("AuthorBankAuditChangedBy")
   billsCreated       Bill[]           @relation("BillCreatedBy")
   billsApproved      Bill[]           @relation("BillApprovedBy")
@@ -206,6 +207,10 @@ model Event {
   // files) live -- separate from the bills export folder above. Null falls
   // back to driveExportFolderId (the old shared behavior).
   driveParticipantsFolderId String? @map("drive_participants_folder_id")
+  // The user whose connected Google account does this event's Drive work (see
+  // DriveAccount). Set when someone saves the event's Drive folders, when a user
+  // connects from the Drive tab and none is set, or via "take over".
+  driveConfiguredByUserId String? @map("drive_configured_by_user_id")
   senderEmail         String?     @map("sender_email")
   driveDocSyncEnabled      Boolean   @default(true) @map("drive_doc_sync_enabled")
   statusExportEnabled      Boolean   @default(true) @map("status_export_enabled")
@@ -253,6 +258,7 @@ model Event {
   moduleAccess          UserEventModuleAccess[]
   authorAccess         AuthorEventAccess[]
   authorBankAudits     AuthorBankAudit[]
+  driveConfiguredBy    User?    @relation("EventDriveConfiguredBy", fields: [driveConfiguredByUserId], references: [id])
   bills                Bill[]
   participants         Participant[]
   eventListItems       EventListItem[]
@@ -760,18 +766,21 @@ model MailSenderAccount {
   @@map("mail_sender_accounts")
 }
 
-// The Google account whose own Drive quota/permissions the app uses for all
-// Drive/Sheets/Docs calls (src/lib/drive.ts) -- a service account has no
-// storage quota, so it can't create files in a normal My Drive folder. App-
-// wide, latest connection wins; without one drive.ts falls back to the
-// service account (fine inside a Shared Drive).
+// A user's own connected Google account (OAuth). Each user can have at most one
+// (unique connected_by_user_id -- reconnecting replaces their own row, never
+// someone else's). An event uses the account of the user who configured its
+// Drive (Event.driveConfiguredByUserId) for ALL Drive/Sheets/Docs work, including
+// background jobs; without a valid connection it falls back to the service
+// account (src/lib/drive.ts getDriveIdentity). `tokenInvalidAt` is set when
+// Google reports the refresh token dead (revoked/expired) and cleared on reconnect.
 model DriveAccount {
-  id                    String   @id @default(uuid())
-  email                 String   @unique
-  refreshTokenEncrypted String   @map("refresh_token_encrypted")
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  refreshTokenEncrypted String    @map("refresh_token_encrypted")
   scope                 String?
-  connectedByUserId     String   @map("connected_by_user_id")
-  connectedAt           DateTime @default(now()) @map("connected_at")
+  connectedByUserId     String    @unique @map("connected_by_user_id")
+  connectedAt           DateTime  @default(now()) @map("connected_at")
+  tokenInvalidAt        DateTime? @map("token_invalid_at")
 
   connectedByUser User @relation("DriveAccountConnectedBy", fields: [connectedByUserId], references: [id])
 

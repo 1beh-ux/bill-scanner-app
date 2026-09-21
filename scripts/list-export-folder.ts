@@ -28,7 +28,7 @@ async function main() {
     process.exit(1);
   }
 
-  const drive = await getDriveClient();
+  const drive = await getDriveClient(eventId);
   const res = await drive.files.list({
     q: `'${event.driveExportFolderId}' in parents and trashed = false`,
     fields: "files(id, name, mimeType, createdTime, webViewLink)",

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
-import { readSheetValues, getDriveServiceAccountEmail } from "@/lib/drive";
+import { readSheetValues, toDriveError } from "@/lib/drive";
+import { httpStatusForDriveError } from "@/lib/drive-errors";
 
 // Accepts either a bare spreadsheet ID or a full Sheets URL and pulls the ID
 // out of either — same shape a user would paste from their browser bar.
@@ -27,14 +28,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   try {
-    const values = await readSheetValues(spreadsheetId);
+    const values = await readSheetValues(eventId, spreadsheetId);
     const [headerRow, ...dataRows] = values;
     return NextResponse.json({ headers: headerRow ?? [], rows: dataRows });
   } catch (err) {
-    console.log("[sheets-preview] read failed:", String(err));
-    return NextResponse.json(
-      { error: "sheet_read_failed", serviceAccountEmail: getDriveServiceAccountEmail() },
-      { status: 422 }
-    );
+    // A stable code + which Google account was used (it is the one the sheet must be shared with).
+    const e = await toDriveError(eventId, err, { purpose: "read" });
+    return NextResponse.json({ error: e.code, ...e.params }, { status: httpStatusForDriveError(e.code) });
   }
 }

@@ -81,7 +81,7 @@ async function buildAutoAttachDocuments(
   const rootFolderId = participantsRootFolderId(event);
   let participantFolderId: string | null = null;
   if (rootFolderId) {
-    participantFolderId = await getOrCreateSubfolder(rootFolderId, participant.name).catch((err) => {
+    participantFolderId = await getOrCreateSubfolder(event.id, rootFolderId, participant.name, "participants").catch((err) => {
       console.log(`[participant-bulk-email] couldn't open Drive folder for participant ${participant.id}:`, String(err));
       return null;
     });
@@ -95,6 +95,7 @@ async function buildAutoAttachDocuments(
 
     try {
       const buffer = await mergeAndExportDocument(
+        event.id,
         data.templateGoogleDocId,
         text,
         images,

@@ -24,7 +24,7 @@ export async function GET(
   if (!input.templateGoogleDocId) return NextResponse.json({ error: "no_template" }, { status: 404 });
 
   try {
-    const pdf = await mergeAndExportDocument(input.templateGoogleDocId, input.text, input.images, undefined, input.imageSizesMm);
+    const pdf = await mergeAndExportDocument(eventId, input.templateGoogleDocId, input.text, input.images, undefined, input.imageSizesMm);
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",

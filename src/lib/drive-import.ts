@@ -7,6 +7,7 @@ import {
   isGoogleNativeFile,
 } from "@/lib/drive";
 import { ingestBillFiles, type RawFileInput, type IngestResult } from "@/lib/bill-ingest";
+import { DriveError } from "@/lib/drive-errors";
 
 export class DriveImportError extends Error {
   code: string;
@@ -74,7 +75,7 @@ export async function importBillsFromDrive(
   if (event.status === "closed") throw new DriveImportError("event_closed_locked");
   if (!event.driveIngestFolderId) throw new DriveImportError("no_ingest_folder");
 
-  const subfolders = await listAuthorSubfolders(event.driveIngestFolderId);
+  const subfolders = await listAuthorSubfolders(eventId, event.driveIngestFolderId, "ingest");
 
   const authorsResolved: AuthorResolution[] = [];
   const skippedNativeGoogleFiles: { filename: string; subfolderName: string }[] = [];
@@ -102,12 +103,12 @@ export async function importBillsFromDrive(
       created,
     });
 
-    collect(await listFilesInSubfolder(subfolder.id), subfolder.name, author.id);
+    collect(await listFilesInSubfolder(eventId, subfolder.id, "ingest"), subfolder.name, author.id);
   }
 
   // Files directly in the ingest folder have no author subfolder -- imported
   // as event-paid bills (no payer), same as a plain upload.
-  collect(await listFilesInSubfolder(event.driveIngestFolderId), "", null);
+  collect(await listFilesInSubfolder(eventId, event.driveIngestFolderId, "ingest"), "", null);
 
   // Skip files already brought in by a previous import run, without downloading
   // them again — this is what driveSourceFileId was reserved for.
@@ -126,7 +127,7 @@ export async function importBillsFromDrive(
   for (const fileId of toDownloadIds) {
     const meta = fileMeta.get(fileId)!;
     try {
-      const buffer = await downloadFileBuffer(fileId);
+      const buffer = await downloadFileBuffer(eventId, fileId);
       rawFiles.push({
         filename: meta.name,
         buffer,
@@ -137,7 +138,8 @@ export async function importBillsFromDrive(
     } catch (err) {
       // One file's download exhausting all retries no longer aborts every
       // other file in the batch — it's reported and the rest continue.
-      downloadFailures.push({ filename: meta.name, error: String(err) });
+      // `error` is a stable DriveErrorCode (rendered as driveSettings.error.<code>).
+      downloadFailures.push({ filename: meta.name, error: err instanceof DriveError ? err.code : "drive_unknown" });
     }
   }
 

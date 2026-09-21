@@ -3,6 +3,8 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess, requireAnyModuleAccess } from "@/lib/module-access";
+import { parseFolderId } from "@/lib/drive-errors";
+import { invalidateDriveIdentity } from "@/lib/drive";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -44,9 +46,6 @@ export async function PATCH(
     name,
     startDate,
     endDate,
-    driveIngestFolderId,
-    driveExportFolderId,
-    driveParticipantsFolderId,
     memberPriceCzk,
     nonMemberPriceCzk,
     registrationBankAccountNumber,
@@ -58,6 +57,32 @@ export async function PATCH(
     mailQuestionnaireUrl,
     qrSizeMm,
   } = body;
+
+  // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
+  // is not recognisably an id is rejected (and says which field). Empty = unset.
+  const folderIds: Record<"driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId", string | null | undefined> = {
+    driveIngestFolderId: undefined,
+    driveExportFolderId: undefined,
+    driveParticipantsFolderId: undefined,
+  };
+  for (const field of Object.keys(folderIds) as (keyof typeof folderIds)[]) {
+    const raw = body[field];
+    if (raw === undefined) continue;
+    if (raw === null || (typeof raw === "string" && raw.trim() === "")) {
+      folderIds[field] = null;
+      continue;
+    }
+    const parsed = typeof raw === "string" ? parseFolderId(raw) : null;
+    if (!parsed) return NextResponse.json({ error: "not_a_folder_id", field }, { status: 400 });
+    folderIds[field] = parsed;
+  }
+  const driveIngestFolderId = folderIds.driveIngestFolderId;
+  const driveExportFolderId = folderIds.driveExportFolderId;
+  const driveParticipantsFolderId = folderIds.driveParticipantsFolderId;
+  // Whoever saves the Drive folders becomes the person whose Google account the
+  // event's Drive work runs as (see DriveAccount / getDriveIdentity).
+  const savesDrive = driveIngestFolderId !== undefined || driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined;
+
   // Everything already exported/synced was written to the *old* folder, and
   // the manifest sheet id is remembered per event -- so after a folder change
   // the export would report "already exported" and keep updating the old
@@ -79,6 +104,7 @@ export async function PATCH(
     where: { id },
     data: {
       ...(exportFolderChanged && { driveManifestSpreadsheetId: null }),
+      ...(savesDrive && { driveConfiguredByUserId: user.id }),
       ...(name !== undefined && { name }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
@@ -97,6 +123,7 @@ export async function PATCH(
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
     },
   });
+  if (savesDrive) invalidateDriveIdentity(id);
   if (exportFolderChanged) {
     await prisma.bill.updateMany({
       where: { eventId: id, OR: [{ exportFilename: { not: null } }, { exportedAt: { not: null } }] },
