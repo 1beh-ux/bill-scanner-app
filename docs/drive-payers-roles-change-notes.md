@@ -115,3 +115,21 @@ wins, else Impersonated service account). Exported helpers and their callers (al
   New confirms: bulk approve (count + "lze vrátit Znovu otevřít"), bulk mark paid/unpaid, bill-detail paid toggle.
   Not browser-tested (no browser in this environment): focus trap / Esc / Enter behavior is by construction (safe button focused first).
   Translation keys go into `scripts/seed-missing-translations.ts` (single idempotent script, extended per part).
+- Part 9 (FX preview): changed. `GET /api/exchange-rates/lookup` + FxPreview on the bill detail (rate, date, CZK result before saving);
+  `MAX_BACKFILL_DAYS = 366` bounds the ČNB backfill.
+- Part 10 (budget page): changed. Neutral colour at 0 (no red/green), see `src/lib/budget.ts` and the budget page.
+- Part 11 (bills columns): changed. `Event.billsListColumns Json?` (migration `add_bills_list_columns`), `src/lib/bill-columns.ts`,
+  shared `ColumnPicker` (also used by participants), event PATCH normalises and resets with `Prisma.DbNull`; bills GET includes `createdBy`.
+- Part 12 (switcher / move): changed. Selected event persists (`CURRENT_EVENT_KEY`, `setCurrentEventId`); move targets limited to events the
+  user may access (`bill-move.ts`, `GET /api/events?module=bills`), new error codes.
+- Part 13 (translations): changed. `scripts/audit-translations.ts` (read-only; `--json`, `--strict`), shared parser
+  `scripts/lib/translation-sources.ts`. `seed-missing-translations.ts` now also inserts every key defined in older seed scripts (never
+  overwrites) plus 16 dynamic error-code texts. `t()` warns in dev on a missing key. Local before -> after: missing 14->0 (16 after
+  enumerating 7 more dynamic prefixes ->0), not-in-DB 141->0, empty 0, same-as-key 0. 2 "suspect" near-duplicate pairs are false positives.
+  Production audit NOT run (gcloud login expired): run `audit-translations.ts` -> `seed-missing-translations.ts` -> `audit-translations.ts --strict`.
+  Not enumerable: `imageEditor.error.HTTP <status>` (raw fallback text, non-JSON failures only).
+
+## Deviations / contradictions
+- Blank-page threshold 99.9 % of pooled blocks instead of 99.5 % of pixels (see Part 7).
+- Not browser-tested anywhere (no browser here): dialogs, column picker, switcher, FX preview UI.
+- Production not reachable from this environment: no prod audit, no prod script dry runs.
