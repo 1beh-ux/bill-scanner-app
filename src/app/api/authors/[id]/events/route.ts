@@ -10,6 +10,9 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
 
   const { id } = await params;
   const access = await prisma.authorEventAccess.findMany({
@@ -27,6 +30,9 @@ export async function POST(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -50,6 +56,9 @@ export async function DELETE(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 
   const { id } = await params;

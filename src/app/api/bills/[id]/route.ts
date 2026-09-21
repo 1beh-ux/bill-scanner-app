@@ -109,6 +109,15 @@ export async function PATCH(
   if (body.pendingCategoryId !== undefined) data.pendingCategoryId = body.pendingCategoryId || null;
 
 if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAuthorId) {
+    // A bill can only be given a payer that is attached to its event (clearing
+    // is always fine; an unchanged payer, e.g. one since removed from the event,
+    // is left alone by the condition above).
+    if (data.payerAuthorId !== null) {
+      const attached = await prisma.authorEventAccess.findUnique({
+        where: { authorId_eventId: { authorId: data.payerAuthorId as string, eventId: existing.eventId } },
+      });
+      if (!attached) return NextResponse.json({ error: "payer_not_in_event" }, { status: 400 });
+    }
     // Payer is actually changing (including being cleared) — any prior "paid"
     // mark referred to the old payer and no longer applies. Auto-true when
     // the new payer is null (paid directly by the event, nothing to reimburse).

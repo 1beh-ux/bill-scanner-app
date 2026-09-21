@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
 
 export async function POST(
   req: NextRequest,
@@ -10,10 +11,20 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
 
   const { id: sourceId } = await params;
   const body = await req.json().catch(() => ({}));
   const targetId: string | undefined = body.targetAuthorId;
+  // Optional: the surviving payer takes these bank details (audited as `merge`).
+  const hasBank = "bankAccountNumber" in body && "bankCode" in body;
+  const bank = hasBank ? cleanBank(body.bankAccountNumber, body.bankCode) : null;
+  if (bank) {
+    const bankError = validateBank(bank);
+    if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
+  }
 
   if (!targetId) {
     return NextResponse.json({ error: "targetAuthorId is required" }, { status: 400 });
@@ -53,6 +64,8 @@ export async function POST(
       });
     }
     await tx.authorEventAccess.deleteMany({ where: { authorId: sourceId } });
+
+    if (bank) await setAuthorBank(tx, { authorId: targetId, bank, userId: user.id, eventId: null, source: "merge" });
 
     // Archive the source — reuses the schema's existing merge fields.
     await tx.author.update({

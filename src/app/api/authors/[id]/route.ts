@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
 
 export async function GET(
   req: NextRequest,
@@ -10,6 +11,9 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 
   const { id } = await params;
@@ -30,19 +34,36 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
 
   const { id } = await params;
   const body = await req.json();
-  const { canonicalName, bankAccountNumber, bankCode, active } = body;
+  const { canonicalName, active } = body;
 
-  const author = await prisma.author.update({
-    where: { id },
-    data: {
-      ...(canonicalName !== undefined && { canonicalName }),
-      ...(bankAccountNumber !== undefined && { bankAccountNumber: bankAccountNumber || null }),
-      ...(bankCode !== undefined && { bankCode: bankCode || null }),
-      ...(active !== undefined && { active }),
-    },
+  const hasAccount = "bankAccountNumber" in body;
+  const hasCode = "bankCode" in body;
+  if (hasAccount !== hasCode) return NextResponse.json({ error: "bank_incomplete" }, { status: 400 });
+  const bank = hasAccount ? cleanBank(body.bankAccountNumber, body.bankCode) : null;
+  if (bank) {
+    const bankError = validateBank(bank);
+    if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
+  }
+  if (canonicalName !== undefined && !String(canonicalName).trim()) {
+    return NextResponse.json({ error: "name_required" }, { status: 400 });
+  }
+
+  const author = await prisma.$transaction(async (tx) => {
+    await tx.author.update({
+      where: { id },
+      data: {
+        ...(canonicalName !== undefined && { canonicalName: String(canonicalName).trim().replace(/\s+/g, " ") }),
+        ...(active !== undefined && { active }),
+      },
+    });
+    if (bank) await setAuthorBank(tx, { authorId: id, bank, userId: user.id, eventId: null, source: "admin_edit" });
+    return tx.author.findUniqueOrThrow({ where: { id } });
   });
 
   return NextResponse.json(author);
@@ -55,6 +76,9 @@ export async function DELETE(
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 
   const { id } = await params;
