@@ -72,6 +72,30 @@ function proplacenoLabel(payerAuthorId: string | null, paidToAuthor: boolean): s
   return paidToAuthor ? "Ano" : "Ne";
 }
 
+/**
+ * Writes the manifest rows into the remembered sheet, or creates the sheet. Prefers
+ * the cached id (searching Drive by title before creating caused duplicate
+ * manifests under rapid-repeat calls). A remembered sheet that is gone -- or not
+ * reachable by the identity now used -- is NOT silently replaced: it raises
+ * `manifest_missing` so the user can confirm, and only `recreate: true` makes a
+ * new one.
+ */
+export async function upsertManifest(
+  eventId: string,
+  o: { exportFolderId: string; cachedSpreadsheetId: string | null; title: string; rows: (string | number)[][]; recreate: boolean }
+): Promise<string> {
+  if (o.cachedSpreadsheetId) {
+    try {
+      await writeManifestValues(eventId, o.cachedSpreadsheetId, o.rows);
+      return o.cachedSpreadsheetId;
+    } catch (err) {
+      if (!(err instanceof DriveError) || err.code !== "not_found_or_no_access") throw err;
+      if (!o.recreate) throw new DriveError("manifest_missing", { ...err.params, folderLabel: "export" }, err);
+    }
+  }
+  return createManifestSheet(eventId, o.exportFolderId, o.title, o.rows);
+}
+
 export async function exportEventBills(eventId: string, opts: { recreateManifest?: boolean } = {}): Promise<ExportSummary> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) throw new DriveExportError("event_not_found");
@@ -198,37 +222,15 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   const manifestTitle = `Manifest - ${event.name}`;
   const manifestRows = [header, ...rows];
 
-  // Prefer the cached ID from a previous run — avoids searching Drive by
-  // title before deciding whether to create, which caused duplicate manifest
-  // files under rapid-repeat calls (see createManifestSheet's comment).
-  let manifestSpreadsheetId: string | null = event.driveManifestSpreadsheetId;
-
-  if (manifestSpreadsheetId) {
-    try {
-      await writeManifestValues(eventId, manifestSpreadsheetId, manifestRows);
-    } catch (err) {
-      // The remembered sheet is gone (deleted) or not reachable by the
-      // identity now used. Don't silently create another one: tell the caller
-      // (manifest_missing) and let the user confirm, then recreate.
-      if (err instanceof DriveError && err.code === "not_found_or_no_access") {
-        if (!opts.recreateManifest) throw new DriveError("manifest_missing", { ...err.params, folderLabel: "export" }, err);
-        manifestSpreadsheetId = null;
-      } else {
-        throw err;
-      }
-    }
-  }
-
-  if (!manifestSpreadsheetId) {
-    manifestSpreadsheetId = await createManifestSheet(eventId, event.driveExportFolderId, manifestTitle, manifestRows);
-    await prisma.event.update({
-      where: { id: eventId },
-      data: { driveManifestSpreadsheetId: manifestSpreadsheetId },
-    });
-  }
-
-  if (!manifestSpreadsheetId) {
-    throw new Error("Failed to resolve a manifest spreadsheet id");
+  const manifestSpreadsheetId = await upsertManifest(eventId, {
+    exportFolderId: event.driveExportFolderId,
+    cachedSpreadsheetId: event.driveManifestSpreadsheetId,
+    title: manifestTitle,
+    rows: manifestRows,
+    recreate: opts.recreateManifest === true,
+  });
+  if (manifestSpreadsheetId !== event.driveManifestSpreadsheetId) {
+    await prisma.event.update({ where: { id: eventId }, data: { driveManifestSpreadsheetId: manifestSpreadsheetId } });
   }
 
   return { totalApproved: bills.length, newlyExported, alreadyExported, exportFailures, manifestSpreadsheetId };
