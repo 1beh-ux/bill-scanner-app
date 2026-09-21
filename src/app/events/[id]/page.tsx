@@ -7,6 +7,7 @@ import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
+import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -37,13 +38,6 @@ type Category = {
   description: string | null;
   budgetAmount: string;
   isFromTemplate: boolean;
-};
-
-type ExportSummary = {
-  totalApproved: number;
-  newlyExported: number;
-  alreadyExported: number;
-  manifestSpreadsheetId: string;
 };
 
 type ModuleKey = "bills" | "health" | "mail";
@@ -93,13 +87,6 @@ export default function EventDetailPage({
   const [error, setError] = useState<string | null>(null);
   const [syncingCategories, setSyncingCategories] = useState(false);
 
-  const [driveAccountEmail, setDriveAccountEmail] = useState("");
-  const [driveConnectedEmail, setDriveConnectedEmail] = useState<string | null>(null);
-  const [ingestFolderId, setIngestFolderId] = useState("");
-  const [exportFolderId, setExportFolderId] = useState("");
-  const [participantsFolderId, setParticipantsFolderId] = useState("");
-  const [driveError, setDriveError] = useState<string | null>(null);
-  const [driveSaving, setDriveSaving] = useState(false);
 
   const [memberPriceCzk, setMemberPriceCzk] = useState("");
   const [nonMemberPriceCzk, setNonMemberPriceCzk] = useState("");
@@ -112,9 +99,6 @@ export default function EventDetailPage({
   const [questionnaireSaving, setQuestionnaireSaving] = useState(false);
   const [questionnaireSaved, setQuestionnaireSaved] = useState(false);
 
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportResult, setExportResult] = useState<ExportSummary | null>(null);
 
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
@@ -145,20 +129,7 @@ export default function EventDetailPage({
   }, [tab, moduleAccess]);
 
   useEffect(() => {
-    fetch("/api/config/drive-account")
-      .then((r) => r.json())
-      .then((d) => {
-        setDriveAccountEmail(d.email || "");
-        setDriveConnectedEmail(d.connectedEmail ?? null);
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
     if (event) {
-      setIngestFolderId(event.driveIngestFolderId ?? "");
-      setExportFolderId(event.driveExportFolderId ?? "");
-      setParticipantsFolderId(event.driveParticipantsFolderId ?? "");
       setMemberPriceCzk(event.memberPriceCzk != null ? String(event.memberPriceCzk) : "");
       setNonMemberPriceCzk(event.nonMemberPriceCzk != null ? String(event.nonMemberPriceCzk) : "");
       setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
@@ -262,41 +233,6 @@ export default function EventDetailPage({
     load();
   }
 
-  async function handleSaveDriveFolders(e: React.FormEvent) {
-    e.preventDefault();
-    setDriveError(null);
-    setDriveSaving(true);
-    const res = await fetch(`/api/events/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        driveIngestFolderId: ingestFolderId.trim() || null,
-        driveExportFolderId: exportFolderId.trim() || null,
-        driveParticipantsFolderId: participantsFolderId.trim() || null,
-      }),
-    });
-    setDriveSaving(false);
-    if (!res.ok) {
-      setDriveError(t("driveSettings.errorSaveFailed"));
-      return;
-    }
-    load();
-  }
-
-  async function handleExportNow() {
-    setExportError(null);
-    setExportResult(null);
-    setExporting(true);
-    const res = await fetch(`/api/events/${id}/drive-export`, { method: "POST" });
-    setExporting(false);
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({ error: "exportGeneric" }));
-      setExportError(data.error || "exportGeneric");
-      return;
-    }
-    setExportResult(await res.json());
-  }
-
   async function handleClose() {
     if (!(await confirm({ message: t("eventDetail.confirmClose") }))) return;
     setLifecycleError(null);
@@ -329,7 +265,6 @@ export default function EventDetailPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
-  const hasFolderInput = !!(ingestFolderId.trim() || exportFolderId.trim() || participantsFolderId.trim());
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -667,116 +602,7 @@ export default function EventDetailPage({
       )}
 
       {tab === "drive" && (
-        <>
-          <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("driveSettings.title")}</h2>
-
-          <div className="mb-6 rounded-lg border border-mist bg-paper-2 p-3">
-            <p className="mb-1 text-[14px] font-medium text-ink">{t("driveSettings.connectTitle")}</p>
-            <p className="mb-2 text-[13px] text-ink-secondary">{t("driveSettings.connectHint")}</p>
-            {driveConnect === "connected" && <p className="mb-2 text-[13px] text-pine">{t("driveSettings.connectDone")}</p>}
-            {driveConnect === "error" && <p className="mb-2 text-[13px] text-red-600">{t("driveSettings.connectError")}</p>}
-            <p className="mb-2 text-[13px] text-ink">
-              {driveConnectedEmail
-                ? t("driveSettings.connectedAs", { email: driveConnectedEmail })
-                : t("driveSettings.notConnected")}
-            </p>
-            <a
-              href={`/api/mail-oauth/authorize?eventId=${id}&purpose=drive`}
-              className="inline-block rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
-            >
-              {driveConnectedEmail ? t("driveSettings.reconnect") : t("driveSettings.connect")}
-            </a>
-          </div>
-
-          <p className="mb-1 text-[14px] text-ink-secondary">{t("driveSettings.instructionsIntro")}</p>
-          <p className="mb-2 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
-            {driveAccountEmail || "…"}
-          </p>
-          <p className="mb-4 whitespace-pre-line text-[13px] text-ink-secondary">{t("driveSettings.instructionsSteps")}</p>
-
-          <form onSubmit={handleSaveDriveFolders} className="mb-1 flex max-w-md flex-col gap-2">
-            <label className="text-[13px] text-ink-secondary">
-              {t("driveSettings.ingestFolderLabel")}
-              <input
-                type="text"
-                value={ingestFolderId}
-                onChange={(e) => setIngestFolderId(e.target.value)}
-                className={inputClass + " mt-1"}
-              />
-            </label>
-            <label className="text-[13px] text-ink-secondary">
-              {t("driveSettings.exportFolderLabel")}
-              <input
-                type="text"
-                value={exportFolderId}
-                onChange={(e) => setExportFolderId(e.target.value)}
-                className={inputClass + " mt-1"}
-              />
-            </label>
-            <label className="text-[13px] text-ink-secondary">
-              {t("driveSettings.participantsFolderLabel")}
-              <input
-                type="text"
-                value={participantsFolderId}
-                onChange={(e) => setParticipantsFolderId(e.target.value)}
-                className={inputClass + " mt-1"}
-              />
-            </label>
-            <p className="text-[12px] text-ink-secondary">{t("driveSettings.participantsFolderHint")}</p>
-            <p className="text-[12px] text-ink-secondary">{t("driveSettings.folderIdHint")}</p>
-
-            {driveError && <p className="text-[13px] text-red-600">{driveError}</p>}
-
-            <div className="mt-1">
-              <button type="submit" disabled={driveSaving} className={btnPrimary}>
-                {t("driveSettings.saveFolders")}
-              </button>
-            </div>
-          </form>
-
-          {!hasFolderInput && <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.noFoldersSet")}</p>}
-
-          <div className="mt-6 border-t border-mist pt-6">
-            <button
-              type="button"
-              onClick={handleExportNow}
-              disabled={exporting || !event.driveExportFolderId}
-              className={btnPrimary}
-            >
-              {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
-            </button>
-
-            {!event.driveExportFolderId && (
-              <p className="mt-2 text-[12px] text-ink-secondary">{t("driveSettings.exportNoFolderSet")}</p>
-            )}
-
-            {exportError && (
-              <p className="mt-2 text-[14px] text-red-600">
-                {t(`driveSettings.error.${exportError}`) || t("driveSettings.error.exportGeneric")}
-              </p>
-            )}
-
-            {exportResult && (
-              <div className="mt-3 text-[14px] text-ink">
-                <p>
-                  {t("driveSettings.exportResultSummary", {
-                    total: String(exportResult.totalApproved),
-                    new: String(exportResult.newlyExported),
-                    already: String(exportResult.alreadyExported),
-                  })}
-                </p>
-                <a
-                  href={`https://docs.google.com/spreadsheets/d/${exportResult.manifestSpreadsheetId}/edit`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-ember hover:underline"
-                >
-                  {t("driveSettings.exportOpenManifest")}
-                </a>
-              </div>
-            )}
-          </div>
-        </>
+        <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} />
       )}
     </div>
   );

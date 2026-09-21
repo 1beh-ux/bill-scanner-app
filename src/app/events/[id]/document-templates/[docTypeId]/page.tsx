@@ -2,10 +2,11 @@
 
 import { use, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
 
 type Placeholder = { key: string; status: "ok" | "field_off" | "unknown" | "invalid"; hasSpaces: boolean };
 type CheckData = {
-  template: { name: string; docId?: string; error?: string; placeholders: Placeholder[] };
+  template: { name: string; docId?: string; error?: string; errorParams?: DriveErrorInfo; placeholders: Placeholder[] };
   unusedFields: { key: string; label: string }[];
   values: Record<string, string> | null;
   imageKeys: string[];
@@ -33,7 +34,7 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
   // Results carry the key they were made for, so "loading" is derived
   // (result key !== current key) instead of set synchronously.
   const [check, setCheck] = useState<{ key: string; data: CheckData | null } | null>(null);
-  const [pdf, setPdf] = useState<{ key: string; url: string | null } | null>(null);
+  const [pdf, setPdf] = useState<{ key: string; url: string | null; error?: { code: string; info: DriveErrorInfo } } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
 
@@ -66,10 +67,15 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
       .catch(() => !cancelled && setCheck({ key, data: null }));
 
     fetch(`${base}/preview?${q}`)
-      .then((r) => (r.ok ? r.blob() : Promise.reject()))
-      .then((blob) => {
-        objectUrl = URL.createObjectURL(blob);
-        if (!cancelled) setPdf({ key, url: objectUrl });
+      .then(async (r) => {
+        if (r.ok) {
+          objectUrl = URL.createObjectURL(await r.blob());
+          if (!cancelled) setPdf({ key, url: objectUrl });
+          return;
+        }
+        // The route answers with a stable Drive error code (+ the account/folder involved).
+        const data = await r.json().catch(() => ({}));
+        if (!cancelled) setPdf({ key, url: null, error: data.error ? { code: data.error, info: data } : undefined });
       })
       .catch(() => !cancelled && setPdf({ key, url: null }));
 
@@ -169,7 +175,9 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
           ) : pdfReady.url ? (
             <iframe src={pdfReady.url} title="preview" className="h-[80vh] w-full border-0" />
           ) : (
-            <p className="p-6 text-[14px] text-red-600">{t("templatePreview.pdfFailed")}</p>
+            <p className="p-6 text-[14px] text-red-600">
+              {pdfReady.error ? driveErrorText(t, pdfReady.error.code, pdfReady.error.info) : t("templatePreview.pdfFailed")}
+            </p>
           )}
         </div>
 
@@ -180,7 +188,7 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
           ) : !data ? (
             <p className="text-[13px] text-red-600">{t("templateCheck.failed")}</p>
           ) : data.template.error ? (
-            <p className="text-[13px] text-red-600">{t("templateCheck.readFailed")}</p>
+            <p className="text-[13px] text-red-600">{driveErrorText(t, data.template.error, data.template.errorParams)}</p>
           ) : (
             <>
               <p className="mb-3 text-[12px] text-ink-secondary">

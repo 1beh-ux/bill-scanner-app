@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { mergeAndExportDocument } from "@/lib/document-merge";
 import { loadTemplatePreviewInput } from "@/lib/template-preview";
+import { DriveError, httpStatusForDriveError } from "@/lib/drive-errors";
 
 // The template merged with one participant's data, as a PDF -- nothing is
 // saved, sent or numbered. Slow (a real Drive copy + export, a few seconds).
@@ -33,7 +34,10 @@ export async function GET(
       },
     });
   } catch (err) {
+    if (err instanceof DriveError) {
+      return NextResponse.json({ error: err.code, ...err.params }, { status: httpStatusForDriveError(err.code) });
+    }
     console.error("[template-preview] merge failed:", err);
-    return NextResponse.json({ error: "merge_failed" }, { status: 502 });
+    return NextResponse.json({ error: "drive_unknown" }, { status: 502 });
   }
 }

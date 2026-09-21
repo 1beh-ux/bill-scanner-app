@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
+import { driveErrorText } from "@/lib/drive-error-messages";
 
 // Import targets are now fully data-driven: every field flagged with the
 // `import` surface (builtin/guardian/custom -- see
@@ -210,7 +211,8 @@ export default function ParticipantImportPage({
   const [spreadsheetIdInput, setSpreadsheetIdInput] = useState("");
   const [sheetsLoading, setSheetsLoading] = useState(false);
   const [sheetsError, setSheetsError] = useState<string | null>(null);
-  const [serviceAccountEmail, setServiceAccountEmail] = useState("");
+  // The Google account this event's Drive/Sheets work runs as -- the sheet must be shared with it.
+  const [identityEmail, setIdentityEmail] = useState("");
 
   // Persisted connection (Seznam účastníků import settings) -- set up once,
   // reused on every future import instead of re-pasting and remapping.
@@ -244,11 +246,11 @@ export default function ParticipantImportPage({
   }, [eventId]);
 
   useEffect(() => {
-    fetch("/api/config/drive-account")
-      .then((r) => (r.ok ? r.json() : { email: "" }))
-      .then((d) => setServiceAccountEmail(d.email || ""))
+    fetch(`/api/events/${eventId}/drive-identity`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIdentityEmail(d?.identity?.email || ""))
       .catch(() => {});
-  }, []);
+  }, [eventId]);
 
   // Prefill from the saved connection, if there is one, and load it
   // straight away -- that's the point of saving it in the first place.
@@ -302,9 +304,10 @@ export default function ParticipantImportPage({
       });
       const data = await res.json();
       if (!res.ok) {
+        // A stable Drive error code (+ the account used) -> precise translated message.
         setSheetsError(
-          data.error === "sheet_read_failed"
-            ? t("participantImportPage.sheetsShareError", { email: data.serviceAccountEmail || serviceAccountEmail })
+          data.error
+            ? driveErrorText(t, data.error, { identity: data.identity || identityEmail, serviceAccount: data.serviceAccount, folderLabel: undefined })
             : t("participantImportPage.sheetsLoadError")
         );
         return;
@@ -555,7 +558,7 @@ export default function ParticipantImportPage({
         <>
           <p className="mb-2 text-[14px] text-ink-secondary">{t("participantImportPage.sheetsInstructions")}</p>
           <p className="mb-3 break-all rounded-lg bg-paper-2 p-2 font-mono text-[13px] text-ink">
-            {serviceAccountEmail || "…"}
+            {identityEmail || "…"}
           </p>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row">
             <input

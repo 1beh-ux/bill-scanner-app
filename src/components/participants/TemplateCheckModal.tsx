@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
 
 type Placeholder = { key: string; status: "ok" | "field_off" | "unknown" | "invalid"; hasSpaces: boolean };
 type CheckResult = {
-  templates: { docTypeId: string; name: string; error?: string; placeholders: Placeholder[] }[];
+  templates: { docTypeId: string; name: string; error?: string; errorParams?: DriveErrorInfo; placeholders: Placeholder[] }[];
   unusedFields: { key: string; label: string }[];
 };
 
@@ -95,7 +96,7 @@ export default function TemplateCheckModal({
           <div key={tpl.docTypeId} className="mb-4">
             <p className="mb-1 text-[14px] font-medium text-ink">{tpl.name}</p>
             {tpl.error ? (
-              <p className="text-[13px] text-red-600">{t("templateCheck.readFailed")}</p>
+              <p className="text-[13px] text-red-600">{driveErrorText(t, tpl.error, tpl.errorParams)}</p>
             ) : tpl.placeholders.length === 0 ? (
               <p className="text-[13px] text-ink-secondary">{t("templateCheck.noPlaceholders")}</p>
             ) : (

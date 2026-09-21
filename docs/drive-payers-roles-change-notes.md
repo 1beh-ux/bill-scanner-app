@@ -65,6 +65,23 @@ wins, else Impersonated service account). Exported helpers and their callers (al
 - Payers rename: 19 existing translation rows updated by `scripts/update-translations-payers.ts` (dry run by default, `--apply`);
   `prisma/seed.ts` source values updated too. `scripts/seed-camp-helper-i18n.ts` did not contain these keys.
 
+- Part 4 design: `DriveAccount.connectedByUserId` is now UNIQUE (1 connection per user; reconnect replaces own row); `email` stays
+  unique, so a Google account already held by another user is refused (`driveConnect=in_use`) instead of being taken over.
+  Added `tokenInvalidAt` (set at runtime when Google answers invalid_grant, cleared on reconnect) and `Event.driveConfiguredByUserId`.
+  `getDriveIdentity(eventId)` = configured user's account, else the service account with a warning (no_connection / token_invalid /
+  user_inactive). Every drive.ts helper now takes `eventId`; the global 60 s "latest connection" cache is gone (per-account OAuth
+  clients, 20 s identity cache invalidated on connect/take-over/folder save).
+- Part 4: `withRetry` used to retry EVERY error 3x (also 404/403). Now only 429/5xx/network/timeouts are retried.
+- Part 4: `drive-test` existed but the button was never rendered; the tab is now `components/events/DriveSettingsTab.tsx` (identity block,
+  three folders, URL->id, save -> auto test, per-folder test, export with `manifest_missing` -> "recreate" confirm).
+- Part 4: a remembered manifest that vanished used to be silently recreated (duplicates risk); now `manifest_missing` + explicit confirm.
+- Part 4: `mergeAndExportDocument` and `template-check` also resolve the identity through the event (document merge runs as the
+  event's configured user).
+- Deploy order (Parts 1-4): 1) `prisma migrate deploy`; 2) `scripts/grant-accountants-bills-access.ts` dry run then `--apply` (BEFORE the new
+  code serves traffic); 3) `scripts/backfill-drive-configured-by.ts` dry run then `--apply`; 4) `scripts/update-translations-payers.ts --apply`;
+  5) `scripts/seed-missing-translations.ts`. Users must re-connect nothing: the existing app-wide connection stays valid and is
+  assigned to the events by step 3.
+
 ## Part status (7-15)
 - Part 8 (ConfirmDialog): changed. `src/components/ConfirmDialog.tsx` (`ConfirmProvider`, `useConfirm`, `useAlert`), mounted in
   `providers.tsx`. All 28 native pop-ups (`window.confirm`/`alert`) replaced; `grep` for `window.(confirm|alert|prompt)` is empty.

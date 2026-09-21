@@ -3,19 +3,60 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { visibleNavSections } from "@/lib/nav-sections";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
+type GoogleAccount = {
+  connected: boolean;
+  email: string | null;
+  connectedAt: string | null;
+  valid: boolean;
+  events: { id: string; name: string; status: string }[];
+};
+
 export default function SettingsPage() {
   const { t, roleLoaded, role, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules } = useTranslations();
+  const confirm = useConfirm();
+  const [google, setGoogle] = useState<GoogleAccount | null>(null);
+  // ?driveConnect=connected|error|in_use after coming back from Google's consent screen
+  const [driveConnect] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("driveConnect")
+  );
+  const [disconnecting, setDisconnecting] = useState(false);
   const [landingPath, setLandingPath] = useState("");
   const [emailSignature, setEmailSignature] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/me/google-account")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setGoogle)
+      .catch(() => {});
+  }, []);
+
+  async function disconnectGoogle() {
+    const events = google?.events ?? [];
+    const ok = await confirm({
+      message:
+        events.length > 0
+          ? t("settingsPage.googleDisconnectWithEvents", { events: events.map((e) => e.name).join(", ") })
+          : t("settingsPage.googleDisconnect"),
+      confirmLabel: t("settingsPage.googleDisconnectButton"),
+      danger: true,
+    });
+    if (!ok) return;
+    setDisconnecting(true);
+    await fetch("/api/me/google-account", { method: "DELETE" });
+    const res = await fetch("/api/me/google-account");
+    if (res.ok) setGoogle(await res.json());
+    setDisconnecting(false);
+  }
 
   useEffect(() => {
     fetch("/api/me")
@@ -94,6 +135,47 @@ export default function SettingsPage() {
             </label>
           ))}
           <span className="mt-1 block text-[11.5px]">{t("settingsPage.modulesHint")}</span>
+        </div>
+      </div>
+
+      <div className="mb-6 border-b border-mist pb-6">
+        <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("settingsPage.googleTitle")}</h2>
+        <p className="mb-2 text-[12px] text-ink-secondary">{t("settingsPage.googleHint")}</p>
+        {driveConnect === "connected" && <p className="mb-2 text-[13px] text-pine">{t("driveSettings.connectDone")}</p>}
+        {driveConnect === "error" && <p className="mb-2 text-[13px] text-red-600">{t("driveSettings.connectError")}</p>}
+        {driveConnect === "in_use" && <p className="mb-2 text-[13px] text-red-600">{t("driveSettings.connectInUse")}</p>}
+        {google?.connected ? (
+          <p className="mb-2 text-[13px] text-ink">
+            {t(google.valid ? "settingsPage.googleConnected" : "settingsPage.googleExpired", {
+              email: google.email ?? "",
+              date: google.connectedAt ? new Date(google.connectedAt).toLocaleDateString("cs-CZ") : "",
+            })}
+          </p>
+        ) : (
+          <p className="mb-2 text-[13px] text-ink-secondary">{t("settingsPage.googleNotConnected")}</p>
+        )}
+        {google && google.events.length > 0 && (
+          <p className="mb-2 text-[12px] text-ink-secondary">
+            {t("settingsPage.googleUsedBy", { events: google.events.map((e) => e.name).join(", ") })}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/api/mail-oauth/authorize?purpose=drive"
+            className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
+          >
+            {google?.connected ? t("driveSettings.reconnect") : t("driveSettings.connectMine")}
+          </a>
+          {google?.connected && (
+            <button
+              type="button"
+              onClick={disconnectGoogle}
+              disabled={disconnecting}
+              className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-red-600 hover:bg-paper-2 disabled:opacity-50"
+            >
+              {t("settingsPage.googleDisconnectButton")}
+            </button>
+          )}
         </div>
       </div>
 
