@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Kind = "med" | "slot" | "situation" | "document";
 type IncidentCategory = "illness" | "injury" | "parasite" | "medication" | "other";
@@ -45,6 +46,7 @@ interface ListTemplateAdminProps {
 
 export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListTemplateAdminProps) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const isSituation = kind === "situation";
   const isDocument = kind === "document";
 
@@ -198,7 +200,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   }
 
   async function handleDelete(item: Item) {
-    if (!window.confirm(t("listTemplateAdmin.confirmDelete", { name: item.name }))) return;
+    if (!(await confirm({ message: t("listTemplateAdmin.confirmDelete", { name: item.name }), danger: true }))) return;
     const res = await fetch(itemUrl(item.id), { method: "DELETE" });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Author = {
   id: string;
@@ -22,6 +23,7 @@ const linkBtn = "text-[13px] text-ember hover:underline";
 
 export default function AuthorsPage() {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [authors, setAuthors] = useState<Author[]>([]);
   const [allEvents, setAllEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +86,7 @@ export default function AuthorsPage() {
   }
 
   async function handleDelete(id: string, authorName: string) {
-    if (!window.confirm(t("authors.confirmDelete", { name: authorName }))) return;
+    if (!(await confirm({ message: t("authors.confirmDelete", { name: authorName }), danger: true }))) return;
     const res = await fetch(`/api/authors/${id}`, { method: "DELETE" });
     if (!res.ok) {
       const data = await res.json();
@@ -189,9 +191,11 @@ export default function AuthorsPage() {
     const target = authors.find((a) => a.id === mergeTargetId);
     if (!target) return;
     if (
-      !window.confirm(
-        t("authors.mergeConfirmDialog", { source: source.canonicalName, target: target.canonicalName })
-      )
+      !(await confirm({
+        message: t("authors.mergeConfirmDialog", { source: source.canonicalName, target: target.canonicalName }),
+        danger: true,
+        confirmLabel: t("authors.mergeConfirmButton"),
+      }))
     )
       return;
 

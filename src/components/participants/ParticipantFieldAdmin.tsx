@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
@@ -83,6 +84,7 @@ function fieldId(isEvent: boolean, field: Field): string {
 // all, since a template concept doesn't apply to a fixed field.
 export default function ParticipantFieldAdmin({ scope, eventId, label }: ParticipantFieldAdminProps) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const isEvent = scope === "event";
 
   const basePath = isEvent ? `/api/events/${eventId}/participant-fields` : "/api/participant-field-templates";
@@ -292,9 +294,10 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     if (!fieldLabel.trim() || !key.trim()) return;
     const keyChanged = key.trim() !== field.key;
     if (keyChanged) {
-      const ok = window.confirm(
-        t("participantFieldAdmin.confirmRename", { oldKey: field.key, newKey: key.trim() })
-      );
+      const ok = await confirm({
+        message: t("participantFieldAdmin.confirmRename", { oldKey: field.key, newKey: key.trim() }),
+        confirmLabel: t("participantFieldAdmin.confirmRenameButton"),
+      });
       if (!ok) return;
     }
     setSaving(true);
@@ -330,7 +333,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
 
   async function handleDelete(field: Field) {
-    if (!window.confirm(t("listTemplateAdmin.confirmDelete", { name: field.label }))) return;
+    if (!(await confirm({ message: t("listTemplateAdmin.confirmDelete", { name: field.label }), danger: true }))) return;
     const res = await fetch(itemUrl(fieldId(isEvent, field)), { method: "DELETE" });
     if (!res.ok) {
       setError(t("listTemplateAdmin.errorDeleteFailed"));

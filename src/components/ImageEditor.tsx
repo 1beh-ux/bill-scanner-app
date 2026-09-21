@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Point = { x: number; y: number };
 
@@ -65,6 +66,7 @@ export default function ImageEditor({
   onSaved: () => void;
 }) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -317,7 +319,7 @@ loadSource();
   }
 
   async function handleRevert() {
-    if (!window.confirm(t("imageEditor.confirmRevert"))) return;
+    if (!(await confirm({ message: t("imageEditor.confirmRevert"), danger: true }))) return;
     setSaving(true);
     setError(null);
     const res = await fetch(`/api/bills/${billId}/image`, { method: "DELETE" });

@@ -9,6 +9,7 @@ import SendSummaryModal from "@/components/health/SendSummaryModal";
 import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import { calculateAge } from "@/lib/age";
 import { type ParticipantFieldDef } from "@/lib/participant-fields";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type Guardian = {
   id: string;
@@ -62,6 +63,7 @@ export default function ParticipantDetailPage({
   const { id: eventId, participantId } = use(params);
   const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
 
@@ -144,7 +146,7 @@ export default function ParticipantDetailPage({
   }
 
   async function removeMedPlan(planId: string) {
-    if (!window.confirm(t("medPlansSection.confirmRemove"))) return;
+    if (!(await confirm({ message: t("medPlansSection.confirmRemove"), danger: true }))) return;
     await fetch(`/api/participants/${participantId}/med-plans/${planId}`, { method: "DELETE" });
     loadMedPlans();
   }
@@ -213,7 +215,7 @@ export default function ParticipantDetailPage({
 
   async function handleDeleteParticipant() {
     if (!participant) return;
-    if (!window.confirm(t("participantDetail.confirmDeleteParticipant", { name: participant.name }))) return;
+    if (!(await confirm({ message: t("participantDetail.confirmDeleteParticipant", { name: participant.name }), danger: true }))) return;
     setDeleting(true);
     const res = await fetch(`/api/participants/${participantId}`, { method: "DELETE" });
     if (!res.ok) {
@@ -271,7 +273,7 @@ export default function ParticipantDetailPage({
   }
 
   async function removeGuardian(guardianId: string) {
-    if (!window.confirm(t("participantDetail.confirmRemoveGuardian"))) return;
+    if (!(await confirm({ message: t("participantDetail.confirmRemoveGuardian"), danger: true }))) return;
     await fetch(`/api/participants/${participantId}/guardians/${guardianId}`, { method: "DELETE" });
     load();
   }

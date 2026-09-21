@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import AttachmentPreviewModal from "./AttachmentPreviewModal";
 import { documentDisplayName, type DocumentType, type MailAttachment, type MailMessage, type Participant } from "./types";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -71,6 +72,7 @@ export default function MailDetailPanel({
   onDeleted: (messageId: string) => void;
 }) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
 
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantSearch, setParticipantSearch] = useState("");
@@ -219,7 +221,7 @@ export default function MailDetailPanel({
   }
 
   async function handleDelete() {
-    if (!window.confirm(t("mailDetail.confirmDelete"))) return;
+    if (!(await confirm({ message: t("mailDetail.confirmDelete"), danger: true }))) return;
     setDeleting(true);
     setError(null);
     try {

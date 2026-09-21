@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import ImageEditor from "@/components/ImageEditor";
+import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 
 type EventCategory = { id: string; name: string };
 type Author = { id: string; canonicalName: string; active: boolean };
@@ -71,6 +72,8 @@ export default function BillDetailPage({
   const { id: eventId, billId } = use(params);
   const router = useRouter();
   const { t } = useTranslations();
+  const confirm = useConfirm();
+  const alert = useAlert();
 
   const [bill, setBill] = useState<BillDetail | null>(null);
   const [eventCategories, setEventCategories] = useState<EventCategory[]>([]);
@@ -100,6 +103,7 @@ const [processingAi, setProcessingAi] = useState(false);
   const isPdf = bill?.originalFilename.toLowerCase().endsWith(".pdf") ?? false;
 
   async function handlePaidChange(paid: boolean) {
+    if (!(await confirm({ message: t(paid ? "billModal.markPaidConfirm" : "billModal.markUnpaidConfirm") }))) return;
     setPaidToggling(true);
     setError(null);
     const res = await fetch(`/api/bills/${billId}/paid`, { method: paid ? "POST" : "DELETE" });
@@ -359,7 +363,7 @@ const [processingAi, setProcessingAi] = useState(false);
 async function handleMoveToEvent(targetEventId: string) {
     const targetEvent = events.find((ev) => ev.id === targetEventId);
     if (!targetEvent) return;
-    if (!window.confirm(t("billModal.moveConfirm", { name: targetEvent.name }))) return;
+    if (!(await confirm({ message: t("billModal.moveConfirm", { name: targetEvent.name }) }))) return;
 
     setSaving(true);
     setError(null);
@@ -377,12 +381,12 @@ async function handleMoveToEvent(targetEventId: string) {
     }
 
     const data = await res.json();
-    window.alert(
-      t("billModal.moveDone", {
+    await alert({
+      message: t("billModal.moveDone", {
         matched: String(data.matchedCategories ?? 0),
         dropped: String(data.droppedCategories ?? 0),
-      })
-    );
+      }),
+    });
     router.push(`/events/${targetEventId}/bills/${billId}`);
   }
   async function handleProcessAi() {

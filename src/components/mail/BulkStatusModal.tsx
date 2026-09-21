@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type DocTypeCol = { id: string; name: string };
 type BulkRow = {
@@ -27,6 +28,7 @@ export default function BulkStatusModal({
   onClose: () => void;
 }) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [documentTypes, setDocumentTypes] = useState<DocTypeCol[]>([]);
@@ -66,7 +68,7 @@ export default function BulkStatusModal({
   async function handleSend() {
     const participantIds = Object.keys(selected).filter((id) => selected[id]);
     if (participantIds.length === 0) return;
-    if (!window.confirm(t("bulkStatusModal.confirmSend", { count: String(participantIds.length) }))) return;
+    if (!(await confirm({ message: t("bulkStatusModal.confirmSend", { count: String(participantIds.length) }) }))) return;
 
     setSending(true);
     setStatus(t("bulkStatusModal.sending"));

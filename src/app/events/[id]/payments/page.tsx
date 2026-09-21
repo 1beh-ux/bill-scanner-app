@@ -4,6 +4,7 @@ import { useEffect, useState, use, useCallback } from "react";
 import QRCode from "qrcode";
 import { useTranslations } from "@/lib/i18n";
 import { czechAccountToIban, buildSpaydString, buildItemizedMessage } from "@/lib/qr-platba";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
 
@@ -27,6 +28,7 @@ export default function EventPaymentsPage({
 }) {
   const { id } = use(params);
   const { t } = useTranslations();
+  const confirm = useConfirm();
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [rows, setRows] = useState<UnpaidRow[]>([]);
@@ -145,7 +147,7 @@ export default function EventPaymentsPage({
   }
 
   async function handleMarkPaid(row: UnpaidRow) {
-    if (!window.confirm(t("paymentsPage.markPaidConfirm", { count: String(row.unpaidBillCount), name: row.name })))
+    if (!(await confirm({ message: t("paymentsPage.markPaidConfirm", { count: String(row.unpaidBillCount), name: row.name }) })))
       return;
     setMarkingPaidId(row.authorId);
     setError(null);

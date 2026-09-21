@@ -7,6 +7,7 @@ import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fi
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import ComposeEmailModal from "@/components/health/ComposeEmailModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null };
 
@@ -58,6 +59,7 @@ export default function EventParticipantsPage({
 }) {
   const { id } = use(params);
   const { t } = useTranslations();
+  const confirm = useConfirm();
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -246,7 +248,7 @@ export default function EventParticipantsPage({
   }
 
   async function handleDelete(p: Participant) {
-    if (!window.confirm(t("participantDetail.confirmDeleteParticipant", { name: p.name }))) return;
+    if (!(await confirm({ message: t("participantDetail.confirmDeleteParticipant", { name: p.name }), danger: true }))) return;
     await fetch(`/api/participants/${p.id}/core`, { method: "DELETE" });
     setEditParticipant(null);
     load();
@@ -268,7 +270,7 @@ export default function EventParticipantsPage({
 
   async function runBulkDelete() {
     if (selected.size === 0) return;
-    const ok = window.confirm(t("participantsPage.confirmBulkDelete", { count: String(selected.size) }));
+    const ok = await confirm({ message: t("participantsPage.confirmBulkDelete", { count: String(selected.size) }), danger: true });
     if (!ok) return;
 
     setBulkRunning(true);

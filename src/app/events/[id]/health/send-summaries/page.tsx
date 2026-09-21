@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import TemplatePreviewModal from "@/components/health/TemplatePreviewModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string };
 type Participant = {
@@ -27,6 +28,7 @@ const btnPrimary =
 export default function SendSummariesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
   const { t } = useTranslations();
+  const confirm = useConfirm();
 
   const [tab, setTab] = useState<"send" | "log">("send");
   const [event, setEvent] = useState<EventBasic | null>(null);
@@ -75,7 +77,7 @@ export default function SendSummariesPage({ params }: { params: Promise<{ id: st
   }
 
   async function handleSend() {
-    if (!window.confirm(t("bulkSendSummaries.confirm", { count: String(selected.size) }))) return;
+    if (!(await confirm({ message: t("bulkSendSummaries.confirm", { count: String(selected.size) }) }))) return;
     setSending(true);
     setResults(null);
     const res = await fetch(`/api/events/${eventId}/health/send-summaries`, {

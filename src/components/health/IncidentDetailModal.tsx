@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import BodyMapPicker from "./BodyMapPicker";
 import IncidentFormModal, { type IncidentClientData } from "./IncidentFormModal";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
@@ -30,12 +31,13 @@ export default function IncidentDetailModal({
   onChanged,
 }: IncidentDetailModalProps) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
   const [followingUp, setFollowingUp] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm(t("incidentDetail.confirmDelete"))) return;
+    if (!(await confirm({ message: t("incidentDetail.confirmDelete"), danger: true }))) return;
     setDeleting(true);
     await fetch(`/api/incidents/${incident.id}/updates`, {
       method: "POST",

@@ -6,6 +6,7 @@ import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type CategoryTemplateRow = { id: string; name: string; description: string | null };
 
@@ -127,6 +128,7 @@ function HealthTemplatesTab() {
 
 function BillsTemplatesTab() {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [templates, setTemplates] = useState<CategoryTemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -194,7 +196,7 @@ function BillsTemplatesTab() {
   }
 
   async function handleDelete(id: string, name: string) {
-    if (!window.confirm(t("categoryTemplates.confirmDelete", { name }))) return;
+    if (!(await confirm({ message: t("categoryTemplates.confirmDelete", { name }), danger: true }))) return;
     await fetch(`/api/category-templates/${id}`, { method: "DELETE" });
     load();
   }

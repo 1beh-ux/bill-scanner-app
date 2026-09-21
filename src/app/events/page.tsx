@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventItem = {
   id: string;
@@ -16,6 +17,7 @@ const inputClass =
 
 export default function EventsPage() {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -64,7 +66,7 @@ export default function EventsPage() {
   }
 
   async function handleDelete(id: string, eventName: string) {
-    if (!window.confirm(t("events.confirmDelete", { name: eventName }))) return;
+    if (!(await confirm({ message: t("events.confirmDelete", { name: eventName }), danger: true }))) return;
 
     const res = await fetch(`/api/events/${id}`, { method: "DELETE" });
     if (!res.ok) {

@@ -60,4 +60,8 @@ wins, else Impersonated service account). Exported helpers and their callers (al
 - Deploy order note: run `scripts/grant-accountants-bills-access.ts` (dry run, then `--apply`) BEFORE the new code is live.
 
 ## Part status (7-15)
-(Filled in as parts are done: already fixed / changed / skipped.)
+- Part 8 (ConfirmDialog): changed. `src/components/ConfirmDialog.tsx` (`ConfirmProvider`, `useConfirm`, `useAlert`), mounted in
+  `providers.tsx`. All 28 native pop-ups (`window.confirm`/`alert`) replaced; `grep` for `window.(confirm|alert|prompt)` is empty.
+  New confirms: bulk approve (count + "lze vrátit Znovu otevřít"), bulk mark paid/unpaid, bill-detail paid toggle.
+  Not browser-tested (no browser in this environment): focus trap / Esc / Enter behavior is by construction (safe button focused first).
+  Translation keys go into `scripts/seed-missing-translations.ts` (single idempotent script, extended per part).

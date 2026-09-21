@@ -8,6 +8,7 @@ import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdm
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventDetail = {
   id: string;
@@ -73,6 +74,7 @@ export default function EventDetailPage({
 }) {
   const { id } = use(params);
   const { t, role } = useTranslations();
+  const confirm = useConfirm();
   const isAdmin = role === "admin";
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
@@ -243,7 +245,7 @@ export default function EventDetailPage({
   }
 
   async function handleDeleteCategory(catId: string) {
-    if (!window.confirm(t("eventDetail.confirmDeleteCategory"))) return;
+    if (!(await confirm({ message: t("eventDetail.confirmDeleteCategory"), danger: true }))) return;
     await fetch(`/api/event-categories/${catId}`, { method: "DELETE" });
     load();
   }
@@ -296,7 +298,7 @@ export default function EventDetailPage({
   }
 
   async function handleClose() {
-    if (!window.confirm(t("eventDetail.confirmClose"))) return;
+    if (!(await confirm({ message: t("eventDetail.confirmClose") }))) return;
     setLifecycleError(null);
     setLifecycleBusy(true);
     const res = await fetch(`/api/events/${id}/close`, { method: "POST" });
@@ -310,7 +312,7 @@ export default function EventDetailPage({
   }
 
   async function handleReopen() {
-    if (!window.confirm(t("eventDetail.confirmReopen"))) return;
+    if (!(await confirm({ message: t("eventDetail.confirmReopen") }))) return;
     setLifecycleError(null);
     setLifecycleBusy(true);
     const res = await fetch(`/api/events/${id}/reopen`, { method: "POST" });

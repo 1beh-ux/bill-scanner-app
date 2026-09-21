@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use, useMemo, useRef } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventDetail = { id: string; name: string };
 
@@ -82,6 +83,7 @@ export default function EventBillsPage({
 }) {
   const { id } = use(params);
   const { t } = useTranslations();
+  const confirm = useConfirm();
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [bills, setBills] = useState<BillItem[]>([]);
@@ -256,12 +258,19 @@ export default function EventBillsPage({
   async function runBulk(action: "approve" | "delete" | "mark_paid" | "mark_unpaid") {
     if (selected.size === 0) return;
 
-    if (action === "delete") {
-      const ok = window.confirm(
-        t("billsPage.confirmBulkDelete", { count: String(selected.size) })
-      );
-      if (!ok) return;
-    }
+    // Every bulk action asks first; the text says what happens and, where it
+    // can be undone, how.
+    const confirmKey = {
+      delete: "billsPage.confirmBulkDelete",
+      approve: "billsPage.confirmBulkApprove",
+      mark_paid: "billsPage.confirmBulkMarkPaid",
+      mark_unpaid: "billsPage.confirmBulkMarkUnpaid",
+    }[action];
+    const ok = await confirm({
+      message: t(confirmKey, { count: String(selected.size) }),
+      danger: action === "delete",
+    });
+    if (!ok) return;
 
     setBulkRunning(true);
     setBulkMessage(null);
@@ -298,9 +307,9 @@ export default function EventBillsPage({
     const targetEvent = events.find((ev) => ev.id === moveTargetId);
     if (!targetEvent) return;
     if (
-      !window.confirm(
-        t("billsPage.bulkMoveConfirm", { count: String(selected.size), name: targetEvent.name })
-      )
+      !(await confirm({
+        message: t("billsPage.bulkMoveConfirm", { count: String(selected.size), name: targetEvent.name }),
+      }))
     )
       return;
 
@@ -341,7 +350,7 @@ export default function EventBillsPage({
     // No batch-size cap here any more — every bill is queued as its own
     // independent Cloud Task, so a run of 100+ bills is handled the same
     // way as a run of 5.
-    const ok = window.confirm(t("billsPage.confirmBulkAi", { count: String(selected.size) }));
+    const ok = await confirm({ message: t("billsPage.confirmBulkAi", { count: String(selected.size) }) });
     if (!ok) return;
 
     setBulkMessage(null);
