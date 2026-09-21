@@ -229,6 +229,18 @@ async function main() {
   rowA = rowOf(r.json, payerA.id);
   check("payer removed from the event is still listed while owed, flagged attached:false", !!rowA && rowA.attached === false);
 
+  console.log("\n== admin overview");
+  const overviewRoute = await import("../src/app/api/admin/overview/route");
+  r = await call(overviewRoute.GET as unknown as Handler, { url: "/x", user: user1 });
+  check("overview: standard user -> 403 admin_only", r.status === 403 && r.json?.error === "admin_only");
+  r = await call(overviewRoute.GET as unknown as Handler, { url: "/x", user: exAcct });
+  check("overview: ex-accountant -> 403 admin_only", r.status === 403);
+  r = await call(overviewRoute.GET as unknown as Handler, { url: "/x", user: admin });
+  const evRow = r.json?.events?.find((e: { id: string }) => e.id === evA.id);
+  check("overview: admin sees events with users, bills by status, payers, drive identity", r.status === 200 && !!evRow && evRow.usersWithAccess >= 2 && evRow.drive.kind === "service_account", JSON.stringify(evRow));
+  check("overview: budget/spent are strings, bills grouped by status", typeof evRow?.spentCzk === "string" && evRow?.billsByStatus && Object.keys(evRow.billsByStatus).length > 0);
+  check("overview: lists Google connections", Array.isArray(r.json?.googleAccounts));
+
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
 }
