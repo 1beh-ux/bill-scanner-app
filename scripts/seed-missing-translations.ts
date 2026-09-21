@@ -185,6 +185,11 @@ export const ROWS: Row[] = [
   { key: "billModal.fxMissingDate", cs: "Přepočet na Kč není možný, protože chybí datum účtenky.", en: "CZK conversion is not possible because the bill date is missing." },
   { key: "billModal.fxRateUnavailable", cs: "Kurz ČNB pro toto datum se nepodařilo získat. Zkuste to za chvíli znovu.", en: "The ČNB rate for this date could not be fetched. Try again shortly." },
   { key: "rates.onDemandNote", cs: "Kurz pro starší účtenku se při jejím uložení stáhne z ČNB automaticky – doplňování historie slouží jen k naplnění tohoto přehledu.", en: "The rate for an older bill is fetched from ČNB automatically when the bill is saved – backfilling only fills this overview." },
+
+  // -- Part 10: budget page at zero budgets -----------------------------------------
+  { key: "budgetPage.notSet", cs: "Rozpočet nenastaven", en: "No budget set" },
+  { key: "budgetPage.noBudgetsHint", cs: "Rozpočty nejsou nastaveny – nastavíte je v Nastavení akce → Kategorie.", en: "No budgets are set – set them in Event settings → Categories." },
+  { key: "budgetPage.noBudgetsLink", cs: "Otevřít Nastavení akce", en: "Open event settings" },
 ];
 
 async function main() {

@@ -67,6 +67,8 @@ async function main() {
   r = await call(lookup, { url: "/x?currency=EUR&date=not-a-date", user });
   check("bad date -> 400 invalid_date", r.status === 400 && r.json.error === "invalid_date");
 
+  // start from a known state so the script can be re-run (a previous run caches the fetched day)
+  await prisma.exchangeRate.deleteMany({ where: { rateDate: { lte: new Date("2005-01-01T00:00:00.000Z") } } });
   const realFetch = globalThis.fetch;
   globalThis.fetch = (async () => new Response("", { status: 500 })) as typeof fetch;
   r = await call(lookup, { url: "/x?currency=EUR&date=2001-01-01", user });
@@ -84,6 +86,24 @@ async function main() {
   r = await call(lookup, { url: "/x?currency=EUR&date=2001-01-02", user });
   check("second lookup for that day hits the cache (no new ČNB call)", r.status === 200 && fetched === 1, `fetched=${fetched}`);
   globalThis.fetch = realFetch;
+
+  console.log("\n== Part 10: budget page is neutral at zero budgets");
+  const { budgetState } = await import("../src/lib/budget");
+  let b = budgetState(0, 0);
+  check("budget 0, spent 0 -> no budget, not over, no bar, no remainder", !b.hasBudget && !b.over && b.percent === null && b.remaining === null);
+  b = budgetState(0, 12500);
+  check("budget 0 but money spent -> still NOT red (was: every category red)", !b.hasBudget && !b.over);
+  b = budgetState(1000, 500);
+  check("budget 1000, spent 500 -> 50 % bar, 500 left, not over", b.hasBudget && !b.over && b.percent === 50 && b.remaining === 500);
+  b = budgetState(1000, 1500);
+  check("budget 1000, spent 1500 -> red, bar capped at 100, -500 left", b.over && b.percent === 100 && b.remaining === -500);
+  b = budgetState(1000, 1000);
+  check("spent exactly the budget -> not red", !b.over && b.percent === 100);
+  b = budgetState(NaN, NaN);
+  check("garbage input is treated as no budget (no crash)", !b.hasBudget && !b.over);
+  const rows = [{ b: 0, a: 300 }, { b: 0, a: 0 }];
+  const tot = budgetState(rows.reduce((n, r) => n + r.b, 0), rows.reduce((n, r) => n + r.a, 0));
+  check("totals row with all budgets 0 -> neutral too", !tot.hasBudget && !tot.over);
 
   void run;
   console.log(`\n${passed} passed, ${failed} failed`);

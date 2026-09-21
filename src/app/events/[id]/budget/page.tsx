@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { budgetState } from "@/lib/budget";
 
 type EventBasic = { id: string; name: string };
 
@@ -44,6 +45,8 @@ export default function EventBudgetPage({
 
   const totalBudget = rows.reduce((sum, r) => sum + parseFloat(r.budgetAmount || "0"), 0);
   const totalActual = rows.reduce((sum, r) => sum + parseFloat(r.actualCzk || "0"), 0);
+  const total = budgetState(totalBudget, totalActual);
+  const noBudgetAtAll = rows.length > 0 && !rows.some((r) => parseFloat(r.budgetAmount || "0") > 0);
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -54,6 +57,15 @@ export default function EventBudgetPage({
       <h1 className="mb-6 mt-2 text-[22px] font-semibold text-ink">
         {t("budgetPage.title")} — {event.name}
       </h1>
+
+      {noBudgetAtAll && (
+        <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+          {t("budgetPage.noBudgetsHint")}{" "}
+          <a href={`/events/${id}`} className="text-ember hover:underline">
+            {t("budgetPage.noBudgetsLink")}
+          </a>
+        </p>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse">
@@ -70,9 +82,7 @@ export default function EventBudgetPage({
             {rows.map((r) => {
               const budget = parseFloat(r.budgetAmount || "0");
               const actual = parseFloat(r.actualCzk || "0");
-              const remaining = budget - actual;
-              const pct = budget > 0 ? Math.min((actual / budget) * 100, 100) : actual > 0 ? 100 : 0;
-              const overBudget = actual > budget;
+              const st = budgetState(budget, actual);
 
               return (
                 <tr key={r.id} className="border-b border-mist/60">
@@ -84,20 +94,21 @@ export default function EventBudgetPage({
                       </div>
                     )}
                   </td>
-                  <td className="p-2 text-[14px] text-ink">{budget.toLocaleString("cs-CZ")}</td>
-                  <td className={"p-2 text-[14px] " + (overBudget ? "font-semibold text-red-600" : "text-ink")}>
+                  <td className="p-2 text-[14px] text-ink">
+                    {st.hasBudget ? budget.toLocaleString("cs-CZ") : <span className="text-[13px] text-ink-secondary">{t("budgetPage.notSet")}</span>}
+                  </td>
+                  <td className={"p-2 text-[14px] " + (st.over ? "font-semibold text-red-600" : "text-ink")}>
                     {actual.toLocaleString("cs-CZ")}
                   </td>
-                  <td className={"p-2 text-[14px] " + (remaining < 0 ? "text-red-600" : "text-ink")}>
-                    {remaining.toLocaleString("cs-CZ")}
+                  <td className={"p-2 text-[14px] " + (st.over ? "text-red-600" : "text-ink")}>
+                    {st.remaining === null ? "—" : st.remaining.toLocaleString("cs-CZ")}
                   </td>
                   <td className="p-2">
-                    <div className="h-2 overflow-hidden rounded-full bg-mist">
-                      <div
-                        className={"h-full " + (overBudget ? "bg-red-600" : "bg-ember")}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
+                    {st.percent !== null && (
+                      <div className="h-2 overflow-hidden rounded-full bg-mist">
+                        <div className={"h-full " + (st.over ? "bg-red-600" : "bg-ember")} style={{ width: `${st.percent}%` }} />
+                      </div>
+                    )}
                   </td>
                 </tr>
               );
@@ -106,21 +117,14 @@ export default function EventBudgetPage({
           <tfoot>
             <tr>
               <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
-              <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")}</td>
-              <td
-                className={
-                  "p-2 text-[14px] font-semibold " + (totalActual > totalBudget ? "text-red-600" : "text-ink")
-                }
-              >
+              <td className="p-2 text-[14px] font-semibold text-ink">
+                {total.hasBudget ? totalBudget.toLocaleString("cs-CZ") : <span className="text-[13px] font-normal text-ink-secondary">{t("budgetPage.notSet")}</span>}
+              </td>
+              <td className={"p-2 text-[14px] font-semibold " + (total.over ? "text-red-600" : "text-ink")}>
                 {totalActual.toLocaleString("cs-CZ")}
               </td>
-              <td
-                className={
-                  "p-2 text-[14px] font-semibold " +
-                  (totalBudget - totalActual < 0 ? "text-red-600" : "text-ink")
-                }
-              >
-                {(totalBudget - totalActual).toLocaleString("cs-CZ")}
+              <td className={"p-2 text-[14px] font-semibold " + (total.over ? "text-red-600" : "text-ink")}>
+                {total.remaining === null ? "—" : total.remaining.toLocaleString("cs-CZ")}
               </td>
               <td></td>
             </tr>
