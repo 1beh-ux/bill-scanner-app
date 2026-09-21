@@ -7,6 +7,7 @@
 //
 // Sequence against a live DB: scripts/audit-translations.ts -> this script -> audit again.
 import { config } from "dotenv";
+import { seedDefinitions } from "./lib/translation-sources";
 config({ path: ".env" });
 config({ path: ".env.local", override: true });
 
@@ -218,6 +219,24 @@ export const ROWS: Row[] = [
   { key: "billModal.removeSplit", cs: "Odebrat toto rozdělení", en: "Remove this split" },
   { key: "billModal.unsavedConfirm", cs: "Máte neuložené změny. Opravdu odejít bez uložení?", en: "You have unsaved changes. Leave without saving?" },
   { key: "billModal.leaveWithoutSaving", cs: "Odejít bez uložení", en: "Leave without saving" },
+
+  // -- Part 13: error codes used through dynamic keys (found by scripts/audit-translations.ts) ----
+  { key: "authors.error.admin_only", cs: "Tuto akci může provést jen administrátor.", en: "Only an administrator can do this." },
+  { key: "authors.error.bank_incomplete", cs: "Číslo účtu a kód banky musí být vyplněny společně.", en: "Account number and bank code must be filled in together." },
+  { key: "authors.error.name_required", cs: "Vyplňte jméno plátce.", en: "Enter the payer's name." },
+  { key: "billModal.error.not_found", cs: "Účtenka nebyla nalezena.", en: "Bill not found." },
+  { key: "billModal.error.split_mismatch", cs: "Součet rozdělení neodpovídá částce účtenky.", en: "The split amounts do not add up to the bill total." },
+  { key: "billModal.error.no_file", cs: "K účtence není přiložen soubor.", en: "This bill has no file attached." },
+  { key: "billModal.error.duplicate_after_edit", cs: "Po úpravě by byla účtenka duplicitní s jinou.", en: "After this edit the bill would duplicate another one." },
+  { key: "billModal.error.no_original", cs: "Původní obrázek není k dispozici.", en: "The original image is not available." },
+  { key: "billModal.error.target_event_id_required", cs: "Vyberte cílovou akci.", en: "Choose a target event." },
+  { key: "billModal.error.payer_not_in_event", cs: "Plátce není v této akci. Přidejte ho na stránce Plátci.", en: "This payer is not in the event. Add them on the Payers page." },
+  { key: "billModal.error.already_approved", cs: "Účtenka je již schválená.", en: "The bill is already approved." },
+  { key: "billModal.error.missing_fields", cs: "Chybí povinná pole.", en: "Required fields are missing." },
+  { key: "billModal.error.invalid_pdf", cs: "Soubor PDF je poškozený nebo nečitelný.", en: "The PDF file is damaged or unreadable." },
+  { key: "billModal.error.module_access_denied", cs: "Nemáte přístup k modulu účtenek.", en: "You do not have access to the bills module." },
+  { key: "imageEditor.error.not_found", cs: "Účtenka nebyla nalezena.", en: "Bill not found." },
+  { key: "imageEditor.error.no_file", cs: "K účtence není přiložen soubor.", en: "This bill has no file attached." },
 ];
 
 async function main() {
@@ -225,10 +244,13 @@ async function main() {
   let created = 0;
   let filled = 0;
   let untouched = 0;
-  for (const row of ROWS) {
+  // keys defined only in older seed scripts (never run against this DB) are filled too; ROWS win on clashes
+  const known = new Set(ROWS.map((r) => r.key));
+  const all: Row[] = [...ROWS, ...seedDefinitions().filter((d) => !known.has(d.key) && known.add(d.key))];
+  for (const row of all) {
     const existing = await prisma.translation.findUnique({ where: { key: row.key } });
     if (!existing) {
-      await prisma.translation.create({ data: row });
+      await prisma.translation.create({ data: { key: row.key, cs: row.cs, en: row.en } });
       created++;
     } else if (!existing.cs.trim() || !existing.en.trim()) {
       await prisma.translation.update({
@@ -240,7 +262,7 @@ async function main() {
       untouched++;
     }
   }
-  console.log(`seed-missing-translations: created ${created}, filled empty ${filled}, left as is ${untouched} (of ${ROWS.length})`);
+  console.log(`seed-missing-translations: created ${created}, filled empty ${filled}, left as is ${untouched} (of ${all.length})`);
 }
 
 if (require.main === module) {

@@ -154,6 +154,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   function t(key: string, vars?: Record<string, string>) {
     const entry = translations[key];
+    if (!entry && process.env.NODE_ENV !== "production" && Object.keys(translations).length > 0) console.warn(`[i18n] missing translation: ${key}`);
     let text = entry ? entry[lang] : key;
     if (vars) {
       for (const [k, v] of Object.entries(vars)) {
