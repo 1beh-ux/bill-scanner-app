@@ -142,7 +142,7 @@ export default function ExchangeRatesPage() {
           <input
             type="number"
             min={1}
-            max={60}
+            max={366}
             value={backfillDays}
             onChange={(e) => setBackfillDays(e.target.value)}
             className={inputSm + " w-20"}
@@ -152,6 +152,7 @@ export default function ExchangeRatesPage() {
           </button>
           <span className="text-[13px] text-ink-secondary">{t("rates.backfillHint")}</span>
         </div>
+        <p className="text-[12px] text-ink-secondary">{t("rates.onDemandNote")}</p>
 
         {busy && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
       </div>

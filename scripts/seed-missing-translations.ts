@@ -177,6 +177,14 @@ export const ROWS: Row[] = [
   // -- Part 7: blank pages when splitting PDFs ------------------------------------
   { key: "importPage.result.blankSkipped", cs: "Přeskočeno prázdných stránek: {count} ({details})", en: "Blank pages skipped: {count} ({details})" },
   { key: "importPage.result.blankDetail", cs: "strana {pages} v souboru {name}", en: "page {pages} of the file {name}" },
+
+  // -- Part 9: foreign-currency preview / rates ---------------------------------------
+  { key: "billModal.fxPreview", cs: "≈ {amount} Kč (kurz {rate} za den {date})", en: "≈ {amount} CZK (rate {rate} for {date})" },
+  { key: "billModal.fxRateOnly", cs: "Kurz {rate} za den {date} – zadejte částku pro přepočet.", en: "Rate {rate} for {date} – enter an amount to convert." },
+  { key: "billModal.fxLoading", cs: "Zjišťuji kurz…", en: "Looking up the rate…" },
+  { key: "billModal.fxMissingDate", cs: "Přepočet na Kč není možný, protože chybí datum účtenky.", en: "CZK conversion is not possible because the bill date is missing." },
+  { key: "billModal.fxRateUnavailable", cs: "Kurz ČNB pro toto datum se nepodařilo získat. Zkuste to za chvíli znovu.", en: "The ČNB rate for this date could not be fetched. Try again shortly." },
+  { key: "rates.onDemandNote", cs: "Kurz pro starší účtenku se při jejím uložení stáhne z ČNB automaticky – doplňování historie slouží jen k naplnění tohoto přehledu.", en: "The rate for an older bill is fetched from ČNB automatically when the bill is saved – backfilling only fills this overview." },
 ];
 
 async function main() {

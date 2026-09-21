@@ -107,6 +107,10 @@ export async function syncRatesForDate(
   return { rateDate: day.rateDate, stored: day.rates.length };
 }
 
+// Bills older than this are still converted: convertToCzk() fetches the rate for
+// the bill's own date on demand. The backfill is only for filling the Kurzy overview.
+export const MAX_BACKFILL_DAYS = 366;
+
 /**
  * Backfill. ČNB asks that its endpoints not be hit excessively, so this is
  * capped and paced deliberately.
@@ -114,7 +118,7 @@ export async function syncRatesForDate(
 export async function backfillRates(
   days: number
 ): Promise<{ requested: number; days: string[] }> {
-  const capped = Math.min(Math.max(days, 1), 60);
+  const capped = Math.min(Math.max(days, 1), MAX_BACKFILL_DAYS);
   const seen = new Set<string>();
   const today = new Date();
 

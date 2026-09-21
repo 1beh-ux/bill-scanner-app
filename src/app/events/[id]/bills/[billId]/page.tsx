@@ -102,6 +102,11 @@ export default function BillDetailPage({
   const [editingImage, setEditingImage] = useState(false);
 const [processingAi, setProcessingAi] = useState(false);
   const [paidToggling, setPaidToggling] = useState(false);
+  // Live CZK preview for foreign-currency bills: the rate for the bill's date, from the same
+  // conversion the save uses (/api/exchange-rates/lookup). `key` ties a result to the inputs it
+  // was fetched for, so "loading" is derived instead of set inside the effect.
+  const [fx, setFx] = useState<{ key: string; rate: string | null; rateDate: string | null } | null>(null);
+  const fxKey = currency !== "CZK" && billDate ? `${currency}|${billDate}` : null;
   const isPdf = bill?.originalFilename.toLowerCase().endsWith(".pdf") ?? false;
 
   async function handlePaidChange(paid: boolean) {
@@ -117,6 +122,19 @@ const [processingAi, setProcessingAi] = useState(false);
     }
     load();
   }
+
+  useEffect(() => {
+    if (!fxKey) return;
+    let cancelled = false;
+    const [cur, date] = fxKey.split("|");
+    fetch(`/api/exchange-rates/lookup?currency=${cur}&date=${date}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && setFx({ key: fxKey, rate: d?.rateToCzk ?? null, rateDate: d?.rateDate ?? null }))
+      .catch(() => !cancelled && setFx({ key: fxKey, rate: null, rateDate: null }));
+    return () => {
+      cancelled = true;
+    };
+  }, [fxKey]);
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -561,15 +579,13 @@ const statusLabel = t(
           </div>
 
           {currency !== "CZK" && (
-            <div className={"text-[13px] " + (bill.amountCzk ? "text-pine" : "text-amber-700")}>
-              {bill.amountCzk && bill.exchangeRateUsed && bill.exchangeRateDate
-                ? t("billModal.czkEquivalent", {
-                    amount: parseFloat(bill.amountCzk).toLocaleString("cs-CZ"),
-                    rate: parseFloat(bill.exchangeRateUsed).toFixed(3),
-                    date: new Date(bill.exchangeRateDate).toLocaleDateString("cs-CZ"),
-                  })
-                : t("billModal.czkUnavailable")}
-            </div>
+            <FxPreview
+              t={t}
+              hasDate={!!billDate}
+              loading={!!fxKey && fx?.key !== fxKey}
+              result={fx && fx.key === fxKey ? fx : null}
+              amount={parseFloat(totalAmount.replace(",", "."))}
+            />
           )}
 
           <div>
@@ -758,6 +774,40 @@ const statusLabel = t(
           }}
         />
       )}
+    </div>
+  );
+}
+
+// "≈ 561,20 Kč (kurz 24,165 za den 30. 7. 2026)". The warning appears only when the
+// date is missing or the rate really could not be fetched -- and says which of the two.
+function FxPreview({
+  t,
+  hasDate,
+  loading,
+  result,
+  amount,
+}: {
+  t: (key: string, vars?: Record<string, string>) => string;
+  hasDate: boolean;
+  loading: boolean;
+  result: { rate: string | null; rateDate: string | null } | null;
+  amount: number;
+}) {
+  if (!hasDate) return <div className="text-[13px] text-amber-700">{t("billModal.fxMissingDate")}</div>;
+  if (loading || !result) return <div className="text-[13px] text-ink-secondary">{t("billModal.fxLoading")}</div>;
+  if (!result.rate || !result.rateDate) return <div className="text-[13px] text-amber-700">{t("billModal.fxRateUnavailable")}</div>;
+  const rate = parseFloat(result.rate);
+  const date = new Date(result.rateDate).toLocaleDateString("cs-CZ");
+  if (!Number.isFinite(amount)) {
+    return <div className="text-[13px] text-ink-secondary">{t("billModal.fxRateOnly", { rate: rate.toFixed(3), date })}</div>;
+  }
+  return (
+    <div className="text-[13px] text-pine">
+      {t("billModal.fxPreview", {
+        amount: (Math.round(amount * rate * 100) / 100).toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        rate: rate.toFixed(3),
+        date,
+      })}
     </div>
   );
 }
