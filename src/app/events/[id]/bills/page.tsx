@@ -417,8 +417,6 @@ export default function EventBillsPage({
         {event.name} — {t("billsPage.title")}
       </h1>
 
-      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
-
       <div className="mb-3 relative max-w-sm">
         <input
           type="text"
@@ -524,6 +522,8 @@ export default function EventBillsPage({
         </p>
       )}
 
+      {/* shown right under the bulk-action buttons that caused it; cleared by the next action */}
+      {error && <p className="mb-2 text-[13px] text-red-600">{error}</p>}
       {bulkMessage && <p className="mb-2 text-[13px] text-pine">{bulkMessage}</p>}
 
       {bulkFailures.length > 0 && (

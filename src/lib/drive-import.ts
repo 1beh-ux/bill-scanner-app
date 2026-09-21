@@ -8,6 +8,7 @@ import {
 } from "@/lib/drive";
 import { ingestBillFiles, type RawFileInput, type IngestResult } from "@/lib/bill-ingest";
 import { DriveError } from "@/lib/drive-errors";
+import { getDriveIdentity } from "@/lib/drive";
 
 export class DriveImportError extends Error {
   code: string;
@@ -27,9 +28,14 @@ interface AuthorResolution {
 export interface ImportSummary {
   authorsResolved: AuthorResolution[];
   skippedAlreadyImported: number;
+  /** Names of the files skipped because a previous import already brought them in. */
+  skippedAlreadyImportedFiles: { filename: string; subfolderName: string }[];
   skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
   downloadFailures: { filename: string; error: string }[];
   ingest: IngestResult;
+  /** The Google account used (and the service account), for messages about failed downloads. */
+  identityEmail: string;
+  serviceAccountEmail: string;
 }
 /**
  * Matches a Drive subfolder name to an existing active author (trimmed,
@@ -80,7 +86,7 @@ export async function importBillsFromDrive(
   const authorsResolved: AuthorResolution[] = [];
   const skippedNativeGoogleFiles: { filename: string; subfolderName: string }[] = [];
   const candidateFileIds: string[] = [];
-  const fileMeta = new Map<string, { authorId: string | null; name: string; mimeType: string }>();
+  const fileMeta = new Map<string, { authorId: string | null; name: string; mimeType: string; subfolderName: string }>();
 
   function collect(files: Awaited<ReturnType<typeof listFilesInSubfolder>>, subfolderName: string, authorId: string | null) {
     for (const file of files) {
@@ -89,7 +95,7 @@ export async function importBillsFromDrive(
         continue;
       }
       candidateFileIds.push(file.id);
-      fileMeta.set(file.id, { authorId, name: file.name, mimeType: file.mimeType });
+      fileMeta.set(file.id, { authorId, name: file.name, mimeType: file.mimeType, subfolderName });
     }
   }
 
@@ -144,12 +150,19 @@ export async function importBillsFromDrive(
   }
 
   const ingest = await ingestBillFiles(eventId, userId, "drive", rawFiles);
+  const identity = await getDriveIdentity(eventId);
 
   return {
     authorsResolved,
     skippedAlreadyImported: alreadyImportedIds.size,
+    skippedAlreadyImportedFiles: [...alreadyImportedIds]
+      .map((fid) => fileMeta.get(fid!))
+      .filter((m): m is NonNullable<typeof m> => !!m)
+      .map((m) => ({ filename: m.name, subfolderName: m.subfolderName })),
     skippedNativeGoogleFiles,
     downloadFailures,
     ingest,
+    identityEmail: identity.email,
+    serviceAccountEmail: identity.serviceAccountEmail,
   };
 }

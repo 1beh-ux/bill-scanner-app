@@ -82,6 +82,11 @@ wins, else Impersonated service account). Exported helpers and their callers (al
   5) `scripts/seed-missing-translations.ts`. Users must re-connect nothing: the existing app-wide connection stays valid and is
   assigned to the events by step 3.
 
+- Part 5: import page now keeps ONE result per run (`ImportRunResult`): per-file rows (imported/duplicate/skipped/failed + reason, Drive
+  failures via mapped codes) and the payers matched/created from subfolders; the accumulated counters and the stale info line are gone.
+  Errors show next to the buttons that caused them (import buttons, merge button, bills bulk toolbar) and clear on the next action.
+  `drive-import` now also returns `skippedAlreadyImportedFiles`, `identityEmail`, `serviceAccountEmail`.
+
 ## Part status (7-15)
 - Part 8 (ConfirmDialog): changed. `src/components/ConfirmDialog.tsx` (`ConfirmProvider`, `useConfirm`, `useAlert`), mounted in
   `providers.tsx`. All 28 native pop-ups (`window.confirm`/`alert`) replaced; `grep` for `window.(confirm|alert|prompt)` is empty.

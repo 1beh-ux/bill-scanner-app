@@ -129,6 +129,21 @@ export const ROWS: Row[] = [
   { key: "settingsPage.googleDisconnectButton", cs: "Odpojit", en: "Disconnect" },
   { key: "settingsPage.googleDisconnect", cs: "Odpojit váš Google účet?", en: "Disconnect your Google account?" },
   { key: "settingsPage.googleDisconnectWithEvents", cs: "Odpojit váš Google účet? Tyto akce jsou nastavené na váš účet a přejdou na servisní účet (s varováním), dokud někdo nepřevezme jejich Drive: {events}", en: "Disconnect your Google account? These events are set up on your account and will fall back to the service account (with a warning) until someone takes over their Drive: {events}" },
+
+  // -- Part 5: import result --------------------------------------------------------
+  { key: "importPage.result.title", cs: "Výsledek posledního načtení", en: "Result of the last run" },
+  { key: "importPage.result.summary", cs: "Importováno: {imported}, duplicity: {duplicates}, přeskočeno: {skipped}, chyb: {failed}", en: "Imported: {imported}, duplicates: {duplicates}, skipped: {skipped}, failed: {failed}" },
+  { key: "importPage.result.nothing", cs: "Nic nového k importu.", en: "Nothing new to import." },
+  { key: "importPage.result.payers", cs: "Plátci ze složek – spárováno: {matched}; nově vytvořeno: {created}", en: "Payers from the folders – matched: {matched}; newly created: {created}" },
+  { key: "importPage.result.split", cs: "{name}: vícestránkové PDF rozděleno na stránky (počet: {count})", en: "{name}: multi-page PDF split into pages (count: {count})" },
+  { key: "importPage.result.kind.imported", cs: "Importováno", en: "Imported" },
+  { key: "importPage.result.kind.duplicate", cs: "Duplicita", en: "Duplicate" },
+  { key: "importPage.result.kind.skipped", cs: "Přeskočeno", en: "Skipped" },
+  { key: "importPage.result.kind.failed", cs: "Chyba", en: "Failed" },
+  { key: "importPage.dupOf", cs: "stejný soubor už v akci je jako „{name}“", en: "the same file already exists in the event as “{name}”" },
+  { key: "importPage.skip.already", cs: "už bylo dříve importováno", en: "already imported earlier" },
+  { key: "importPage.skip.native", cs: "Google dokument nebo tabulku nelze importovat jako účtenku", en: "a Google Doc/Sheet cannot be imported as a bill" },
+  { key: "importPage.failure.invalid_pdf", cs: "soubor není platné PDF", en: "the file is not a valid PDF" },
 ];
 
 async function main() {

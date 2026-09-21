@@ -2,6 +2,8 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import { useTranslations } from "@/lib/i18n";
+import ImportRunResult, { type RunResult, type RunRow } from "@/components/import/ImportRunResult";
+import { driveErrorText } from "@/lib/drive-error-messages";
 
 type CreatedBill = { id: string; originalFilename: string };
 type Author = { id: string; canonicalName: string; active: boolean };
@@ -41,9 +43,8 @@ export default function EventImportPage({
   const [error, setError] = useState<string | null>(null);
 
   const [createdBills, setCreatedBills] = useState<CreatedBill[]>([]);
-  const [duplicateCount, setDuplicateCount] = useState(0);
-  const [splitCount, setSplitCount] = useState(0);
-  const [failureCount, setFailureCount] = useState(0);
+  // The outcome of the LAST import run only (replaced, never accumulated).
+  const [lastRun, setLastRun] = useState<RunResult | null>(null);
 
   const [bulk, setBulk] = useState<DraftFields>(EMPTY_DRAFT);
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
@@ -52,10 +53,10 @@ export default function EventImportPage({
 
   const [confirming, setConfirming] = useState(false);
   const [done, setDone] = useState(false);
-  const [info, setInfo] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -77,6 +78,7 @@ export default function EventImportPage({
     if (!fileList || fileList.length === 0) return;
     setUploading(true);
     setError(null);
+    setLastRun(null);
 
     const formData = new FormData();
     for (const file of Array.from(fileList)) {
@@ -104,9 +106,23 @@ export default function EventImportPage({
         originalFilename: b.originalFilename,
       })),
     ]);
-    setDuplicateCount((c) => c + (data.duplicates?.length || 0));
-    setSplitCount((c) => c + (data.splitInfo?.length || 0));
-    setFailureCount((c) => c + (data.failures?.length || 0));
+    setLastRun({
+      source: channel,
+      rows: [
+        ...data.created.map((b: { originalFilename: string }): RunRow => ({ name: b.originalFilename, kind: "imported" })),
+        ...(data.duplicates ?? []).map(
+          (d: { filename: string; existingFilename: string }): RunRow => ({
+            name: d.filename,
+            kind: "duplicate",
+            reason: t("importPage.dupOf", { name: d.existingFilename }),
+          })
+        ),
+        ...(data.failures ?? []).map(
+          (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: t(`importPage.failure.${f.error}`) })
+        ),
+      ],
+      splits: (data.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
+    });
 
     if (uploadInputRef.current) uploadInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -121,13 +137,15 @@ export default function EventImportPage({
   async function handleDriveImport() {
     setUploading(true);
     setError(null);
+    setLastRun(null);
 
     const res = await fetch(`/api/events/${eventId}/drive-import`, { method: "POST" });
     setUploading(false);
 
     if (!res.ok) {
+      // A stable code (Drive errors and import preconditions alike) + the account/folder involved.
       const data = await res.json().catch(() => ({}));
-      setError(t(`importPage.error.${data.error}`) || t("importPage.driveImportFailed"));
+      setError(driveErrorText(t, data.error ?? "drive_unknown", { ...data, folderLabel: "ingest" }));
       return;
     }
 
@@ -137,14 +155,6 @@ export default function EventImportPage({
       .catch(() => {});
 
     const data = await res.json();
-    setInfo(
-      data.ingest.created.length === 0
-        ? t("importPage.driveNothingNew", {
-            already: String(data.skippedAlreadyImported),
-            native: String(data.skippedNativeGoogleFiles.length),
-          })
-        : null
-    );
     const newBills = data.ingest.created as {
       id: string;
       originalFilename: string;
@@ -155,11 +165,37 @@ export default function EventImportPage({
       ...prev,
       ...newBills.map((b) => ({ id: b.id, originalFilename: b.originalFilename })),
     ]);
-    setDuplicateCount((c) => c + (data.ingest.duplicates?.length || 0));
-    setSplitCount((c) => c + (data.ingest.splitInfo?.length || 0));
-    setFailureCount(
-      (c) => c + (data.ingest.failures?.length || 0) + (data.downloadFailures?.length || 0)
-    );
+    const identityInfo = { identity: data.identityEmail, serviceAccount: data.serviceAccountEmail, folderLabel: "ingest" };
+    setLastRun({
+      source: "drive",
+      rows: [
+        ...newBills.map((b): RunRow => ({ name: b.originalFilename, kind: "imported" })),
+        ...(data.ingest.duplicates ?? []).map(
+          (d: { filename: string; existingFilename: string }): RunRow => ({
+            name: d.filename,
+            kind: "duplicate",
+            reason: t("importPage.dupOf", { name: d.existingFilename }),
+          })
+        ),
+        ...(data.skippedAlreadyImportedFiles ?? []).map(
+          (f: { filename: string }): RunRow => ({ name: f.filename, kind: "skipped", reason: t("importPage.skip.already") })
+        ),
+        ...(data.skippedNativeGoogleFiles ?? []).map(
+          (f: { filename: string }): RunRow => ({ name: f.filename, kind: "skipped", reason: t("importPage.skip.native") })
+        ),
+        ...(data.ingest.failures ?? []).map(
+          (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: t(`importPage.failure.${f.error}`) })
+        ),
+        ...(data.downloadFailures ?? []).map(
+          (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: driveErrorText(t, f.error, identityInfo) })
+        ),
+      ],
+      splits: (data.ingest.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
+      payers: {
+        matched: (data.authorsResolved ?? []).filter((a: { created: boolean }) => !a.created).map((a: { authorName: string }) => a.authorName),
+        created: (data.authorsResolved ?? []).filter((a: { created: boolean }) => a.created).map((a: { authorName: string }) => a.authorName),
+      },
+    });
 
     const driveOverrides: Record<string, DraftFields> = {};
     const driveUnlockedIds: string[] = [];
@@ -201,7 +237,7 @@ export default function EventImportPage({
     // Table order, not click order -- that's the page order in the merged PDF.
     const ids = createdBills.filter((b) => selected.has(b.id)).map((b) => b.id);
     setMerging(true);
-    setError(null);
+    setMergeError(null);
     const res = await fetch(`/api/events/${eventId}/bills/merge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -209,7 +245,7 @@ export default function EventImportPage({
     });
     setMerging(false);
     if (!res.ok) {
-      setError(t("importPage.mergeFailed"));
+      setMergeError(t("importPage.mergeFailed"));
       return;
     }
     const merged = (await res.json()) as { id: string; originalFilename: string; payerAuthorId: string | null };
@@ -336,8 +372,6 @@ export default function EventImportPage({
 
       <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">{t("importPage.title")}</h1>
 
-      {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
-
       <div
         onDragOver={(e) => {
           e.preventDefault();
@@ -383,18 +417,11 @@ export default function EventImportPage({
           </button>
         </div>
         {uploading && <p className="mt-2 text-[13px] text-ink-secondary">{t("common.loading")}</p>}
-        {info && <p className="mt-2 text-[13px] text-amber-700">{info}</p>}
+        {/* shown next to the buttons that caused it; cleared by the next action */}
+        {error && <p className="mt-2 text-[14px] text-red-600">{error}</p>}
       </div>
 
-      {(duplicateCount > 0 || splitCount > 0 || failureCount > 0) && (
-        <p className="mb-4 text-[13px] text-amber-700">
-          {t("importPage.ingestSummary", {
-            duplicates: String(duplicateCount),
-            splits: String(splitCount),
-            failures: String(failureCount),
-          })}
-        </p>
-      )}
+      {lastRun && <ImportRunResult result={lastRun} />}
 
       {createdBills.length > 0 && (
         <>
@@ -469,6 +496,7 @@ export default function EventImportPage({
               {merging ? t("common.loading") : t("importPage.mergeSelected", { count: String(selected.size) })}
             </button>
           )}
+          {mergeError && <p className="mb-3 text-[13px] text-red-600">{mergeError}</p>}
 
           <div className="mb-4 overflow-x-auto">
             <table className="w-full min-w-[700px] border-collapse">
