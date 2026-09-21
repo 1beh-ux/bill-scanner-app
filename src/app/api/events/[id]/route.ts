@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess, requireAnyModuleAccess } from "@/lib/module-access";
 import { parseFolderId } from "@/lib/drive-errors";
+import { normalizeBillColumns } from "@/lib/bill-columns";
 import { invalidateDriveIdentity } from "@/lib/drive";
 
 // GET is readable by any module grant -- the row carries no module-specific
@@ -56,6 +57,7 @@ export async function PATCH(
     participantsListColumns,
     mailQuestionnaireUrl,
     qrSizeMm,
+    billsListColumns,
   } = body;
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
@@ -119,6 +121,11 @@ export async function PATCH(
       ...(vsOrderInYear !== undefined && { vsOrderInYear }),
       ...(vsMembershipFieldKey !== undefined && { vsMembershipFieldKey }),
       ...(participantsListColumns !== undefined && { participantsListColumns }),
+      // Bills list columns: per event, anyone with bills access may set them. Unknown keys are
+      // dropped, required columns kept; null resets to the default set.
+      ...(billsListColumns !== undefined && {
+        billsListColumns: billsListColumns === null ? Prisma.DbNull : normalizeBillColumns(billsListColumns),
+      }),
       ...(qrSizeMm !== undefined && { qrSizeMm: qrSizeMm === null ? null : Math.min(150, Math.max(10, Math.round(Number(qrSizeMm)) || 35)) }),
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
     },

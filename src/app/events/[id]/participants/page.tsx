@@ -7,6 +7,7 @@ import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fi
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import ComposeEmailModal from "@/components/health/ComposeEmailModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
+import ColumnPicker from "@/components/ColumnPicker";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null };
@@ -95,10 +96,6 @@ export default function EventParticipantsPage({
   // offering them here would just be a second, disconnected toggle for the
   // same thing.
   const dynamicListFields = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.surfaces.includes("list")), [fields]);
-  const [columnsOpen, setColumnsOpen] = useState(false);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [columnOrder, setColumnOrder] = useState<string[]>([]);
-  const [savingColumns, setSavingColumns] = useState(false);
   // The actually-displayed columns: the saved order, filtered to fields
   // still eligible (deactivated/removed fields drop out silently), falling
   // back to "every eligible field, API order" when nothing's configured
@@ -347,109 +344,24 @@ export default function EventParticipantsPage({
           {t("participantsPage.importButton")}
         </a>
         {dynamicListFields.length > 0 && (
-          <div className="relative">
-            <button
-              onClick={() => {
-                setColumnOrder(activeColumns.map((f) => f.key));
-                setColumnsOpen((v) => !v);
-              }}
-              className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
-            >
-              {t("participantsPage.columnsButton")}
-            </button>
-            {columnsOpen && (
-              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-lg border border-mist bg-paper-2 p-3 shadow-lg">
-                <p className="mb-1 text-[12px] font-medium text-ink-secondary">{t("participantsPage.columnsPickerTitle")}</p>
-                <p className="mb-2 text-[11px] text-ink-secondary">{t("participantsPage.columnsDragHint")}</p>
-                <ul className="mb-1 flex flex-col gap-0.5">
-                  {columnOrder.map((key, i) => {
-                    const f = dynamicListFields.find((x) => x.key === key);
-                    if (!f) return null;
-                    return (
-                      <li
-                        key={key}
-                        draggable
-                        onDragStart={() => setDragIndex(i)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => {
-                          if (dragIndex === null || dragIndex === i) return;
-                          setColumnOrder((prev) => {
-                            const next = [...prev];
-                            const [moved] = next.splice(dragIndex, 1);
-                            next.splice(i, 0, moved);
-                            return next;
-                          });
-                          setDragIndex(null);
-                        }}
-                        onDragEnd={() => setDragIndex(null)}
-                        className={
-                          "flex cursor-grab items-center gap-2 rounded px-1 py-1 text-[13px] text-ink active:cursor-grabbing " +
-                          (dragIndex === i ? "opacity-40" : "hover:bg-paper")
-                        }
-                      >
-                        <span className="select-none text-ink-secondary">⠿</span>
-                        <input
-                          type="checkbox"
-                          checked
-                          onChange={() => setColumnOrder((prev) => prev.filter((k) => k !== key))}
-                        />
-                        <span className="flex-1">{f.label}</span>
-                      </li>
-                    );
-                  })}
-                </ul>
-                {dynamicListFields.filter((f) => !columnOrder.includes(f.key)).length > 0 && (
-                  <>
-                    <p className="mb-1 mt-2 text-[10px] font-semibold uppercase tracking-wide text-ink-secondary">
-                      {t("participantsPage.columnsNotShown")}
-                    </p>
-                    <ul className="mb-3 flex flex-col gap-0.5">
-                      {dynamicListFields
-                        .filter((f) => !columnOrder.includes(f.key))
-                        .map((f) => (
-                          <li key={f.key} className="flex items-center gap-2 px-1 py-1 text-[13px] text-ink-secondary">
-                            <span className="select-none opacity-30">⠿</span>
-                            <input
-                              type="checkbox"
-                              checked={false}
-                              onChange={() => setColumnOrder((prev) => [...prev, f.key])}
-                            />
-                            <span className="flex-1">{f.label}</span>
-                          </li>
-                        ))}
-                    </ul>
-                  </>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setColumnsOpen(false)}
-                    className="text-[13px] text-ink-secondary hover:underline"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={savingColumns}
-                    onClick={async () => {
-                      setSavingColumns(true);
-                      await fetch(`/api/events/${id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ participantsListColumns: columnOrder }),
-                      });
-                      setSavingColumns(false);
-                      setColumnsOpen(false);
-                      load();
-                    }}
-                    className={btnPrimary}
-                  >
-                    {savingColumns ? t("common.loading") : t("common.save")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <ColumnPicker
+            options={dynamicListFields.map((f) => ({ key: f.key, label: f.label }))}
+            shown={activeColumns.map((f) => f.key)}
+            labels={{
+              button: t("participantsPage.columnsButton"),
+              title: t("participantsPage.columnsPickerTitle"),
+              dragHint: t("participantsPage.columnsDragHint"),
+              notShown: t("participantsPage.columnsNotShown"),
+            }}
+            onSave={async (keys) => {
+              await fetch(`/api/events/${id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ participantsListColumns: keys }),
+              });
+              await load();
+            }}
+          />
         )}
         {moduleAccess.mail && (
           <button

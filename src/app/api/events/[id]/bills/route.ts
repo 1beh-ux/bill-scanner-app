@@ -24,6 +24,7 @@ export async function GET(
     include: {
       payerAuthor: { select: { canonicalName: true } },
       categories: { include: { eventCategory: { select: { name: true } } } },
+      createdBy: { select: { displayName: true } },
     },
   });
 

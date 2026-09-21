@@ -21,11 +21,11 @@ export const ROWS: Row[] = [
   { key: "common.ok", cs: "OK", en: "OK" },
   { key: "authors.mergeConfirmButton", cs: "Sloučit", en: "Merge" },
   { key: "participantFieldAdmin.confirmRenameButton", cs: "Přejmenovat", en: "Rename" },
-  { key: "billModal.markPaidConfirm", cs: "Označit tuto účtenku jako vyplacenou plátci?", en: "Mark this bill as paid out to the payer?" },
-  { key: "billModal.markUnpaidConfirm", cs: "Zrušit u této účtenky označení „vyplaceno“?", en: "Remove the “paid out” mark from this bill?" },
+  { key: "billModal.markPaidConfirm", cs: "Označit tuto účtenku jako proplacenou plátci?", en: "Mark this bill as paid out to the payer?" },
+  { key: "billModal.markUnpaidConfirm", cs: "Zrušit u této účtenky označení „proplaceno“?", en: "Remove the “paid out” mark from this bill?" },
   { key: "billsPage.confirmBulkApprove", cs: "Schválit vybrané účtenky (počet: {count})? Schválení lze vrátit tlačítkem „Znovu otevřít“ na detailu účtenky.", en: "Approve the selected bills (count: {count})? An approval can be undone with “Reopen” on the bill detail." },
-  { key: "billsPage.confirmBulkMarkPaid", cs: "Označit vybrané účtenky jako vyplacené (počet: {count})?", en: "Mark the selected bills as paid out (count: {count})?" },
-  { key: "billsPage.confirmBulkMarkUnpaid", cs: "Zrušit u vybraných účtenek označení „vyplaceno“ (počet: {count})?", en: "Remove the “paid out” mark from the selected bills (count: {count})?" },
+  { key: "billsPage.confirmBulkMarkPaid", cs: "Označit vybrané účtenky jako proplacené (počet: {count})?", en: "Mark the selected bills as paid out (count: {count})?" },
+  { key: "billsPage.confirmBulkMarkUnpaid", cs: "Zrušit u vybraných účtenek označení „proplaceno“ (počet: {count})?", en: "Remove the “paid out” mark from the selected bills (count: {count})?" },
 
   // -- Part 2/3: payers (Plátci) + payments page --------------------------------
   { key: "nav.payers", cs: "Plátci", en: "Payers" },
@@ -71,8 +71,8 @@ export const ROWS: Row[] = [
   { key: "paymentsPage.bills.few", cs: "účtenky", en: "bills" },
   { key: "paymentsPage.bills.many", cs: "účtenek", en: "bills" },
   { key: "paymentsPage.removedFromEvent", cs: "Plátce byl z této akce odebrán, ale stále je mu dlužné.", en: "This payer was removed from the event but is still owed money here." },
-  { key: "paymentsPage.alreadyPaidOut", cs: "již vyplaceno {amount}, počet: {count}", en: "already paid out {amount}, count: {count}" },
-  { key: "paymentsPage.itemPaidOut", cs: "vyplaceno", en: "paid out" },
+  { key: "paymentsPage.alreadyPaidOut", cs: "již proplaceno {amount}, počet: {count}", en: "already paid out {amount}, count: {count}" },
+  { key: "paymentsPage.itemPaidOut", cs: "proplaceno", en: "paid out" },
   { key: "common.adminOnly", cs: "Tato stránka je jen pro administrátory.", en: "This page is for administrators only." },
   { key: "authors.globalIntro", cs: "Všichni plátci ze všech akcí. Uživatelé akcí spravují jen plátce své akce; tady je sloučíte, upravíte nebo deaktivujete a uvidíte historii změn bankovních účtů.", en: "All payers across all events. Event users only manage the payers of their own event; here you merge, edit or deactivate them and see the history of bank-account changes." },
   { key: "authors.colEvents", cs: "Akce", en: "Events" },
@@ -190,6 +190,22 @@ export const ROWS: Row[] = [
   { key: "budgetPage.notSet", cs: "Rozpočet nenastaven", en: "No budget set" },
   { key: "budgetPage.noBudgetsHint", cs: "Rozpočty nejsou nastaveny – nastavíte je v Nastavení akce → Kategorie.", en: "No budgets are set – set them in Event settings → Categories." },
   { key: "budgetPage.noBudgetsLink", cs: "Otevřít Nastavení akce", en: "Open event settings" },
+
+  // -- Part 11: bills list columns + paid status --------------------------------------
+  { key: "billsPage.columnsButton", cs: "Sloupce", en: "Columns" },
+  { key: "billsPage.columnsPickerTitle", cs: "Sloupce seznamu účtenek (pro celou akci)", en: "Bills list columns (for the whole event)" },
+  { key: "billsPage.columnsReset", cs: "Obnovit výchozí", en: "Restore default" },
+  { key: "billsPage.colNote", cs: "Poznámka", en: "Note" },
+  { key: "billsPage.colAmountCzk", cs: "Částka v Kč", en: "Amount in CZK" },
+  { key: "billsPage.colPaid", cs: "Proplaceno", en: "Paid out" },
+  { key: "billsPage.colCreatedAt", cs: "Vloženo", en: "Added" },
+  { key: "billsPage.colCreatedBy", cs: "Vložil/a", en: "Added by" },
+  { key: "billsPage.colExported", cs: "Exportováno", en: "Exported" },
+  { key: "billsPage.paidYes", cs: "Proplaceno", en: "Paid out" },
+  { key: "billsPage.paidNo", cs: "Neproplaceno", en: "Not paid out" },
+  { key: "billsPage.exportedYes", cs: "Ano", en: "Yes" },
+  { key: "billsPage.exportedNo", cs: "Ne", en: "No" },
+  { key: "billsPage.payerEventShort", cs: "Akce", en: "Event" },
 ];
 
 async function main() {

@@ -250,6 +250,10 @@ model Event {
   // configured yet -- falls back to every active field with the `list`
   // surface, in API order (the old, always-on behavior).
   participantsListColumns Json? @map("participants_list_columns")
+  // Ordered column keys chosen for the bills list (src/lib/bill-columns.ts). Stored per
+  // event, so everyone with access sees the same columns; null = the default set.
+  // (A Json array like participantsListColumns -- Prisma has no nullable scalar list.)
+  billsListColumns Json? @map("bills_list_columns")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 

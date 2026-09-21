@@ -3,8 +3,11 @@
 import { useEffect, useState, use, useMemo, useRef } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import ColumnPicker from "@/components/ColumnPicker";
+import { BILL_COLUMNS, REQUIRED_BILL_COLUMNS, normalizeBillColumns, type BillColumnKey } from "@/lib/bill-columns";
+import { formatCzk } from "@/lib/format";
 
-type EventDetail = { id: string; name: string };
+type EventDetail = { id: string; name: string; billsListColumns: unknown };
 
 type BillItem = {
   id: string;
@@ -19,6 +22,11 @@ type BillItem = {
   createdAt: string;
   payerAuthor: { canonicalName: string } | null;
   categories: { eventCategory: { name: string } }[];
+  notes: string | null;
+  paidToAuthor: boolean;
+  paidAt: string | null;
+  exportedAt: string | null;
+  createdBy: { displayName: string } | null;
 };
 
 type BulkFailure = {
@@ -86,6 +94,8 @@ export default function EventBillsPage({
   const confirm = useConfirm();
 
   const [event, setEvent] = useState<EventDetail | null>(null);
+  // Paid = reimbursed to the payer. Only bills WITH a payer take part (paid directly by the event = nothing to pay out).
+  const [paidFilter, setPaidFilter] = useState<null | "paid" | "unpaid">(null);
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -194,15 +204,19 @@ export default function EventBillsPage({
   }, [bills]);
 
   const filteredBills = useMemo(() => {
-    const byStatus = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
+    let byFilter = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
+    if (paidFilter === "paid") byFilter = byFilter.filter((b) => b.payerAuthor && b.paidToAuthor);
+    if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => b.payerAuthor && !b.paidToAuthor);
 
     const query = normalize(searchQuery.trim());
-    if (!query) return byStatus;
+    if (!query) return byFilter;
 
-    return byStatus.filter((b) => {
+    return byFilter.filter((b) => {
       const haystack = [
         b.originalFilename,
         b.merchantName,
+        b.notes,
+        b.createdBy?.displayName,
         b.payerAuthor?.canonicalName,
         ...b.categories.map((c) => c.eventCategory.name),
         b.billDate,
@@ -215,7 +229,136 @@ export default function EventBillsPage({
         .join(" ");
       return normalize(haystack).includes(query);
     });
-  }, [bills, statusFilter, searchQuery]);
+  }, [bills, statusFilter, paidFilter, searchQuery]);
+
+  const paidCounts = useMemo(
+    () => ({
+      paid: bills.filter((b) => b.payerAuthor && b.paidToAuthor).length,
+      unpaid: bills.filter((b) => b.payerAuthor && !b.paidToAuthor).length,
+    }),
+    [bills]
+  );
+
+  // Displayed columns: the event's saved choice (same for everyone with access), else the default.
+  const columns: BillColumnKey[] = useMemo(() => normalizeBillColumns(event?.billsListColumns ?? null), [event?.billsListColumns]);
+  // The source file is the link that opens a bill; without that column the merchant becomes the link.
+  const linkColumn: BillColumnKey = columns.includes("sourceFile") ? "sourceFile" : "merchant";
+
+  async function saveColumns(keys: string[] | null) {
+    await fetch(`/api/events/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billsListColumns: keys }),
+    });
+    const res = await fetch(`/api/events/${id}`);
+    if (res.ok) setEvent(await res.json());
+  }
+
+  function renderCell(col: BillColumnKey, b: BillItem) {
+    const link = (text: string) =>
+      isAiLocked(b) ? (
+        <span className="text-ink-secondary">{text}</span>
+      ) : (
+        <a href={billHref(b.id)} className="text-ember hover:underline">
+          {text}
+        </a>
+      );
+    switch (col) {
+      case "sourceFile":
+        return <td key={col} className="p-2 text-[14px] [overflow-wrap:anywhere]">{link(b.originalFilename)}</td>;
+      case "status":
+        return (
+          <td key={col} className="p-2">
+            <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] ${statusStyle(b.status)}`}>
+              {statusLabels[b.status] || b.status}
+            </span>
+          </td>
+        );
+      case "billDate":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[14px] text-ink-secondary">
+            {b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}
+          </td>
+        );
+      case "merchant":
+        return (
+          <td key={col} className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">
+            {linkColumn === "merchant" ? link(b.merchantName || "—") : b.merchantName || "—"}
+          </td>
+        );
+      case "note":
+        return (
+          <td key={col} className="max-w-[240px] p-2 text-[13px] text-ink-secondary [overflow-wrap:anywhere]">
+            <span className="line-clamp-2">{b.notes || "—"}</span>
+          </td>
+        );
+      case "category":
+        return (
+          <td key={col} className="p-2 text-[13px] text-ink-secondary [overflow-wrap:anywhere]">
+            {b.categories.length > 0 ? b.categories.map((c) => c.eventCategory.name).join(", ") : "—"}
+          </td>
+        );
+      case "payer":
+        return (
+          <td key={col} className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">
+            {b.payerAuthor?.canonicalName ?? t("billsPage.payerEventShort")}
+          </td>
+        );
+      case "amount":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[14px] text-ink">
+            {b.totalAmount === null ? (
+              "—"
+            ) : (
+              <>
+                {parseFloat(b.totalAmount).toLocaleString("cs-CZ")} {b.currency}
+                {b.currency !== "CZK" && (
+                  <div className={`text-[12px] ${b.amountCzk ? "text-ink-secondary" : "text-amber-700"}`}>
+                    {b.amountCzk ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč` : t("billsPage.noRate")}
+                  </div>
+                )}
+              </>
+            )}
+          </td>
+        );
+      case "amountCzk":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[14px] text-ink">
+            {b.amountCzk ? formatCzk(b.amountCzk) : b.totalAmount !== null && b.currency !== "CZK" ? <span className="text-[12px] text-amber-700">{t("billsPage.noRate")}</span> : b.totalAmount !== null ? formatCzk(b.totalAmount) : "—"}
+          </td>
+        );
+      case "paid":
+        return <td key={col} className="p-2">{paidChip(b)}</td>;
+      case "createdAt":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[13px] text-ink-secondary">
+            {new Date(b.createdAt).toLocaleDateString("cs-CZ")}
+          </td>
+        );
+      case "createdBy":
+        return <td key={col} className="p-2 text-[13px] text-ink-secondary">{b.createdBy?.displayName ?? "—"}</td>;
+      case "exported":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[13px] text-ink-secondary">
+            {b.exportedAt ? t("billsPage.exportedYes") : t("billsPage.exportedNo")}
+          </td>
+        );
+    }
+  }
+
+  function paidChip(b: BillItem) {
+    if (!b.payerAuthor) return <span className="text-[13px] text-ink-secondary">—</span>;
+    return b.paidToAuthor ? (
+      <span
+        title={b.paidAt ? new Date(b.paidAt).toLocaleDateString("cs-CZ") : undefined}
+        className="whitespace-nowrap rounded-full bg-pine-bg px-2.5 py-0.5 text-[12px] text-pine"
+      >
+        {t("billsPage.paidYes")}
+      </span>
+    ) : (
+      <span className="whitespace-nowrap rounded-full bg-amber-50 px-2.5 py-0.5 text-[12px] text-amber-700">{t("billsPage.paidNo")}</span>
+    );
+  }
 
   const runningTotal = filteredBills.reduce(
     (sum, b) => sum + parseFloat(b.amountCzk || "0"),
@@ -453,6 +596,32 @@ export default function EventBillsPage({
             {statusLabels[s]} ({counts[s]})
           </button>
         ))}
+        <span className="mx-1 self-center text-ink-secondary/40">|</span>
+        {(["paid", "unpaid"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => setPaidFilter(paidFilter === p ? null : p)}
+            className={`${pillBase} ${paidFilter === p ? pillActive : pillInactive}`}
+          >
+            {t(p === "paid" ? "billsPage.paidYes" : "billsPage.paidNo")} ({paidCounts[p]})
+          </button>
+        ))}
+        <div className="ml-auto">
+          <ColumnPicker
+            options={BILL_COLUMNS.map((c) => ({ key: c.key, label: t(c.labelKey) }))}
+            shown={columns}
+            required={REQUIRED_BILL_COLUMNS}
+            labels={{
+              button: t("billsPage.columnsButton"),
+              title: t("billsPage.columnsPickerTitle"),
+              dragHint: t("participantsPage.columnsDragHint"),
+              notShown: t("participantsPage.columnsNotShown"),
+              reset: t("billsPage.columnsReset"),
+            }}
+            onSave={(keys) => saveColumns(keys)}
+            onReset={() => saveColumns(null)}
+          />
+        </div>
       </div>
 
       {searchQuery && (
@@ -545,19 +714,17 @@ export default function EventBillsPage({
         <>
           {/* Desktop / tablet: table */}
           <div className="hidden overflow-x-auto md:block">
-          <table className="w-full min-w-[760px] border-collapse">
+          <table className="w-full border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="w-8 p-2">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colFilename")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.status")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billsPage.colMerchant")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billModal.payer")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billsPage.colAmount")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("billModal.date")}</th>
+                {columns.map((col) => (
+                  <th key={col} className="p-2 text-[12px] font-medium text-ink-secondary">
+                    {t(BILL_COLUMNS.find((c) => c.key === col)!.labelKey)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -571,53 +738,16 @@ export default function EventBillsPage({
                       disabled={isAiLocked(b)}
                     />
                   </td>
-                  <td className="p-2 text-[14px] [overflow-wrap:anywhere]">
-                    {isAiLocked(b) ? (
-                      <span className="text-ink-secondary">{b.originalFilename}</span>
-                    ) : (
-                      <a href={billHref(b.id)} className="text-ember hover:underline">
-                        {b.originalFilename}
-                      </a>
-                    )}
-                  </td>
-                  <td className="p-2">
-                    <span className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] ${statusStyle(b.status)}`}>
-                      {statusLabels[b.status] || b.status}
-                    </span>
-                  </td>
-                  <td className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">{b.merchantName || "—"}</td>
-                  <td className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">{b.payerAuthor?.canonicalName ?? "Akce"}</td>
-                  <td className="p-2 text-[13px] text-ink-secondary">
-                    {b.categories.length > 0 ? b.categories.map((c) => c.eventCategory.name).join(", ") : "—"}
-                  </td>
-                  <td className="p-2 text-[14px] text-ink">
-                    {b.totalAmount === null ? (
-                      "—"
-                    ) : (
-                      <>
-                        {parseFloat(b.totalAmount).toLocaleString("cs-CZ")} {b.currency}
-                        {b.currency !== "CZK" && (
-                          <div className={`text-[12px] ${b.amountCzk ? "text-ink-secondary" : "text-amber-700"}`}>
-                            {b.amountCzk
-                              ? `= ${parseFloat(b.amountCzk).toLocaleString("cs-CZ")} Kč`
-                              : t("billsPage.noRate")}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td className="p-2 text-[14px] text-ink-secondary">
-                    {b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}
-                  </td>
+                  {columns.map((col) => renderCell(col, b))}
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr>
-                <td colSpan={6} className="p-2 text-[14px] font-medium text-ink">
+                <td colSpan={1 + columns.indexOf("amount")} className="p-2 text-[14px] font-medium text-ink">
                   {t("billsPage.colTotal")}
                 </td>
-                <td className="p-2 text-[14px] font-medium text-ink">
+                <td className="whitespace-nowrap p-2 text-[14px] font-medium text-ink">
                   {runningTotal.toLocaleString("cs-CZ")} Kč
                   {unconvertedCount > 0 && (
                     <div className="text-[12px] font-normal text-amber-700">
@@ -625,7 +755,7 @@ export default function EventBillsPage({
                     </div>
                   )}
                 </td>
-                <td></td>
+                {columns.length - columns.indexOf("amount") - 1 > 0 && <td colSpan={columns.length - columns.indexOf("amount") - 1}></td>}
               </tr>
             </tfoot>
           </table>
@@ -682,6 +812,7 @@ export default function EventBillsPage({
                   <span>{b.payerAuthor?.canonicalName ?? "Akce"}</span>
                   {b.categories.length > 0 && <span>{b.categories.map((c) => c.eventCategory.name).join(", ")}</span>}
                   <span>{b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}</span>
+                  {b.payerAuthor && paidChip(b)}
                 </div>
               </div>
             ))}

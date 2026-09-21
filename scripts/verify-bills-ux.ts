@@ -105,6 +105,33 @@ async function main() {
   const tot = budgetState(rows.reduce((n, r) => n + r.b, 0), rows.reduce((n, r) => n + r.a, 0));
   check("totals row with all budgets 0 -> neutral too", !tot.hasBudget && !tot.over);
 
+  console.log("\n== Part 11: bills list columns are stored per event, for everyone with access");
+  const cols = await import("../src/lib/bill-columns");
+  check("normalize: unknown keys and duplicates dropped, required columns kept", JSON.stringify(cols.normalizeBillColumns(["amount", "bogus", "amount", "note"])) === JSON.stringify(["amount", "note", "status", "merchant"]));
+  check("normalize: empty/invalid input -> the default set", JSON.stringify(cols.normalizeBillColumns(null)) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS) && JSON.stringify(cols.normalizeBillColumns([])) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS) && JSON.stringify(cols.normalizeBillColumns("x")) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS));
+  check("the default set contains paid status and the required columns", cols.DEFAULT_BILL_COLUMNS.includes("paid") && cols.REQUIRED_BILL_COLUMNS.every((k) => cols.DEFAULT_BILL_COLUMNS.includes(k)));
+  const eventRoute = await import("../src/app/api/events/[id]/route");
+  const u2 = await prisma.user.upsert({ where: { email: "b-user2@test.local" }, update: { active: true }, create: { email: "b-user2@test.local", displayName: "b-user2", role: "user" } });
+  const outsider = await prisma.user.upsert({ where: { email: "b-outsider@test.local" }, update: { active: true }, create: { email: "b-outsider@test.local", displayName: "b-outsider", role: "user" } });
+  const ev = await prisma.event.create({ data: { name: `Cols ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  await prisma.userEventModuleAccess.createMany({ data: [user, u2].map((u) => ({ userId: u.id, eventId: ev.id, moduleKey: "bills" as const })), skipDuplicates: true });
+  const patch = (u: FakeUser, body: unknown) => call(eventRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: ev.id }, user: u, body });
+  const getEv = (u: FakeUser) => call(eventRoute.GET as unknown as Handler, { url: "/x", params: { id: ev.id }, user: u });
+  let rr = await patch(user, { billsListColumns: ["amount", "bogus", "billDate", "amount", "paid"] });
+  check("any user with bills access can set the columns; junk is cleaned", rr.status === 200 && JSON.stringify(rr.json.billsListColumns) === JSON.stringify(["amount", "billDate", "paid", "status", "merchant"]), JSON.stringify(rr.json?.billsListColumns));
+  rr = await getEv(u2);
+  check("another user of the event sees the SAME columns", JSON.stringify(rr.json.billsListColumns) === JSON.stringify(["amount", "billDate", "paid", "status", "merchant"]));
+  rr = await patch(outsider, { billsListColumns: ["status"] });
+  check("a user without access to the event cannot change them (403)", rr.status === 403, String(rr.status));
+  rr = await patch(u2, { billsListColumns: null });
+  check("'restore default' (null) clears the choice for everyone", rr.status === 200 && rr.json.billsListColumns === null);
+  rr = await getEv(user);
+  check("after reset the list falls back to the default set", JSON.stringify(cols.normalizeBillColumns(rr.json.billsListColumns)) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS));
+  const billsRoute = await import("../src/app/api/events/[id]/bills/route");
+  await prisma.bill.create({ data: { eventId: ev.id, gcsObjectPath: `t/${run}.pdf`, originalFilename: "c.pdf", contentHash: `c-${run}`, ingestChannel: "upload", createdByUserId: user.id, notes: "pozn." } });
+  rr = await call(billsRoute.GET as unknown as Handler, { url: "/x", params: { id: ev.id }, user: u2 });
+  check("bills list API carries the fields the columns need (note, paid, created by, exported)", rr.json[0].notes === "pozn." && "paidToAuthor" in rr.json[0] && "paidAt" in rr.json[0] && "exportedAt" in rr.json[0] && rr.json[0].createdBy?.displayName === "b-user");
+
   void run;
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);
