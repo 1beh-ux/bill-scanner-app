@@ -7,6 +7,9 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
 
   const rates = await prisma.exchangeRate.findMany({
     orderBy: [{ rateDate: "desc" }, { currency: "asc" }],

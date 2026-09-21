@@ -11,6 +11,9 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  if (user.role !== "admin") {
+    return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  }
 
   // Approved bills are deliberately excluded: their stored rate is denormalized
   // so historical records don't shift when rates are added or corrected later.

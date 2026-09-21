@@ -3,18 +3,18 @@ import type { ListTemplateKind, ModuleKey, User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
 // admin acts as an unrestricted superuser across every module and event
-// (same as the rest of this app — user management, category templates,
-// exchange rates), and accountant keeps its pre-existing implicit access to
-// Bills specifically. Everyone else needs an explicit UserEventModuleAccess
-// grant. See docs/bill-scanner-v2-health-module-design.md ("Module registry
-// & access").
+// (same as the rest of this app -- user management, category templates,
+// exchange rates). Everyone else -- `user` and `accountant` alike; the latter
+// is only a label now, it carries no implicit privileges -- needs an explicit
+// UserEventModuleAccess grant per event and module. See
+// docs/bill-scanner-v2-health-module-design.md ("Module registry & access")
+// and docs/drive-payers-roles-change-notes.md.
 export async function hasModuleAccess(
   user: User,
   eventId: string,
   moduleKey: ModuleKey
 ): Promise<boolean> {
   if (user.role === "admin") return true;
-  if (user.role === "accountant" && moduleKey === "bills") return true;
 
   const grant = await prisma.userEventModuleAccess.findUnique({
     where: { userId_eventId_moduleKey: { userId: user.id, eventId, moduleKey } },

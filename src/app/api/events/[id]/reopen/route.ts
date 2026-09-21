@@ -11,9 +11,6 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
 
   const { id } = await params;
   const denied = await requireModuleAccess(user, id, "bills");

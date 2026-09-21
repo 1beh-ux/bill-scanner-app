@@ -15,8 +15,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
   bills: {
     sectionLabelKey: "nav.sectionBills",
     items: [
-      { path: "/authors", labelKey: "nav.authors", icon: Users },
-      { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark },
+      { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
+      { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true },
     ],
   },
   organization: {

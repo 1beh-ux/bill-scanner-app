@@ -50,7 +50,14 @@ wins, else Impersonated service account). Exported helpers and their callers (al
 - `drive-import.ts` and `bill-move.ts` grant `AuthorEventAccess`.
 
 ## Findings that contradict / extend the brief
-- (Filled in during the work; see the bottom of the file.)
+- Part 1: `reopen` was admin-only while `close` needs only bills access -> a user could close but never reopen. Reopen now uses the
+  same bills-access guard (decision 1: user = small admin of the event).
+- Part 1: `GET /api/events` returned every event to every user. Now non-admins get only events they hold a module grant on
+  (needed for the switcher/pickers; the brief implies it in Parts 12/2 but does not say it explicitly).
+- Part 1: the Přístup / Moduly tabs (event settings) stay admin-only: the underlying APIs are admin-only and Pavel asked for it
+  earlier; they are grant management, not page content. No other admin-only control exists on event pages.
+- Part 1: `/authors` and `/exchange-rates` (+ their APIs) are now admin-only; sidebar "bills" section hides them for non-admins.
+- Deploy order note: run `scripts/grant-accountants-bills-access.ts` (dry run, then `--apply`) BEFORE the new code is live.
 
 ## Part status (7-15)
 (Filled in as parts are done: already fixed / changed / skipped.)

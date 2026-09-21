@@ -1012,16 +1012,10 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
                       <div className="text-[12px] text-ink-secondary">{row.email}</div>
                     </td>
                     {MODULE_KEYS.map((key) => {
-                      const shortcut =
-                        row.role === "admin" || (row.role === "accountant" && key === "bills");
                       return (
                         <td key={key} className="p-2 text-[14px] text-ink">
-                          {shortcut ? (
-                            <span className="text-[12px] text-ink-secondary">
-                              {row.role === "admin"
-                                ? t("accessTab.shortcutAdmin")
-                                : t("accessTab.shortcutAccountant")}
-                            </span>
+                          {row.role === "admin" ? (
+                            <span className="text-[12px] text-ink-secondary">{t("accessTab.shortcutAdmin")}</span>
                           ) : (
                             <input
                               type="checkbox"

@@ -9,7 +9,10 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Admin sees every event; everyone else only events they hold at least one
+  // module grant on (the event switcher and pickers are built from this).
   const events = await prisma.event.findMany({
+    where: user.role === "admin" ? {} : { moduleAccess: { some: { userId: user.id } } },
     orderBy: { startDate: "desc" },
   });
 
