@@ -212,6 +212,12 @@ export const ROWS: Row[] = [
   { key: "billModal.error.target_no_access", cs: "Do cílové akce nemáte přístup k účtenkám.", en: "You do not have bills access to the target event." },
   { key: "billsPage.bulkErrTargetClosed", cs: "{filename}: cílová akce je uzavřená.", en: "{filename}: the target event is closed." },
   { key: "billsPage.bulkErrTargetNoAccess", cs: "{filename}: do cílové akce nemáte přístup k účtenkám.", en: "{filename}: you have no bills access to the target event." },
+
+  // -- Part 15: hidden controls, unsaved changes ------------------------------------------
+  { key: "billModal.splitRemaining", cs: "Zbývá rozdělit: {amount}", en: "Left to assign: {amount}" },
+  { key: "billModal.removeSplit", cs: "Odebrat toto rozdělení", en: "Remove this split" },
+  { key: "billModal.unsavedConfirm", cs: "Máte neuložené změny. Opravdu odejít bez uložení?", en: "You have unsaved changes. Leave without saving?" },
+  { key: "billModal.leaveWithoutSaving", cs: "Odejít bez uložení", en: "Leave without saving" },
 ];
 
 async function main() {

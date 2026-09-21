@@ -88,6 +88,13 @@ wins, else Impersonated service account). Exported helpers and their callers (al
   `drive-import` now also returns `skippedAlreadyImportedFiles`, `identityEmail`, `serviceAccountEmail`.
 
 ## Part status (7-15)
+- Part 15 (hidden controls): changed. Findings vs the brief: the app has NO Tailwind hover-hiding (`group-hover`/`opacity-0`/`invisible` grep = empty).
+  "Doplnit zbytek" was a bare "=" button whose only label was a hover `title` -> now a visible labelled button under each split row together
+  with "Zbývá rozdělit: X" (shown only while something is left to assign). Other icon-only controls got `aria-label`s (remove split, previous/next
+  bill). Escape on the bill page used to `router.push` back to the list -> now it only closes the image editor (dialogs handle their own Escape) and
+  never navigates. Unsaved changes: back link, previous/next and arrow keys ask with the styled dialog; reload/close gets the browser's own prompt
+  (a native one is the only option there). Nothing else in `src` is hover-only (checked `onMouseEnter`/`title=` usages; the import-page file preview
+  is an optional extra on hover, the file link itself stays visible).
 - Part 14 (manifest): changed. `src/lib/manifest.ts`; header = Datum, Obchod, Částka, Měna, Částka Kč, Plátce, Proplaceno, Soubor, Odkaz + `Kategorie n` /
   `Částka kat. n (Kč)` pairs (max categories per bill, min 1; categories sorted by name; single category = bill total). "Proplaceno" = Ano / Ne /
   "Akce hradí přímo"; the payer column says "Akce (bez proplacení)" for event-paid bills. `writeManifestValues` clear range is A1:ZZ10000 (was

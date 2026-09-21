@@ -207,6 +207,13 @@ async function main() {
   check("no bill has categories -> still one pair (minimum)", minimal[0].length === 11 && minimal[0][9] === "Kategorie 1");
   check("empty event -> header only, one pair", mf.buildManifestRows([], []).length === 1 && mf.buildManifestRows([], [])[0].length === 11);
 
+  console.log("\n== Part 15: unsaved-changes detection");
+  const bf = await import("../src/lib/bill-form");
+  const base = { merchant: "Tesco", date: "2026-07-30", total: "100.00", currency: "CZK", payer: "p1", notes: "", splits: [{ eventCategoryId: "c1", amount: "100.00" }] };
+  check("identical form -> identical snapshot (not dirty)", bf.formSnapshot(base) === bf.formSnapshot({ ...base, splits: [{ eventCategoryId: "c1", amount: "100.00" }] }));
+  check("editing a field -> dirty", bf.formSnapshot(base) !== bf.formSnapshot({ ...base, merchant: "Albert" }) && bf.formSnapshot(base) !== bf.formSnapshot({ ...base, notes: "x" }) && bf.formSnapshot(base) !== bf.formSnapshot({ ...base, payer: "" }));
+  check("changing a split amount, or adding a split -> dirty", bf.formSnapshot(base) !== bf.formSnapshot({ ...base, splits: [{ eventCategoryId: "c1", amount: "60.00" }] }) && bf.formSnapshot(base) !== bf.formSnapshot({ ...base, splits: [...base.splits, { eventCategoryId: "c2", amount: "0" }] }));
+
   void run;
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

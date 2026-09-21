@@ -7,6 +7,7 @@ import { useTranslations } from "@/lib/i18n";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
+import { formSnapshot, type SplitRow } from "@/lib/bill-form";
 import type { Payer } from "@/lib/payers-client";
 
 type EventCategory = { id: string; name: string };
@@ -41,7 +42,7 @@ type BillDetail = {
   categories: BillCategoryRow[];
 };
 
-type SplitRow = { eventCategoryId: string; amount: string };
+
 type BillListEntry = { id: string; status: string };
 
 async function safeJson(res: Response): Promise<Record<string, unknown>> {
@@ -104,6 +105,8 @@ export default function BillDetailPage({
   const [editingImage, setEditingImage] = useState(false);
 const [processingAi, setProcessingAi] = useState(false);
   const [paidToggling, setPaidToggling] = useState(false);
+  // Form values as last loaded from the server (or saved); null until the first load.
+  const [baseline, setBaseline] = useState<string | null>(null);
   // Live CZK preview for foreign-currency bills: the rate for the bill's date, from the same
   // conversion the save uses (/api/exchange-rates/lookup). `key` ties a result to the inputs it
   // was fetched for, so "loading" is derived instead of set inside the effect.
@@ -155,11 +158,21 @@ const [processingAi, setProcessingAi] = useState(false);
       setCurrency(data.currency);
       setPayerAuthorId(data.payerAuthorId || "");
       setNotes(data.notes || "");
-      setSplits(
-        data.categories.map((c) => ({
-          eventCategoryId: c.eventCategoryId,
-          amount: String(c.amount),
-        }))
+      const loadedSplits = data.categories.map((c) => ({
+        eventCategoryId: c.eventCategoryId,
+        amount: String(c.amount),
+      }));
+      setSplits(loadedSplits);
+      setBaseline(
+        formSnapshot({
+          merchant: data.merchantName || "",
+          date: data.billDate ? data.billDate.slice(0, 10) : "",
+          total: data.totalAmount || "",
+          currency: data.currency,
+          payer: data.payerAuthorId || "",
+          notes: data.notes || "",
+          splits: loadedSplits,
+        })
       );
     }
     setLoading(false);
@@ -213,30 +226,67 @@ const [processingAi, setProcessingAi] = useState(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bill?.status]);
 
+  const isApproved = bill?.status === "approved";
+  const isAiLocked = bill?.status === "queued" || bill?.status === "processing";
+  const isLocked = isApproved || isAiLocked;
+
   function qs() {
     return statusFilter ? `?status=${statusFilter}` : "";
   }
   const backHref = `/events/${eventId}/bills${qs()}`;
-  function navigate(id: string) {
-    router.push(`/events/${eventId}/bills/${id}${qs()}`);
+
+  const isDirty =
+    baseline !== null &&
+    !isLocked &&
+    formSnapshot({ merchant: merchantName, date: billDate, total: totalAmount, currency, payer: payerAuthorId, notes, splits }) !== baseline;
+
+  // Leaving the page (back link, previous/next bill, arrow keys) asks first when the form has
+  // unsaved changes -- with the styled dialog, not a native pop-up.
+  async function leave(go: () => void) {
+    if (isDirty) {
+      const ok = await confirm({
+        message: t("billModal.unsavedConfirm"),
+        confirmLabel: t("billModal.leaveWithoutSaving"),
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    go();
   }
+
+  function navigate(id: string) {
+    leave(() => router.push(`/events/${eventId}/bills/${id}${qs()}`));
+  }
+
+  // Reload / closing the tab can only get the browser's own prompt.
+  useEffect(() => {
+    if (!isDirty) return;
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
+      // Escape closes the topmost overlay (the image editor here; dialogs handle their
+      // own Escape) and NEVER leaves the page -- leaving is the visible "Zpět" link.
+      if (e.key === "Escape") {
+        if (editingImage) setEditingImage(false);
+        return;
+      }
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (e.key === "ArrowLeft" && adjacent.prev) navigate(adjacent.prev);
       if (e.key === "ArrowRight" && adjacent.next) navigate(adjacent.next);
-      if (e.key === "Escape") router.push(backHref);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjacent, backHref]);
+  }, [adjacent, backHref, editingImage, isDirty]);
 
-  const isApproved = bill?.status === "approved";
-  const isAiLocked = bill?.status === "queued" || bill?.status === "processing";
-  const isLocked = isApproved || isAiLocked;
 
   const splitTotal = splits.reduce((sum, s) => sum + parseFloat(s.amount || "0"), 0);
   const billTotalNum = parseFloat(totalAmount || "0");
@@ -315,6 +365,8 @@ const [processingAi, setProcessingAi] = useState(false);
       return false;
     }
 
+    // Saved: the form is the new baseline (otherwise "save and next" would ask about unsaved changes).
+    setBaseline(formSnapshot({ merchant: merchantName, date: billDate, total: totalAmount, currency, payer: payerAuthorId, notes, splits }));
     setSaving(false);
     return true;
   }
@@ -442,6 +494,12 @@ const statusLabel = t(
           <div className="flex min-w-0 items-center gap-3">
             <a
               href={backHref}
+              onClick={(e) => {
+                if (isDirty) {
+                  e.preventDefault();
+                  leave(() => router.push(backHref));
+                }
+              }}
               className="flex shrink-0 items-center gap-1 text-[13px] text-ink-secondary hover:text-ink"
             >
               <ArrowLeft size={16} aria-hidden="true" />
@@ -463,6 +521,7 @@ const statusLabel = t(
               onClick={() => adjacent.prev && navigate(adjacent.prev)}
               disabled={!adjacent.prev}
               title={t("billModal.prev")}
+              aria-label={t("billModal.prev")}
               className="rounded-lg border border-mist p-1.5 text-ink-secondary hover:bg-paper disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <ChevronLeft size={16} aria-hidden="true" />
@@ -471,6 +530,7 @@ const statusLabel = t(
               onClick={() => adjacent.next && navigate(adjacent.next)}
               disabled={!adjacent.next}
               title={t("billModal.next")}
+              aria-label={t("billModal.next")}
               className="rounded-lg border border-mist p-1.5 text-ink-secondary hover:bg-paper disabled:opacity-40 disabled:hover:bg-transparent"
             >
               <ChevronRight size={16} aria-hidden="true" />
@@ -636,43 +696,52 @@ const statusLabel = t(
 
             <div className="flex flex-col gap-2">
               {splits.map((s, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={s.eventCategoryId}
-                    onChange={(e) => updateSplit(i, { eventCategoryId: e.target.value })}
-                    disabled={isLocked}
-                    className={inputBase + " min-w-0 flex-1"}
-                  >
-                    {eventCategories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={s.amount}
-                    onChange={(e) => updateSplit(i, { amount: e.target.value })}
-                    disabled={isLocked}
-                    className={inputBase + " w-28 shrink-0"}
-                  />
-                  {!isLocked && (
-                    <>
-                      <button
-                        onClick={() => fillRemainder(i)}
-                        title={t("billModal.fillRemainder")}
-                        className="text-[13px] text-ember hover:underline"
-                      >
-                        =
-                      </button>
+                <div key={i} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={s.eventCategoryId}
+                      onChange={(e) => updateSplit(i, { eventCategoryId: e.target.value })}
+                      disabled={isLocked}
+                      className={inputBase + " min-w-0 flex-1"}
+                    >
+                      {eventCategories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={s.amount}
+                      onChange={(e) => updateSplit(i, { amount: e.target.value })}
+                      disabled={isLocked}
+                      className={inputBase + " w-28 shrink-0"}
+                    />
+                    {!isLocked && (
                       <button
                         onClick={() => removeSplit(i)}
-                        className="text-red-600 hover:text-red-700"
+                        aria-label={t("billModal.removeSplit")}
+                        title={t("billModal.removeSplit")}
+                        className="px-1 text-red-600 hover:text-red-700"
                       >
                         ×
                       </button>
-                    </>
+                    )}
+                  </div>
+                  {/* Always visible (not a hover tooltip): what is still unassigned and a button to put it here.
+                      Hidden only when nothing is left to assign. */}
+                  {!isLocked && Number.isFinite(difference) && Math.abs(difference) >= 0.005 && billTotalNum > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary">
+                      <span>{t("billModal.splitRemaining", { amount: difference.toFixed(2) })}</span>
+                      <button
+                        type="button"
+                        onClick={() => fillRemainder(i)}
+                        className="rounded-md border border-mist bg-paper px-2 py-0.5 text-[12px] text-ember hover:bg-paper-2"
+                      >
+                        {t("billModal.fillRemainder")}
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
