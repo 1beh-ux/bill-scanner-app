@@ -26,9 +26,9 @@ export async function POST(
     return NextResponse.json({ error: "target_event_id_required" }, { status: 400 });
   }
 
-  const result = await moveBillToEvent(id, targetEventId, user.id);
+  const result = await moveBillToEvent(id, targetEventId, user);
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 409 });
+    return NextResponse.json({ error: result.error }, { status: result.error === "target_no_access" ? 403 : 409 });
   }
   return NextResponse.json({
     ok: true,

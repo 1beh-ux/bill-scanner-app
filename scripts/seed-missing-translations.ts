@@ -206,6 +206,12 @@ export const ROWS: Row[] = [
   { key: "billsPage.exportedYes", cs: "Ano", en: "Yes" },
   { key: "billsPage.exportedNo", cs: "Ne", en: "No" },
   { key: "billsPage.payerEventShort", cs: "Akce", en: "Event" },
+
+  // -- Part 12: move to another event ---------------------------------------------------
+  { key: "billModal.error.target_event_closed", cs: "Cílová akce je uzavřená, účtenky do ní nelze přesunout.", en: "The target event is closed; bills cannot be moved into it." },
+  { key: "billModal.error.target_no_access", cs: "Do cílové akce nemáte přístup k účtenkám.", en: "You do not have bills access to the target event." },
+  { key: "billsPage.bulkErrTargetClosed", cs: "{filename}: cílová akce je uzavřená.", en: "{filename}: the target event is closed." },
+  { key: "billsPage.bulkErrTargetNoAccess", cs: "{filename}: do cílové akce nemáte přístup k účtenkám.", en: "{filename}: you have no bills access to the target event." },
 ];
 
 async function main() {

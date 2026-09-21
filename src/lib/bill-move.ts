@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma";
+import type { User } from "@/generated/prisma";
+import { hasModuleAccess } from "@/lib/module-access";
 
 export interface MoveResult {
   ok: boolean;
@@ -11,7 +13,7 @@ export interface MoveResult {
 export async function moveBillToEvent(
   billId: string,
   targetEventId: string,
-  userId: string
+  user: User
 ): Promise<MoveResult> {
   const bill = await prisma.bill.findUnique({
     where: { id: billId },
@@ -31,7 +33,10 @@ export async function moveBillToEvent(
 
   const targetEvent = await prisma.event.findUnique({ where: { id: targetEventId } });
   if (!targetEvent) return { ok: false, error: "target_event_not_found" };
-  if (targetEvent.status === "closed") return { ok: false, error: "event_closed_locked" };
+  // Enforced here, not just hidden in the picker: a closed event never receives bills,
+  // and you can only move bills into an event you have bills access to yourself.
+  if (targetEvent.status === "closed") return { ok: false, error: "target_event_closed" };
+  if (!(await hasModuleAccess(user, targetEventId, "bills"))) return { ok: false, error: "target_no_access" };
 
   const targetCategories = await prisma.eventCategory.findMany({
     where: { eventId: targetEventId },
@@ -87,7 +92,7 @@ export async function moveBillToEvent(
     await tx.billAuditLog.create({
       data: {
         billId,
-        userId,
+        userId: user.id,
         actionType: "edit",
         fieldName: "eventId",
         oldValue: bill.event.name,

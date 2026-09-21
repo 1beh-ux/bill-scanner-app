@@ -132,6 +132,53 @@ async function main() {
   rr = await call(billsRoute.GET as unknown as Handler, { url: "/x", params: { id: ev.id }, user: u2 });
   check("bills list API carries the fields the columns need (note, paid, created by, exported)", rr.json[0].notes === "pozn." && "paidToAuthor" in rr.json[0] && "paidAt" in rr.json[0] && "exportedAt" in rr.json[0] && rr.json[0].createdBy?.displayName === "b-user");
 
+  console.log("\n== Part 12: which event is current + move targets");
+  const ce = await import("../src/lib/current-event");
+  const evs = [{ id: "A", status: "active" }, { id: "B", status: "active" }, { id: "C", status: "closed" }];
+  check("remembered active event B stays selected (also on Kurzy / Plátci / after reload)", ce.pickCurrentEvent(evs, "B", null) === "B");
+  check("nothing remembered -> first selectable", ce.pickCurrentEvent(evs, null, null) === "A");
+  check("remembered event no longer accessible/existing -> falls back to first active", ce.pickCurrentEvent(evs, "ZZZ", null) === "A");
+  check("remembered event is closed and we're not on it -> falls back to first active", ce.pickCurrentEvent(evs, "C", null) === "A");
+  check("closed event stays selectable while we are ON it (never a blank switcher)", ce.pickCurrentEvent(evs, "C", "C") === "C");
+  check("no events at all -> null (no crash)", ce.pickCurrentEvent([], "B", null) === null);
+  check("the switcher list offers active events only (plus the one being viewed)", JSON.stringify(ce.selectableEvents(evs, null).map((e) => e.id)) === '["A","B"]' && ce.selectableEvents(evs, "C").some((e) => e.id === "C"));
+
+  const eventsRoute = await import("../src/app/api/events/route");
+  const moveRoute = await import("../src/app/api/bills/[id]/move/route");
+  const bulkRoute = await import("../src/app/api/events/[id]/bills/bulk/route");
+  const mvA = await prisma.event.create({ data: { name: `MvA ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvOpen = await prisma.event.create({ data: { name: `MvOpen ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvClosed = await prisma.event.create({ data: { name: `MvClosed ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10"), status: "closed" } });
+  const mvNoAccess = await prisma.event.create({ data: { name: `MvNoAccess ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvHealthOnly = await prisma.event.create({ data: { name: `MvHealth ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  await prisma.userEventModuleAccess.createMany({
+    data: [
+      { userId: user.id, eventId: mvA.id, moduleKey: "bills" as const },
+      { userId: user.id, eventId: mvOpen.id, moduleKey: "bills" as const },
+      { userId: user.id, eventId: mvClosed.id, moduleKey: "bills" as const },
+      { userId: user.id, eventId: mvHealthOnly.id, moduleKey: "health" as const },
+    ],
+    skipDuplicates: true,
+  });
+  rr = await call(eventsRoute.GET as unknown as Handler, { url: "/api/events?module=bills", user });
+  const ids = (rr.json as { id: string }[]).map((e) => e.id);
+  check("?module=bills lists only events with BILLS access (not the health-only or foreign ones)", ids.includes(mvOpen.id) && ids.includes(mvClosed.id) && !ids.includes(mvNoAccess.id) && !ids.includes(mvHealthOnly.id));
+  const mkBill = (eventId: string, tag: string) => prisma.bill.create({ data: { eventId, gcsObjectPath: `t/${run}-${tag}.pdf`, originalFilename: `${tag}.pdf`, contentHash: `m-${run}-${tag}`, ingestChannel: "upload", createdByUserId: user.id } });
+  const b1 = await mkBill(mvA.id, "one");
+  rr = await call(moveRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: b1.id }, user, body: { targetEventId: mvClosed.id } });
+  check("moving into a CLOSED event is refused server-side: target_event_closed", rr.status === 409 && rr.json.error === "target_event_closed", JSON.stringify(rr.json));
+  rr = await call(moveRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: b1.id }, user, body: { targetEventId: mvNoAccess.id } });
+  check("moving into an event without bills access is refused: target_no_access (403)", rr.status === 403 && rr.json.error === "target_no_access", JSON.stringify(rr.json));
+  rr = await call(moveRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: b1.id }, user, body: { targetEventId: mvHealthOnly.id } });
+  check("a health-only grant on the target is not enough", rr.status === 403);
+  const stillThere = await prisma.bill.findUniqueOrThrow({ where: { id: b1.id } });
+  check("refused moves leave the bill where it was", stillThere.eventId === mvA.id);
+  rr = await call(bulkRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: mvA.id }, user, body: { action: "move", billIds: [b1.id], targetEventId: mvClosed.id } });
+  check("bulk move into a closed event: reported per bill as target_event_closed", rr.status === 200 && rr.json.failedCount === 1 && rr.json.failed[0].error === "target_event_closed", JSON.stringify(rr.json));
+  rr = await call(moveRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: b1.id }, user, body: { targetEventId: mvOpen.id } });
+  const moved = await prisma.bill.findUniqueOrThrow({ where: { id: b1.id } });
+  check("moving into an active event with bills access works", rr.status === 200 && moved.eventId === mvOpen.id, JSON.stringify(rr.json));
+
   void run;
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

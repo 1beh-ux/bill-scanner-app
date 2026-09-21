@@ -3,7 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 
-export async function GET() {
+// ?module=bills -> only events where the user may work with bills (what a
+// "move to another event" picker needs); without it, every event the user holds
+// any module grant on (the switcher). Admin: everything either way.
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -11,8 +14,13 @@ export async function GET() {
 
   // Admin sees every event; everyone else only events they hold at least one
   // module grant on (the event switcher and pickers are built from this).
+  const requested = new URL(req.url).searchParams.get("module");
+  const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" ? requested : undefined;
   const events = await prisma.event.findMany({
-    where: user.role === "admin" ? {} : { moduleAccess: { some: { userId: user.id } } },
+    where:
+      user.role === "admin"
+        ? {}
+        : { moduleAccess: { some: { userId: user.id, ...(moduleFilter && { moduleKey: moduleFilter }) } } },
     orderBy: { startDate: "desc" },
   });
 

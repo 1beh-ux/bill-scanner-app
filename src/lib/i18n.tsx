@@ -24,6 +24,7 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 const TRANSLATIONS_CACHE_KEY = "translations-cache-v1";
+const CURRENT_EVENT_KEY = "currentEventId";
 
 function readCachedTranslations(): TranslationsMap {
   try {
@@ -49,7 +50,26 @@ function readCachedLang(): Lang {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(readCachedLang);
-  const [currentEventId, setCurrentEventId] = useState<string | null>(null);
+  const [currentEventId, setCurrentEventIdState] = useState<string | null>(null);
+
+  // The switcher's event is remembered across reloads (and kept on organisation pages).
+  // Restored after mount -- not in the initial state -- so server and client render the same.
+  useEffect(() => {
+    Promise.resolve().then(() => {
+      try {
+        const stored = localStorage.getItem(CURRENT_EVENT_KEY);
+        if (stored) setCurrentEventIdState((cur) => cur ?? stored);
+      } catch {}
+    });
+  }, []);
+
+  function setCurrentEventId(id: string | null) {
+    setCurrentEventIdState(id);
+    try {
+      if (id) localStorage.setItem(CURRENT_EVENT_KEY, id);
+      else localStorage.removeItem(CURRENT_EVENT_KEY);
+    } catch {}
+  }
   // Seeded from sessionStorage so a hard navigation shows real text instead of
   // raw i18n keys while the fresh fetch below is still in flight.
   const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);

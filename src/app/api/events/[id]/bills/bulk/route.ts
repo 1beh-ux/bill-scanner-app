@@ -53,7 +53,7 @@ if (action === "move") {
     const succeeded: string[] = [];
     const failed: FailureDetail[] = [];
     for (const bill of bills) {
-      const result = await moveBillToEvent(bill.id, targetEventId, user.id);
+      const result = await moveBillToEvent(bill.id, targetEventId, user);
       if (result.ok) {
         succeeded.push(bill.id);
       } else {

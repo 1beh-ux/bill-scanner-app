@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
+import { pickCurrentEvent, selectableEvents as pickSelectable } from "@/lib/current-event";
 
 type EventOption = { id: string; name: string; status: string };
 
@@ -54,14 +55,11 @@ export default function AppSidebar() {
 
   // Only active events are offered. A closed event stays listed only while
   // you're actually on it (e.g. an admin opened it from the events page), so
-  // the dropdown never goes blank; a stale remembered closed event falls back
-  // to the first active one.
-  const pathEventId = pathname.match(/^\/events\/([^/]+)/)?.[1];
-  const selectableEvents = events.filter((ev) => ev.status === "active" || ev.id === pathEventId);
-  const eventId =
-    (selectableEvents.some((ev) => ev.id === currentEventId) ? currentEventId : selectableEvents[0]?.id) ||
-    currentEventId ||
-    null;
+  // the dropdown never goes blank. The remembered choice is validated here every
+  // time (exists, active, accessible) -- see src/lib/current-event.ts.
+  const pathEventId = pathname.match(/^\/events\/([^/]+)/)?.[1] ?? null;
+  const selectableEvents = pickSelectable(events, pathEventId);
+  const eventId = pickCurrentEvent(events, currentEventId, pathEventId) || currentEventId || null;
 
   useEffect(() => {
     if (!eventId) {

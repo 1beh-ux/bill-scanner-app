@@ -108,7 +108,7 @@ export default function EventBillsPage({
   const [bulkFailures, setBulkFailures] = useState<BulkFailure[]>([]);
 
   const [aiProgressIds, setAiProgressIds] = useState<Set<string> | null>(null);
-  const [events, setEvents] = useState<{ id: string; name: string }[]>([]);
+  const [events, setEvents] = useState<{ id: string; name: string; status: string }[]>([]);
   const [showMoveSelect, setShowMoveSelect] = useState(false);
   const [moveTargetId, setMoveTargetId] = useState("");
 
@@ -159,7 +159,7 @@ export default function EventBillsPage({
   }, [id]);
 
   useEffect(() => {
-    fetch(`/api/events`)
+    fetch(`/api/events?module=bills`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setEvents)
       .catch(() => {});
@@ -548,6 +548,12 @@ export default function EventBillsPage({
     if (f.error === "event_closed_locked") {
       return t("billsPage.bulkErrEventClosed", { filename: f.filename });
     }
+    if (f.error === "target_event_closed") {
+      return t("billsPage.bulkErrTargetClosed", { filename: f.filename });
+    }
+    if (f.error === "target_no_access") {
+      return t("billsPage.bulkErrTargetNoAccess", { filename: f.filename });
+    }
     return `${f.filename}: ${f.error}`;
   }
 
@@ -671,8 +677,9 @@ export default function EventBillsPage({
             className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink"
           >
             <option value="">{t("billsPage.bulkMoveSelectPlaceholder")}</option>
+            {/* only active events, not this one, that this user may work with bills in */}
             {events
-              .filter((ev) => ev.id !== id)
+              .filter((ev) => ev.id !== id && ev.status === "active")
               .map((ev) => (
                 <option key={ev.id} value={ev.id}>
                   {ev.name}

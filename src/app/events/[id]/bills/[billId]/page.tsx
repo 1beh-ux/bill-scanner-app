@@ -85,7 +85,9 @@ export default function BillDetailPage({
     prev: null,
     next: null,
   });
-  const [events, setEvents] = useState<{ id: string; name: string }[]>([]);
+  const [events, setEvents] = useState<{ id: string; name: string; status: string }[]>([]);
+  // Move targets: active events other than this one where this user has bills access.
+  const moveTargets = events.filter((ev) => ev.id !== eventId && ev.status === "active");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -176,7 +178,7 @@ const [processingAi, setProcessingAi] = useState(false);
       .then((r) => (r.ok ? r.json() : []))
       .then(setPayers)
       .catch(() => {});
-    fetch(`/api/events`)
+    fetch(`/api/events?module=bills`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setEvents)
       .catch(() => {});
@@ -738,7 +740,7 @@ const statusLabel = t(
             >
               {processingAi ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
             </button>
-            {!isLocked && events.length > 1 && (
+            {!isLocked && moveTargets.length > 0 && (
               <select
                 value=""
                 onChange={(e) => {
@@ -748,13 +750,11 @@ const statusLabel = t(
                 className={inputBase + " w-auto"}
               >
                 <option value="">{t("billModal.moveToEvent")}</option>
-                {events
-                  .filter((ev) => ev.id !== eventId)
-                  .map((ev) => (
-                    <option key={ev.id} value={ev.id}>
-                      {ev.name}
-                    </option>
-                  ))}
+                {moveTargets.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.name}
+                  </option>
+                ))}
               </select>
             )}
             {saving && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
