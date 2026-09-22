@@ -223,6 +223,11 @@ model Event {
   statusExportLastSyncedAt DateTime? @map("status_export_last_synced_at")
   mailDoneLabelName        String?   @map("mail_done_label_name")
   mailQuestionnaireUrl     String?   @map("mail_questionnaire_url")
+  // Optional -- {{registration_deadline}} (Part 11 of the participants/settings
+  // prompt). Omitted (not defaulted to a hardcoded date) when null, so the
+  // acceptance e-mail/document sentence that uses it is simply left out instead
+  // of ever printing a wrong or contradicting date.
+  registrationDeadline     DateTime? @map("registration_deadline") @db.Date
   // Persisted registration-sheet connection (Seznam účastníků import
   // settings) -- set once, reused on every future import instead of
   // re-pasting the sheet id and remapping columns each time. Mapping is

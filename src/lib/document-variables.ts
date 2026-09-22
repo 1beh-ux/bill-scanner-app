@@ -34,6 +34,7 @@ export type EventForMerge = {
   vsMembershipFieldKey: string | null;
   mailQuestionnaireUrl: string | null;
   qrSizeMm: number | null;
+  registrationDeadline: Date | null;
 };
 
 function formatDate(d: Date | null): string {
@@ -44,8 +45,15 @@ function formatDate(d: Date | null): string {
   return `${dd}.${mm}.${dt.getUTCFullYear()}`;
 }
 
+// "Primary guardian" for every guardian-kind document/email field (zast_jmeno, vztah,
+// zast_telefon, ...): the one flagged receivesCommunications, else the first at all --
+// same rule as resolveContactEmail below, reused rather than adding a second
+// "hlavní zástupce" flag that would just duplicate it (Part 11-I of the participants/
+// settings prompt asks for a documented primary-guardian rule; this is that rule).
 function firstGuardian(p: ParticipantForMerge) {
-  return p.guardians[0] ?? { name: "", email: "", relationship: "", phone: "" };
+  return (
+    p.guardians.find((g) => g.receivesCommunications) ?? p.guardians[0] ?? { name: "", email: "", relationship: "", phone: "" }
+  );
 }
 
 /** First guardian flagged to receive communications, else the first guardian at all. */
@@ -129,6 +137,14 @@ export async function resolveVariables(
   const text: Record<string, string> = {
     camp_name: event.name,
     questionnaire_url: event.mailQuestionnaireUrl ?? "",
+    // A full clause, not a bare date: with no real conditional-block templating
+    // ({{#if}}...{{/if}}), a bare date would leave a dangling "do ." sentence
+    // fragment when unset. This lets the default template just place
+    // {{registration_deadline}} as its own sentence and have it vanish cleanly
+    // when the event has no deadline set (Part 11-I: "sentence is omitted").
+    registration_deadline: event.registrationDeadline
+      ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
+      : "",
   };
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};

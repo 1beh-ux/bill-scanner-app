@@ -282,6 +282,9 @@ export const ROWS: Row[] = [
   { key: "listTemplateAdmin.syncNothing", cs: "V šablonách organizace zatím nic není – přidejte je v Šablony → Zdraví.", en: "There's nothing in the organization templates yet – add some in Templates → Health." },
   { key: "medPlansSection.reportedLabel", cs: "Léky uvedené v přihlášce", en: "Medication reported at registration" },
   { key: "medPlansSection.convertToPlanButton", cs: "Převést na plán", en: "Convert to plan" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-I/E: documents/variables -----------
+  { key: "templateCheck.emptyValue", cs: "prázdná hodnota", en: "empty value" },
 ];
 
 async function main() {

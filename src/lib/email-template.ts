@@ -19,7 +19,9 @@ export {
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
 };
 
-const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
+// Exported for scripts/fix-registration-acceptance-template.ts, which needs to know
+// the real default text without duplicating it.
+export const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
   [PARENT_SUMMARY_PURPOSE_KEY]: {
     subject: "Souhrn zdravotních záznamů – {{child_name}} – {{camp_name}}",
     body: `Dobrý den,
@@ -43,18 +45,23 @@ Děkujeme,
 {{sender_name}}`,
   },
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: {
-    // Placeholder -- Pavel said he'll specify the real wording and which
-    // documents get attached later. Attach the přihláška (or anything
-    // else) manually when sending, via the file picker in the send dialog,
-    // until document generation exists.
-    subject: "{{camp_name}} — přijetí registrace ({{participant_name}})",
+    // Final wording (Part 5/11 of the participants/settings prompt) -- replaces the
+    // earlier "[PLACEHOLDER: ...]" text. No hard-coded deadline date: {{registration_
+    // deadline}} resolves to a whole sentence (empty when the event has none set --
+    // see resolveVariables in document-variables.ts), and {{attachments_list}} is
+    // built from whatever actually got attached to this specific send.
+    subject: "Přijetí registrace: {{participant_name}} — {{camp_name}}",
     body: `Dobrý den,
 
-potvrzujeme přijetí registrace pro {{participant_name}} na akci {{camp_name}}.
+s radostí potvrzujeme přijetí {{participant_name}} na akci {{camp_name}}.
 
-V příloze najdete přihlášku k vyplnění a odeslání zpět. [PLACEHOLDER: text a přílohy doladíme později]
+V příloze najdete: {{attachments_list}}.
 
-S pozdravem,
+{{registration_deadline}}
+
+Kdyby cokoli nebylo jasné, ozvěte se na {{sender_email}}.
+
+S pozdravem
 {{sender_name}}`,
   },
 };

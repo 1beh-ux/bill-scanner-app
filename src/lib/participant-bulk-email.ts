@@ -6,7 +6,7 @@ import { mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
 import { getOrCreateSubfolder } from "@/lib/drive";
-import type { DocumentTypeData } from "@/lib/mail-reply-template";
+import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
   participantId: string;
@@ -48,19 +48,29 @@ async function buildAutoAttachDocuments(
     vsMembershipFieldKey: string | null;
     mailQuestionnaireUrl: string | null;
     qrSizeMm: number | null;
+    registrationDeadline: Date | null;
     driveParticipantsFolderId: string | null;
     driveExportFolderId: string | null;
   },
   allowedDocumentTypeIds: string[] | undefined,
   generatedByUserId: string
-): Promise<{ attachments: { buffer: Buffer; filename: string; mimeType: string }[]; failedDocuments: string[]; generatedCount: number }> {
+): Promise<{
+  attachments: { buffer: Buffer; filename: string; mimeType: string }[];
+  failedDocuments: string[];
+  generatedCount: number;
+  // Part 11-I: {{attachments_list}} in the acceptance e-mail is built from what
+  // actually got attached, not a static list -- collected here since this is
+  // where that's decided.
+  attachedDocumentNames: string[];
+}> {
   let generatedCount = 0;
   const failedDocuments: string[] = [];
-  if (!participant) return { attachments: [], failedDocuments, generatedCount };
+  const attachedDocumentNames: string[] = [];
+  if (!participant) return { attachments: [], failedDocuments, generatedCount, attachedDocumentNames };
 
   await ensureRegistrationNumber(participant.id, event.id);
   const refreshed = await prisma.participant.findUnique({ where: { id: participant.id } });
-  if (!refreshed) return { attachments: [], failedDocuments, generatedCount };
+  if (!refreshed) return { attachments: [], failedDocuments, generatedCount, attachedDocumentNames };
 
   const documentTypes = await prisma.eventListItem.findMany({
     where: { eventId: event.id, kind: "document", active: true },
@@ -104,6 +114,7 @@ async function buildAutoAttachDocuments(
       );
       const filename = `${docType.name}.pdf`;
       attachments.push({ buffer, filename, mimeType: "application/pdf" });
+      attachedDocumentNames.push(documentDisplayName({ ...docType, data }));
       generatedCount++;
       // Persisted the same way a received document is (see
       // participant-document-store.ts's own comment) -- a save failure
@@ -135,7 +146,7 @@ async function buildAutoAttachDocuments(
     }
   }
 
-  return { attachments, failedDocuments, generatedCount };
+  return { attachments, failedDocuments, generatedCount, attachedDocumentNames };
 }
 
 function loadParticipant(participantId: string) {
@@ -186,6 +197,15 @@ export async function sendBulkParticipantEmail(opts: {
     const participant = await loadParticipant(participantId);
     if (!participant) continue;
 
+    // Built before `vars` -- {{attachments_list}} depends on what actually got
+    // attached (Part 11-I), not a static guess made before generation runs.
+    const generated = opts.markAccepted
+      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
+      : { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
+    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
+    documentsGenerated += generated.generatedCount;
+    generated.failedDocuments.forEach((d) => failedDocs.add(d));
+
     const { text: fieldVars } = await resolveVariables(
       { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
       event
@@ -196,16 +216,11 @@ export async function sendBulkParticipantEmail(opts: {
       camp_name: event.name,
       sender_name: senderDisplayName,
       contact_email: resolveContactEmail(participant),
+      attachments_list: generated.attachedDocumentNames.join(", "),
+      sender_email: senderEmail ?? "",
     };
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
-
-    const generated = opts.markAccepted
-      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
-      : { attachments: [], failedDocuments: [] as string[], generatedCount: 0 };
-    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
-    documentsGenerated += generated.generatedCount;
-    generated.failedDocuments.forEach((d) => failedDocs.add(d));
 
     for (const guardian of sendEmail ? participant.guardians : []) {
       if (!senderEmail) {

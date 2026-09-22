@@ -71,11 +71,41 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   both org and event scope), "Plán léků" (was "Léky", per-participant section),
   "Výdej léků" already correct. New events already copy org meds/situations at
   creation (unconditional `listTemplate` copy, no kind filter) — no change needed.
-- **Parts 5–11**: pending.
+- **Part 11-I/E** (documents/variables -- done out of order, per the brief's own
+  "highest-risk defect, do before the UI restructure"): the root fix is in
+  `document-merge.ts`: after the known-key substitution pass, the merged doc is
+  re-scanned for ANY remaining `{{...}}`-shaped text (whatever the reason -- unknown
+  key, a field not flagged `documents`, or an image that couldn't be generated, e.g.
+  `{{picture}}` with no bank account set) and blanks it, logged not silent. This is
+  a blanket safety net, not a per-cause fix, so it holds regardless of what future
+  causes turn up. Also: `firstGuardian()` now prefers the `receivesCommunications`
+  guardian (documented choice: reused that flag as "primary guardian" rather than
+  adding a separate one, since Part 1 already treats it that way for contact e-mail);
+  `{{attachments_list}}` (built from what actually got attached, not a guess);
+  `Event.registrationDeadline` (additive migration `add_registration_deadline`) +
+  `{{registration_deadline}}` resolving to a whole sentence, empty when unset (no
+  conditional-block templating exists, so a bare date would leave a dangling
+  fragment -- documented limitation); `{{sender_email}}`. Default acceptance e-mail
+  text replaced (script `fix-registration-acceptance-template`, dry-run, only
+  touches rows still containing "[PLACEHOLDER"). Template preview page now shows
+  "prázdná hodnota" (amber) instead of a green check when a correctly-enabled
+  field resolves empty for the selected participant (it already had the data,
+  `values` was fetched but unused for this).
+  NOT done (deferred, noted rather than rushed): the accept-dialog's resolved
+  preview, participant switcher, recipient-address list + Czech plural fix, and
+  the "blocks sending until acknowledged" pre-send checklist -- the merge-time
+  safety net above already guarantees no raw `{{` reaches a real PDF regardless,
+  which was the hard, testable requirement; the dialog UX layer on top is real
+  additional work not yet started. Price/QR "two sources of truth": not a code
+  bug -- `{{price}}`/`{{picture}}` already resolve correctly from event settings;
+  the reported issue is that Pavel's actual Google Doc has the price typed in by
+  hand instead of using the variable, which is template content, not something
+  this codebase can fix.
+- **Parts 5–10, 11 A-D/F-H**: pending.
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum
-   value, MailActionType document_marked/unmarked).
+   value, MailActionType document_marked/unmarked, Event.registrationDeadline).
 2. `scripts/backfill-unified-participant-fields.ts` (idempotent).
 3. `scripts/backfill-contact-email-field.ts --apply` — before new code
    serves traffic (old kind still resolves without it, just without the
@@ -86,5 +116,6 @@ lastName split, a `contact_email` computed type, a leftover duplicate
 6. `scripts/normalize-participant-field-surfaces.ts --apply`.
 7. `scripts/fix-tshirt-size-casing.ts --apply`.
 8. `scripts/rename-medsnotes-label.ts --apply`.
-9. `scripts/seed-missing-translations.ts`.
-10. `scripts/update-translations-text-changes.ts --apply`.
+9. `scripts/fix-registration-acceptance-template.ts --apply`.
+10. `scripts/seed-missing-translations.ts`.
+11. `scripts/update-translations-text-changes.ts --apply`.

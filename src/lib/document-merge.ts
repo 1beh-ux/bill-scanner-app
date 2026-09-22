@@ -36,6 +36,33 @@ function findPlaceholderRange(
   return null;
 }
 
+const PLACEHOLDER_PATTERN = /\{\{[^{}]+\}\}/g;
+
+/**
+ * Same tree walk as findPlaceholderRange, but collects every `{{...}}`-shaped
+ * run of text still in the document, whatever's inside the braces. Used as
+ * the final safety net after the known-key substitution pass (Part 11-I of
+ * the participants/settings/Health/Mail prompt: a generated PDF must never
+ * contain a raw `{{...}}`, whatever the reason a given key wasn't resolved --
+ * unknown key, a field not flagged for the `documents` surface, or anything
+ * else this file's author didn't think of).
+ */
+function collectRemainingPlaceholders(content: docs_v1.Schema$StructuralElement[] | undefined): Set<string> {
+  const found = new Set<string>();
+  for (const el of content ?? []) {
+    for (const pe of el.paragraph?.elements ?? []) {
+      const text = pe.textRun?.content;
+      if (text) for (const m of text.matchAll(PLACEHOLDER_PATTERN)) found.add(m[0]);
+    }
+    for (const row of el.table?.tableRows ?? []) {
+      for (const cell of row.tableCells ?? []) {
+        for (const placeholder of collectRemainingPlaceholders(cell.content)) found.add(placeholder);
+      }
+    }
+  }
+  return found;
+}
+
 /**
  * Briefly uploads `buffer` to the bills GCS bucket and returns a v4 signed
  * read URL -- the Docs API's insertInlineImage request only accepts a
@@ -170,6 +197,26 @@ async function mergeAndExportDocumentRaw(
       } catch (err) {
         console.log(`[document-merge] failed to insert image for {{${key}}} in ${templateDocId}:`, String(err));
       }
+    }
+
+    // Safety net: whatever the reason (unknown key, a field not flagged for the
+    // `documents` surface, an image that couldn't be generated -- e.g. {{picture}}
+    // when the camp fee/bank account aren't set), a raw {{...}} must never reach the
+    // exported PDF. Re-scan the doc and blank anything still shaped like a
+    // placeholder. Logged (not silent) so a real missing-field bug still shows up
+    // somewhere, even though the document itself now reads clean.
+    const finalDoc = await docs.documents.get({ documentId: scratchId });
+    const leftover = collectRemainingPlaceholders(finalDoc.data.body?.content);
+    if (leftover.size > 0) {
+      console.log(`[document-merge] blanking unresolved placeholder(s) in ${templateDocId}:`, [...leftover].join(", "));
+      await docs.documents.batchUpdate({
+        documentId: scratchId,
+        requestBody: {
+          requests: [...leftover].map((placeholder) => ({
+            replaceAllText: { containsText: { text: placeholder, matchCase: true }, replaceText: "" },
+          })),
+        },
+      });
     }
 
     const exported = await drive.files.export(

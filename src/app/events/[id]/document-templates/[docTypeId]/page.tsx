@@ -198,19 +198,31 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
                 {placeholders.map((p) => {
                   const value = valueOf(p);
                   const addableRow = p.status === "field_off" || p.status === "unknown";
+                  // Part 11-E: an enabled field that resolves empty FOR THIS PARTICIPANT is a
+                  // separate warning from "not enabled at all" -- amber, not a green check,
+                  // even though the field itself is configured correctly.
+                  const isEmptyForParticipant = p.status === "ok" && data?.values && !data.imageKeys.includes(p.key) && !value;
                   return (
                     <li key={p.key} className="flex items-start gap-2 text-[13px]">
                       {addableRow ? (
                         <input type="checkbox" className="mt-1" checked={selected.has(p.key)} onChange={() => toggle(p.key)} />
                       ) : (
-                        <span className={"mt-px w-[13px] " + (p.status === "ok" ? "text-pine" : "text-red-600")}>
-                          {p.status === "ok" ? "✓" : "✗"}
+                        <span
+                          className={
+                            "mt-px w-[13px] " + (isEmptyForParticipant ? "text-amber-700" : p.status === "ok" ? "text-pine" : "text-red-600")
+                          }
+                        >
+                          {isEmptyForParticipant ? "!" : p.status === "ok" ? "✓" : "✗"}
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
                         <code className="text-ink">{`{{${p.key}}}`}</code>
                         {p.status === "ok" ? (
-                          <div className={"break-words " + (value ? "text-ink-secondary" : "text-ink-secondary/60")}>{value || "—"}</div>
+                          isEmptyForParticipant ? (
+                            <div className="text-amber-700">{t("templateCheck.emptyValue")}</div>
+                          ) : (
+                            <div className="break-words text-ink-secondary">{value}</div>
+                          )
                         ) : (
                           <div className="text-amber-700">{t(`templateCheck.status.${p.status}`)}</div>
                         )}
