@@ -14,10 +14,7 @@ export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
 export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
   bills: {
     sectionLabelKey: "nav.sectionBills",
-    items: [
-      { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
-      { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true },
-    ],
+    items: [{ path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true }],
   },
   organization: {
     sectionLabelKey: "nav.organization",
@@ -25,6 +22,10 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       { path: "/events", labelKey: "nav.events", icon: Calendar, adminOnly: true },
       { path: "/admin/overview", labelKey: "nav.adminOverview", icon: LayoutDashboard, adminOnly: true },
       { path: "/users", labelKey: "nav.users", icon: UserCog, adminOnly: true },
+      // Global payer list -- admin-only, event-independent (see docs/drive-payers-roles-change-notes.md);
+      // moved here from "bills" per retest feedback: admin should see the same event-scoped context
+      // as a user, so a global/all-events list belongs with the other org-wide admin pages, not Bills.
+      { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
     ],

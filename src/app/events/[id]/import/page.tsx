@@ -359,6 +359,9 @@ export default function EventImportPage({
         <p className="mb-4 text-[14px] text-pine">
           {t("importPage.doneMessage", { count: String(createdBills.length) })}
         </p>
+        {/* Same breakdown (duplicates/skipped/failed/blank pages) shown while staging --
+            repeated here so it isn't lost once the run is confirmed. */}
+        {lastRun && <ImportRunResult result={lastRun} />}
         <a href={`/events/${eventId}/bills`} className="text-[14px] text-ember hover:underline">
           {t("importPage.goToBills")}
         </a>

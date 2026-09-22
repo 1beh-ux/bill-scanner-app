@@ -23,7 +23,7 @@ export async function GET(
     orderBy: { createdAt: "desc" },
     include: {
       payerAuthor: { select: { canonicalName: true } },
-      categories: { include: { eventCategory: { select: { name: true } } } },
+      categories: { include: { eventCategory: { select: { name: true } } }, orderBy: { eventCategory: { name: "asc" } } },
       createdBy: { select: { displayName: true } },
     },
   });

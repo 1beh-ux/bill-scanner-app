@@ -18,6 +18,27 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   { key: "billsPage.confirmBulkMarkUnpaid", cs: "Zrušit u vybraných účtenek označení „proplaceno“ (počet: {count})?", en: "Remove the “paid out” mark from the selected bills (count: {count})?" },
   { key: "paymentsPage.alreadyPaidOut", cs: "již proplaceno {amount}, počet: {count}", en: "already paid out {amount}, count: {count}" },
   { key: "paymentsPage.itemPaidOut", cs: "proplaceno", en: "paid out" },
+  // {count} needs Czech grammatical agreement (1 účtenku / 2-4 účtenky / 5+ účtenek) that plain
+  // interpolation can't give -- reworded to state the count instead of inflecting around it,
+  // same pattern already used for confirmBulkMarkPaid/Unpaid above.
+  { key: "billsPage.confirmBulkDelete", cs: "Opravdu smazat vybrané účtenky (počet: {count})? Tuto akci nelze vrátit.", en: "Really delete the selected bills (count: {count})? This cannot be undone." },
+  { key: "participantsPage.confirmBulkDelete", cs: "Opravdu smazat vybrané účastníky (počet: {count})? Smažou se i jejich záznamy a plány léků. Tuto akci nelze vrátit.", en: "Really delete the selected participants (count: {count})? Their records and med plans will be deleted too. This cannot be undone." },
+  // Same fix, the rest of the bills/payments strings with the same "{count} <genitive-plural
+  // noun>" problem (only correct for 5+, wrong for 1 and 2-4). Not sweeping the whole app for
+  // this -- Mail/Health strings (bulkSendSummaries, bulkStatusModal, participantImportPage, ...)
+  // are outside this change's scope and are left as a known issue.
+  { key: "billsPage.confirmBulkAi", cs: "Opravdu spustit AI zpracování pro vybrané účtenky (počet: {count})? Zůstaňte na této stránce, dokud zpracování neskončí.", en: "Really run AI processing for the selected bills (count: {count})? Stay on this page until it finishes." },
+  { key: "billsPage.bulkAiActive", cs: "Počet účtenek zpracovávaných AI: {count}.", en: "Bills currently being processed by AI: {count}." },
+  { key: "billsPage.bulkMoveConfirm", cs: "Opravdu přesunout vybrané účtenky (počet: {count}) do akce „{name}“?", en: "Really move the selected bills (count: {count}) to “{name}”?" },
+  { key: "billsPage.totalExcludes", cs: "nezahrnuje účtenky bez kurzu (počet: {count})", en: "excludes bills without a rate (count: {count})" },
+  { key: "importPage.doneMessage", cs: "Hotovo — importováno účtenek: {count}.", en: "Done — bills imported: {count}." },
+  { key: "importPage.confirmPartialFailure", cs: "Nepodařilo se nastavit počet účtenek: {count} — zkontrolujte je prosím v seznamu.", en: "Could not update, count of bills: {count} — please check them in the list." },
+  { key: "paymentsPage.unmarkPaidConfirm", cs: "Opravdu zrušit vyplacení pro {name} (počet dokladů: {count})?", en: "Really unmark as paid for {name} (count of bills: {count})?" },
+  { key: "rates.recalcPending", cs: "Čeká na přepočet do Kč, počet účtenek: {count}.", en: "Waiting for CZK conversion, bill count: {count}." },
+  { key: "events.error.event_has_bills", cs: "Tuto akci nelze smazat, protože obsahuje doklady (počet: {count}). Nejprve doklady přesuňte nebo smažte.", en: "This event cannot be deleted because it contains bills (count: {count}). Move or delete the bills first." },
+  // flagged as "still English" in the retest -- "import" reads as an untranslated placeholder
+  // next to the other nominalized entries here even though it's also a standard Czech word.
+  { key: "authors.auditSource.import", cs: "import z Drive", en: "Drive import" },
 ];
 
 async function main() {

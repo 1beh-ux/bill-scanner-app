@@ -29,6 +29,19 @@ export type PageVerdict = { blank: boolean; reason: "empty" | "flat_image" | "te
 
 type PdfJs = typeof import("pdfjs-dist/legacy/build/pdf.mjs");
 
+// pdfjs-dist wants a global DOMMatrix at module load (a top-level `new DOMMatrix()`, used only
+// by page.render()) even though we never render -- only getTextContent/getOperatorList/page.objs.
+// It tries to polyfill this itself from `@napi-rs/canvas`, but that package's native binary is
+// pulled in via a require() Next's standalone output tracing can't see, so it's missing in
+// production and the module import throws "DOMMatrix is not defined" (falls back to "keep every
+// page" -- see the catch in analyseBlankPages -- silently disabling blank-page detection).
+// A real implementation isn't needed: nothing we call ever invokes a DOMMatrix method, so a
+// no-op constructor is enough, and if some path ever did, the per-page try/catch below already
+// treats that as "not blank" (fail open), same as any other analysis error.
+if (typeof (globalThis as { DOMMatrix?: unknown }).DOMMatrix === "undefined") {
+  (globalThis as { DOMMatrix?: unknown }).DOMMatrix = class {};
+}
+
 let pdfjsPromise: Promise<PdfJs> | null = null;
 function loadPdfJs(): Promise<PdfJs> {
   pdfjsPromise ??= import("pdfjs-dist/legacy/build/pdf.mjs");

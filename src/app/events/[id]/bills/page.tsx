@@ -300,7 +300,7 @@ export default function EventBillsPage({
         );
       case "payer":
         return (
-          <td key={col} className="p-2 text-[14px] text-ink [overflow-wrap:anywhere]">
+          <td key={col} className="whitespace-nowrap p-2 text-[14px] text-ink">
             {b.payerAuthor?.canonicalName ?? t("billsPage.payerEventShort")}
           </td>
         );

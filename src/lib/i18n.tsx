@@ -48,6 +48,19 @@ function readCachedLang(): Lang {
   }
 }
 
+// Same instant-paint idea as readCachedLang: without this the sidebar's admin-only nav items
+// (visibleNavSections) briefly disappear on every load, since `role` starts out null until
+// /api/me resolves and null !== "admin". Only used for that first paint; /api/me still
+// reconciles the real value right after.
+function readCachedRole(): Role | null {
+  try {
+    const v = localStorage.getItem("role");
+    return v === "admin" || v === "accountant" || v === "user" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(readCachedLang);
   const [currentEventId, setCurrentEventIdState] = useState<string | null>(null);
@@ -73,7 +86,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // Seeded from sessionStorage so a hard navigation shows real text instead of
   // raw i18n keys while the fresh fetch below is still in flight.
   const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);
-  const [role, setRole] = useState<Role | null>(null);
+  const [role, setRole] = useState<Role | null>(readCachedRole);
   const [roleLoaded, setRoleLoaded] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
@@ -125,6 +138,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { role: Role; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
         setRole(data?.role ?? null);
+        try {
+          if (data?.role) localStorage.setItem("role", data.role);
+          else localStorage.removeItem("role");
+        } catch {}
         setHiddenModules(data?.hiddenModules ?? []);
         // Reconcile to the server's values without re-PATCHing them right
         // back -- this is the server telling the client, not a user action.

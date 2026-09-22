@@ -47,7 +47,9 @@ export async function GET(
   const bill = await prisma.bill.findUnique({
     where: { id },
     include: {
-      categories: { include: { eventCategory: true } },
+      // Same order as the manifest export (src/lib/manifest.ts) so the split list on this
+      // page and the "Kategorie n" columns in the sheet always agree.
+      categories: { include: { eventCategory: true }, orderBy: { eventCategory: { name: "asc" } } },
       payerAuthor: true,
       event: { select: { id: true, name: true, status: true } },
     },
