@@ -138,7 +138,7 @@ function renderBandTable(opts: {
         .join("");
       return `
         <tr class="${rowClasses}">
-          <td class="${nameCellClass}">${escapeHtml(row.participantName)}<div class="medname">${escapeHtml(row.medName)}</div></td>
+          <td class="${nameCellClass}">${escapeHtml(row.participantName)}<div class="medname">${escapeHtml(row.medName)}${row.dose ? ` (${escapeHtml(row.dose)})` : ""}</div></td>
           ${cells}
         </tr>`;
     })

@@ -276,6 +276,12 @@ export const ROWS: Row[] = [
   { key: "participantDetail.guardianReceivesLabel", cs: "Dostává e-maily", en: "Receives e-mails" },
   { key: "participantDetail.confirmDeleteGuardian", cs: "Opravdu odstranit tohoto zákonného zástupce?", en: "Remove this guardian?" },
   { key: "participantsPage.acceptImmediatelyLabel", cs: "Přijmout hned", en: "Accept immediately" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 3: medications ------------------------
+  { key: "listTemplateAdmin.syncAdded", cs: "Načteno položek: {count}.", en: "Items loaded: {count}." },
+  { key: "listTemplateAdmin.syncNothing", cs: "V šablonách organizace zatím nic není – přidejte je v Šablony → Zdraví.", en: "There's nothing in the organization templates yet – add some in Templates → Health." },
+  { key: "medPlansSection.reportedLabel", cs: "Léky uvedené v přihlášce", en: "Medication reported at registration" },
+  { key: "medPlansSection.convertToPlanButton", cs: "Převést na plán", en: "Convert to plan" },
 ];
 
 async function main() {

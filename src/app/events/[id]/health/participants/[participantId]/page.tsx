@@ -96,7 +96,10 @@ export default function ParticipantDetailPage({
   const [eventMeds, setEventMeds] = useState<NamedListItem[]>([]);
   const [eventSlots, setEventSlots] = useState<NamedListItem[]>([]);
   const [addingMedPlan, setAddingMedPlan] = useState(false);
-  const [planMedId, setPlanMedId] = useState("");
+  // Part 3: a combobox, not a plain dropdown -- typing a name not yet in the event
+  // catalogue creates it on the fly (POST .../list-items) so an empty catalogue is
+  // never a dead end; matching an existing name (case-insensitive) reuses that item.
+  const [planMedName, setPlanMedName] = useState("");
   const [planSlotId, setPlanSlotId] = useState("");
   const [planDose, setPlanDose] = useState("");
   const [planNotes, setPlanNotes] = useState("");
@@ -115,20 +118,36 @@ export default function ParticipantDetailPage({
 
   async function handleAddMedPlan(e: React.FormEvent) {
     e.preventDefault();
-    if (!planMedId || !planSlotId) return;
+    const name = planMedName.trim();
+    if (!name || !planSlotId) return;
     setSavingMedPlan(true);
-    await fetch(`/api/participants/${participantId}/med-plans`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        eventMedId: planMedId,
-        eventSlotId: planSlotId,
-        dose: planDose.trim() || undefined,
-        notes: planNotes.trim() || undefined,
-      }),
-    });
+
+    let eventMedId = eventMeds.find((m) => m.name.trim().toLowerCase() === name.toLowerCase())?.id;
+    if (!eventMedId) {
+      const created = await fetch(`/api/events/${eventId}/list-items`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "med", name }),
+      });
+      if (created.ok) {
+        const item = (await created.json()) as NamedListItem;
+        eventMedId = item.id;
+      }
+    }
+    if (eventMedId) {
+      await fetch(`/api/participants/${participantId}/med-plans`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventMedId,
+          eventSlotId: planSlotId,
+          dose: planDose.trim() || undefined,
+          notes: planNotes.trim() || undefined,
+        }),
+      });
+    }
     setSavingMedPlan(false);
-    setPlanMedId("");
+    setPlanMedName("");
     setPlanSlotId("");
     setPlanDose("");
     setPlanNotes("");
@@ -306,7 +325,10 @@ export default function ParticipantDetailPage({
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!participant) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
-  const hasNotes = fields.some((f) => participant.customFieldValues?.[f.key]);
+  // medsNotes gets its own dedicated block (with "Převést na plán") above the med plan
+  // list -- excluded here so it isn't shown twice.
+  const generalNoteFields = fields.filter((f) => f.key !== "medsNotes");
+  const hasNotes = generalNoteFields.some((f) => participant.customFieldValues?.[f.key]);
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">
@@ -363,7 +385,7 @@ export default function ParticipantDetailPage({
       <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
       {hasNotes ? (
         <div className="mb-6 flex flex-col gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
-          {fields.map(
+          {generalNoteFields.map(
             (f) =>
               participant.customFieldValues?.[f.key] && (
                 <p key={f.id}>
@@ -444,6 +466,26 @@ export default function ParticipantDetailPage({
         </div>
       )}
 
+      {/* Part 3: the free-text "Léky uvedené v přihlášce" note (customFieldValues.medsNotes)
+          stays read-only "as reported by parents" -- "Převést na plán" opens the plan add
+          form prefilled with that text so the admin can turn it into a real plan row. */}
+      {participant.customFieldValues?.medsNotes && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
+          <p>
+            <strong>{t("medPlansSection.reportedLabel")}:</strong> {participant.customFieldValues.medsNotes}
+          </p>
+          <button
+            onClick={() => {
+              setPlanNotes(participant.customFieldValues!.medsNotes!);
+              setAddingMedPlan(true);
+            }}
+            className="text-[13px] text-ember hover:underline"
+          >
+            {t("medPlansSection.convertToPlanButton")}
+          </button>
+        </div>
+      )}
+
       <div className="mb-3 mt-6 flex items-center justify-between">
         <h2 className="text-[16px] font-semibold text-ink">{t("medPlansSection.title")}</h2>
         <button onClick={() => setAddingMedPlan((v) => !v)} className="text-[13px] text-ember hover:underline">
@@ -456,14 +498,19 @@ export default function ParticipantDetailPage({
           onSubmit={handleAddMedPlan}
           className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2"
         >
-          <select value={planMedId} onChange={(e) => setPlanMedId(e.target.value)} className={inputClass + " flex-1"}>
-            <option value="">{t("medPlansSection.selectMed")}</option>
+          <input
+            type="text"
+            list="med-plan-catalog"
+            placeholder={t("medPlansSection.selectMed")}
+            value={planMedName}
+            onChange={(e) => setPlanMedName(e.target.value)}
+            className={inputClass + " flex-1"}
+          />
+          <datalist id="med-plan-catalog">
             {eventMeds.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
+              <option key={m.id} value={m.name} />
             ))}
-          </select>
+          </datalist>
           <select value={planSlotId} onChange={(e) => setPlanSlotId(e.target.value)} className={inputClass + " flex-1"}>
             <option value="">{t("medPlansSection.selectSlot")}</option>
             {eventSlots.map((s) => (

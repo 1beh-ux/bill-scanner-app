@@ -39,6 +39,13 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   // flagged as "still English" in the retest -- "import" reads as an untranslated placeholder
   // next to the other nominalized entries here even though it's also a standard Czech word.
   { key: "authors.auditSource.import", cs: "import z Drive", en: "Drive import" },
+  // Was a plain dropdown; Part 3 of the participants/settings prompt turns it into a
+  // combobox that also accepts a new name -- wording updated to say so.
+  { key: "medPlansSection.selectMed", cs: "Vyberte nebo napište nový lék", en: "Pick or type a new medication" },
+  // Part 3 terminology: "Katalog léků" (event/org settings) / "Plán léků" (per
+  // participant) / "Výdej léků" (the grid, already correct) -- were all "Léky".
+  { key: "healthTemplatesPage.tabMeds", cs: "Katalog léků", en: "Medication catalog" },
+  { key: "medPlansSection.title", cs: "Plán léků", en: "Medication plan" },
 ];
 
 async function main() {

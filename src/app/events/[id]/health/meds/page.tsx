@@ -14,6 +14,7 @@ type GridRow = {
   participantGroup: string | null;
   eventMedId: string;
   medName: string;
+  dose: string | null;
   slotIds: string[];
   days: Record<string, Record<string, CellStatus>>;
 };
@@ -380,7 +381,10 @@ export default function MedChecklistPage({
                       <button onClick={() => toggleNotes(row.participantId)} className="text-left hover:underline">
                         {row.participantName}
                       </button>
-                      <span className="ml-1 text-[10px] text-ink-secondary">{row.medName}</span>
+                      <span className="ml-1 text-[10px] text-ink-secondary">
+                        {row.medName}
+                        {row.dose && ` (${row.dose})`}
+                      </span>
                     </td>
                     {data.days.flatMap((day) =>
                       visibleSlots.map((slot, si) => {
@@ -430,7 +434,10 @@ export default function MedChecklistPage({
                   <div className="mt-2 flex flex-col gap-2">
                     {p.meds.map((row) => (
                       <div key={row.eventMedId}>
-                        <div className="text-[13px] font-medium text-ink">{row.medName}</div>
+                        <div className="text-[13px] font-medium text-ink">
+                          {row.medName}
+                          {row.dose && <span className="font-normal text-ink-secondary"> ({row.dose})</span>}
+                        </div>
                         <div className="flex flex-col gap-1">
                           {data.days.map((day) => {
                             const slotsForRow = visibleSlots.filter((s) => row.slotIds.includes(s.id));

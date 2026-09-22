@@ -73,6 +73,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -85,6 +86,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     if (scope !== "event") return;
     setSyncing(true);
     setError(null);
+    setSyncMessage(null);
     const res = await fetch(`${basePath}/sync`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -95,6 +97,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
       setError(t("listTemplateAdmin.errorSyncFailed"));
       return;
     }
+    const { added } = (await res.json()) as { added: number };
+    setSyncMessage(added > 0 ? t("listTemplateAdmin.syncAdded", { count: String(added) }) : t("listTemplateAdmin.syncNothing"));
     load();
   }
 
@@ -235,6 +239,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
       </div>
 
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+      {syncMessage && <p className="mb-3 text-[13px] text-ink-secondary">{syncMessage}</p>}
 
       {loading ? (
         <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>

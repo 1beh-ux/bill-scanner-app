@@ -53,7 +53,25 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   like the existing accept flow). Bulk accept from toolbar already
   existed. Editable "Věk": never existed, brief already satisfied. Script:
   `fix-tshirt-size-casing` (dry-run, production data not a seed default).
-- **Parts 3, 5–11**: pending.
+- **Part 3** (medications) — done. Deviation: the brief's premise ("dose and notes
+  exist in the schema but the form doesn't show them") was already stale — the
+  add-plan form and plan rows already showed both; the real gaps were: (a) the
+  medication picker was a plain `<select>`, not a combobox — now `<input list>` +
+  `<datalist>` against the event catalogue, and typing an unmatched name creates a
+  new `EventListItem` (kind=med) via the existing list-items POST route, same
+  "empty catalogue is never a dead end" as custom fields; (b) `medsNotes`'s label
+  was still "Léky" (reads like the real plan) — script `rename-medsnotes-label`
+  (dry-run) → "Léky uvedené v přihlášce", shown read-only above the plan list with
+  a "Převést na plán" button that opens the add form with its text pre-filled into
+  Notes; (c) dose wasn't shown in the meds grid or its PDF export — added to
+  `GridRow`/both renderers (first non-empty dose per participant+med pair — a plan
+  is really per-slot, so a genuinely different dose per slot only shows the first);
+  (d) "Načíst ze šablon" was silent on success — now shows a count or the
+  "nothing in org templates" message. Terminology: "Katalog léků" (was "Léky" at
+  both org and event scope), "Plán léků" (was "Léky", per-participant section),
+  "Výdej léků" already correct. New events already copy org meds/situations at
+  creation (unconditional `listTemplate` copy, no kind filter) — no change needed.
+- **Parts 5–11**: pending.
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum
@@ -67,4 +85,6 @@ lastName split, a `contact_email` computed type, a leftover duplicate
 5. `scripts/deactivate-duplicate-name-field.ts --apply`.
 6. `scripts/normalize-participant-field-surfaces.ts --apply`.
 7. `scripts/fix-tshirt-size-casing.ts --apply`.
-8. `scripts/seed-missing-translations.ts`.
+8. `scripts/rename-medsnotes-label.ts --apply`.
+9. `scripts/seed-missing-translations.ts`.
+10. `scripts/update-translations-text-changes.ts --apply`.

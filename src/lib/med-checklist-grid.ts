@@ -11,6 +11,10 @@ export type GridRow = {
   participantGroup: string | null;
   eventMedId: string;
   medName: string;
+  // First non-empty dose found for this (participant, med) pair -- a plan is really
+  // per-slot, so if dose differs between slots only the first one encountered shows
+  // here (Part 3: "show dose ... when set", not full per-slot dose display).
+  dose: string | null;
   slotIds: string[];
   days: Record<string, Record<string, CellStatus>>;
 };
@@ -56,6 +60,7 @@ export async function fetchMedChecklistGrid(
     participantGroup: string | null;
     eventMedId: string;
     medName: string;
+    dose: string | null;
     slotIds: Set<string>;
   };
   const rowMap = new Map<string, RowAccum>();
@@ -69,6 +74,7 @@ export async function fetchMedChecklistGrid(
         participantGroup: plan.participant.groupName,
         eventMedId: plan.eventMed.id,
         medName: plan.eventMed.name,
+        dose: plan.dose,
         slotIds: new Set(),
       };
       rowMap.set(key, row);
@@ -118,6 +124,7 @@ export async function fetchMedChecklistGrid(
       participantGroup: row.participantGroup,
       eventMedId: row.eventMedId,
       medName: row.medName,
+      dose: row.dose,
       slotIds,
       days: daysOut,
     };
