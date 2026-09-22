@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 
 async function loadGuardianWithEvent(guardianId: string) {
   return prisma.participantGuardian.findUnique({
@@ -23,11 +23,11 @@ export async function PATCH(
   if (!guardian) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireModuleAccess(user, guardian.participant.eventId, "health");
+  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, email, relationship, receivesCommunications } = body;
+  const { name, email, relationship, phone, receivesCommunications } = body;
 
   if (email !== undefined && (typeof email !== "string" || !email.trim())) {
     return NextResponse.json({ error: "guardian_email_required" }, { status: 400 });
@@ -39,6 +39,7 @@ export async function PATCH(
       ...(name !== undefined && { name: name?.trim() || null }),
       ...(email !== undefined && { email: email.trim() }),
       ...(relationship !== undefined && { relationship: relationship?.trim() || null }),
+      ...(phone !== undefined && { phone: phone?.trim() || null }),
       ...(receivesCommunications !== undefined && { receivesCommunications }),
     },
   });
@@ -59,7 +60,7 @@ export async function DELETE(
   if (!guardian) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireModuleAccess(user, guardian.participant.eventId, "health");
+  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["health", "mail"]);
   if (denied) return denied;
 
   await prisma.participantGuardian.delete({ where: { id: guardianId } });

@@ -116,6 +116,12 @@ export async function POST(
   // accepted for other callers (import, scripts) that don't split it.
   const name: string = firstName || lastName ? fullNameFrom(firstName, lastName) : body.name;
   const guardians: GuardianInput[] = Array.isArray(body.guardians) ? body.guardians : [];
+  // Part 2: "Přijmout hned" on the add form -- a shortcut past the extra click every
+  // manually-typed participant otherwise needs (see docs/registration-workflow.md's
+  // "every participant defaults to pending" note). No registration number is assigned
+  // here -- that's still deferred to whenever one is actually needed (document
+  // generation), same as the existing accept flow (see ensureRegistrationNumber).
+  const acceptImmediately = body.acceptImmediately === true;
 
   if (!name || typeof name !== "string" || !name.trim()) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -136,6 +142,7 @@ export async function POST(
         groupName: groupName || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         customFieldValues: customFieldValues ?? undefined,
+        ...(acceptImmediately && { registrationStatus: "accepted" }),
       },
     });
 

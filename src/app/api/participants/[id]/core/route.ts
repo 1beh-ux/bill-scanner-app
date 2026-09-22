@@ -34,6 +34,12 @@ export async function GET(
       dateOfBirth: true,
       registrationStatus: true,
       customFieldValues: true,
+      // Part 2: guardians are editable from the central roster now, not just add/delete
+      // from the Health detail page -- this is the roster's own "give me everything to
+      // edit" read, so the full rows (including phone) belong here. No orderBy: there's
+      // no createdAt on this model to sort by, and the DB's natural row order is closer
+      // to insertion order than any derived key (id is a random UUID) would be.
+      guardians: true,
     },
   });
   if (!participant) {

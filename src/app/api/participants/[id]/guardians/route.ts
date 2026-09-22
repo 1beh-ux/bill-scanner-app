@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 
+// Was health-only -- widened to health-or-mail (Part 2 of the participants/settings
+// prompt: "Guardians must be editable [in the central roster], and the central
+// roster is reachable by health or mail alike, same as the rest of that page).
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,7 +19,7 @@ export async function POST(
   if (!participant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireModuleAccess(user, participant.eventId, "health");
+  const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();

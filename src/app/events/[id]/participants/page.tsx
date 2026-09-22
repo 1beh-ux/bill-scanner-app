@@ -5,6 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
+import { fieldCategory } from "@/lib/participant-fields";
 import ComposeEmailModal from "@/components/health/ComposeEmailModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 import ColumnPicker from "@/components/ColumnPicker";
@@ -45,15 +46,20 @@ function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string
   return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType as "text" | "number" | "date" | "boolean" | "select");
 }
 
-type GuardianDraft = { name: string; email: string; relationship: string };
+type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
+// A saved guardian row shown in the edit panel -- edited and saved in place (own PATCH
+// per row), not as part of the surrounding form submit.
+type EditGuardian = { id: string; name: string; email: string; relationship: string; phone: string; receivesCommunications: boolean };
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
+const btnSecondary =
+  "rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
 
 function emptyGuardian(): GuardianDraft {
-  return { name: "", email: "", relationship: "" };
+  return { name: "", email: "", relationship: "", phone: "" };
 }
 
 export default function EventParticipantsPage({
@@ -77,6 +83,7 @@ export default function EventParticipantsPage({
   const [groupName, setGroupName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [guardians, setGuardians] = useState<GuardianDraft[]>([emptyGuardian()]);
+  const [acceptImmediately, setAcceptImmediately] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,6 +94,12 @@ export default function EventParticipantsPage({
   const [editDob, setEditDob] = useState("");
   const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
   const [savingEdit, setSavingEdit] = useState(false);
+  // Guardians (Part 2): loaded fresh from /core when the edit panel opens, each row
+  // saved with its own PATCH -- separate from the surrounding form's single submit,
+  // same immediate-save pattern already used for surface pills elsewhere on this page.
+  const [editGuardians, setEditGuardians] = useState<EditGuardian[]>([]);
+  const [newGuardianDraft, setNewGuardianDraft] = useState<GuardianDraft>(emptyGuardian());
+  const [savingGuardianId, setSavingGuardianId] = useState<string | null>(null);
 
   // All active event fields (any surface) -- what the edit modal offers,
   // since editing a value shouldn't depend on where it happens to be
@@ -94,13 +107,21 @@ export default function EventParticipantsPage({
   // editable here, and builtin fields already have their own dedicated
   // inputs above).
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  const editableFields = useMemo(() => fields.filter((f) => f.kind === "custom"), [fields]);
+  // Part 2: the edit panel splits custom fields into "Údaje" (everything else) and
+  // "Zdravotní poznámky" (Zdraví-category, only ever non-empty when Health is enabled
+  // for the event -- allowedParticipantFieldKeys already keeps them out of `fields`
+  // otherwise, see module-access.ts).
+  const editableFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) !== "health"), [fields]);
+  const editableHealthFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) === "health"), [fields]);
   // Every non-builtin field with the `list` surface -- candidates for the
-  // roster's optional columns. builtin fields (Name/Group/DOB/status) are
-  // excluded: they're always shown via the dedicated columns below, so
-  // offering them here would just be a second, disconnected toggle for the
-  // same thing.
-  const dynamicListFields = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.surfaces.includes("list")), [fields]);
+  // roster's optional columns. builtin fields (Name/Group/DOB/status) and the
+  // "Email" computed field are excluded: they're always shown via the dedicated
+  // fixed columns below, so offering them here would just be a second,
+  // disconnected toggle for the same thing.
+  const dynamicListFields = useMemo(
+    () => fields.filter((f) => f.kind !== "builtin" && f.key !== "Email" && f.surfaces.includes("list")),
+    [fields]
+  );
   // The actually-displayed columns: the saved order, filtered to fields
   // still eligible (deactivated/removed fields drop out silently), falling
   // back to "every eligible field, API order" when nothing's configured
@@ -166,6 +187,7 @@ export default function EventParticipantsPage({
     setGroupName("");
     setDateOfBirth("");
     setGuardians([emptyGuardian()]);
+    setAcceptImmediately(false);
     setAddOpen(true);
   }
 
@@ -190,6 +212,7 @@ export default function EventParticipantsPage({
         name: g.name.trim() || undefined,
         email: g.email.trim(),
         relationship: g.relationship.trim() || undefined,
+        phone: g.phone.trim() || undefined,
       }));
 
     setSaving(true);
@@ -199,6 +222,7 @@ export default function EventParticipantsPage({
       body: JSON.stringify({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        acceptImmediately,
         groupName: groupName.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
         guardians: guardianPayload,
@@ -225,10 +249,88 @@ export default function EventParticipantsPage({
     setEditGroup(p.groupName ?? "");
     setEditDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
     setEditCustomFieldValues({ ...(p.customFieldValues ?? {}) });
+    setNewGuardianDraft(emptyGuardian());
+    setEditGuardians([]);
+    fetch(`/api/participants/${p.id}/core`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { guardians?: EditGuardian[] } | null) => {
+        if (data?.guardians) {
+          setEditGuardians(
+            data.guardians.map((g) => ({
+              id: g.id,
+              name: g.name ?? "",
+              email: g.email,
+              relationship: g.relationship ?? "",
+              phone: g.phone ?? "",
+              receivesCommunications: g.receivesCommunications,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
   }
 
   function setEditFieldValue(key: string, value: string) {
     setEditCustomFieldValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateEditGuardianDraft(id: string, patch: Partial<EditGuardian>) {
+    setEditGuardians((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+  }
+
+  async function saveEditGuardian(guardianId: string) {
+    const g = editGuardians.find((x) => x.id === guardianId);
+    if (!g || !editParticipant) return;
+    setSavingGuardianId(guardianId);
+    await fetch(`/api/participants/${editParticipant.id}/guardians/${guardianId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: g.name.trim() || null,
+        email: g.email.trim(),
+        relationship: g.relationship.trim() || null,
+        phone: g.phone.trim() || null,
+        receivesCommunications: g.receivesCommunications,
+      }),
+    });
+    setSavingGuardianId(null);
+    load();
+  }
+
+  async function deleteEditGuardian(guardianId: string) {
+    if (!editParticipant) return;
+    if (!(await confirm({ message: t("participantDetail.confirmDeleteGuardian"), danger: true }))) return;
+    setSavingGuardianId(guardianId);
+    await fetch(`/api/participants/${editParticipant.id}/guardians/${guardianId}`, { method: "DELETE" });
+    setSavingGuardianId(null);
+    // No reorder -- just drop the deleted row, everything else keeps its position.
+    setEditGuardians((prev) => prev.filter((g) => g.id !== guardianId));
+    load();
+  }
+
+  async function addEditGuardian() {
+    if (!editParticipant || !newGuardianDraft.email.trim()) return;
+    setSavingGuardianId("new");
+    const res = await fetch(`/api/participants/${editParticipant.id}/guardians`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newGuardianDraft.name.trim() || undefined,
+        email: newGuardianDraft.email.trim(),
+        relationship: newGuardianDraft.relationship.trim() || undefined,
+        phone: newGuardianDraft.phone.trim() || undefined,
+      }),
+    });
+    setSavingGuardianId(null);
+    if (!res.ok) return;
+    const created = (await res.json()) as { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
+    // New row always goes at the end -- existing rows never move.
+    setEditGuardians((prev) => [
+      ...prev,
+      { id: created.id, name: created.name ?? "", email: created.email, relationship: created.relationship ?? "", phone: created.phone ?? "", receivesCommunications: created.receivesCommunications },
+    ]);
+    setNewGuardianDraft(emptyGuardian());
+    load();
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -436,11 +538,13 @@ export default function EventParticipantsPage({
                 <th className="p-2">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.lastNameLabel")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.firstNameLabel")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.contactEmailLabel")}</th>
                 {activeColumns.map((f) => (
                   <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
                 ))}
@@ -455,15 +559,18 @@ export default function EventParticipantsPage({
                     <td className="p-2">
                       <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
                     </td>
+                    {/* Not split yet (firstName/lastName both null) -- fall back to the whole
+                        stored name in the surname cell rather than showing nothing. */}
                     <td className="p-2 text-[14px] text-ink">
                       {moduleAccess.health ? (
                         <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
-                          {p.name}
+                          {p.lastName || (p.firstName ? "—" : p.name)}
                         </a>
                       ) : (
-                        p.name
+                        p.lastName || (p.firstName ? "—" : p.name)
                       )}
                     </td>
+                    <td className="p-2 text-[14px] text-ink">{p.firstName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
                     <td className="p-2 text-[13px]">
@@ -487,6 +594,7 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
                     </td>
+                    <td className="whitespace-nowrap p-2 text-[13px] text-ink-secondary">{p.computed.contact_email || "—"}</td>
                     {activeColumns.map((f) => (
                       <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
                         {resolveDynamicValue(f, p)}
@@ -548,6 +656,11 @@ export default function EventParticipantsPage({
                 />
               </label>
 
+              <label className="flex items-center gap-2 text-[13px] text-ink">
+                <input type="checkbox" checked={acceptImmediately} onChange={(e) => setAcceptImmediately(e.target.checked)} />
+                {t("participantsPage.acceptImmediatelyLabel")}
+              </label>
+
               <h3 className="mt-2 text-[14px] font-medium text-ink">{t("participantDetail.guardiansTitle")}</h3>
               {guardians.map((g, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2">
@@ -570,6 +683,13 @@ export default function EventParticipantsPage({
                     placeholder={t("participantDetail.guardianRelationshipLabel")}
                     value={g.relationship}
                     onChange={(e) => updateGuardian(i, { relationship: e.target.value })}
+                    className={inputClass + " flex-1"}
+                  />
+                  <input
+                    type="tel"
+                    placeholder={t("participantDetail.guardianPhoneLabel")}
+                    value={g.phone}
+                    onChange={(e) => updateGuardian(i, { phone: e.target.value })}
                     className={inputClass + " flex-1"}
                   />
                   {guardians.length > 1 && (
@@ -600,54 +720,179 @@ export default function EventParticipantsPage({
 
       {editParticipant && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-paper p-5">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
             <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("common.edit")}</h2>
-            <form onSubmit={saveEdit} className="flex flex-col gap-3">
-              <div className="flex gap-2">
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.firstNameLabel")}
+            <form onSubmit={saveEdit} className="flex flex-col gap-5">
+              <div className="flex flex-col gap-3">
+                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  {t("participantDetail.sectionBasics")}
+                </h3>
+                <div className="flex gap-2">
+                  <label className="flex-1 text-[13px] text-ink-secondary">
+                    {t("participantsPage.firstNameLabel")}
+                    <input
+                      type="text"
+                      value={editFirstName}
+                      onChange={(e) => setEditFirstName(e.target.value)}
+                      className={inputClass + " mt-1"}
+                      autoFocus
+                    />
+                  </label>
+                  <label className="flex-1 text-[13px] text-ink-secondary">
+                    {t("participantsPage.lastNameLabel")}
+                    <input
+                      type="text"
+                      value={editLastName}
+                      onChange={(e) => setEditLastName(e.target.value)}
+                      className={inputClass + " mt-1"}
+                    />
+                  </label>
+                </div>
+                <label className="text-[13px] text-ink-secondary">
+                  {t("participantsPage.colGroup")}
                   <input
                     type="text"
-                    value={editFirstName}
-                    onChange={(e) => setEditFirstName(e.target.value)}
+                    value={editGroup}
+                    onChange={(e) => setEditGroup(e.target.value)}
                     className={inputClass + " mt-1"}
-                    autoFocus
                   />
                 </label>
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.lastNameLabel")}
+                <label className="text-[13px] text-ink-secondary">
+                  {t("participantsPage.dobLabel")}
                   <input
-                    type="text"
-                    value={editLastName}
-                    onChange={(e) => setEditLastName(e.target.value)}
+                    type="date"
+                    value={editDob}
+                    onChange={(e) => setEditDob(e.target.value)}
                     className={inputClass + " mt-1"}
                   />
                 </label>
               </div>
-              <input
-                type="text"
-                placeholder={t("participantsPage.colGroup")}
-                value={editGroup}
-                onChange={(e) => setEditGroup(e.target.value)}
-                className={inputClass}
-              />
-              <label className="text-[13px] text-ink-secondary">
-                {t("participantsPage.dobLabel")}
-                <input
-                  type="date"
-                  value={editDob}
-                  onChange={(e) => setEditDob(e.target.value)}
-                  className={inputClass + " mt-1"}
-                />
-              </label>
-              {editableFields.map((f) => (
-                <FieldInput
-                  key={f.id}
-                  field={f}
-                  value={editCustomFieldValues[f.key] ?? ""}
-                  onChange={(v) => setEditFieldValue(f.key, v)}
-                />
-              ))}
+
+              <div className="flex flex-col gap-2 border-t border-mist pt-4">
+                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  {t("participantDetail.guardiansTitle")}
+                </h3>
+                {editGuardians.map((g) => (
+                  <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder={t("common.name")}
+                        value={g.name}
+                        onChange={(e) => updateEditGuardianDraft(g.id, { name: e.target.value })}
+                        className={inputClass + " flex-1"}
+                      />
+                      <input
+                        type="email"
+                        placeholder={t("participantDetail.guardianEmailLabel")}
+                        value={g.email}
+                        onChange={(e) => updateEditGuardianDraft(g.id, { email: e.target.value })}
+                        className={inputClass + " flex-1"}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder={t("participantDetail.guardianRelationshipLabel")}
+                        value={g.relationship}
+                        onChange={(e) => updateEditGuardianDraft(g.id, { relationship: e.target.value })}
+                        className={inputClass + " flex-1"}
+                      />
+                      <input
+                        type="tel"
+                        placeholder={t("participantDetail.guardianPhoneLabel")}
+                        value={g.phone}
+                        onChange={(e) => updateEditGuardianDraft(g.id, { phone: e.target.value })}
+                        className={inputClass + " flex-1"}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 text-[13px] text-ink">
+                        <input
+                          type="checkbox"
+                          checked={g.receivesCommunications}
+                          onChange={(e) => updateEditGuardianDraft(g.id, { receivesCommunications: e.target.checked })}
+                        />
+                        {t("participantDetail.guardianReceivesLabel")}
+                      </label>
+                      <div className="flex gap-3">
+                        <button
+                          type="button"
+                          onClick={() => saveEditGuardian(g.id)}
+                          disabled={savingGuardianId === g.id}
+                          className="text-[13px] text-ember hover:underline disabled:opacity-50"
+                        >
+                          {t("common.save")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => deleteEditGuardian(g.id)}
+                          disabled={savingGuardianId === g.id}
+                          className="text-[13px] text-red-600 hover:underline disabled:opacity-50"
+                        >
+                          {t("common.delete")}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-mist p-2">
+                  <input
+                    type="text"
+                    placeholder={t("common.name")}
+                    value={newGuardianDraft.name}
+                    onChange={(e) => setNewGuardianDraft((d) => ({ ...d, name: e.target.value }))}
+                    className={inputClass + " flex-1"}
+                  />
+                  <input
+                    type="email"
+                    placeholder={t("participantDetail.guardianEmailLabel")}
+                    value={newGuardianDraft.email}
+                    onChange={(e) => setNewGuardianDraft((d) => ({ ...d, email: e.target.value }))}
+                    className={inputClass + " flex-1"}
+                  />
+                  <button
+                    type="button"
+                    onClick={addEditGuardian}
+                    disabled={savingGuardianId === "new" || !newGuardianDraft.email.trim()}
+                    className={btnSecondary}
+                  >
+                    {t("participantDetail.addGuardianButton")}
+                  </button>
+                </div>
+              </div>
+
+              {editableFields.length > 0 && (
+                <div className="flex flex-col gap-3 border-t border-mist pt-4">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
+                    {t("participantDetail.sectionCustomFields")}
+                  </h3>
+                  {editableFields.map((f) => (
+                    <FieldInput
+                      key={f.id}
+                      field={f}
+                      value={editCustomFieldValues[f.key] ?? ""}
+                      onChange={(v) => setEditFieldValue(f.key, v)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {editableHealthFields.length > 0 && (
+                <div className="flex flex-col gap-3 border-t border-mist pt-4">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
+                    {t("participantDetail.sectionHealthNotes")}
+                  </h3>
+                  {editableHealthFields.map((f) => (
+                    <FieldInput
+                      key={f.id}
+                      field={f}
+                      value={editCustomFieldValues[f.key] ?? ""}
+                      onChange={(v) => setEditFieldValue(f.key, v)}
+                    />
+                  ))}
+                </div>
+              )}
 
               {moduleAccess.health && (
                 <a

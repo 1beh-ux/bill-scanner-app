@@ -267,6 +267,15 @@ export const ROWS: Row[] = [
   { key: "participantsPage.contactEmailLabel", cs: "Kontaktní e-mail", en: "Contact e-mail" },
   { key: "mailActionLogModal.action.document_marked", cs: "označen dokument jako doručený", en: "document marked as received" },
   { key: "mailActionLogModal.action.document_unmarked", cs: "zrušeno označení dokumentu jako doručený", en: "document's received mark removed" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 2: central roster edit panel ----------
+  { key: "participantDetail.sectionBasics", cs: "Základní údaje", en: "Basic details" },
+  { key: "participantDetail.sectionCustomFields", cs: "Údaje", en: "Details" },
+  { key: "participantDetail.sectionHealthNotes", cs: "Zdravotní poznámky", en: "Health notes" },
+  { key: "participantDetail.guardianPhoneLabel", cs: "Telefon", en: "Phone" },
+  { key: "participantDetail.guardianReceivesLabel", cs: "Dostává e-maily", en: "Receives e-mails" },
+  { key: "participantDetail.confirmDeleteGuardian", cs: "Opravdu odstranit tohoto zákonného zástupce?", en: "Remove this guardian?" },
+  { key: "participantsPage.acceptImmediatelyLabel", cs: "Přijmout hned", en: "Accept immediately" },
 ];
 
 async function main() {
