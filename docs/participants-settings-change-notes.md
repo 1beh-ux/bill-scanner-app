@@ -145,9 +145,14 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   marker when a photo is attached (previously invisible without opening
   the row). Temperature field hidden for the "Úraz" (injury) category —
   not applicable there and was cluttering the form.
+- **Part 11-A.4** — done. `ComposeEmailModal` (both accept and freeform
+  bulk-email modes) now lists each recipient's real resolved contact
+  e-mail (or a ⚠ "bez kontaktního e-mailu" warning), fetched from the
+  same roster endpoint's `computed.contact_email` already used elsewhere
+  -- same idea as the bulk-status dialog's "Příjemci" column, just applied
+  to the other send dialog. Kept the existing count line alongside it.
 - **Pending**: 10 §3-7 (e-mail template catalog w/ Výchozí/Upraveno
-  badges + org-compare, most of §5.1 help text, Přehled akce — optional),
-  11-A.4 (real recipient list in the accept-dialog ComposeEmailModal).
+  badges + org-compare, most of §5.1 help text, Přehled akce — optional).
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum

@@ -15,6 +15,7 @@ const btnPrimary =
 type Mode = "acceptance" | "freeform";
 
 type AutoAttachDocType = { id: string; name: string };
+type RecipientRow = { id: string; name: string; email: string | null };
 
 export default function ComposeEmailModal({
   eventId,
@@ -49,6 +50,25 @@ export default function ComposeEmailModal({
   const emailOn = mode === "freeform" || sendEmail;
   const [autoAttachDocTypes, setAutoAttachDocTypes] = useState<AutoAttachDocType[]>([]);
   const [selectedDocTypeIds, setSelectedDocTypeIds] = useState<Set<string>>(new Set());
+  const [recipients, setRecipients] = useState<RecipientRow[] | null>(null);
+
+  // 11-A.4: real recipient addresses (or a warning) instead of just a
+  // participant count -- same idea as the bulk-status dialog's "Příjemci"
+  // column, reusing the roster endpoint's already-computed contact_email.
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/participants`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((all: { id: string; name: string; computed: { contact_email: string | null } }[]) => {
+        const byId = new Map(all.map((p) => [p.id, p]));
+        setRecipients(
+          participantIds.map((id) => {
+            const p = byId.get(id);
+            return { id, name: p?.name ?? id, email: p?.computed.contact_email ?? null };
+          })
+        );
+      })
+      .catch(() => setRecipients(null));
+  }, [eventId, participantIds]);
 
   useEffect(() => {
     if (mode !== "acceptance") return;
@@ -134,9 +154,18 @@ export default function ComposeEmailModal({
             {t("common.close")}
           </button>
         </div>
-        <p className="mb-4 text-[13px] text-ink-secondary">
-          {t("composeEmailModal.recipientCount", { count: String(participantIds.length) })}
-        </p>
+        <div className="mb-4 text-[13px] text-ink-secondary">
+          <p>{t("composeEmailModal.recipientCount", { count: String(participantIds.length) })}</p>
+          {recipients && (
+            <ul className="mt-1 flex flex-col gap-0.5">
+              {recipients.map((r) => (
+                <li key={r.id} className={r.email ? "" : "text-amber-700"}>
+                  {r.name} — {r.email ?? `⚠ ${t("composeEmailModal.noRecipientEmail")}`}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {loading ? (
           <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>

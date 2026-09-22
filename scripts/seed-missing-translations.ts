@@ -349,6 +349,9 @@ export const ROWS: Row[] = [
   // -- Participants/settings/Health/Mail prompt, Part 11-F: body map hint + remove-mark button --
   { key: "bodyMap.hint", cs: "Klepnutím na siluetu označte místo.", en: "Tap the silhouette to mark the spot." },
   { key: "bodyMap.remove", cs: "Odebrat značku", en: "Remove mark" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-A.4: real recipient list in the accept dialog --
+  { key: "composeEmailModal.noRecipientEmail", cs: "bez kontaktního e-mailu", en: "no contact e-mail" },
 ];
 
 async function main() {
