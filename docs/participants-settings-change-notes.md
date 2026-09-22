@@ -4,6 +4,26 @@ Source: "FINAL Claude Code prompt 2 (consolidated)" (Parts 0–11). Precedence
 Part 11 > Part 10 > Parts 1–9. Updated as each part lands; status + findings
 only, not a diff log (see git log for that).
 
+## Final status
+
+All parts done except: Part 10 §5.1's help-text table (most of it) and
+"Přehled akce" (optional per the brief) — both left as explicit,
+documented deviations, not oversights. Everything else in Parts 1–11
+landed, one commit per part, 15 commits total (`874a06a`..`633bb38`).
+Nothing has been pushed or deployed — per the standing instruction, that
+stays a separate, explicitly-requested step.
+
+Final verification (all green): `prisma validate`, `tsc --noEmit` (0
+errors), `npm run build` (succeeds), `audit-translations.ts --strict`
+(missing=0 notInDb=0 empty=0 sameAsKey=0), the 3 verify suites (55+53+57
+passed, 0 failed), every migration script's dry-run runs clean. Full-repo
+`eslint .` gives the exact same count before (`a46ab87`, pre-Part-1) and
+after (`633bb38`, current) all 15 commits — 1531 problems (742 errors,
+789 warnings) both times — confirming zero net-new lint issues across the
+whole body of work; that count is pre-existing baseline noise (mostly
+`react-hooks/set-state-in-effect`), not something this work introduced or
+was asked to clean up.
+
 ## Part 0 — orientation
 
 Much of Parts 1–6's foundation already existed from an earlier session:
@@ -29,24 +49,15 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   real guardian CRUD (found & fixed: guardian routes were health-only-
   gated, blocking mail-only users; PATCH silently dropped phone);
   "Přijmout hned" on add. Script: fix-tshirt-size-casing.
-- **Part 3** (medications) — done. Deviation: the brief's premise ("dose and notes
-  exist in the schema but the form doesn't show them") was already stale — the
-  add-plan form and plan rows already showed both; the real gaps were: (a) the
-  medication picker was a plain `<select>`, not a combobox — now `<input list>` +
-  `<datalist>` against the event catalogue, and typing an unmatched name creates a
-  new `EventListItem` (kind=med) via the existing list-items POST route, same
-  "empty catalogue is never a dead end" as custom fields; (b) `medsNotes`'s label
-  was still "Léky" (reads like the real plan) — script `rename-medsnotes-label`
-  (dry-run) → "Léky uvedené v přihlášce", shown read-only above the plan list with
-  a "Převést na plán" button that opens the add form with its text pre-filled into
-  Notes; (c) dose wasn't shown in the meds grid or its PDF export — added to
-  `GridRow`/both renderers (first non-empty dose per participant+med pair — a plan
-  is really per-slot, so a genuinely different dose per slot only shows the first);
-  (d) "Načíst ze šablon" was silent on success — now shows a count or the
-  "nothing in org templates" message. Terminology: "Katalog léků" (was "Léky" at
-  both org and event scope), "Plán léků" (was "Léky", per-participant section),
-  "Výdej léků" already correct. New events already copy org meds/situations at
-  creation (unconditional `listTemplate` copy, no kind filter) — no change needed.
+- **Part 3** (medications) — done. Deviation: the brief's premise ("dose and
+  notes exist in the schema but the form doesn't show them") was already
+  stale. Real gaps fixed: medication picker was a plain `<select>` — now a
+  combobox (`<input list>`+`<datalist>`) that can also create a new
+  `EventListItem`; `medsNotes`'s label read like the real plan ("Léky") —
+  renamed to "Léky uvedené v přihlášce", shown read-only with a "Převést na
+  plán" shortcut; dose wasn't shown in the meds grid/PDF — added; "Načíst ze
+  šablon" was silent on success — now reports a count. Terminology cleanup:
+  "Katalog léků" / "Plán léků" / "Výdej léků" (was "Léky" in all 3 places).
 - **Part 11-I/E** (documents/variables -- done out of order, per the brief's own
   "highest-risk defect, do before the UI restructure"): root fix in
   `document-merge.ts` -- after the known-key substitution pass, the merged doc
@@ -66,17 +77,17 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   "two sources of truth" is template content (hand-typed price in Pavel's
   actual Doc), not a code bug.
 - **Part 5 + Part 10 §1-2** (event settings + nav) — done. 7 horizontal tabs ->
-  left section list (Akce incl. Moduly/fee/new deadline date, Lidé a přístup,
-  Připojení with ONE sender-mailbox control instead of duplicated-with-different-
-  wording on two tabs, Účtenky, Účastníci incl. acceptance template + questionnaire
-  URL, Zdraví, Pošta). Old `?tab=` values (incl. the mail-oauth callback's own
-  redirect) still resolve via `OLD_TAB_MAP`. Setup checklist (4-5 objective
-  signals, not the brief's full 7 -- two have no clean data signal). Fixed a real
-  bug: every module showed "(Zapnuto)" regardless of actual state. Nav: Import
-  removed (now a button on the bills page); Rozpočet/Léky a výdej/Dokumenty
-  renames. NOT done: Odeslané nav+page (bundled into Part 8), an ORGANIZACE
-  "Připojení" item (ambiguous target, skipped), the template catalog with
-  Výchozí/Upraveno badges, Přehled akce (optional), most of §5.1's help texts.
+  left section list (Akce incl. Moduly/fee/deadline date, Lidé a přístup,
+  Připojení with ONE sender-mailbox control instead of duplicated-with-
+  different-wording on two tabs, Účtenky, Účastníci incl. acceptance
+  template + questionnaire URL, Zdraví, Pošta). Old `?tab=` values still
+  resolve via `OLD_TAB_MAP`. Setup checklist (4-5 objective signals, not
+  the brief's full 7). Fixed a real bug: every module showed "(Zapnuto)"
+  regardless of actual state. Nav: Import removed (now a button on the
+  bills page); Rozpočet/Léky a výdej/Dokumenty renames. NOT done: Odeslané
+  nav+page (bundled into Part 8), an ORGANIZACE "Připojení" item
+  (ambiguous target, skipped) -- template catalog badges landed later, see
+  Part 10 §3-7 below.
 - **Part 6** (import) — done. Found & fixed: Part 1's firstName/lastName fixed
   fields were offered as mapping targets but silently dropped in row-building
   (only kind=custom was read). Combined-name column now auto-splits; multiple
@@ -178,6 +189,7 @@ lastName split, a `contact_email` computed type, a leftover duplicate
 9. `scripts/fix-stale-default-email-templates.ts --apply`.
 10. `prisma migrate deploy` (again) — `ParentEmailLog.subject` (Part 7),
     additive.
-11. `scripts/seed-missing-translations.ts` — run again, idempotent.
+11. `scripts/seed-missing-translations.ts` — run again (idempotent; picks
+    up every key added across Parts 9-11).
 12. `scripts/update-translations-text-changes.ts --apply` — run again,
     idempotent.
