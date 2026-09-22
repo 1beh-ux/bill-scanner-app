@@ -302,6 +302,10 @@ export const ROWS: Row[] = [
   { key: "accessTab.modulesHelp", cs: "Zapněte jen to, co akce používá. Vypnutý modul zmizí z menu a jeho pole se nezobrazují, data zůstanou zachována.", en: "Turn on only what this event uses. A disabled module disappears from the menu and its fields stop showing, but its data is kept." },
   { key: "accessTab.usersHelp", cs: "Určuje, kdo v této akci vidí které moduly. Administrátor vidí vše vždy.", en: "Decides who sees which modules in this event. An administrator always sees everything." },
   { key: "billsPage.uploadButton", cs: "Nahrát účtenky", en: "Upload bills" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 6: import -----------------------------
+  { key: "participantImportPage.error.name_looks_like_email", cs: "jméno vypadá jako e-mail — zkontrolujte mapování sloupců", en: "name looks like an e-mail address — check the column mapping" },
+  { key: "participantImportPage.guardianCount", cs: "zástupců: {count}", en: "guardians: {count}" },
 ];
 
 async function main() {

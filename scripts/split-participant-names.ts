@@ -14,16 +14,7 @@
 import { config } from "dotenv";
 config({ path: ".env" });
 config({ path: ".env.local", override: true });
-
-function split(name: string): { firstName: string; lastName: string | null; ambiguous: boolean } {
-  const trimmed = name.trim().replace(/\s+/g, " ");
-  const tokens = trimmed.split(" ").filter(Boolean);
-  const looksAllCaps = trimmed === trimmed.toUpperCase() && /[A-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]/.test(trimmed);
-  if (tokens.length === 2 && !trimmed.includes(",") && !looksAllCaps) {
-    return { firstName: tokens[0], lastName: tokens[1], ambiguous: false };
-  }
-  return { firstName: trimmed, lastName: null, ambiguous: true };
-}
+import { splitFullName as split } from "../src/lib/participant-name";
 
 async function main() {
   const apply = process.argv.includes("--apply");

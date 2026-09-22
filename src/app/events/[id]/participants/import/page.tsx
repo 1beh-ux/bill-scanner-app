@@ -5,6 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import { type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { driveErrorText } from "@/lib/drive-error-messages";
+import { splitFullName, fullNameFrom } from "@/lib/participant-name";
 
 // Import targets are now fully data-driven: every field flagged with the
 // `import` surface (builtin/guardian/custom -- see
@@ -22,6 +23,8 @@ function fixedKey(match: (f: (typeof FIXED_PARTICIPANT_FIELDS)[number]) => boole
   return FIXED_PARTICIPANT_FIELDS.find(match)?.key ?? "";
 }
 const NAME_FIELD = fixedKey((f) => f.builtinProp === "name");
+const FIRST_NAME_FIELD = fixedKey((f) => f.builtinProp === "firstName");
+const LAST_NAME_FIELD = fixedKey((f) => f.builtinProp === "lastName");
 const GROUP_FIELD = fixedKey((f) => f.builtinProp === "groupName");
 const DOB_FIELD = fixedKey((f) => f.builtinProp === "dateOfBirth");
 const GUARDIAN_NAME_FIELD = fixedKey((f) => f.guardianProp === "name");
@@ -40,6 +43,12 @@ function guessTarget(header: string, fields: ParticipantFieldDef[]): FieldTarget
   if (h.includes("vztah") || h.includes("relationship")) return GUARDIAN_RELATIONSHIP_FIELD;
   if (h.includes("rodič") || h.includes("rodic") || h.includes("zástupce") || h.includes("zastupce") || h.includes("guardian"))
     return GUARDIAN_NAME_FIELD;
+  // "Příjmení"/"surname" is unambiguous on its own -- checked before the generic
+  // jméno/name match below, which would otherwise never be reached (every Czech
+  // "příjmení" header also satisfies a naive "contains jméno" check once accents
+  // are folded, so order matters here more than it looks).
+  if (h.includes("příjmení") || h.includes("prijmeni") || h.includes("surname") || h.includes("last name")) return LAST_NAME_FIELD;
+  if (h.includes("křestní") || h.includes("krestni") || h.includes("first name")) return FIRST_NAME_FIELD;
   if (h.includes("jméno") || h.includes("jmeno") || h.includes("name")) return NAME_FIELD;
   if (h.includes("skupina") || h.includes("oddíl") || h.includes("oddil") || h.includes("group")) return GROUP_FIELD;
   if (h.includes("e-mail") || h.includes("email") || h.includes("kontakt")) return GUARDIAN_EMAIL_FIELD;
@@ -51,8 +60,15 @@ function guessTarget(header: string, fields: ParticipantFieldDef[]): FieldTarget
   return IGNORE;
 }
 
+// Diacritics-insensitive (Part 6: duplicate matching is "lastName + firstName
+// (diacritics-insensitive)") -- "Novak" typed without the accent still matches "Novák".
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, " ");
+  return name
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ");
 }
 
 // Every column mapped to a target is combined, not just the first -- lets
@@ -117,24 +133,48 @@ function formatDob(raw: string, order: "dayFirst" | "monthFirst"): string | unde
 type ExistingParticipant = {
   id: string;
   name: string;
+  dateOfBirth: string | null;
   groupName: string | null;
 };
+
+type GuardianRow = { name: string; email: string; relationship: string; phone: string };
 
 type ParsedRow = {
   index: number;
   cells: string[];
   name: string;
+  firstName: string;
+  lastName: string;
   groupName: string;
   dateOfBirthRaw: string;
   dateOfBirthIso: string | undefined;
-  guardianName: string;
-  guardianEmail: string;
-  guardianRelationship: string;
-  guardianPhone: string;
+  // One entry per guardian e-mail COLUMN that has a value on this row -- Part 6: "If two
+  // guardian e-mail columns exist, create two guardians." Paired by position: the Nth
+  // mapped e-mail column goes with the Nth mapped name/phone/relationship column.
+  guardians: GuardianRow[];
   customFieldValues: Record<string, string>;
   errors: string[];
   duplicateOf: ExistingParticipant | null;
 };
+
+/** Every column mapped to `target`, in mapping order, with its raw (untrimmed-check) value. */
+function columnsFor(cells: string[], mapping: FieldTarget[], target: FieldTarget): string[] {
+  const out: string[] = [];
+  mapping.forEach((m, i) => {
+    if (m !== target) return;
+    const v = (cells[i] ?? "").trim();
+    if (v) out.push(v);
+  });
+  return out;
+}
+
+function resolveGuardians(cells: string[], mapping: FieldTarget[]): GuardianRow[] {
+  const emails = columnsFor(cells, mapping, GUARDIAN_EMAIL_FIELD);
+  const names = columnsFor(cells, mapping, GUARDIAN_NAME_FIELD);
+  const phones = columnsFor(cells, mapping, GUARDIAN_PHONE_FIELD);
+  const relationships = columnsFor(cells, mapping, GUARDIAN_RELATIONSHIP_FIELD);
+  return emails.map((email, i) => ({ email, name: names[i] ?? "", phone: phones[i] ?? "", relationship: relationships[i] ?? "" }));
+}
 
 type RowAction = "create" | "skip" | "merge";
 
@@ -153,15 +193,43 @@ function buildRows(
   const nonEmptyRows = cellRows.filter((cells) => cells.some((c) => c.trim()));
   const rawDobs = nonEmptyRows.map((cells) => resolve(cells, DOB_FIELD));
   const dateOrder = detectDateOrder(rawDobs);
-  const existingByName = new Map(existingParticipants.map((p) => [normalizeName(p.name), p]));
+  // Grouped, not single-valued: two existing participants can share a name (twins,
+  // coincidence) -- date of birth (when the row has one) picks the right one instead
+  // of always taking whichever was inserted first.
+  const existingByName = new Map<string, ExistingParticipant[]>();
+  for (const p of existingParticipants) {
+    const key = normalizeName(p.name);
+    const list = existingByName.get(key);
+    if (list) list.push(p);
+    else existingByName.set(key, [p]);
+  }
 
   return nonEmptyRows.map((cells, index) => {
-    const name = resolve(cells, NAME_FIELD);
-    const guardianEmail = resolve(cells, GUARDIAN_EMAIL_FIELD);
+    // Dedicated Jméno/Příjmení columns win when mapped; otherwise split the combined
+    // "Jméno a příjmení" column the same way scripts/split-participant-names.ts does
+    // (Part 6: "combined, split by the rule of Part 1") -- never guessed beyond that
+    // rule, an ambiguous combined name just lands whole in lastName like the script.
+    const mappedFirst = resolve(cells, FIRST_NAME_FIELD);
+    const mappedLast = resolve(cells, LAST_NAME_FIELD);
+    const combinedName = resolve(cells, NAME_FIELD);
+    let firstName = mappedFirst;
+    let lastName = mappedLast;
+    if (!firstName && !lastName && combinedName) {
+      const split = splitFullName(combinedName);
+      firstName = split.firstName;
+      lastName = split.lastName ?? "";
+    }
+    const name = fullNameFrom(firstName, lastName) || combinedName;
+    const guardians = resolveGuardians(cells, mapping);
     const dateOfBirthRaw = resolve(cells, DOB_FIELD);
     const errors: string[] = [];
     if (!name) errors.push("missing_name");
-    if (guardianEmail && !EMAIL_RE.test(guardianEmail)) errors.push("invalid_email");
+    // A header mapped to the wrong kind of target shows up as a value that plainly
+    // isn't one -- Part 6: "a header must never be mapped to a target of an obviously
+    // different kind" (checked here rather than at mapping time so it re-evaluates
+    // live as values come from different rows/cells, not just the header text).
+    if (guardians.some((g) => !EMAIL_RE.test(g.email))) errors.push("invalid_email");
+    if (firstName && EMAIL_RE.test(firstName)) errors.push("name_looks_like_email");
     // Only kind=custom fields store into customFieldValues -- builtin
     // (name/group/DOB) and guardian fields are resolved into their own
     // ParsedRow properties above/below instead.
@@ -171,22 +239,29 @@ function buildRows(
       const v = resolve(cells, f.key);
       if (v) customFieldValues[f.key] = v;
     }
+    const dateOfBirthIso = formatDob(dateOfBirthRaw, dateOrder);
     return {
       index,
       cells,
       name,
+      firstName,
+      lastName,
       groupName: resolve(cells, GROUP_FIELD),
       dateOfBirthRaw,
-      dateOfBirthIso: formatDob(dateOfBirthRaw, dateOrder),
-      guardianName: resolve(cells, GUARDIAN_NAME_FIELD),
-      guardianEmail,
-      guardianRelationship: resolve(cells, GUARDIAN_RELATIONSHIP_FIELD),
-      guardianPhone: resolve(cells, GUARDIAN_PHONE_FIELD),
+      dateOfBirthIso,
+      guardians,
       customFieldValues,
       errors,
-      duplicateOf: name ? (existingByName.get(normalizeName(name)) ?? null) : null,
+      duplicateOf: name ? matchExisting(existingByName.get(normalizeName(name)), dateOfBirthIso) : null,
     };
   });
+}
+
+/** Among same-named existing participants, prefer the one whose DOB matches the row's. */
+function matchExisting(candidates: ExistingParticipant[] | undefined, dateOfBirthIso: string | undefined): ExistingParticipant | null {
+  if (!candidates || candidates.length === 0) return null;
+  if (candidates.length === 1 || !dateOfBirthIso) return candidates[0];
+  return candidates.find((p) => p.dateOfBirth?.slice(0, 10) === dateOfBirthIso) ?? candidates[0];
 }
 
 type SourceTab = "paste" | "sheets";
@@ -409,23 +484,25 @@ export default function ParticipantImportPage({
       if (!patchRes.ok) return false;
     }
 
-    if (row.guardianEmail) {
-      const existingEmails = new Set(
-        ((existing.guardians ?? []) as { email: string }[]).map((g) => g.email.trim().toLowerCase())
-      );
-      if (!existingEmails.has(row.guardianEmail.trim().toLowerCase())) {
-        await fetch(`/api/participants/${existingId}/guardians`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: row.guardianName || undefined,
-            email: row.guardianEmail,
-            relationship: row.guardianRelationship || undefined,
-            phone: row.guardianPhone || undefined,
-          }),
-        });
-      }
-    }
+    const existingEmails = new Set(
+      ((existing.guardians ?? []) as { email: string }[]).map((g) => g.email.trim().toLowerCase())
+    );
+    await Promise.all(
+      row.guardians
+        .filter((g) => !existingEmails.has(g.email.trim().toLowerCase()))
+        .map((g) =>
+          fetch(`/api/participants/${existingId}/guardians`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: g.name || undefined,
+              email: g.email,
+              relationship: g.relationship || undefined,
+              phone: g.phone || undefined,
+            }),
+          })
+        )
+    );
 
     return true;
   }
@@ -455,20 +532,18 @@ export default function ParticipantImportPage({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
+              firstName: row.firstName || undefined,
+              lastName: row.lastName || undefined,
               name: row.name,
               groupName: row.groupName || undefined,
               dateOfBirth: row.dateOfBirthIso || undefined,
               customFieldValues: row.customFieldValues,
-              guardians: row.guardianEmail
-                ? [
-                    {
-                      name: row.guardianName || undefined,
-                      email: row.guardianEmail,
-                      relationship: row.guardianRelationship || undefined,
-                      phone: row.guardianPhone || undefined,
-                    },
-                  ]
-                : [],
+              guardians: row.guardians.map((g) => ({
+                name: g.name || undefined,
+                email: g.email,
+                relationship: g.relationship || undefined,
+                phone: g.phone || undefined,
+              })),
             }),
           });
           if (res.ok) created++;
@@ -671,8 +746,14 @@ export default function ParticipantImportPage({
                     <td className="p-2 text-[14px] text-ink-secondary">
                       {row.dateOfBirthRaw ? (row.dateOfBirthIso ?? `${row.dateOfBirthRaw} ⚠`) : "—"}
                     </td>
-                    <td className="p-2 text-[14px] text-ink-secondary">{row.guardianName || "—"}</td>
-                    <td className="p-2 text-[14px] text-ink-secondary">{row.guardianEmail || "—"}</td>
+                    <td className="p-2 text-[14px] text-ink-secondary">{row.guardians[0]?.name || "—"}</td>
+                    <td className="p-2 text-[14px] text-ink-secondary">
+                      {row.guardians.length === 0
+                        ? "—"
+                        : row.guardians.length === 1
+                          ? row.guardians[0].email
+                          : t("participantImportPage.guardianCount", { count: String(row.guardians.length) })}
+                    </td>
                     <td className="p-2 text-[13px]">
                       {row.errors.length > 0 ? (
                         <span className="text-red-600">

@@ -114,7 +114,26 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   the brief); the rest of the §5.1 help-text table; participant registration
   sheet connection moved into Připojení (stays on the import page, tied to
   Part 6).
-- **Parts 6–9, 10 §3-7, 11 A-D/F-H**: pending.
+- **Part 6** (import) — done. The dynamic mapping system (fields fetched, generic
+  targets) already existed from an earlier session; found & fixed a real
+  correctness bug: Part 1's new `participant_first_name`/`participant_last_name`
+  fixed fields were offered as mapping targets but silently DROPPED in row-
+  building (only `kind: "custom"` fields were read into the payload) -- a
+  column mapped to "Jméno (křestní)"/"Příjmení" did nothing. Now resolved
+  properly, and a combined "Jméno a příjmení" column auto-splits via the same
+  `splitFullName` rule as the Part 1 migration script (extracted to
+  `participant-name.ts` so script and page share one implementation).
+  Multiple guardian e-mail columns now create multiple guardians (paired by
+  position with name/phone/relationship columns), instead of being silently
+  concatenated into one garbled string. Duplicate matching is diacritics-
+  insensitive now, and DOB disambiguates when two existing participants share
+  a name. Added an explicit "Příjmení"/"křestní jméno" header-alias rule (was
+  falling through to a fragile label-substring match) and a "name looks like
+  an e-mail" row warning. NOT done: a full per-row post-import result table
+  with failure reasons -- the aggregate-counts summary (already links back to
+  the roster) covers the same ground at lower cost; the live preview table
+  already shows per-row duplicate/error state before import runs.
+- **Parts 7–9, 10 §3-7, 11 A-D/F-H**: pending.
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum
