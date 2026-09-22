@@ -306,6 +306,20 @@ export const ROWS: Row[] = [
   // -- Participants/settings/Health/Mail prompt, Part 6: import -----------------------------
   { key: "participantImportPage.error.name_looks_like_email", cs: "jméno vypadá jako e-mail — zkontrolujte mapování sloupců", en: "name looks like an e-mail address — check the column mapping" },
   { key: "participantImportPage.guardianCount", cs: "zástupců: {count}", en: "guardians: {count}" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 7: Health module fixes ----------------
+  { key: "incidentForm.dateOutsideEventHint", cs: "Datum je mimo termín akce.", en: "The date is outside the event dates." },
+  { key: "common.moreActions", cs: "Další akce", en: "More actions" },
+  { key: "sendLog.colType", cs: "Typ", en: "Type" },
+  { key: "sendLog.colSubject", cs: "Předmět", en: "Subject" },
+  { key: "sendLog.purpose.parent_health_summary", cs: "souhrn", en: "summary" },
+  { key: "sendLog.purpose.mail_helper_bulk_status_update", cs: "stav dokumentů", en: "document status" },
+  { key: "sendLog.purpose.mail_helper_reply", cs: "odpověď", en: "reply" },
+  { key: "sendLog.purpose.registration_acceptance", cs: "přijetí registrace", en: "registration acceptance" },
+  { key: "sendLog.purpose.participant_open_email", cs: "e-mail", en: "e-mail" },
+  { key: "medGridPage.outsideEventHint", cs: "Dnes je mimo termín akce – zobrazena celá akce.", en: "Today is outside the event dates – showing the whole event instead." },
+  { key: "pdfExport.modeLabel", cs: "Typ výtisku", en: "Print type" },
+  { key: "pdfExport.formatLabel", cs: "Formát papíru", en: "Paper format" },
 ];
 
 async function main() {

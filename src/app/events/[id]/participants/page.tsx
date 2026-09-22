@@ -889,6 +889,7 @@ export default function EventParticipantsPage({
                       field={f}
                       value={editCustomFieldValues[f.key] ?? ""}
                       onChange={(v) => setEditFieldValue(f.key, v)}
+                      multiline
                     />
                   ))}
                 </div>
@@ -967,10 +968,15 @@ function FieldInput({
   field,
   value,
   onChange,
+  multiline,
 }: {
   field: ParticipantFieldDef;
   value: string;
   onChange: (value: string) => void;
+  // Zdravotní poznámky tend to be longer free text (Part 7: this replaces the Health
+  // detail page's separate textarea-based notes editor -- same field, one editor now,
+  // so it keeps the textarea instead of regressing to a single-line input).
+  multiline?: boolean;
 }) {
   if (field.fieldType === "boolean") {
     return (
@@ -990,6 +996,17 @@ function FieldInput({
           </option>
         ))}
       </select>
+    );
+  }
+  if (multiline && field.fieldType === "text") {
+    return (
+      <textarea
+        placeholder={field.label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={3}
+        className={inputClass}
+      />
     );
   }
   return (

@@ -70,6 +70,7 @@ export async function sendBulkStatusUpdates(
             status: "failed",
             errorMessage: "sender_not_configured",
             sentByUserId,
+            subject,
           },
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage: "sender_not_configured" });
@@ -85,6 +86,7 @@ export async function sendBulkStatusUpdates(
             purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
             status: "sent",
             sentByUserId,
+            subject,
           },
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent" });
@@ -98,6 +100,7 @@ export async function sendBulkStatusUpdates(
             status: "failed",
             errorMessage,
             sentByUserId,
+            subject,
           },
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage });

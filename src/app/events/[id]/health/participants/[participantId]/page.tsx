@@ -16,6 +16,7 @@ type Guardian = {
   name: string | null;
   email: string;
   relationship: string | null;
+  phone: string | null;
   receivesCommunications: boolean;
 };
 
@@ -45,6 +46,8 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
+const btnSecondary =
+  "rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
 
 function incidentMeta(inc: IncidentClientData): string {
   const parts: string[] = [];
@@ -66,20 +69,24 @@ export default function ParticipantDetailPage({
   const confirm = useConfirm();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
+  const [hasDriveFolder, setHasDriveFolder] = useState(false);
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   const [participant, setParticipant] = useState<ParticipantDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [editing, setEditing] = useState(false);
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
-  const [savingEdit, setSavingEdit] = useState(false);
 
   const [addingGuardian, setAddingGuardian] = useState(false);
   const [gName, setGName] = useState("");
   const [gEmail, setGEmail] = useState("");
   const [gRelationship, setGRelationship] = useState("");
+  const [gPhone, setGPhone] = useState("");
+  // Part 7: guardians are now editable in place here too (not just add/delete), same
+  // as the central roster (Part 2) -- a per-row draft, saved with its own PATCH.
+  const [editGuardianId, setEditGuardianId] = useState<string | null>(null);
+  const [editGuardianDraft, setEditGuardianDraft] = useState<Guardian | null>(null);
   const [savingGuardian, setSavingGuardian] = useState(false);
 
   const [incidents, setIncidents] = useState<IncidentWithFollowUps[]>([]);
@@ -205,7 +212,16 @@ export default function ParticipantDetailPage({
     loadIncidents();
     loadMedPlans();
     loadEmailLogs();
-  }, [participantId]);
+    // Part 7: "Otevřít složku na Disku" only shows when it would actually work --
+    // folders are created lazily on first click, so the real prerequisite is
+    // just whether the event has a participants-root (or export) folder set.
+    fetch(`/api/events/${eventId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { driveParticipantsFolderId: string | null; driveExportFolderId: string | null } | null) =>
+        setHasDriveFolder(!!(d?.driveParticipantsFolderId || d?.driveExportFolderId))
+      )
+      .catch(() => {});
+  }, [participantId, eventId]);
 
   function handleIncidentChanged() {
     loadIncidents();
@@ -221,17 +237,6 @@ export default function ParticipantDetailPage({
     });
   }
 
-  function startEdit() {
-    if (!participant) return;
-    setError(null);
-    setEditCustomFieldValues({ ...(participant.customFieldValues ?? {}) });
-    setEditing(true);
-  }
-
-  function setEditFieldValue(key: string, value: string) {
-    setEditCustomFieldValues((prev) => ({ ...prev, [key]: value }));
-  }
-
   async function handleDeleteParticipant() {
     if (!participant) return;
     if (!(await confirm({ message: t("participantDetail.confirmDeleteParticipant", { name: participant.name }), danger: true }))) return;
@@ -245,25 +250,6 @@ export default function ParticipantDetailPage({
     router.push(`/events/${eventId}/health`);
   }
 
-  async function saveEdit(e: React.FormEvent) {
-    e.preventDefault();
-    setSavingEdit(true);
-    setError(null);
-    const res = await fetch(`/api/participants/${participantId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customFieldValues: editCustomFieldValues,
-      }),
-    });
-    setSavingEdit(false);
-    if (!res.ok) {
-      setError(t("participantDetail.errorSaveFailed"));
-      return;
-    }
-    setEditing(false);
-    load();
-  }
 
   async function addGuardian(e: React.FormEvent) {
     e.preventDefault();
@@ -277,6 +263,7 @@ export default function ParticipantDetailPage({
         name: gName.trim() || undefined,
         email: gEmail.trim(),
         relationship: gRelationship.trim() || undefined,
+        phone: gPhone.trim() || undefined,
       }),
     });
     setSavingGuardian(false);
@@ -287,6 +274,7 @@ export default function ParticipantDetailPage({
     setGName("");
     setGEmail("");
     setGRelationship("");
+    setGPhone("");
     setAddingGuardian(false);
     load();
   }
@@ -294,6 +282,30 @@ export default function ParticipantDetailPage({
   async function removeGuardian(guardianId: string) {
     if (!(await confirm({ message: t("participantDetail.confirmRemoveGuardian"), danger: true }))) return;
     await fetch(`/api/participants/${participantId}/guardians/${guardianId}`, { method: "DELETE" });
+    load();
+  }
+
+  function startEditGuardian(g: Guardian) {
+    setEditGuardianId(g.id);
+    setEditGuardianDraft({ ...g });
+  }
+
+  async function saveEditGuardian() {
+    if (!editGuardianDraft) return;
+    setSavingGuardian(true);
+    await fetch(`/api/participants/${participantId}/guardians/${editGuardianDraft.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: editGuardianDraft.name?.trim() || null,
+        email: editGuardianDraft.email.trim(),
+        relationship: editGuardianDraft.relationship?.trim() || null,
+        phone: editGuardianDraft.phone?.trim() || null,
+      }),
+    });
+    setSavingGuardian(false);
+    setEditGuardianId(null);
+    setEditGuardianDraft(null);
     load();
   }
 
@@ -349,34 +361,50 @@ export default function ParticipantDetailPage({
               .filter(Boolean)
               .join(" · ")}
           </p>
-          <button onClick={openDriveFolder} className="mt-1 text-[13px] text-ember hover:underline">
-            {t("participantDetail.openDriveFolder")}
-          </button>
+          {hasDriveFolder && (
+            <button onClick={openDriveFolder} className="mt-1 text-[13px] text-ember hover:underline">
+              {t("participantDetail.openDriveFolder")}
+            </button>
+          )}
           {driveFolderError && <p className="mt-1 text-[12px] text-red-600">{driveFolderError}</p>}
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setSendModalOpen(true)} className="text-[13px] text-ember hover:underline">
+        {/* Part 7: primary actions as buttons; "Upravit" now opens the central roster's
+            section editor (Part 2), which already covers both core fields and Zdravotní
+            poznámky -- no separate inline notes editor here anymore. Smazat moved into
+            the overflow menu, confirmed with the shared dialog either way. */}
+        <div className="flex items-center gap-2">
+          <button onClick={() => setSendModalOpen(true)} className={btnPrimary}>
             {t("sendSummary.sendButtonShort")}
           </button>
-          <a
-            href={`/api/participants/${participantId}/summary-pdf`}
-            className="text-[13px] text-ink-secondary hover:text-ink"
-          >
+          <a href={`/api/participants/${participantId}/summary-pdf`} className={btnSecondary}>
             {t("participantDetail.downloadPdfButton")}
           </a>
-          <a href={`/events/${eventId}/participants?edit=${participantId}`} className="text-[13px] text-ember hover:underline">
-            {t("participantsPage.editCoreDetailsLink")}
+          <a href={`/events/${eventId}/participants?edit=${participantId}`} className={btnSecondary}>
+            {t("common.edit")}
           </a>
-          <button onClick={startEdit} className="text-[13px] text-ember hover:underline">
-            {t("participantDetail.editNotesButton")}
-          </button>
-          <button
-            onClick={handleDeleteParticipant}
-            disabled={deleting}
-            className="text-[13px] text-red-600 hover:underline disabled:opacity-50"
-          >
-            {t("common.delete")}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setOverflowOpen((v) => !v)}
+              aria-label={t("common.moreActions")}
+              className="rounded-lg border border-mist bg-paper px-2.5 py-2 text-[14px] text-ink-secondary hover:bg-paper-2"
+            >
+              ⋯
+            </button>
+            {overflowOpen && (
+              <div className="absolute right-0 z-10 mt-1 w-40 rounded-lg border border-mist bg-paper py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    handleDeleteParticipant();
+                  }}
+                  disabled={deleting}
+                  className="block w-full px-3 py-1.5 text-left text-[13px] text-red-600 hover:bg-paper-2 disabled:opacity-50"
+                >
+                  {t("common.delete")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -428,6 +456,13 @@ export default function ParticipantDetailPage({
             onChange={(e) => setGRelationship(e.target.value)}
             className={inputClass + " flex-1"}
           />
+          <input
+            type="tel"
+            placeholder={t("participantDetail.guardianPhoneLabel")}
+            value={gPhone}
+            onChange={(e) => setGPhone(e.target.value)}
+            className={inputClass + " flex-1"}
+          />
           <button type="submit" disabled={savingGuardian} className={btnPrimary}>
             {t("common.save")}
           </button>
@@ -438,31 +473,80 @@ export default function ParticipantDetailPage({
         <p className="text-[14px] text-ink-secondary">{t("participantDetail.guardiansEmpty")}</p>
       ) : (
         <div className="flex flex-col gap-2">
-          {participant.guardians.map((g) => (
-            <div key={g.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2">
-              <div className="text-[14px] text-ink">
-                {g.name || g.email}
-                {g.name && <span className="text-ink-secondary"> · {g.email}</span>}
-                {g.relationship && <span className="text-ink-secondary"> · {g.relationship}</span>}
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
+          {participant.guardians.map((g) =>
+            editGuardianId === g.id && editGuardianDraft ? (
+              <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <input
-                    type="checkbox"
-                    checked={g.receivesCommunications}
-                    onChange={() => toggleReceives(g)}
+                    type="text"
+                    placeholder={t("common.name")}
+                    value={editGuardianDraft.name ?? ""}
+                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, name: e.target.value })}
+                    className={inputClass + " flex-1"}
                   />
-                  {t("participantDetail.receivesCommunicationsLabel")}
-                </label>
-                <button
-                  onClick={() => removeGuardian(g.id)}
-                  className="text-[13px] text-red-600 hover:underline"
-                >
-                  {t("common.delete")}
-                </button>
+                  <input
+                    type="email"
+                    placeholder={t("participantDetail.guardianEmailLabel")}
+                    value={editGuardianDraft.email}
+                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, email: e.target.value })}
+                    className={inputClass + " flex-1"}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder={t("participantDetail.guardianRelationshipLabel")}
+                    value={editGuardianDraft.relationship ?? ""}
+                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, relationship: e.target.value })}
+                    className={inputClass + " flex-1"}
+                  />
+                  <input
+                    type="tel"
+                    placeholder={t("participantDetail.guardianPhoneLabel")}
+                    value={editGuardianDraft.phone ?? ""}
+                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, phone: e.target.value })}
+                    className={inputClass + " flex-1"}
+                  />
+                </div>
+                <div className="flex justify-end gap-3">
+                  <button onClick={() => setEditGuardianId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                    {t("common.cancel")}
+                  </button>
+                  <button onClick={saveEditGuardian} disabled={savingGuardian} className="text-[13px] text-ember hover:underline">
+                    {t("common.save")}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ) : (
+              <div key={g.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2">
+                <div className="text-[14px] text-ink">
+                  {g.name || g.email}
+                  {g.name && <span className="text-ink-secondary"> · {g.email}</span>}
+                  {g.relationship && <span className="text-ink-secondary"> · {g.relationship}</span>}
+                  {g.phone && <span className="text-ink-secondary"> · {g.phone}</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
+                    <input
+                      type="checkbox"
+                      checked={g.receivesCommunications}
+                      onChange={() => toggleReceives(g)}
+                    />
+                    {t("participantDetail.receivesCommunicationsLabel")}
+                  </label>
+                  <button onClick={() => startEditGuardian(g)} className="text-[13px] text-ember hover:underline">
+                    {t("common.edit")}
+                  </button>
+                  <button
+                    onClick={() => removeGuardian(g.id)}
+                    className="text-[13px] text-red-600 hover:underline"
+                  >
+                    {t("common.delete")}
+                  </button>
+                </div>
+              </div>
+            )
+          )}
         </div>
       )}
 
@@ -677,92 +761,6 @@ export default function ParticipantDetailPage({
         />
       )}
 
-      {editing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
-            <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("participantDetail.editNotesButton")}</h2>
-            <form onSubmit={saveEdit} className="flex flex-col gap-3">
-              {fields.map((f, i) => (
-                <HealthFieldInput
-                  key={f.id}
-                  field={f}
-                  value={editCustomFieldValues[f.key] ?? ""}
-                  onChange={(v) => setEditFieldValue(f.key, v)}
-                  autoFocus={i === 0}
-                />
-              ))}
-
-              <div className="mt-2 flex justify-end gap-2">
-                <button type="button" onClick={() => setEditing(false)} className="text-[13px] text-ink-secondary hover:underline">
-                  {t("common.cancel")}
-                </button>
-                <button type="submit" disabled={savingEdit} className={btnPrimary}>
-                  {t("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
-  );
-}
-
-// Text-type fields render as a multi-line textarea here specifically --
-// this page is about longer clinical notes, unlike the central roster's
-// single-line FieldInput (src/app/events/[id]/participants/page.tsx),
-// which is a different screen with a different typical field shape.
-function HealthFieldInput({
-  field,
-  value,
-  onChange,
-  autoFocus,
-}: {
-  field: ParticipantFieldDef;
-  value: string;
-  onChange: (value: string) => void;
-  autoFocus?: boolean;
-}) {
-  if (field.fieldType === "boolean") {
-    return (
-      <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} autoFocus={autoFocus} />
-        {field.label}
-      </label>
-    );
-  }
-  if (field.fieldType === "select") {
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass} autoFocus={autoFocus}>
-        <option value="">{field.label}</option>
-        {(field.options ?? []).map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  if (field.fieldType === "number" || field.fieldType === "date") {
-    return (
-      <input
-        type={field.fieldType}
-        placeholder={field.label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClass}
-        autoFocus={autoFocus}
-      />
-    );
-  }
-  return (
-    <textarea
-      placeholder={field.label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={inputClass}
-      rows={2}
-      autoFocus={autoFocus}
-    />
   );
 }

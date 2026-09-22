@@ -101,9 +101,17 @@ export default function MedChecklistPage({
     const max = ev.endDate.slice(0, 10);
     setPreset(p);
     if (p === "today") {
-      const d = clamp(todayIso(), min, max);
-      setStartDate(d);
-      setEndDate(d);
+      // Part 7: inside the event, a single day (today); outside it (before start or
+      // after end), the whole event range instead of clamping to one boundary day --
+      // a lone edge day is rarely what's wanted right after a camp ends.
+      const today = todayIso();
+      if (today >= min && today <= max) {
+        setStartDate(today);
+        setEndDate(today);
+      } else {
+        setStartDate(min);
+        setEndDate(max);
+      }
     } else if (p === "week") {
       const wkStart = clamp(startOfWeek(todayIso()), min, max);
       const wkEnd = clamp(addDays(wkStart, 6), min, max);
@@ -338,6 +346,12 @@ export default function MedChecklistPage({
           }
         />
       </div>
+
+      {/* Part 7: explains why "today" shows the whole event instead of a single day --
+          shown regardless of whether that range happens to have any plans in it. */}
+      {preset === "today" && event && (todayIso() < event.startDate.slice(0, 10) || todayIso() > event.endDate.slice(0, 10)) && (
+        <p className="mb-3 text-[13px] text-amber-700">{t("medGridPage.outsideEventHint")}</p>
+      )}
 
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>

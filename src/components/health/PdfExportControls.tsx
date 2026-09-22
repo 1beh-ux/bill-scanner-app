@@ -15,23 +15,29 @@ export default function PdfExportControls({ buildHref }: PdfExportControlsProps)
   const [format, setFormat] = useState<"A4" | "A3">("A4");
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <select
-        value={mode}
-        onChange={(e) => setMode(e.target.value as "blank" | "hybrid")}
-        className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink"
-      >
-        <option value="blank">{t("pdfExport.modeBlank")}</option>
-        <option value="hybrid">{t("pdfExport.modeHybrid")}</option>
-      </select>
-      <select
-        value={format}
-        onChange={(e) => setFormat(e.target.value as "A4" | "A3")}
-        className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink"
-      >
-        <option value="A4">A4</option>
-        <option value="A3">A3</option>
-      </select>
+    <div className="flex flex-wrap items-end gap-2">
+      <label className="text-[12px] text-ink-secondary">
+        {t("pdfExport.modeLabel")}
+        <select
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "blank" | "hybrid")}
+          className="mt-1 block rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink"
+        >
+          <option value="blank">{t("pdfExport.modeBlank")}</option>
+          <option value="hybrid">{t("pdfExport.modeHybrid")}</option>
+        </select>
+      </label>
+      <label className="text-[12px] text-ink-secondary">
+        {t("pdfExport.formatLabel")}
+        <select
+          value={format}
+          onChange={(e) => setFormat(e.target.value as "A4" | "A3")}
+          className="mt-1 block rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink"
+        >
+          <option value="A4">A4</option>
+          <option value="A3">A3</option>
+        </select>
+      </label>
       <a
         href={buildHref(mode, format)}
         className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"

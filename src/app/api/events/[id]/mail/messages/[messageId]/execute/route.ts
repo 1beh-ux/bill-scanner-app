@@ -166,6 +166,7 @@ export async function POST(
           purposeKey: MAIL_HELPER_REPLY_PURPOSE_KEY,
           status: "sent",
           sentByUserId: user.id,
+          subject,
         },
       });
     } catch (err) {
@@ -181,6 +182,7 @@ export async function POST(
             status: "failed",
             errorMessage,
             sentByUserId: user.id,
+            subject,
           },
         });
       }

@@ -48,6 +48,20 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   { key: "nav.budget", cs: "Rozpočet", en: "Budget" },
   { key: "medChecklistPage.title", cs: "Léky a výdej", en: "Medications and handout" },
   { key: "participantsPage.mailListTitle", cs: "Dokumenty", en: "Documents" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 7: "Follow-up" -> "Následná kontrola" -
+  { key: "incidentsPage.followUpButton", cs: "+ Následná kontrola", en: "+ Follow-up check" },
+  { key: "incidentsPage.showFollowUps", cs: "Zobrazit následné kontroly ({count})", en: "Show follow-up checks ({count})" },
+  { key: "incidentsPage.hideFollowUps", cs: "Skrýt následné kontroly", en: "Hide follow-up checks" },
+  { key: "incidentForm.titleFollowUp", cs: "Následná kontrola", en: "Follow-up check" },
+  { key: "incidentForm.followUpLockedNote", cs: "Následná kontrola ke stejné situaci — kategorie a umístění na těle jsou převzaty ({category}).", en: "Follow-up check on the same situation — category and body location are inherited ({category})." },
+  { key: "incidentForm.saveFollowUp", cs: "Uložit následnou kontrolu", en: "Save follow-up check" },
+  { key: "incidentDetail.followUpButton", cs: "+ Následná kontrola", en: "+ Follow-up check" },
+  { key: "bulkSendSummaries.colIncidents", cs: "Záznamy", en: "Records" },
+  { key: "incidentsPage.detailButton", cs: "Podrobnosti", en: "Details" },
+  { key: "medChecklistPage.empty", cs: "Nikdo nemá plán léků.", en: "Nobody has a medication plan." },
+  // Reveals the child's health notes (allergies etc.) -- "Zobrazit podrobnosti…" didn't say so.
+  { key: "incidentForm.showParticipantSummary", cs: "Zdravotní poznámky dítěte", en: "Child's health notes" },
   // Part 3 terminology: "Katalog léků" (event/org settings) / "Plán léků" (per
   // participant) / "Výdej léků" (the grid, already correct) -- were all "Léky".
   { key: "healthTemplatesPage.tabMeds", cs: "Katalog léků", en: "Medication catalog" },

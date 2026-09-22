@@ -821,6 +821,9 @@ model ParentEmailLog {
   errorMessage  String?            @map("error_message")
   sentByUserId  String             @map("sent_by_user_id")
   pdfGcsPath    String?            @map("pdf_gcs_path")
+  // Resolved subject at send time (Part 7 of the participants/settings prompt: the sent-
+  // mail log gets a "Předmět" column) -- null for rows sent before this column existed.
+  subject       String?
 
   participant Participant         @relation(fields: [participantId], references: [id])
   guardian    ParticipantGuardian @relation(fields: [guardianId], references: [id])

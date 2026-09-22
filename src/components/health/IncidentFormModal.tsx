@@ -135,6 +135,7 @@ export default function IncidentFormModal({
   const [participantSummary, setParticipantSummary] = useState<ParticipantSummary | null>(null);
   const [showParticipantSummary, setShowParticipantSummary] = useState(false);
   const [summaryFields, setSummaryFields] = useState<ParticipantFieldDef[]>([]);
+  const [eventDates, setEventDates] = useState<{ startDate: string; endDate: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -156,7 +157,15 @@ export default function IncidentFormModal({
       .then((r) => (r.ok ? r.json() : []))
       .then(setSummaryFields)
       .catch(() => {});
+    fetch(`/api/events/${eventId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { startDate: string; endDate: string } | null) => d && setEventDates({ startDate: d.startDate.slice(0, 10), endDate: d.endDate.slice(0, 10) }))
+      .catch(() => {});
   }, [eventId, participantId]);
+
+  // Part 7: a hint, never a block -- an incident logged a day after the camp ended (writing
+  // it up the next morning) is a completely normal thing to do.
+  const dateOutsideEvent = !!eventDates && (incidentDate < eventDates.startDate || incidentDate > eventDates.endDate);
 
   function applySituation(item: ListItem) {
     const data = (item.data ?? {}) as SituationData;
@@ -309,6 +318,7 @@ export default function IncidentFormModal({
               className={inputClass + " w-28 flex-none"}
             />
           </div>
+          {dateOutsideEvent && <p className="-mt-1.5 text-[12px] text-amber-700">{t("incidentForm.dateOutsideEventHint")}</p>}
 
           {isFollowUp ? (
             <p className="rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink-secondary">

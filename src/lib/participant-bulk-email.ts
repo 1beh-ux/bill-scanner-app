@@ -232,6 +232,7 @@ export async function sendBulkParticipantEmail(opts: {
             status: "failed",
             errorMessage: "sender_not_configured",
             sentByUserId: opts.sentByUserId,
+            subject,
           },
         });
         results.push({
@@ -254,7 +255,7 @@ export async function sendBulkParticipantEmail(opts: {
           attachments,
         });
         await prisma.parentEmailLog.create({
-          data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId },
+          data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId, subject },
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "sent" });
       } catch (err) {
@@ -267,6 +268,7 @@ export async function sendBulkParticipantEmail(opts: {
             status: "failed",
             errorMessage,
             sentByUserId: opts.sentByUserId,
+            subject,
           },
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage });

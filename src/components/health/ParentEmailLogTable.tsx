@@ -8,6 +8,8 @@ export type EmailLogRow = {
   sentAt: string;
   status: "sent" | "failed";
   errorMessage: string | null;
+  purposeKey: string;
+  subject: string | null;
   guardian: { email: string; name: string | null };
   participant?: { name: string };
 };
@@ -35,6 +37,8 @@ export default function ParentEmailLogTable({ logs, showParticipant, onResend, r
               <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
             )}
             <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("sendLog.colGuardian")}</th>
+            <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("sendLog.colType")}</th>
+            <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("sendLog.colSubject")}</th>
             <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("sendLog.colSentAt")}</th>
             <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("sendLog.colStatus")}</th>
             <th className="p-2"></th>
@@ -47,6 +51,10 @@ export default function ParentEmailLogTable({ logs, showParticipant, onResend, r
                 <td className="p-2 text-[14px] text-ink">{log.participant?.name ?? "—"}</td>
               )}
               <td className="p-2 text-[14px] text-ink">{log.guardian.name || log.guardian.email}</td>
+              <td className="p-2 text-[13px] text-ink-secondary">{t(`sendLog.purpose.${log.purposeKey}`)}</td>
+              <td className="max-w-[220px] truncate p-2 text-[13px] text-ink-secondary" title={log.subject ?? undefined}>
+                {log.subject || "—"}
+              </td>
               <td className="p-2 text-[13px] text-ink-secondary">
                 {new Date(log.sentAt).toLocaleString("cs-CZ")}
               </td>

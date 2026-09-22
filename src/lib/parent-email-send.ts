@@ -137,6 +137,7 @@ export async function sendSummaryToGuardians(
           status: "failed",
           errorMessage: pdfError ?? "pdf_generation_failed",
           sentByUserId,
+          subject,
         },
       });
       results.push({ guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage: pdfError ?? "pdf_generation_failed" });
@@ -161,6 +162,7 @@ export async function sendSummaryToGuardians(
           status: "sent",
           sentByUserId,
           pdfGcsPath: pdf.gcsPath,
+          subject,
         },
       });
       results.push({ guardianId: guardian.id, guardianEmail: guardian.email, status: "sent" });
@@ -175,6 +177,7 @@ export async function sendSummaryToGuardians(
           errorMessage,
           sentByUserId,
           pdfGcsPath: pdf.gcsPath,
+          subject,
         },
       });
       results.push({ guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage });
