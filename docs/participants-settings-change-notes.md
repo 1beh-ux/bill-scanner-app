@@ -151,8 +151,16 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   same roster endpoint's `computed.contact_email` already used elsewhere
   -- same idea as the bulk-status dialog's "Příjemci" column, just applied
   to the other send dialog. Kept the existing count line alongside it.
-- **Pending**: 10 §3-7 (e-mail template catalog w/ Výchozí/Upraveno
-  badges + org-compare, most of §5.1 help text, Přehled akce — optional).
+- **Part 10 §3-7 (partial)** — done: `EmailTemplateAdmin` (the shared
+  widget already used for all 3 event-scope editable templates --
+  registration_acceptance, parent_health_summary,
+  mail_helper_bulk_status_update, across the Účastníci/Zdraví/Pošta
+  tabs) gained a Výchozí/Upraveno badge next to its label and a
+  "Porovnat s organizací" toggle that fetches and shows the org default
+  read-only alongside the event's override, via the already-existing
+  `/api/email-templates` org route. One shared component, so all 3
+  templates got this at once. NOT done: most of §5.1's help-text table,
+  Přehled akce landing page (optional per the brief).
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum

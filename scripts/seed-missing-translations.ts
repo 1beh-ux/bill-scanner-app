@@ -352,6 +352,13 @@ export const ROWS: Row[] = [
 
   // -- Participants/settings/Health/Mail prompt, Part 11-A.4: real recipient list in the accept dialog --
   { key: "composeEmailModal.noRecipientEmail", cs: "bez kontaktního e-mailu", en: "no contact e-mail" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 10 §3-7: template catalog badges + org compare --
+  { key: "emailTemplateAdmin.badgeDefault", cs: "Výchozí", en: "Default" },
+  { key: "emailTemplateAdmin.badgeModified", cs: "Upraveno", en: "Modified" },
+  { key: "emailTemplateAdmin.compareWithOrg", cs: "Porovnat s organizací", en: "Compare with organization" },
+  { key: "emailTemplateAdmin.hideCompare", cs: "Skrýt porovnání", en: "Hide comparison" },
+  { key: "emailTemplateAdmin.orgDefaultTitle", cs: "Výchozí šablona organizace", en: "Organization's default template" },
 ];
 
 async function main() {

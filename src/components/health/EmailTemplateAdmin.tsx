@@ -59,6 +59,10 @@ export default function EmailTemplateAdmin({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Part 10 §3-7: "Porovnat s organizací" -- only meaningful once an event
+  // override exists (otherwise the event IS the org default already).
+  const [orgCompare, setOrgCompare] = useState<{ subject: string; body: string } | null>(null);
+  const [comparing, setComparing] = useState(false);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -80,8 +84,23 @@ export default function EmailTemplateAdmin({
 
   useEffect(() => {
     load();
+    setOrgCompare(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, eventId, purposeKey]);
+
+  async function toggleCompare() {
+    if (orgCompare) {
+      setOrgCompare(null);
+      return;
+    }
+    setComparing(true);
+    const res = await fetch(`/api/email-templates?purposeKey=${encodeURIComponent(purposeKey)}`);
+    setComparing(false);
+    if (res.ok) {
+      const data = await res.json();
+      setOrgCompare({ subject: data.subject, body: data.body });
+    }
+  }
 
   function insertVariable(name: string) {
     const token = `{{${name}}}`;
@@ -139,17 +158,46 @@ export default function EmailTemplateAdmin({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
-        {scope === "event" && hasOverride && (
-          <button onClick={handleRevert} disabled={saving} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
-            {t("emailTemplateAdmin.revertToDefault")}
-          </button>
-        )}
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
+          {scope === "event" && (
+            <span
+              className={
+                "rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                (hasOverride ? "bg-ember/15 text-ember" : "bg-paper-2 text-ink-secondary")
+              }
+            >
+              {t(hasOverride ? "emailTemplateAdmin.badgeModified" : "emailTemplateAdmin.badgeDefault")}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {scope === "event" && hasOverride && (
+            <button onClick={toggleCompare} disabled={comparing} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
+              {orgCompare ? t("emailTemplateAdmin.hideCompare") : t("emailTemplateAdmin.compareWithOrg")}
+            </button>
+          )}
+          {scope === "event" && hasOverride && (
+            <button onClick={handleRevert} disabled={saving} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
+              {t("emailTemplateAdmin.revertToDefault")}
+            </button>
+          )}
+        </div>
       </div>
 
       {scope === "event" && !hasOverride && (
         <p className="mb-3 text-[13px] text-ink-secondary">{t("emailTemplateAdmin.usingOrgDefault")}</p>
+      )}
+
+      {orgCompare && (
+        <div className="mb-3 rounded-lg border border-mist bg-paper-2 p-3">
+          <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">
+            {t("emailTemplateAdmin.orgDefaultTitle")}
+          </p>
+          <p className="mb-1 text-[14px] font-medium text-ink">{orgCompare.subject}</p>
+          <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{orgCompare.body}</p>
+        </div>
       )}
 
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
