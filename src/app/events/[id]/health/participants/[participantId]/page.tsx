@@ -32,6 +32,15 @@ type ParticipantDetail = {
 
 type IncidentWithFollowUps = IncidentClientData & { followUps: IncidentClientData[] };
 
+type ParticipantDocumentRow = {
+  id: string;
+  docTypeName: string;
+  filename: string | null;
+  receivedAt: string;
+  receivedVia: string;
+  driveUrl: string | null;
+};
+
 type NamedListItem = { id: string; name: string };
 type MedPlan = {
   id: string;
@@ -97,6 +106,7 @@ export default function ParticipantDetailPage({
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
+  const [documents, setDocuments] = useState<ParticipantDocumentRow[]>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
   const [medPlans, setMedPlans] = useState<MedPlan[]>([]);
@@ -199,6 +209,11 @@ export default function ParticipantDetailPage({
     if (res.ok) setEmailLogs(await res.json());
   }
 
+  async function loadDocuments() {
+    const res = await fetch(`/api/participants/${participantId}/documents`);
+    if (res.ok) setDocuments(await res.json());
+  }
+
   async function handleResend(log: EmailLogRow) {
     setResendingId(log.id);
     await fetch(`/api/participants/${participantId}/emails/${log.id}/resend`, { method: "POST" });
@@ -212,6 +227,7 @@ export default function ParticipantDetailPage({
     loadIncidents();
     loadMedPlans();
     loadEmailLogs();
+    loadDocuments();
     // Part 7: "Otevřít složku na Disku" only shows when it would actually work --
     // folders are created lazily on first click, so the real prerequisite is
     // just whether the event has a participants-root (or export) folder set.
@@ -424,6 +440,43 @@ export default function ParticipantDetailPage({
         </div>
       ) : (
         <p className="mb-6 text-[14px] text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
+      )}
+
+      {/* Part 11-D: what the inbox (or a manual mark) saved, checkable without opening
+          Drive. Grouped by document type, "Typ — N souborů" (Part 11-C's own wording),
+          each file with its received date/source and a Drive link when synced. */}
+      <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.documentsTitle")}</h2>
+      {documents.length === 0 ? (
+        <p className="mb-6 text-[14px] text-ink-secondary">{t("participantDetail.documentsEmpty")}</p>
+      ) : (
+        <div className="mb-6 flex flex-col gap-3">
+          {Object.entries(
+            documents.reduce<Record<string, ParticipantDocumentRow[]>>((acc, d) => {
+              (acc[d.docTypeName] ??= []).push(d);
+              return acc;
+            }, {})
+          ).map(([docTypeName, files]) => (
+            <div key={docTypeName} className="rounded-lg border border-mist/60 p-2">
+              <p className="mb-1 text-[13px] font-medium text-ink">
+                {t("participantDetail.documentsFileCount", { name: docTypeName, count: String(files.length) })}
+              </p>
+              <ul className="flex flex-col gap-0.5">
+                {files.map((f) => (
+                  <li key={f.id} className="flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary">
+                    <span>{f.filename || "—"}</span>
+                    <span>· {new Date(f.receivedAt).toLocaleDateString("cs-CZ")}</span>
+                    <span>· {t(`participantDetail.documentsVia.${f.receivedVia}`)}</span>
+                    {f.driveUrl && (
+                      <a href={f.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                        {t("participantDetail.documentsOpenInDrive")}
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
 
       <div className="mb-3 flex items-center justify-between">

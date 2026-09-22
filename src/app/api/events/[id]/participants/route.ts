@@ -68,7 +68,11 @@ export async function GET(
   // rows (a document we sent them, not one they returned -- see
   // getReceivedItemIds's own comment on the same distinction).
   const documentTypes = await getActiveDocumentTypes(eventId);
-  const receivedCounts: Record<string, number> = {};
+  // Part 11-C: distinct TYPES received, not files -- 3 files for the same type (e.g. two
+  // more attachments saved on top of an existing one) must never push the count above
+  // documentTypes.length. A participantId+eventListItemId Set per participant does that;
+  // the old code counted rows (files) instead.
+  const receivedTypeIds: Record<string, Set<string>> = {};
   if (documentTypes.length > 0 && scopedParticipants.length > 0) {
     const rows = await prisma.participantDocument.findMany({
       where: {
@@ -76,15 +80,17 @@ export async function GET(
         eventListItemId: { in: documentTypes.map((d) => d.id) },
         receivedVia: { not: "generated" },
       },
-      select: { participantId: true },
+      select: { participantId: true, eventListItemId: true },
     });
-    for (const r of rows) receivedCounts[r.participantId] = (receivedCounts[r.participantId] ?? 0) + 1;
+    for (const r of rows) {
+      (receivedTypeIds[r.participantId] ??= new Set()).add(r.eventListItemId);
+    }
   }
 
   const withDocuments = scopedParticipants.map((p) => ({
     ...p,
     documentsTotal: documentTypes.length,
-    documentsReceived: receivedCounts[p.id] ?? 0,
+    documentsReceived: receivedTypeIds[p.id]?.size ?? 0,
   }));
   // Default sort is by surname (Part 2: "Lists: sort by surname by default"), Czech
   // collation -- the DB-level `orderBy: { name: "asc" }` above only decides fetch order

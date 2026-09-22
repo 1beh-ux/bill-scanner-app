@@ -123,6 +123,16 @@ export default function EventDetailPage({
 
 
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  // Part 9: outgoing mail is signed with the sending user's own signature/name, not a
+  // fixed event-wide one -- shown here so it's clear WHOSE name that will be, with a
+  // link to where to change it, rather than only being discoverable by sending a test.
+  const [mySignature, setMySignature] = useState<{ emailSignature: string | null; displayName: string } | null>(null);
+  useEffect(() => {
+    fetch("/api/me")
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setMySignature)
+      .catch(() => {});
+  }, []);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
   // Setup checklist (Part 10 §4): kept to a few objectively checkable signals rather
@@ -485,7 +495,17 @@ export default function EventDetailPage({
                   gmail.modify scope warning only matters when Mail is enabled (it reads/
                   moves inbound mail; Health only ever sends), so purpose follows that. */}
               {(moduleAccess.health || moduleAccess.mail) && (
-                <SenderEmailField eventId={id} purpose={moduleAccess.mail ? "mail" : "health"} />
+                <>
+                  <SenderEmailField eventId={id} purpose={moduleAccess.mail ? "mail" : "health"} />
+                  {mySignature && (
+                    <p className="text-[12px] text-ink-secondary">
+                      {t("eventDetail.signedAsLabel", { name: mySignature.emailSignature || mySignature.displayName })}{" "}
+                      <a href="/settings" className="text-ember hover:underline">
+                        {t("eventDetail.signedAsChangeLink")}
+                      </a>
+                    </p>
+                  )}
+                </>
               )}
             </div>
           )}

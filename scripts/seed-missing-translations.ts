@@ -329,6 +329,19 @@ export const ROWS: Row[] = [
   { key: "bulkStatusModal.colRecipients", cs: "Příjemci", en: "Recipients" },
   { key: "bulkStatusModal.noRecipient", cs: "bez příjemce", en: "no recipient" },
   { key: "bulkStatusModal.noRecipientHint", cs: "Žádný zákonný zástupce s platným e-mailem, který má dostávat e-maily.", en: "No guardian with a valid e-mail flagged to receive e-mails." },
+  { key: "eventDetail.signedAsLabel", cs: "E-maily, které odešlete, budou podepsané jako: {name}.", en: "E-mails you send will be signed as: {name}." },
+  { key: "eventDetail.signedAsChangeLink", cs: "Změnit v osobním nastavení", en: "Change in personal settings" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-C/D: document counters/visibility --
+  { key: "participantDetail.documentsTitle", cs: "Dokumenty", en: "Documents" },
+  { key: "participantDetail.documentsEmpty", cs: "Zatím žádné doručené dokumenty.", en: "No documents received yet." },
+  { key: "participantDetail.documentsFileCount", cs: "{name} — počet souborů: {count}", en: "{name} — file count: {count}" },
+  { key: "participantDetail.documentsOpenInDrive", cs: "Otevřít na Disku", en: "Open in Drive" },
+  { key: "participantDetail.documentsVia.email", cs: "z e-mailu", en: "from e-mail" },
+  { key: "participantDetail.documentsVia.manual", cs: "ručně označeno", en: "marked manually" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-G: styled file input in mail dialog --
+  { key: "composeEmailModal.noFileChosen", cs: "Žádný soubor nevybrán", en: "No file chosen" },
 ];
 
 async function main() {

@@ -91,67 +91,61 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   Výchozí/Upraveno badges, Přehled akce (optional), most of §5.1's help texts.
 - **Part 6** (import) — done. Found & fixed: Part 1's firstName/lastName fixed
   fields were offered as mapping targets but silently dropped in row-building
-  (only kind=custom was read). Combined-name column now auto-splits (same rule
-  as the Part 1 script, extracted to `participant-name.ts`). Multiple guardian
-  e-mail columns now create multiple guardians instead of one garbled
-  concatenated string. Diacritics-insensitive duplicate matching + DOB
-  disambiguation. NOT done: a full per-row post-import result table (the
-  aggregate summary + live preview table already cover most of that ground).
-- **Part 7** (Health module fixes) — done. All 7 "Follow-up" strings renamed to
-  "Následná kontrola"; "Zobrazit podrobnosti…" -> "Zdravotní poznámky dítěte";
-  incident-form date-outside-event hint (never blocks). Participant detail:
-  actions grouped as buttons; "Upravit údaje"/"Upravit poznámky" merged into
-  one "Upravit" that opens the central roster's section editor -- the
-  duplicate inline health-notes editor on this page is DELETED (`FieldInput`
-  gained a `multiline` prop so its nicer textarea isn't lost); "Smazat" moved
-  to a "⋯" overflow menu; "Otevřít složku na Disku" only shows when the
-  event actually has a participants/export root folder configured; guardians
-  here are now editable in place too (found the same missing-phone gap Part
-  2 fixed on the roster). Meds grid: "today" falls back to the whole event
-  range when today is outside it (was clamping to one boundary day), with an
-  info banner explaining why; export controls got visible labels. Sent-mail
-  log (`ParentEmailLogTable`, already shared by 2 pages) gained Typ/Předmět
-  columns (`ParentEmailLog.subject`, additive migration, wired into all 9
-  log-creation call sites). Already satisfied: meds grid scroll+sticky column
-  (the rotated slot labels are a separate, coexisting detail).
-- **Part 8 + 11-B** (Mail inbox) — done. Inbox now loads on open (was a manual
-  "Načíst e-maily" click); default sort newest-first ("Od nejstarších" is the
-  alternative). After processing/deleting one message, the next one is no
-  longer auto-opened with its actions pre-ticked -- an empty state with a
-  short success summary instead, and a deliberate pick for what's next.
-  Message detail: participant-dependent actions (save attachments/reply/
-  update status) only pre-check when a participant was actually detected;
-  "Provést vybrané akce" is disabled until a participant is picked or only
-  "Přesunout e-mail" is requested; "Smazat e-mail" is a secondary text
-  action next to the primary button, not a second primary-looking one.
-  Detection gained a fallback (11-B.7): when no name matches, check whether
-  the sender's address belongs to a known guardian and suggest that child
-  ("Odesílatel je zákonný zástupce: X"). Per-attachment child select now
-  falls back to (and displays) the top-level participant instead of showing
-  empty while silently using it anyway; its document-type dropdown offers
-  every active type, not just ones with a filenameSuffix configured (that's
-  only for the auto-guess, not eligibility). Guardian dedup on reply
-  (11-B.8) already matched case-insensitively by e-mail; the real gap was a
-  newly-created guardian never getting a name -- now uses the sender's "From"
-  display name. Reply/bulk-status checklist lines (shared renderer): dropped
-  the trailing comma, added the word next to the icon ("✔ Přihláška —
-  doručeno"), and the closing now always has a blank line before it (was
-  only when a note/questionnaire link happened to supply one). Questionnaire
-  URL line now genuinely omits itself when unset (new `questionnaire_line`
-  clause variable, same trick as `registration_deadline`). Bulk status
-  dialog: now lists every active participant (not just ones with a valid
-  recipient), shows each row's recipient address(es) or a ⚠ warning, and
-  only preselects rows that are both incomplete AND have one. Script
-  `fix-registration-acceptance-template.ts` renamed/generalized to
-  `fix-stale-default-email-templates.ts` (now covers both rewritten
-  defaults). Fixed two more of the `{count}` Czech-plural bugs
+  (only kind=custom was read). Combined-name column now auto-splits; multiple
+  guardian e-mail columns now create multiple guardians instead of one
+  garbled concatenated string; diacritics-insensitive duplicate matching +
+  DOB disambiguation. NOT done: a full per-row post-import result table.
+- **Part 7** (Health module fixes) — done. "Follow-up" strings renamed to
+  "Následná kontrola"; incident-form date-outside-event hint (never blocks).
+  Participant detail: actions grouped as buttons, "Upravit" merged into one
+  link opening the central roster's section editor -- the duplicate inline
+  health-notes editor on this page is DELETED (`FieldInput` gained a
+  `multiline` prop so its textarea UX isn't lost); "Smazat" moved to a "⋯"
+  overflow menu; guardians here now editable in place too (same
+  missing-phone gap Part 2 fixed on the roster). Meds grid: "today" falls
+  back to the whole event range when today is outside it. Sent-mail log
+  gained Typ/Předmět columns (`ParentEmailLog.subject`, additive migration).
+- **Part 8 + 11-B** (Mail inbox) — done. Inbox loads on open (was a manual
+  click) with newest-first default sort; after processing/deleting a
+  message it no longer auto-advances into the next one pre-ticked -- an
+  empty state with a short summary instead. Actions only pre-check when a
+  participant was actually detected; "Smazat e-mail" is a secondary text
+  link, not a second primary button. Detection gained a fallback (11-B.7):
+  sender address matched against known guardian e-mails when no name
+  matches. Newly-created guardians (on reply) now get a name from the
+  sender's "From" header (was always blank) (11-B.8). Reply/bulk-status
+  checklist lines: doručeno/chybí wording + spacing fixed; questionnaire-URL
+  line now self-omits when unset (`questionnaire_line`, same trick as
+  `registration_deadline`). Bulk status dialog lists every active
+  participant with its real recipient address(es) or a ⚠ warning, not just
+  ones already known-valid. Fixed two more `{count}`-plural bugs
   (`bulkStatusModal.confirmSend`, `composeEmailModal.recipientCount`).
-  NOT done: showing real (not dummy) recipient addresses in the
-  registration-accept ComposeEmailModal specifically (11-A.4) -- same idea
-  as the bulk-status fix above, not yet built there; "syntactically valid
-  e-mail" isn't separately validated beyond the existing regex check already
-  used elsewhere.
-- **Part 9, 10 §3-7, 11 A/C/D/F/G/H**: pending.
+  NOT done: real recipient list in the accept-dialog ComposeEmailModal
+  (11-A.4, same idea, different dialog).
+- **Part 9 + 11-C/D + 11-G (partial)** — done. Event page shows "Podepsáno
+  jako: {name}" under the sender-mailbox control with a link to personal
+  settings (Part 7's own per-user settings, already shipped separately).
+  Found & fixed (11-C): the roster's document-received counter counted
+  ROWS (files), not distinct types — 3 files of the same type pushed a
+  participant's count past the event's actual document-type total; now
+  keyed by a `participantId -> Set<eventListItemId>` map. New "Dokumenty"
+  section (11-D) on the health participant-detail page, grouped by type
+  with filename/received-at/received-via/Drive link, backed by
+  `GET /api/participants/[id]/documents` (health-or-mail gated, same as
+  the rest of this page). 11-G native-file-input fix: the mail compose
+  dialog's raw `<input type="file">` (showed the browser's own "Choose
+  File / No file chosen") replaced with the same styled-button pattern
+  already used by the incident form's photo picker, plus a filename/
+  "Žádný soubor nevybrán" line next to it. Also fixed a literal
+  `{{proměnných}}` left in stored translation copy (documentVariablesPage
+  .intro) — currently an orphaned/unused key, fixed as a precaution.
+- **Pending**: 10 §3-7 (e-mail template catalog w/ Výchozí/Upraveno
+  badges + org-compare, most of §5.1 help text, Přehled akce — optional),
+  11-A.4 (real recipient list in the accept-dialog ComposeEmailModal),
+  11-F (incident photo/marker/body-location UI polish), rest of 11-G
+  (Překlady page "Chybějící překlady" filter+search), 11-H (verify event
+  switcher persists on org pages — likely already correct, needs only
+  checking, no code expected).
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum
@@ -167,5 +161,8 @@ lastName split, a `contact_email` computed type, a leftover duplicate
 7. `scripts/fix-tshirt-size-casing.ts --apply`.
 8. `scripts/rename-medsnotes-label.ts --apply`.
 9. `scripts/fix-stale-default-email-templates.ts --apply`.
-10. `scripts/seed-missing-translations.ts`.
-11. `scripts/update-translations-text-changes.ts --apply`.
+10. `prisma migrate deploy` (again) — `ParentEmailLog.subject` (Part 7),
+    additive.
+11. `scripts/seed-missing-translations.ts` — run again, idempotent.
+12. `scripts/update-translations-text-changes.ts --apply` — run again,
+    idempotent.

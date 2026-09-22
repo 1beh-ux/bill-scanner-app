@@ -65,6 +65,11 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   // earlier bills-page batch.
   { key: "bulkStatusModal.confirmSend", cs: "Opravdu chcete odeslat e-mail vybraným rodičům (počet: {count})? Tuto akci nelze vzít zpět.", en: "Send this e-mail to the selected guardians (count: {count})? This action can't be undone." },
   { key: "composeEmailModal.recipientCount", cs: "Příjemci (zákonní zástupci), počet účastníků: {count}", en: "Recipients (guardians), participant count: {count}" },
+  // Part 11-G: literal "{{...}}" in stored UI copy reads as a broken/unresolved placeholder
+  // to anyone looking at it, even where (as here) t() happens to never touch it because no
+  // matching var is ever passed. Not currently rendered anywhere in the app (orphaned key),
+  // fixed anyway so it's safe if it's ever wired back in.
+  { key: "documentVariablesPage.intro", cs: "Mapování proměnných použitých v šablonách dokumentů (přihláška, posudek) na údaje účastníka, zákonného zástupce nebo akce.", en: "Mapping of variables used in document templates (application form, health certificate) to participant, guardian, or event data." },
   // Reveals the child's health notes (allergies etc.) -- "Zobrazit podrobnosti…" didn't say so.
   { key: "incidentForm.showParticipantSummary", cs: "Zdravotní poznámky dítěte", en: "Child's health notes" },
   // Part 3 terminology: "Katalog léků" (event/org settings) / "Plán léků" (per

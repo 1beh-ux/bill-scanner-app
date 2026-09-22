@@ -191,14 +191,22 @@ export default function ComposeEmailModal({
               </div>
             )}
             {emailOn && (
-            <label className="text-[13px] text-ink-secondary">
-              {t("composeEmailModal.attachmentLabel")}
-              <input
-                type="file"
-                onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
-                className="mt-1 block w-full text-[13px]"
-              />
-            </label>
+            <div className="text-[13px] text-ink-secondary">
+              <div className="mb-1">{t("composeEmailModal.attachmentLabel")}</div>
+              <div className="flex items-center gap-2">
+                <label className="cursor-pointer rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist">
+                  {t("incidentForm.choosePhoto")}
+                  <input
+                    type="file"
+                    onChange={(e) => setAttachment(e.target.files?.[0] ?? null)}
+                    className="hidden"
+                  />
+                </label>
+                <span className="truncate text-[13px] text-ink-secondary">
+                  {attachment ? attachment.name : t("composeEmailModal.noFileChosen")}
+                </span>
+              </div>
+            </div>
             )}
             {emailOn && <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>}
 
