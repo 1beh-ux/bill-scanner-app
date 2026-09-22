@@ -12,7 +12,6 @@ const selectClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
-const btnDanger = "rounded-lg bg-red-600 px-3 py-2 text-[13px] text-white hover:bg-red-700 disabled:opacity-50";
 
 function fmtDate(iso: string): string {
   if (!iso) return "";
@@ -27,9 +26,19 @@ function normalize(s: string): string {
   return (s || "").toLowerCase();
 }
 
-// Port of the old app's detectChildFromEmail: longest participant-name
-// substring match against subject+body wins.
-function detectParticipant(message: MailMessage, participants: Participant[]): string | null {
+function extractSenderEmail(from: string): string {
+  const m = from.match(/<([^>]+)>/);
+  return normalize((m ? m[1] : from).trim());
+}
+
+type DetectResult = { participantId: string | null; participantName: string | null; reason: "name" | "guardian_email" | null };
+
+// Port of the old app's detectChildFromEmail (longest participant-name substring match
+// against subject+body), plus a fallback (Part 11-B.7) the old app didn't have: if no
+// name matches, check whether the sender's own address belongs to a known guardian --
+// often stronger evidence than a name mention, and covers a subject with no name in it
+// at all.
+function detectParticipant(message: MailMessage, participants: Participant[]): DetectResult {
   const text = normalize(`${message.subject} ${message.bodySnippet}`);
   let best: Participant | null = null;
   for (const p of participants) {
@@ -38,7 +47,14 @@ function detectParticipant(message: MailMessage, participants: Participant[]): s
       if (!best || name.length > normalize(best.name).length) best = p;
     }
   }
-  return best?.id ?? null;
+  if (best) return { participantId: best.id, participantName: best.name, reason: "name" };
+
+  const senderEmail = extractSenderEmail(message.from);
+  if (senderEmail) {
+    const byGuardian = participants.find((p) => p.guardians.some((g) => normalize(g.email) === senderEmail));
+    if (byGuardian) return { participantId: byGuardian.id, participantName: byGuardian.name, reason: "guardian_email" };
+  }
+  return { participantId: null, participantName: null, reason: null };
 }
 
 // Port of renderAttachments' filename-keyword guess: split each document
@@ -76,7 +92,7 @@ export default function MailDetailPanel({
 
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [participantSearch, setParticipantSearch] = useState("");
-  const [autoDetected, setAutoDetected] = useState(false);
+  const [detectReason, setDetectReason] = useState<DetectResult["reason"]>(null);
   const [note, setNote] = useState("");
   const [attachmentDocType, setAttachmentDocType] = useState<Record<string, string>>({});
   const [attachmentParticipant, setAttachmentParticipant] = useState<Record<string, string>>({});
@@ -96,8 +112,6 @@ export default function MailDetailPanel({
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const attachableDocTypes = useMemo(() => documentTypes.filter((d) => d.data?.filenameSuffix), [documentTypes]);
-
   const filteredParticipants = useMemo(() => {
     const q = normalize(participantSearch);
     return q ? participants.filter((p) => normalize(p.name).includes(q)) : participants;
@@ -105,16 +119,18 @@ export default function MailDetailPanel({
 
   // Reset all per-message working state whenever a different email is selected.
   useEffect(() => {
-    const detected = detectParticipant(message, participants);
+    const { participantId: detected, reason } = detectParticipant(message, participants);
     setParticipantId(detected);
-    setAutoDetected(Boolean(detected));
+    setDetectReason(reason);
     setParticipantSearch("");
     setNote("");
     setFlagOnlyIds(new Set());
     setReplyText("");
     setReplyHint("");
     setError(null);
-    setActions({ saveAttachments: true, sendReply: true, moveEmail: true, updateStatus: true });
+    // Part 8/11-B.5: only pre-check participant-dependent actions when a participant was
+    // actually auto-detected -- moving the mail is never participant-dependent, so it stays on.
+    setActions({ saveAttachments: !!detected, sendReply: !!detected, moveEmail: true, updateStatus: !!detected });
 
     const nextDocType: Record<string, string> = {};
     const nextParticipant: Record<string, string> = {};
@@ -242,6 +258,11 @@ export default function MailDetailPanel({
     }
   }
 
+  // Part 8: "Provést vybrané akce" stays disabled until either a participant is picked, or
+  // the only action requested is moving the e-mail (which never needs one).
+  const onlyMoveRequested = actions.moveEmail && !actions.saveAttachments && !actions.sendReply && !actions.updateStatus;
+  const canExecute = !!participantId || onlyMoveRequested;
+
   function toggleFlagOnly(id: string, checked: boolean) {
     setFlagOnlyIds((prev) => {
       const next = new Set(prev);
@@ -282,7 +303,7 @@ export default function MailDetailPanel({
           value={participantId ?? ""}
           onChange={(e) => {
             setParticipantId(e.target.value || null);
-            setAutoDetected(false);
+            setDetectReason(null);
           }}
           className={selectClass}
         >
@@ -296,9 +317,11 @@ export default function MailDetailPanel({
       </div>
       <p className="mb-4 text-[12px] text-ink-secondary">
         {participantId
-          ? autoDetected
-            ? t("mailDetail.autoDetectedHint")
-            : t("mailDetail.manuallySelectedHint")
+          ? detectReason === "guardian_email"
+            ? t("mailDetail.guardianEmailDetectedHint", { name: participants.find((p) => p.id === participantId)?.name ?? "" })
+            : detectReason === "name"
+              ? t("mailDetail.autoDetectedHint")
+              : t("mailDetail.manuallySelectedHint")
           : t("mailDetail.notDetectedHint")}
       </p>
 
@@ -317,7 +340,10 @@ export default function MailDetailPanel({
               </div>
               <div className="flex gap-2">
                 <select
-                  value={attachmentParticipant[att.attachmentId] ?? ""}
+                  // Part 8/11-B.4: falls back to (and so displays) the top-level participant
+                  // when this attachment has no override of its own -- execute/preview already
+                  // resolve it the same way, this just stops the select from lying about it.
+                  value={attachmentParticipant[att.attachmentId] || participantId || ""}
                   onChange={(e) =>
                     setAttachmentParticipant((prev) => ({ ...prev, [att.attachmentId]: e.target.value }))
                   }
@@ -336,7 +362,10 @@ export default function MailDetailPanel({
                   className={selectClass}
                 >
                   <option value="">{t("mailDetail.ignoreOption")}</option>
-                  {attachableDocTypes.map((d) => (
+                  {/* Part 8/11-B.5: every active document type is offerable here, not just
+                      ones with a filenameSuffix configured (that's only used for the
+                      auto-guess below, not as a hard requirement for being selectable). */}
+                  {documentTypes.map((d) => (
                     <option key={d.id} value={d.id}>
                       {documentDisplayName(d)}
                     </option>
@@ -420,12 +449,14 @@ export default function MailDetailPanel({
         </div>
       )}
 
-      <div className="mt-2 flex justify-between gap-2">
-        <button onClick={handleDelete} disabled={deleting} className={btnDanger}>
-          {t("mailDetail.deleteButton")}
-        </button>
-        <button onClick={handleExecute} disabled={saving} className={btnPrimary}>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <button onClick={handleExecute} disabled={saving || !canExecute} className={btnPrimary}>
           {saving ? t("common.loading") : t("mailDetail.executeButton")}
+        </button>
+        {/* Part 7/8: a destructive action, not a second primary-looking button next to the
+            main one. */}
+        <button onClick={handleDelete} disabled={deleting} className="text-[13px] text-red-600 hover:underline disabled:opacity-50">
+          {t("mailDetail.deleteButton")}
         </button>
       </div>
 

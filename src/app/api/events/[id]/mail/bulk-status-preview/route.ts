@@ -7,10 +7,14 @@ import { resolveEmailTemplate, substituteVariables, MAIL_HELPER_BULK_STATUS_PURP
 import { substituteDummyTemplateValues } from "@/lib/email-template-preview";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
 
-// Mirrors the old app's api_prepareBulk -- one row per participant with a
-// communicating guardian, per-document-type received/missing, defaultSend
-// = not fully complete (so finished families aren't re-contacted), plus a
-// dummy-value template preview.
+const EMAIL_RE = /^\S+@\S+\.\S+$/;
+
+// Mirrors the old app's api_prepareBulk -- one row per active participant (not just
+// ones with a valid recipient, Part 8: a participant with no deliverable e-mail is
+// shown, flagged, and simply not preselected, rather than silently vanishing from
+// the list), per-document-type received/missing, defaultSend = not fully complete
+// AND has at least one receivesCommunications guardian with a syntactically valid
+// address, plus a dummy-value template preview.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,8 +29,8 @@ export async function GET(
 
   const documentTypes = await getActiveDocumentTypes(eventId);
   const participants = await prisma.participant.findMany({
-    where: { eventId, active: true, guardians: { some: { receivesCommunications: true } } },
-    select: { id: true, name: true },
+    where: { eventId, active: true },
+    select: { id: true, name: true, guardians: { where: { receivesCommunications: true }, select: { email: true } } },
     orderBy: { name: "asc" },
   });
 
@@ -34,11 +38,13 @@ export async function GET(
     participants.map(async (p) => {
       const receivedItemIds = await getReceivedItemIds(p.id);
       const allComplete = documentTypes.every((d) => receivedItemIds.has(d.id));
+      const recipientEmails = p.guardians.map((g) => g.email).filter((e) => EMAIL_RE.test(e));
       return {
         participantId: p.id,
         participantName: p.name,
         allComplete,
-        defaultSend: !allComplete,
+        recipientEmails,
+        defaultSend: !allComplete && recipientEmails.length > 0,
         documents: documentTypes.map((d) => ({ eventListItemId: d.id, received: receivedItemIds.has(d.id) })),
       };
     })

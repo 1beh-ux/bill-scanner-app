@@ -130,7 +130,15 @@ export function extractEmailAddress(fromHeaderValue: string): string {
   return (match ? match[1] : fromHeaderValue).trim();
 }
 
-export async function getReplyToAddress(senderEmail: string, messageId: string): Promise<string> {
+// The "Test Rodič" part of `"Test Rodič" <rodic@example.com>` -- "" when the header is
+// just a bare address with no display name.
+export function extractDisplayName(fromHeaderValue: string): string {
+  const match = fromHeaderValue.match(/^\s*"?([^"<]*?)"?\s*<[^>]+>/);
+  return (match ? match[1] : "").trim();
+}
+
+/** Part 8/11-B.8: also returns the display name, used to name a newly-created guardian. */
+export async function getReplyToAddress(senderEmail: string, messageId: string): Promise<{ email: string; name: string }> {
   const gmail = await getGmailClient(senderEmail);
   const res = await gmail.users.messages.get({
     userId: "me",
@@ -139,7 +147,8 @@ export async function getReplyToAddress(senderEmail: string, messageId: string):
     metadataHeaders: ["From"],
   });
   const headers = (res.data.payload?.headers || []) as GmailHeader[];
-  return extractEmailAddress(headerValue(headers, "From"));
+  const from = headerValue(headers, "From");
+  return { email: extractEmailAddress(from), name: extractDisplayName(from) };
 }
 
 export async function getMessageAttachmentContent(

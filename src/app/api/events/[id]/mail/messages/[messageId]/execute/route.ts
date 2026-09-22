@@ -18,15 +18,17 @@ const DEFAULT_DONE_LABEL = "MailHelperDone";
 type AttachmentAction = { attachmentId: string; filename: string; mimeType: string; eventListItemId: string | null; participantId: string };
 type ExecuteActions = { saveAttachments: boolean; sendReply: boolean; moveEmail: boolean; updateStatus: boolean };
 
-async function findOrCreateGuardian(participantId: string, email: string): Promise<string> {
+async function findOrCreateGuardian(participantId: string, email: string, name: string): Promise<string> {
   const normalized = email.trim().toLowerCase();
   const existing = await prisma.participantGuardian.findFirst({
     where: { participantId, email: { equals: normalized, mode: "insensitive" } },
   });
   if (existing) return existing.id;
 
+  // Part 8/11-B.8: a genuinely new guardian gets the sender's display name instead of
+  // being created blank -- "Test Rodič <rodic@example.com>" used to create a nameless row.
   const created = await prisma.participantGuardian.create({
-    data: { participantId, email: normalized, receivesCommunications: true },
+    data: { participantId, email: normalized, name: name || null, receivesCommunications: true },
   });
   return created.id;
 }
@@ -157,8 +159,8 @@ export async function POST(
     }
     try {
       const to = await getReplyToAddress(senderEmail, messageId);
-      await replyToMessage(senderEmail, { messageId, to, subject, body: replyText, fromName: user.displayName });
-      const guardianId = await findOrCreateGuardian(participantId, to);
+      await replyToMessage(senderEmail, { messageId, to: to.email, subject, body: replyText, fromName: user.displayName });
+      const guardianId = await findOrCreateGuardian(participantId, to.email, to.name);
       await prisma.parentEmailLog.create({
         data: {
           participantId,
@@ -171,9 +173,9 @@ export async function POST(
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      const to = await getReplyToAddress(senderEmail, messageId).catch(() => "");
-      if (to) {
-        const guardianId = await findOrCreateGuardian(participantId, to);
+      const to = await getReplyToAddress(senderEmail, messageId).catch(() => ({ email: "", name: "" }));
+      if (to.email) {
+        const guardianId = await findOrCreateGuardian(participantId, to.email, to.name);
         await prisma.parentEmailLog.create({
           data: {
             participantId,

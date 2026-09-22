@@ -9,6 +9,7 @@ type BulkRow = {
   participantId: string;
   participantName: string;
   allComplete: boolean;
+  recipientEmails: string[];
   defaultSend: boolean;
   documents: { eventListItemId: string; received: boolean }[];
 };
@@ -129,6 +130,7 @@ export default function BulkStatusModal({
                   <tr className="border-b border-mist text-left">
                     <th className="p-2 font-medium text-ink-secondary">{t("bulkStatusModal.colSend")}</th>
                     <th className="p-2 font-medium text-ink-secondary">{t("bulkStatusModal.colParticipant")}</th>
+                    <th className="p-2 font-medium text-ink-secondary">{t("bulkStatusModal.colRecipients")}</th>
                     {documentTypes.map((d) => (
                       <th key={d.id} className="p-2 font-medium text-ink-secondary">
                         {d.name}
@@ -147,6 +149,15 @@ export default function BulkStatusModal({
                         />
                       </td>
                       <td className="p-2 text-ink">{r.participantName}</td>
+                      <td className="p-2">
+                        {r.recipientEmails.length > 0 ? (
+                          <span className="text-ink-secondary">{r.recipientEmails.join(", ")}</span>
+                        ) : (
+                          <span className="text-amber-700" title={t("bulkStatusModal.noRecipientHint")}>
+                            ⚠ {t("bulkStatusModal.noRecipient")}
+                          </span>
+                        )}
+                      </td>
                       {documentTypes.map((d) => {
                         const doc = r.documents.find((x) => x.eventListItemId === d.id);
                         return (

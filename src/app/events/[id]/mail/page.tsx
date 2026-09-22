@@ -26,7 +26,8 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
   const [messages, setMessages] = useState<MailMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [count, setCount] = useState(25);
-  const [sort, setSort] = useState<"oldest" | "newest">("oldest");
+  // Part 8: default sort is newest first ("Od nejstarších" is the alternative, not the default).
+  const [sort, setSort] = useState<"oldest" | "newest">("newest");
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [inboxError, setInboxError] = useState<string | null>(null);
 
@@ -36,6 +37,10 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
 
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
+  // Part 8/11-B.3: after processing one message, don't auto-open the next one with its
+  // action checkboxes pre-ticked (including "Smazat e-mail") -- show an empty state with
+  // a short success summary instead, and let the admin deliberately pick what's next.
+  const [lastActionSummary, setLastActionSummary] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
@@ -52,6 +57,9 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
     fetch(`/api/events/${eventId}/mail/participants`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setParticipants);
+    // Part 8: load on open instead of waiting for a manual "Načíst e-maily" click.
+    loadMessages();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   function getSortedMessages(list: MailMessage[] = messages): MailMessage[] {
@@ -62,13 +70,6 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
       return sort === "oldest" ? da - db : db - da;
     });
     return arr;
-  }
-
-  function getNextMessageId(currentId: string): string | null {
-    const sorted = getSortedMessages();
-    const idx = sorted.findIndex((m) => m.messageId === currentId);
-    if (idx < 0) return sorted[0]?.messageId ?? null;
-    return sorted[idx + 1]?.messageId ?? sorted[idx - 1]?.messageId ?? null;
   }
 
   async function loadMessages() {
@@ -94,10 +95,16 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
     }
   }
 
-  function removeMessageAndAdvance(messageId: string) {
-    const next = getNextMessageId(messageId);
+  function handleExecuted(messageId: string) {
     setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
-    setSelectedMessageId(next !== messageId ? next : null);
+    setSelectedMessageId(null);
+    setLastActionSummary(t("mailDetail.executedSummary"));
+  }
+
+  function handleDeleted(messageId: string) {
+    setMessages((prev) => prev.filter((m) => m.messageId !== messageId));
+    setSelectedMessageId(null);
+    setLastActionSummary(t("mailDetail.deletedSummary"));
   }
 
   function toggleSelectedId(id: string, checked: boolean) {
@@ -139,7 +146,7 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
   return (
     <div className="mx-auto max-w-[1400px] p-4 md:p-8">
       <a href={`/events/${eventId}`} className="text-[13px] text-ink-secondary hover:text-ink">
-        ← {t("nav.eventSetup")}
+        ← {t("mailPage.backLink")}
       </a>
 
       <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-2">
@@ -183,7 +190,10 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
             sort={sort}
             onSortChange={setSort}
             selectedMessageId={selectedMessageId}
-            onSelectMessage={setSelectedMessageId}
+            onSelectMessage={(id) => {
+              setSelectedMessageId(id);
+              setLastActionSummary(null);
+            }}
             selectMode={selectMode}
             onToggleSelectMode={() => {
               setSelectMode((v) => !v);
@@ -206,11 +216,14 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
               message={selectedMessage}
               documentTypes={documentTypes}
               participants={participants}
-              onExecuted={removeMessageAndAdvance}
-              onDeleted={removeMessageAndAdvance}
+              onExecuted={handleExecuted}
+              onDeleted={handleDeleted}
             />
           ) : (
-            <p className="text-[13px] text-ink-secondary">{t("mailDetail.emptyHint")}</p>
+            <div className="flex flex-col gap-2">
+              {lastActionSummary && <p className="text-[13px] text-pine">{lastActionSummary}</p>}
+              <p className="text-[13px] text-ink-secondary">{t("mailDetail.emptyHint")}</p>
+            </div>
           )}
         </div>
       </div>

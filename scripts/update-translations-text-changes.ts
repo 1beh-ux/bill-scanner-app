@@ -60,6 +60,11 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   { key: "bulkSendSummaries.colIncidents", cs: "Záznamy", en: "Records" },
   { key: "incidentsPage.detailButton", cs: "Podrobnosti", en: "Details" },
   { key: "medChecklistPage.empty", cs: "Nikdo nemá plán léků.", en: "Nobody has a medication plan." },
+  // Part 8/11-A.4: {count} needing Czech grammatical agreement it can't get from plain
+  // interpolation -- same "state the count instead of inflecting around it" fix as the
+  // earlier bills-page batch.
+  { key: "bulkStatusModal.confirmSend", cs: "Opravdu chcete odeslat e-mail vybraným rodičům (počet: {count})? Tuto akci nelze vzít zpět.", en: "Send this e-mail to the selected guardians (count: {count})? This action can't be undone." },
+  { key: "composeEmailModal.recipientCount", cs: "Příjemci (zákonní zástupci), počet účastníků: {count}", en: "Recipients (guardians), participant count: {count}" },
   // Reveals the child's health notes (allergies etc.) -- "Zobrazit podrobnosti…" didn't say so.
   { key: "incidentForm.showParticipantSummary", cs: "Zdravotní poznámky dítěte", en: "Child's health notes" },
   // Part 3 terminology: "Katalog léků" (event/org settings) / "Plán léků" (per

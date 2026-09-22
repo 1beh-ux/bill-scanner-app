@@ -29,7 +29,9 @@ export function documentDisplayName(docType: DocumentListItem): string {
 }
 
 // Shared by the single-reply template and the bulk-status checklist block --
-// same "- ✅/❌ {displayName}," line shape in both.
+// same "- icon displayName — word" line shape in both (Part 5/8/11-B.6: icon
+// plus word, since icon-only isn't accessible without colour/emoji support;
+// no trailing comma -- one item per line is enough separation on its own).
 export function buildDocumentChecklistLines(
   documentTypes: DocumentListItem[],
   receivedItemIds: Set<string>,
@@ -38,15 +40,16 @@ export function buildDocumentChecklistLines(
   return documentTypes.map((docType) => {
     const displayName = documentDisplayName(docType);
     const isComplete = receivedItemIds.has(docType.id);
-    const icon = isComplete ? "✅" : "❌";
+    const icon = isComplete ? "✔" : "✖";
+    const word = isComplete ? "doručeno" : "chybí";
 
     // APPLICATION is an event-configured convention (EventListItem.key),
     // not a typed field -- see mail-helper-module-design.md and the
     // foundation-session plan's judgment call #3.
     if (docType.key === "APPLICATION" && isComplete && opts.isFirstTimeApplication) {
-      return `- ${icon} ${displayName} (tímto potvrzujeme místo na táboře),`;
+      return `- ${icon} ${displayName} — ${word} (tímto potvrzujeme místo na táboře)`;
     }
-    return `- ${icon} ${displayName},`;
+    return `- ${icon} ${displayName} — ${word}`;
   });
 }
 
@@ -63,12 +66,13 @@ export function buildSingleReplyText(opts: {
     isFirstTimeApplication: opts.isFirstTimeApplication,
   });
 
+  // Leading blank line dropped here -- the unconditional one right after docLines below
+  // now covers it, whether or not there's a questionnaire link or note.
   const url = (opts.questionnaireUrl || "").trim();
-  const questionnaireLines =
-    opts.questionnaireNeeded && url ? ["", `Odkaz na vyplnění dotazníku: ${url}.`, ""] : [];
+  const questionnaireLines = opts.questionnaireNeeded && url ? [`Odkaz na vyplnění dotazníku: ${url}.`, ""] : [];
 
   const note = (opts.note || "").trim();
-  const noteLines = note ? ["", note, ""] : [];
+  const noteLines = note ? [note, ""] : [];
 
   return [
     "Dobrý den,",
@@ -76,6 +80,10 @@ export function buildSingleReplyText(opts: {
     "Děkujeme za zaslání a posíláme potvrzení o aktuálním stavu dokumentů:",
     "",
     ...docLines,
+    // Part 11-B.6: unconditional, not just when a questionnaire link or note happens to
+    // supply one -- without a note/questionnaire the closing used to run on immediately
+    // after the last checklist line.
+    "",
     ...questionnaireLines,
     ...noteLines,
     "Děkujeme za důvěru,",

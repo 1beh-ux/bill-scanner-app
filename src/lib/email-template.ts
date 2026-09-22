@@ -39,7 +39,9 @@ posíláme průběžnou informaci ke stavu podkladů pro dítě: {{participant_n
 
 {{document_checklist}}
 
-Pokud něco chybí, prosím o poslání v odpovědi na tento email. Odkaz na vyplnění dotazníku: {{questionnaire_url}}.
+Pokud něco chybí, prosím o poslání v odpovědi na tento email.
+
+{{questionnaire_line}}
 
 Děkujeme,
 {{sender_name}}`,

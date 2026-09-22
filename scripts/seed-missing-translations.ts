@@ -320,6 +320,15 @@ export const ROWS: Row[] = [
   { key: "medGridPage.outsideEventHint", cs: "Dnes je mimo termín akce – zobrazena celá akce.", en: "Today is outside the event dates – showing the whole event instead." },
   { key: "pdfExport.modeLabel", cs: "Typ výtisku", en: "Print type" },
   { key: "pdfExport.formatLabel", cs: "Formát papíru", en: "Paper format" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 8/11-B: Mail inbox --------------------
+  { key: "mailPage.backLink", cs: "Akce", en: "Event" },
+  { key: "mailDetail.executedSummary", cs: "E-mail byl zpracován.", en: "The e-mail was processed." },
+  { key: "mailDetail.deletedSummary", cs: "E-mail byl smazán.", en: "The e-mail was deleted." },
+  { key: "mailDetail.guardianEmailDetectedHint", cs: "Odesílatel je zákonný zástupce: {name}", en: "Sender is a guardian of: {name}" },
+  { key: "bulkStatusModal.colRecipients", cs: "Příjemci", en: "Recipients" },
+  { key: "bulkStatusModal.noRecipient", cs: "bez příjemce", en: "no recipient" },
+  { key: "bulkStatusModal.noRecipientHint", cs: "Žádný zákonný zástupce s platným e-mailem, který má dostávat e-maily.", en: "No guardian with a valid e-mail flagged to receive e-mails." },
 ];
 
 async function main() {

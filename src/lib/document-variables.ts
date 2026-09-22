@@ -137,6 +137,12 @@ export async function resolveVariables(
   const text: Record<string, string> = {
     camp_name: event.name,
     questionnaire_url: event.mailQuestionnaireUrl ?? "",
+    // Same "whole clause, vanishes cleanly when unset" trick as registration_deadline
+    // below -- Part 8: "questionnaire URL line is omitted when the event has none",
+    // which a bare {{questionnaire_url}} can't do inside fixed surrounding text.
+    questionnaire_line: event.mailQuestionnaireUrl
+      ? `Odkaz na vyplnění dotazníku: ${event.mailQuestionnaireUrl}.`
+      : "",
     // A full clause, not a bare date: with no real conditional-block templating
     // ({{#if}}...{{/if}}), a bare date would leave a dangling "do ." sentence
     // fragment when unset. This lets the default template just place
