@@ -3,7 +3,7 @@ import { resolveEmailTemplate, substituteVariables, MAIL_HELPER_BULK_STATUS_PURP
 import { sendPlainTextEmail } from "@/lib/mail";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
-import { resolveVariables } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail } from "@/lib/document-variables";
 
 export interface BulkStatusSendResult {
   participantId: string;
@@ -55,6 +55,7 @@ export async function sendBulkStatusUpdates(
       document_checklist: buildDocumentChecklistText(documentTypes, receivedItemIds),
       questionnaire_url: event.mailQuestionnaireUrl ?? "",
       sender_name: senderDisplayName,
+      contact_email: resolveContactEmail(participant),
     };
     const subject = substituteVariables(templateSubject, vars);
     const body = substituteVariables(templateBody, vars);

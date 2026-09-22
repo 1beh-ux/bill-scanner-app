@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
-import { resolveVariables, ensureRegistrationNumber } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, ensureRegistrationNumber } from "@/lib/document-variables";
 import { mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
@@ -190,7 +190,13 @@ export async function sendBulkParticipantEmail(opts: {
       { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
       event
     );
-    const vars = { ...fieldVars, participant_name: participant.name, camp_name: event.name, sender_name: senderDisplayName };
+    const vars = {
+      ...fieldVars,
+      participant_name: participant.name,
+      camp_name: event.name,
+      sender_name: senderDisplayName,
+      contact_email: resolveContactEmail(participant),
+    };
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 import { generateParticipantSummaryPdf } from "@/lib/parent-summary-pdf";
 import { sendParentSummaryEmail } from "@/lib/mail";
-import { resolveVariables } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail } from "@/lib/document-variables";
 
 export interface GuardianSendResult {
   guardianId: string;
@@ -45,6 +45,7 @@ export async function resolveEmailPreview(
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
     sender_name: senderDisplayName,
+    contact_email: resolveContactEmail(participant),
   };
   return {
     subject: substituteVariables(templateSubject, vars),
@@ -112,6 +113,7 @@ export async function sendSummaryToGuardians(
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
     sender_name: senderDisplayName,
+    contact_email: resolveContactEmail(participant),
   };
   const subject = substituteVariables(templateSubject, vars);
   const body = substituteVariables(templateBody, vars);

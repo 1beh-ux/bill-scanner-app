@@ -11,7 +11,7 @@ export type FixedFieldDef = {
   fieldType: ParticipantFieldType;
   label: string;
   defaultSurfaces: ParticipantFieldSurface[];
-  builtinProp?: "name" | "groupName" | "dateOfBirth" | "registrationStatus";
+  builtinProp?: "name" | "firstName" | "lastName" | "groupName" | "dateOfBirth" | "registrationStatus";
   guardianProp?: "name" | "email" | "relationship" | "phone";
   computedType?: ComputedFieldType;
 };
@@ -33,6 +33,26 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     label: "Jméno a příjmení dítěte",
     builtinProp: "name",
     defaultSurfaces: ["list", "health_list", "health_detail", "mail_list", "documents", "import"],
+  },
+  {
+    // New (Part 1 of the participants/settings prompt) -- name/surname split into
+    // dedicated fields, kept separate from the "Name" row above (which stays the
+    // maintained full display name -- see the Participant.name schema comment)
+    // so existing document templates keyed on {{Name}} are untouched.
+    key: "participant_first_name",
+    kind: "builtin",
+    fieldType: "text",
+    label: "Jméno (křestní)",
+    builtinProp: "firstName",
+    defaultSurfaces: ["documents", "import"],
+  },
+  {
+    key: "participant_last_name",
+    kind: "builtin",
+    fieldType: "text",
+    label: "Příjmení",
+    builtinProp: "lastName",
+    defaultSurfaces: ["documents", "import"],
   },
   {
     key: "datum_narozeni",
@@ -91,12 +111,21 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     defaultSurfaces: ["documents", "import"],
   },
   {
+    // Kind changed from "guardian" (plain guardians[0].email) to "computed"
+    // (Part 1: first guardian with receivesCommunications, else the first) --
+    // the key stays "Email" so existing document templates keyed on
+    // {{Email}} keep resolving, just to a better-chosen address.
     key: "Email",
-    kind: "guardian",
+    kind: "computed",
     fieldType: "text",
     label: "Kontaktní e-mail",
+    computedType: "contact_email",
+    // Not used for merge (kind=computed takes over that) -- kept so the import page's
+    // "guardian e-mail" mapping target (matched by guardianProp, see participants/import/
+    // page.tsx) still resolves to this field's key ("Email"); import always writes a real
+    // ParticipantGuardian row, never this computed field.
     guardianProp: "email",
-    defaultSurfaces: ["mail_list", "documents", "import"],
+    defaultSurfaces: ["list", "mail_list", "documents", "import"],
   },
   {
     key: "price",

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
+import { fullNameFrom } from "@/lib/participant-name";
 
 // Core-identity view of a participant (name/group/dob/registration status)
 // for the central "Seznam účastníků" section, reachable by health OR mail
@@ -27,6 +28,8 @@ export async function GET(
       id: true,
       eventId: true,
       name: true,
+      firstName: true,
+      lastName: true,
       groupName: true,
       dateOfBirth: true,
       registrationStatus: true,
@@ -69,7 +72,15 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth, customFieldValues } = body;
+  const { groupName, dateOfBirth, customFieldValues } = body;
+  const firstName: string | undefined = typeof body.firstName === "string" ? body.firstName.trim() : undefined;
+  const lastName: string | undefined = typeof body.lastName === "string" ? body.lastName.trim() : undefined;
+  // Editing firstName/lastName recomputes `name` from the merged pair (the field not sent
+  // keeps its existing value) so the maintained display name never drifts out of sync.
+  const splitChanged = firstName !== undefined || lastName !== undefined;
+  const name: string | undefined = splitChanged
+    ? fullNameFrom(firstName ?? existing.firstName, lastName ?? existing.lastName)
+    : body.name;
 
   if (name !== undefined && (typeof name !== "string" || !name.trim())) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -98,6 +109,8 @@ export async function PATCH(
     where: { id },
     data: {
       ...(name !== undefined && { name: name.trim() }),
+      ...(firstName !== undefined && { firstName: firstName || null }),
+      ...(lastName !== undefined && { lastName: lastName || null }),
       ...(groupName !== undefined && { groupName: groupName || null }),
       ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
       ...(mergedCustomFieldValues !== undefined && { customFieldValues: mergedCustomFieldValues }),
@@ -105,6 +118,8 @@ export async function PATCH(
     select: {
       id: true,
       name: true,
+      firstName: true,
+      lastName: true,
       groupName: true,
       dateOfBirth: true,
       registrationStatus: true,

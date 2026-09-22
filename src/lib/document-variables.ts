@@ -5,12 +5,14 @@ import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 
 export type ParticipantForMerge = {
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
   groupName: string | null;
   dateOfBirth: Date | null;
   registrationStatus: string;
   customFieldValues: Record<string, string> | null;
   registrationNumber: number | null;
-  guardians: { name: string | null; email: string; relationship: string | null; phone: string | null }[];
+  guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
 };
 
 // Camp-fee membership used to be read from a hardcoded custom-field key;
@@ -46,6 +48,11 @@ function firstGuardian(p: ParticipantForMerge) {
   return p.guardians[0] ?? { name: "", email: "", relationship: "", phone: "" };
 }
 
+/** First guardian flagged to receive communications, else the first guardian at all. */
+export function resolveContactEmail(p: { guardians: { email: string; receivesCommunications: boolean }[] }): string {
+  return p.guardians.find((g) => g.receivesCommunications)?.email ?? p.guardians[0]?.email ?? "";
+}
+
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
   return p.customFieldValues?.[key] === "true";
@@ -75,6 +82,8 @@ export function buildVariableSymbol(p: ParticipantForMerge, e: EventForMerge): s
 
 const BUILTIN_RESOLVERS: Record<string, (p: ParticipantForMerge) => string> = {
   name: (p) => p.name,
+  firstName: (p) => p.firstName ?? "",
+  lastName: (p) => p.lastName ?? "",
   groupName: (p) => p.groupName ?? "",
   dateOfBirth: (p) => formatDate(p.dateOfBirth),
   registrationStatus: (p) => p.registrationStatus,
@@ -151,6 +160,8 @@ export async function resolveVariables(
         text[f.key] = price != null ? `${price} Kč` : "";
       } else if (f.computedType === "variable_symbol") {
         text[f.key] = buildVariableSymbol(participant, event);
+      } else if (f.computedType === "contact_email") {
+        text[f.key] = resolveContactEmail(participant);
       }
     }
   }

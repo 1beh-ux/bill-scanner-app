@@ -465,7 +465,14 @@ model MerchantAlias {
 model Participant {
   id            String    @id @default(uuid())
   eventId       String    @map("event_id")
+  // `name` is kept as the maintained full display name ("Jméno Příjmení",
+  // written from firstName+lastName on every save) so existing readers
+  // (search, sort, exports, {{Name}}) keep working unchanged -- see
+  // src/lib/participant-name.ts. firstName/lastName are null for rows not
+  // yet migrated (scripts/split-participant-names.ts) or left ambiguous.
   name          String
+  firstName     String?   @map("first_name")
+  lastName      String?   @map("last_name")
   groupName     String?   @map("group_name")
   dateOfBirth   DateTime? @map("date_of_birth") @db.Date
   active        Boolean   @default(true)
@@ -561,6 +568,9 @@ enum ComputedFieldType {
   effective_price
   variable_symbol
   payment_qr_image
+  // First guardian with receivesCommunications = true, else the first
+  // guardian -- see resolveContactEmail() in document-variables.ts.
+  contact_email
 }
 
 // Org-wide field definition, synced into EventParticipantField the same

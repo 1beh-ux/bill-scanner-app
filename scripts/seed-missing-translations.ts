@@ -237,6 +237,10 @@ export const ROWS: Row[] = [
   { key: "billModal.error.module_access_denied", cs: "Nemáte přístup k modulu účtenek.", en: "You do not have access to the bills module." },
   { key: "imageEditor.error.not_found", cs: "Účtenka nebyla nalezena.", en: "Bill not found." },
   { key: "imageEditor.error.no_file", cs: "K účtence není přiložen soubor.", en: "This bill has no file attached." },
+
+  // -- Participants/settings/Health/Mail prompt, Part 1: name/surname split -----------------
+  { key: "participantsPage.firstNameLabel", cs: "Jméno", en: "First name" },
+  { key: "participantsPage.lastNameLabel", cs: "Příjmení", en: "Last name" },
 ];
 
 async function main() {

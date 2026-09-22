@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
-import { effectivePriceCzk, buildVariableSymbol } from "@/lib/document-variables";
+import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail } from "@/lib/document-variables";
+import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
 
 type GuardianInput = {
   name?: string;
@@ -31,7 +32,9 @@ export async function GET(
     prisma.participant.findMany({
       where: { eventId },
       orderBy: { name: "asc" },
-      include: { guardians: { where: { receivesCommunications: true }, take: 1 } },
+      // All guardians, not just receivesCommunications ones -- resolveContactEmail below
+      // needs the fallback-to-first-guardian case too.
+      include: { guardians: true },
     }),
     allowedParticipantFieldKeys(user, eventId),
     prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
@@ -50,10 +53,11 @@ export async function GET(
           allowedKeys.has(key)
         )
       ),
-      guardian: guardians[0] ?? null,
+      guardian: guardians.find((g) => g.receivesCommunications) ?? guardians[0] ?? null,
       computed: {
         price: effectivePriceCzk(forMerge, event),
         var_symb: buildVariableSymbol(forMerge, event),
+        contact_email: resolveContactEmail({ guardians }),
       },
     };
   });
@@ -82,6 +86,10 @@ export async function GET(
     documentsTotal: documentTypes.length,
     documentsReceived: receivedCounts[p.id] ?? 0,
   }));
+  // Default sort is by surname (Part 2: "Lists: sort by surname by default"), Czech
+  // collation -- the DB-level `orderBy: { name: "asc" }` above only decides fetch order
+  // before this, real presentation order is decided here where firstName/lastName exist.
+  withDocuments.sort(compareParticipantsBySurname);
 
   return NextResponse.json(withDocuments);
 }
@@ -101,7 +109,12 @@ export async function POST(
   if (denied) return denied;
 
   const body = await req.json();
-  const { name, groupName, dateOfBirth, customFieldValues } = body;
+  const { groupName, dateOfBirth, customFieldValues } = body;
+  const firstName: string | undefined = typeof body.firstName === "string" ? body.firstName.trim() : undefined;
+  const lastName: string | undefined = typeof body.lastName === "string" ? body.lastName.trim() : undefined;
+  // firstName/lastName win when given (the central roster's add form); `name` alone stays
+  // accepted for other callers (import, scripts) that don't split it.
+  const name: string = firstName || lastName ? fullNameFrom(firstName, lastName) : body.name;
   const guardians: GuardianInput[] = Array.isArray(body.guardians) ? body.guardians : [];
 
   if (!name || typeof name !== "string" || !name.trim()) {
@@ -118,6 +131,8 @@ export async function POST(
       data: {
         eventId,
         name: name.trim(),
+        firstName: firstName || null,
+        lastName: lastName || null,
         groupName: groupName || null,
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         customFieldValues: customFieldValues ?? undefined,

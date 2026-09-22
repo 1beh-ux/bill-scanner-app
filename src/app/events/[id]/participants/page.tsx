@@ -15,6 +15,8 @@ type EventBasic = { id: string; name: string; participantsListColumns: string[] 
 type Participant = {
   id: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
   groupName: string | null;
   dateOfBirth: string | null;
   registrationStatus: "pending" | "accepted";
@@ -22,7 +24,7 @@ type Participant = {
   documentsReceived: number;
   customFieldValues: Record<string, string> | null;
   guardian: { name: string | null; email: string; relationship: string | null; phone: string | null } | null;
-  computed: { price: number | null; var_symb: string };
+  computed: { price: number | null; var_symb: string; contact_email: string };
 };
 
 // Resolves a guardian/computed field's display value for the roster --
@@ -37,6 +39,7 @@ function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string
   if (field.kind === "computed") {
     if (field.key === "price") return p.computed.price != null ? `${p.computed.price} Kč` : "—";
     if (field.key === "var_symb") return p.computed.var_symb || "—";
+    if (field.key === "Email") return p.computed.contact_email || "—";
     return "—";
   }
   return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType as "text" | "number" | "date" | "boolean" | "select");
@@ -69,7 +72,8 @@ export default function EventParticipantsPage({
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [addOpen, setAddOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [groupName, setGroupName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [guardians, setGuardians] = useState<GuardianDraft[]>([emptyGuardian()]);
@@ -77,7 +81,8 @@ export default function EventParticipantsPage({
   const [error, setError] = useState<string | null>(null);
 
   const [editParticipant, setEditParticipant] = useState<Participant | null>(null);
-  const [editName, setEditName] = useState("");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
   const [editGroup, setEditGroup] = useState("");
   const [editDob, setEditDob] = useState("");
   const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
@@ -156,7 +161,8 @@ export default function EventParticipantsPage({
 
   function openAdd() {
     setError(null);
-    setName("");
+    setFirstName("");
+    setLastName("");
     setGroupName("");
     setDateOfBirth("");
     setGuardians([emptyGuardian()]);
@@ -176,7 +182,7 @@ export default function EventParticipantsPage({
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim()) return;
+    if (!firstName.trim() && !lastName.trim()) return;
 
     const guardianPayload = guardians
       .filter((g) => g.email.trim())
@@ -191,7 +197,8 @@ export default function EventParticipantsPage({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: name.trim(),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
         groupName: groupName.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
         guardians: guardianPayload,
@@ -210,7 +217,11 @@ export default function EventParticipantsPage({
   function startEdit(p: Participant) {
     setError(null);
     setEditParticipant(p);
-    setEditName(p.name);
+    // Not split yet (scripts/split-participant-names.ts hasn't run for this row, or left
+    // it ambiguous) -- put the whole stored name in Příjmení rather than losing it from
+    // the form; the admin can move the first name across by hand.
+    setEditFirstName(p.firstName ?? "");
+    setEditLastName(p.lastName ?? (p.firstName ? "" : p.name));
     setEditGroup(p.groupName ?? "");
     setEditDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
     setEditCustomFieldValues({ ...(p.customFieldValues ?? {}) });
@@ -222,14 +233,15 @@ export default function EventParticipantsPage({
 
   async function saveEdit(e: React.FormEvent) {
     e.preventDefault();
-    if (!editParticipant || !editName.trim()) return;
+    if (!editParticipant || (!editFirstName.trim() && !editLastName.trim())) return;
     setSavingEdit(true);
     setError(null);
     const res = await fetch(`/api/participants/${editParticipant.id}/core`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: editName.trim(),
+        firstName: editFirstName.trim(),
+        lastName: editLastName.trim(),
         groupName: editGroup.trim() || null,
         dateOfBirth: editDob || null,
         customFieldValues: editCustomFieldValues,
@@ -498,14 +510,27 @@ export default function EventParticipantsPage({
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
             <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("participantsPage.addButton")}</h2>
             <form onSubmit={handleCreate} className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder={t("common.name")}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className={inputClass}
-                autoFocus
-              />
+              <div className="flex gap-2">
+                <label className="flex-1 text-[13px] text-ink-secondary">
+                  {t("participantsPage.firstNameLabel")}
+                  <input
+                    type="text"
+                    value={firstName}
+                    onChange={(e) => setFirstName(e.target.value)}
+                    className={inputClass + " mt-1"}
+                    autoFocus
+                  />
+                </label>
+                <label className="flex-1 text-[13px] text-ink-secondary">
+                  {t("participantsPage.lastNameLabel")}
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={(e) => setLastName(e.target.value)}
+                    className={inputClass + " mt-1"}
+                  />
+                </label>
+              </div>
               <input
                 type="text"
                 placeholder={t("participantsPage.colGroup")}
@@ -578,14 +603,27 @@ export default function EventParticipantsPage({
           <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-paper p-5">
             <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("common.edit")}</h2>
             <form onSubmit={saveEdit} className="flex flex-col gap-3">
-              <input
-                type="text"
-                placeholder={t("common.name")}
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className={inputClass}
-                autoFocus
-              />
+              <div className="flex gap-2">
+                <label className="flex-1 text-[13px] text-ink-secondary">
+                  {t("participantsPage.firstNameLabel")}
+                  <input
+                    type="text"
+                    value={editFirstName}
+                    onChange={(e) => setEditFirstName(e.target.value)}
+                    className={inputClass + " mt-1"}
+                    autoFocus
+                  />
+                </label>
+                <label className="flex-1 text-[13px] text-ink-secondary">
+                  {t("participantsPage.lastNameLabel")}
+                  <input
+                    type="text"
+                    value={editLastName}
+                    onChange={(e) => setEditLastName(e.target.value)}
+                    className={inputClass + " mt-1"}
+                  />
+                </label>
+              </div>
               <input
                 type="text"
                 placeholder={t("participantsPage.colGroup")}

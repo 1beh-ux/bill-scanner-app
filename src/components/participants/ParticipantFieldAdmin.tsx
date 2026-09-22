@@ -647,12 +647,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         </div>
       </div>
 
-      {isEvent && (
-        <p className="mb-3 rounded-lg border border-[#EBDFC4] bg-[#FBF6ED] px-3 py-2 text-[11.5px] text-[#8A6A1F]">
-          {t("participantFieldAdmin.campNameHint")}
-        </p>
-      )}
-
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
       {adding && (
