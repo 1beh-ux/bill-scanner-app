@@ -4,6 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { fieldCategory, surfacesForCategory, type ParticipantFieldCategory } from "@/lib/participant-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
@@ -12,29 +13,9 @@ type FieldKind = "custom" | "builtin" | "guardian" | "computed";
 type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select"];
-const SURFACES: Surface[] = ["list", "health_list", "health_detail", "mail_list", "documents", "import"];
-// Which module has to be enabled (on this event) before a surface is worth
-// offering at all -- undefined means always offered. `documents`/`import`
-// are deliberately not module-gated: a field can be document-mergeable or
-// importable regardless of which module it's otherwise scoped to (see
-// src/lib/module-access.ts's allowedParticipantFieldKeys).
-const SURFACE_MODULE: Partial<Record<Surface, ModuleKey>> = {
-  health_list: "health",
-  health_detail: "health",
-  mail_list: "mail",
-};
-// Pill color when a surface is ON, by kind of surface -- display surfaces
-// (where a value shows) get one color, the two merge-related surfaces
-// (documents/import) get their own so they read as a different category of
-// thing at a glance.
-const SURFACE_ON_CLASS: Record<Surface, string> = {
-  list: "bg-ink text-white",
-  health_list: "bg-ink text-white",
-  health_detail: "bg-ink text-white",
-  mail_list: "bg-ink text-white",
-  documents: "bg-[#6B5CA5] text-white",
-  import: "bg-ember text-white",
-};
+// Part 4 replaced the per-surface pill grid with one "show in list" toggle -- only the
+// `list` surface is ever switched from the UI now (see categoryAndListCell below).
+const SURFACE_ON_CLASS = "bg-ink text-white";
 const SURFACE_OFF_CLASS = "bg-[#EFEDE8] text-ink-secondary";
 
 type Field = {
@@ -107,7 +88,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
   const [optionsText, setOptionsText] = useState("");
-  const [newSurfaces, setNewSurfaces] = useState<Set<Surface>>(new Set());
+  const [newCategory, setNewCategory] = useState<ParticipantFieldCategory>("custom");
+  const [newShowInList, setNewShowInList] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [eventStartDate, setEventStartDate] = useState<string | null>(null);
@@ -126,19 +108,16 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const nonComputedFields = orgFields.filter((f) => f.kind !== "computed");
   const booleanFieldOptions = customFields.filter((f) => f.fieldType === "boolean");
 
-  // Which surfaces are worth offering (as pills or, for a new field, as
-  // checkboxes) for a given kind:
-  //  - builtin: the roster/detail already show these via dedicated UI, so
-  //    only documents/import are real toggles -- a list/health_list pill
-  //    would be a no-op that looks like it does something.
-  //  - computed: no health_list/mail_list/import (there's no health-module
-  //    or mail-module screen for price/VS/QR, and nothing to import into).
-  //  - guardian/custom: the full module-gated set.
-  function surfacesFor(kind: FieldKind): Surface[] {
-    const base = isEvent ? SURFACES.filter((s) => !SURFACE_MODULE[s] || enabledModules.has(SURFACE_MODULE[s]!)) : SURFACES;
-    if (kind === "builtin") return base.filter((s) => s === "documents" || s === "import");
-    if (kind === "computed") return base.filter((s) => s === "list" || s === "documents");
-    return base;
+  // Which categories are worth offering for a NEW custom field: at event scope, only
+  // offer Zdraví/Dokumenty a pošta when that module is actually enabled for the event
+  // (a field could still exist with that category from before the module was turned
+  // off -- categoryAndListCell just shows whatever it derives, this only limits what a
+  // new field can be created as). Org-scope templates have no event, so no module to
+  // gate against -- offer every category there.
+  function availableCategories(): ParticipantFieldCategory[] {
+    const categories: ParticipantFieldCategory[] = ["custom", "health", "mail"];
+    if (!isEvent) return categories;
+    return categories.filter((c) => c !== "health" || enabledModules.has("health")).filter((c) => c !== "mail" || enabledModules.has("mail"));
   }
 
   async function load() {
@@ -201,7 +180,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setFieldLabel("");
     setFieldType("text");
     setOptionsText("");
-    setNewSurfaces(new Set());
+    setNewCategory("custom");
+    setNewShowInList(false);
   }
 
   function openAdd() {
@@ -224,15 +204,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setFieldLabel(field.label);
     setFieldType(field.fieldType);
     setOptionsText((field.options ?? []).join(", "));
-  }
-
-  function toggleNewSurface(s: Surface) {
-    setNewSurfaces((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
   }
 
   // Flips one surface on one EXISTING field immediately -- the pill click.
@@ -264,8 +235,9 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
     const options = fieldType === "select" ? optionsText.split(",").map((o) => o.trim()).filter(Boolean) : undefined;
     const body: Record<string, unknown> = { key: key.trim(), label: fieldLabel.trim(), fieldType, options };
-    if (isEvent) body.surfaces = Array.from(newSurfaces);
-    else body.defaultSurfaces = Array.from(newSurfaces);
+    const surfaces = surfacesForCategory(newCategory, newShowInList);
+    if (isEvent) body.surfaces = surfaces;
+    else body.defaultSurfaces = surfaces;
 
     const res = await fetch(basePath, {
       method: "POST",
@@ -368,23 +340,30 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setExpandedId(null);
   }
 
-  function pillsRow(field: Field) {
-    const active = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
+  // Part 4: replaces the old per-surface checkbox grid (Sloupec — Zdraví, Sloupec —
+  // Pošta, Detail účastníka — Zdraví, Dokumenty a e-maily, Import účastníků) with one
+  // derived, read-only category badge plus a single clickable "show in the central
+  // roster" toggle -- documents/import/health_list/mail_list are all implied by the
+  // category now (see surfacesForCategory), not independently switchable.
+  function categoryAndListCell(field: Field) {
+    const surfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
+    const category = fieldCategory(field.kind, surfaces);
+    const showInList = surfaces.includes("list");
     return (
-      <div className="flex flex-wrap gap-1.5">
-        {surfacesFor(field.kind).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => toggleFieldSurface(field, s)}
-            className={
-              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors " +
-              (active.includes(s) ? SURFACE_ON_CLASS[s] : SURFACE_OFF_CLASS)
-            }
-          >
-            {t(`participantFieldAdmin.surface.${s}`)}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded-full bg-[#EFEDE8] px-2.5 py-0.5 text-[11px] font-medium text-ink-secondary">
+          {t(`participantFieldAdmin.category.${category}`)}
+        </span>
+        <button
+          type="button"
+          onClick={() => toggleFieldSurface(field, "list")}
+          className={
+            "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors " +
+            (showInList ? SURFACE_ON_CLASS : SURFACE_OFF_CLASS)
+          }
+        >
+          {t("participantFieldAdmin.showInListLabel")}
+        </button>
       </div>
     );
   }
@@ -595,7 +574,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           </td>
           <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.kind.${field.kind}`)}</td>
           <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.type.${field.fieldType}`)}</td>
-          <td className="p-2">{pillsRow(field)}</td>
+          <td className="p-2">{categoryAndListCell(field)}</td>
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">
@@ -685,15 +664,24 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               className={inputClass}
             />
           )}
-          <div className="flex flex-col gap-1.5">
-            <p className="text-[13px] text-ink-secondary">{t("participantFieldAdmin.surfacesLabel")}</p>
-            {surfacesFor("custom").map((s) => (
-              <label key={s} className="flex items-center gap-2 text-[13px] text-ink">
-                <input type="checkbox" checked={newSurfaces.has(s)} onChange={() => toggleNewSurface(s)} />
-                {t(`participantFieldAdmin.surface.${s}`)}
-              </label>
-            ))}
-          </div>
+          <label className="text-[13px] text-ink-secondary">
+            {t("participantFieldAdmin.categoryLabel")}
+            <select
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value as ParticipantFieldCategory)}
+              className={inputClass + " mt-1"}
+            >
+              {availableCategories().map((c) => (
+                <option key={c} value={c}>
+                  {t(`participantFieldAdmin.category.${c}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input type="checkbox" checked={newShowInList} onChange={(e) => setNewShowInList(e.target.checked)} />
+            {t("participantFieldAdmin.showInListLabel")}
+          </label>
           <div className="mt-1 flex justify-end gap-2">
             <button type="button" onClick={() => setAdding(false)} className="text-[13px] text-ink-secondary hover:underline">
               {t("common.cancel")}

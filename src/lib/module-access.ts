@@ -75,30 +75,29 @@ export async function getEnabledModules(eventId: string): Promise<ModuleKey[]> {
 /**
  * Every custom participant field now lives in one shared JSON blob
  * (Participant.customFieldValues), which means the DB query alone can no
- * longer keep health-only field values away from a mail-only grant the
+ * longer keep health-only field values away from a mail-only reader the
  * way separate typed columns used to (see /api/participants/[id]/core's
- * own comment on this exact boundary). This is the shared filter: a
- * field surfaced only for health (health_list/health_detail) requires
- * health access; a field surfaced for mail_list requires mail access;
- * a field carrying the general `list` surface (or no surfaces at all --
- * not yet configured) is visible to anyone who reached the central
- * roster at all, i.e. has health or mail. Called from every route that
- * reads or writes customFieldValues for a mixed health-or-mail-gated
- * page (the central roster and its supporting endpoints).
+ * own comment on this exact boundary). This is the shared filter.
+ *
+ * Gated by whether the MODULE IS ENABLED FOR THE EVENT, not by which of
+ * health/mail the calling user personally has a grant for (changed from
+ * the original per-user-grant gate -- see the participants/settings/
+ * Health/Mail prompt, Part 4: "the central roster is the main list for
+ * seeing all information enabled for the event"; reaching the roster at
+ * all already required a health-or-mail grant via requireAnyModuleAccess,
+ * so a mail-only user sees health fields too once Health is on, and vice
+ * versa). A field surfaced only for health (health_list/health_detail)
+ * needs Health enabled for the event; one surfaced only for mail_list
+ * needs Mail enabled; a field carrying the general `list` surface (or no
+ * surfaces at all -- not yet configured) is always visible to anyone who
+ * reached the central roster. Applies to admin too: with Health off for
+ * an event there's no Health screen to show these fields in anyway.
  */
 export async function allowedParticipantFieldKeys(
   user: User,
   eventId: string
 ): Promise<Set<string>> {
-  if (user.role === "admin") {
-    const all = await prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true } });
-    return new Set(all.map((f) => f.key));
-  }
-
-  const [hasHealth, hasMail] = await Promise.all([
-    hasModuleAccess(user, eventId, "health"),
-    hasModuleAccess(user, eventId, "mail"),
-  ]);
+  const enabledModules = new Set(await getEnabledModules(eventId));
 
   const fields = await prisma.eventParticipantField.findMany({
     where: { eventId },
@@ -109,16 +108,12 @@ export async function allowedParticipantFieldKeys(
   for (const f of fields) {
     // `documents`/`import` are orthogonal to which screen shows a field --
     // ignore them here so a field that's health_detail-only but also
-    // document-mergeable doesn't leak to a mail-only grant just because it
-    // has a second surface. Also fixes a latent bug: an empty surfaces
-    // array (not yet configured) used to vacuously satisfy "every surface
-    // is health_list/health_detail" and hide the field from mail-only
-    // grants, contradicting the comment above about unconfigured fields.
+    // document-mergeable doesn't leak just because it has a second surface.
     const gateSurfaces = f.surfaces.filter((s) => s !== "documents" && s !== "import");
     const isHealthOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "health_list" || s === "health_detail");
     const isMailOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "mail_list");
-    if (isHealthOnly && !hasHealth) continue;
-    if (isMailOnly && !hasMail) continue;
+    if (isHealthOnly && !enabledModules.has("health")) continue;
+    if (isMailOnly && !enabledModules.has("mail")) continue;
     allowed.add(f.key);
   }
   return allowed;

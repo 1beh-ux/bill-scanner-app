@@ -241,6 +241,14 @@ export const ROWS: Row[] = [
   // -- Participants/settings/Health/Mail prompt, Part 1: name/surname split -----------------
   { key: "participantsPage.firstNameLabel", cs: "Jméno", en: "First name" },
   { key: "participantsPage.lastNameLabel", cs: "Příjmení", en: "Last name" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 4: field category ---------------------
+  { key: "participantFieldAdmin.categoryLabel", cs: "Kategorie", en: "Category" },
+  { key: "participantFieldAdmin.showInListLabel", cs: "Zobrazit v seznamu účastníků", en: "Show in the participant list" },
+  { key: "participantFieldAdmin.category.basic", cs: "Základní", en: "Basic" },
+  { key: "participantFieldAdmin.category.health", cs: "Zdraví", en: "Health" },
+  { key: "participantFieldAdmin.category.mail", cs: "Dokumenty a pošta", en: "Documents and mail" },
+  { key: "participantFieldAdmin.category.custom", cs: "Vlastní", en: "Custom" },
 ];
 
 async function main() {

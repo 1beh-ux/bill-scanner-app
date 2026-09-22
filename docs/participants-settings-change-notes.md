@@ -57,7 +57,22 @@ an earlier session (see the "Unified participant fields..." work):
   `{{participant_first_name}}` -- the latter already is, since it's a new key with no
   legacy baggage); the full canonical-name-with-legacy-alias layer Part 5 asks for
   will let `{{participant_name}}` resolve in documents too, not just email.
-- Part 4 (field visibility by module): pending.
+- Part 4 (field visibility by module): done. `allowedParticipantFieldKeys` (module-
+  access.ts) now gates by whether the module is ENABLED FOR THE EVENT, not by the
+  calling user's own health/mail grant (removed the admin special-case too -- with
+  Health off there's no Health screen to show those fields in for anyone, admin
+  included). `src/lib/participant-fields.ts` gained `fieldCategory`/`surfacesForCategory`
+  (category = Základní/Zdraví/Dokumenty a pošta/Vlastní, derived from kind+surfaces,
+  not stored). `ParticipantFieldAdmin.tsx`'s per-surface checkbox grid (5 checkboxes)
+  replaced with one category badge + a single "Zobrazit v seznamu účastníků" toggle;
+  the "add field" form got a Kategorie select instead. `scripts/normalize-
+  participant-field-surfaces.ts` (dry-run) rewrites existing custom fields' surfaces
+  to the category's derived defaults. Smoke-tested: a mail-only user sees a
+  health-category custom field once Health is enabled for the event, not before.
+  Known minor deviation: the "which categories can a NEW field be created as" filter
+  in the admin UI still reads `/modules/mine` (grant-based) rather than event-level
+  enablement, since the alternative endpoint is bills-access-gated -- cosmetic only,
+  the real access control (allowedParticipantFieldKeys) is correct either way.
 - Parts 2, 3, 5–11: pending.
 
 ## Deviations / contradictions found
