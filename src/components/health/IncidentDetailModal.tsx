@@ -126,7 +126,15 @@ export default function IncidentDetailModal({
 
         {bodyMapValue && (
           <div className="mb-3">
-            <BodyMapPicker value={bodyMapValue} onChange={() => {}} locked frontLabel={t("bodyMap.front")} backLabel={t("bodyMap.back")} />
+            <BodyMapPicker
+              value={bodyMapValue}
+              onChange={() => {}}
+              locked
+              frontLabel={t("bodyMap.front")}
+              backLabel={t("bodyMap.back")}
+              hintLabel={t("bodyMap.hint")}
+              removeLabel={t("bodyMap.remove")}
+            />
           </div>
         )}
 

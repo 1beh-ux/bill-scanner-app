@@ -12,6 +12,8 @@ interface BodyMapPickerProps {
   locked?: boolean;
   frontLabel: string;
   backLabel: string;
+  hintLabel: string;
+  removeLabel: string;
 }
 
 // Schematic, filled humanoid outline -- not medical-grade art (no such
@@ -62,6 +64,8 @@ export default function BodyMapPicker({
   locked,
   frontLabel,
   backLabel,
+  hintLabel,
+  removeLabel,
 }: BodyMapPickerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewTab, setViewTab] = useState<BodyView>(value?.bodyView ?? "front");
@@ -113,13 +117,25 @@ export default function BodyMapPicker({
           <circle
             cx={(value.bodyXPct / 100) * 200}
             cy={(value.bodyYPct / 100) * 400}
-            r="7"
+            r="11"
             fill="#e05d38"
             stroke="white"
-            strokeWidth="1.5"
+            strokeWidth="2"
           />
         )}
       </svg>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        {!locked && <p className="text-[12px] text-ink-secondary">{hintLabel}</p>}
+        {value && !locked && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="whitespace-nowrap text-[12px] text-ember hover:underline"
+          >
+            {removeLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

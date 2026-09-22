@@ -724,6 +724,16 @@ export default function ParticipantDetailPage({
                   <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
                     {t(`incidentForm.category.${inc.category}`)}
                   </span>
+                  {inc.bodyView && (
+                    <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
+                      {t(inc.bodyView === "front" ? "bodyMap.front" : "bodyMap.back")}
+                    </span>
+                  )}
+                  {inc.photoGcsPath && (
+                    <span className="mr-2 text-[12px] text-ink-secondary" title={t("incidentForm.photoLabel")}>
+                      📷
+                    </span>
+                  )}
                   {inc.actionSummary}
                   <div className="text-[12px] text-ink-secondary">{incidentMeta(inc)}</div>
                 </div>
@@ -761,7 +771,14 @@ export default function ParticipantDetailPage({
                       onClick={() => setDetailIncident(fu)}
                       className="cursor-pointer rounded-lg p-1 hover:bg-paper-2"
                     >
-                      <div className="text-[13px] text-ink-secondary">{fu.actionSummary}</div>
+                      <div className="text-[13px] text-ink-secondary">
+                        {fu.photoGcsPath && (
+                          <span className="mr-1" title={t("incidentForm.photoLabel")}>
+                            📷
+                          </span>
+                        )}
+                        {fu.actionSummary}
+                      </div>
                       <div className="text-[12px] text-ink-secondary">{incidentMeta(fu)}</div>
                     </div>
                   ))}

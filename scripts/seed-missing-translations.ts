@@ -345,6 +345,10 @@ export const ROWS: Row[] = [
 
   // -- Participants/settings/Health/Mail prompt, Part 11-G: "missing translations" filter --
   { key: "translationsPage.missingOnlyLabel", cs: "Jen chybějící překlady", en: "Missing translations only" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-F: body map hint + remove-mark button --
+  { key: "bodyMap.hint", cs: "Klepnutím na siluetu označte místo.", en: "Tap the silhouette to mark the spot." },
+  { key: "bodyMap.remove", cs: "Odebrat značku", en: "Remove mark" },
 ];
 
 async function main() {

@@ -48,35 +48,23 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   "Výdej léků" already correct. New events already copy org meds/situations at
   creation (unconditional `listTemplate` copy, no kind filter) — no change needed.
 - **Part 11-I/E** (documents/variables -- done out of order, per the brief's own
-  "highest-risk defect, do before the UI restructure"): the root fix is in
-  `document-merge.ts`: after the known-key substitution pass, the merged doc is
-  re-scanned for ANY remaining `{{...}}`-shaped text (whatever the reason -- unknown
-  key, a field not flagged `documents`, or an image that couldn't be generated, e.g.
-  `{{picture}}` with no bank account set) and blanks it, logged not silent. This is
-  a blanket safety net, not a per-cause fix, so it holds regardless of what future
-  causes turn up. Also: `firstGuardian()` now prefers the `receivesCommunications`
-  guardian (documented choice: reused that flag as "primary guardian" rather than
-  adding a separate one, since Part 1 already treats it that way for contact e-mail);
-  `{{attachments_list}}` (built from what actually got attached, not a guess);
-  `Event.registrationDeadline` (additive migration `add_registration_deadline`) +
-  `{{registration_deadline}}` resolving to a whole sentence, empty when unset (no
-  conditional-block templating exists, so a bare date would leave a dangling
-  fragment -- documented limitation); `{{sender_email}}`. Default acceptance e-mail
-  text replaced (script `fix-registration-acceptance-template`, dry-run, only
-  touches rows still containing "[PLACEHOLDER"). Template preview page now shows
-  "prázdná hodnota" (amber) instead of a green check when a correctly-enabled
-  field resolves empty for the selected participant (it already had the data,
-  `values` was fetched but unused for this).
-  NOT done (deferred, noted rather than rushed): the accept-dialog's resolved
-  preview, participant switcher, recipient-address list + Czech plural fix, and
-  the "blocks sending until acknowledged" pre-send checklist -- the merge-time
-  safety net above already guarantees no raw `{{` reaches a real PDF regardless,
-  which was the hard, testable requirement; the dialog UX layer on top is real
-  additional work not yet started. Price/QR "two sources of truth": not a code
-  bug -- `{{price}}`/`{{picture}}` already resolve correctly from event settings;
-  the reported issue is that Pavel's actual Google Doc has the price typed in by
-  hand instead of using the variable, which is template content, not something
-  this codebase can fix.
+  "highest-risk defect, do before the UI restructure"): root fix in
+  `document-merge.ts` -- after the known-key substitution pass, the merged doc
+  is re-scanned for ANY remaining `{{...}}`-shaped text (unknown key, a field
+  not flagged `documents`, an image that couldn't generate) and blanks it,
+  logged not silent -- a blanket safety net, not a per-cause fix. Also:
+  `firstGuardian()` now prefers the `receivesCommunications` guardian (reused
+  that flag as "primary guardian" rather than adding a separate one);
+  `{{attachments_list}}`/`{{sender_email}}`; `Event.registrationDeadline` +
+  `{{registration_deadline}}` (whole-sentence, empty when unset -- no
+  conditional-block templating exists). Default acceptance e-mail text
+  replaced (only rows still containing "[PLACEHOLDER"). Template preview page
+  shows "prázdná hodnota" (amber) instead of a green check when a field
+  resolves empty. NOT done: accept-dialog resolved preview/participant
+  switcher/recipient list UX (the merge-time safety net already guarantees no
+  raw `{{` reaches a real PDF, which was the hard requirement). Price/QR
+  "two sources of truth" is template content (hand-typed price in Pavel's
+  actual Doc), not a code bug.
 - **Part 5 + Part 10 §1-2** (event settings + nav) — done. 7 horizontal tabs ->
   left section list (Akce incl. Moduly/fee/new deadline date, Lidé a přístup,
   Připojení with ONE sender-mailbox control instead of duplicated-with-different-
@@ -146,10 +134,20 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   (persisted to `localStorage`), not page-local state, and `AppSidebar`
   (which renders the switcher) is mounted once in `providers.tsx` for
   every route — the switcher already persists across Šablony/Překlady.
+- **Part 11-F** — done. Incident photo picker: preview/upload area is now
+  a fixed-size reserved box with a spinner overlay while uploading (was a
+  text-only "Načítání…" line below, layout jumped when the image
+  appeared). Body map: marker radius 7px → 11px (easier to see/tap
+  again), a "Odebrat značku" button clears the mark (previously the only
+  way was re-tapping elsewhere on the silhouette), and an explanatory
+  hint line under it (shown only in the editable, non-locked case).
+  Incident list rows gained a body-location chip (Přední/Zadní) and a 📷
+  marker when a photo is attached (previously invisible without opening
+  the row). Temperature field hidden for the "Úraz" (injury) category —
+  not applicable there and was cluttering the form.
 - **Pending**: 10 §3-7 (e-mail template catalog w/ Výchozí/Upraveno
   badges + org-compare, most of §5.1 help text, Přehled akce — optional),
-  11-A.4 (real recipient list in the accept-dialog ComposeEmailModal),
-  11-F (incident photo/marker/body-location UI polish).
+  11-A.4 (real recipient list in the accept-dialog ComposeEmailModal).
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum

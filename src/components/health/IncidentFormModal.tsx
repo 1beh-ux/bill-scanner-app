@@ -363,14 +363,16 @@ export default function IncidentFormModal({
             autoFocus
           />
 
-          <input
-            type="number"
-            step="0.1"
-            placeholder={t("incidentForm.tempLabel")}
-            value={tempC}
-            onChange={(e) => setTempC(e.target.value)}
-            className={inputClass}
-          />
+          {category !== "injury" && (
+            <input
+              type="number"
+              step="0.1"
+              placeholder={t("incidentForm.tempLabel")}
+              value={tempC}
+              onChange={(e) => setTempC(e.target.value)}
+              className={inputClass}
+            />
+          )}
 
           {meds.length > 0 ? (
             <div className="flex flex-col gap-1.5">
@@ -416,9 +418,18 @@ export default function IncidentFormModal({
 
           <div>
             <div className="mb-1 text-[13px] text-ink-secondary">{t("incidentForm.photoLabel")}</div>
-            {previewUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="" className="mb-2 h-32 w-32 rounded-lg object-cover" />
+            {(previewUrl || uploadingPhoto) && (
+              <div className="relative mb-2 h-32 w-32 overflow-hidden rounded-lg bg-paper-2">
+                {previewUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="" className="h-full w-full object-cover" />
+                )}
+                {uploadingPhoto && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-paper-2/80">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-mist border-t-ember" />
+                  </div>
+                )}
+              </div>
             )}
             <div className="flex gap-2">
               <label className="cursor-pointer rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist">
@@ -443,7 +454,6 @@ export default function IncidentFormModal({
                 />
               </label>
             </div>
-            {uploadingPhoto && <p className="mt-1 text-[12px] text-ink-secondary">{t("common.loading")}</p>}
           </div>
 
           <div>
@@ -454,6 +464,8 @@ export default function IncidentFormModal({
               locked={isFollowUp}
               frontLabel={t("bodyMap.front")}
               backLabel={t("bodyMap.back")}
+              hintLabel={t("bodyMap.hint")}
+              removeLabel={t("bodyMap.remove")}
             />
           </div>
 
