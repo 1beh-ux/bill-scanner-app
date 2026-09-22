@@ -2,6 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
+import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
+
+async function logToggle(userId: string, eventId: string, participantId: string, docTypeId: string, marked: boolean) {
+  const docType = await prisma.eventListItem.findUnique({ where: { id: docTypeId } });
+  await prisma.mailActionLog.create({
+    data: {
+      userId,
+      eventId,
+      participantId,
+      action: marked ? "document_marked" : "document_unmarked",
+      status: "ok",
+      details: docType ? documentDisplayName({ ...docType, data: docType.data as DocumentTypeData | null }) : docTypeId,
+    },
+  });
+}
 
 // Manual document-received toggle for the Mail participants list -- covers
 // the case where a document was handed over/scanned outside of email and
@@ -35,6 +50,7 @@ export async function POST(
       where: { id: generated.id },
       data: { receivedVia: "manual", receivedByUserId: user.id, receivedAt: new Date() },
     });
+    await logToggle(user.id, eventId, participantId, docTypeId, true);
     return NextResponse.json(updated);
   }
 
@@ -46,6 +62,7 @@ export async function POST(
       receivedByUserId: user.id,
     },
   });
+  await logToggle(user.id, eventId, participantId, docTypeId, true);
   return NextResponse.json(created, { status: 201 });
 }
 
@@ -61,8 +78,9 @@ export async function DELETE(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  await prisma.participantDocument.deleteMany({
+  const deleted = await prisma.participantDocument.deleteMany({
     where: { participantId, eventListItemId: docTypeId },
   });
+  if (deleted.count > 0) await logToggle(user.id, eventId, participantId, docTypeId, false);
   return NextResponse.json({ ok: true });
 }

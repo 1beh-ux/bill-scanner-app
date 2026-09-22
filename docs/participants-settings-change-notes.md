@@ -73,7 +73,22 @@ an earlier session (see the "Unified participant fields..." work):
   in the admin UI still reads `/modules/mine` (grant-based) rather than event-level
   enablement, since the alternative endpoint is bills-access-gated -- cosmetic only,
   the real access control (allowedParticipantFieldKeys) is correct either way.
-- Parts 2, 3, 5–11: pending.
+- Part 2 (working lists): in progress. Health working list (`health/page.tsx`) now
+  shows Příjmení Jméno / Skupina / Věk / incident indicator (dot+count, tooltip with
+  last date) / med-plan-today dot / "+ Záznam"; dropped the Dokumenty column and the
+  dynamic health_list custom-field columns (working list, not a configurable roster).
+  New endpoint `GET .../participants/health-signals`. Deviation: "unresolved incidents"
+  from the brief isn't representable -- `Incident` has no resolved/closed concept
+  anywhere in the schema -- so the indicator is "logged in the last 24h" only.
+  Mail working list (`mail/participants/page.tsx`): Příjmení Jméno / Registrace / one
+  column per document type / Kontaktní e-mail (new `contactEmail` on the mail
+  participants route, via `resolveContactEmail`); dropped Věk and the dynamic
+  mail_list custom-field columns. Toggle now writes a `MailActionLog` row
+  (`document_marked`/`document_unmarked`, additive migration
+  `add_mail_action_document_toggle`) and the click shows a 5s undo toast.
+  Central roster (default columns, edit drawer, "Přijmout hned", bulk accept, guardian
+  inline edit): not started yet.
+- Parts 3, 5–11: pending.
 
 ## Deviations / contradictions found
 

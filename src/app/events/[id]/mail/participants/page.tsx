@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
-import { calculateAge } from "@/lib/age";
-import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
+import { participantListName } from "@/lib/participant-name";
 
 type EventBasic = { id: string; name: string };
 
@@ -12,10 +11,11 @@ type DocStatus = { eventListItemId: string; name: string; received: boolean };
 type Participant = {
   id: string;
   name: string;
-  dateOfBirth: string | null;
+  firstName: string | null;
+  lastName: string | null;
   registrationStatus: "pending" | "accepted";
+  contactEmail: string;
   documents: DocStatus[];
-  customFieldValues: Record<string, string> | null;
 };
 
 export default function MailParticipantsPage({
@@ -31,24 +31,30 @@ export default function MailParticipantsPage({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
-  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
+  // Part 2: a brief undo toast after a manual received/missing toggle, instead of just
+  // silently flipping the pill -- click "Vrátit zpět" to flip it right back.
+  const [undo, setUndo] = useState<{ participantId: string; docTypeId: string; wasReceived: boolean } | null>(null);
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes, fieldsRes] = await Promise.all([
+    const [evRes, partRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/mail/participants?withDocuments=1`),
-      fetch(`/api/events/${id}/participant-fields?surface=mail_list`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
-    if (fieldsRes.ok) setFields(await fieldsRes.json());
     setLoading(false);
   }
 
   useEffect(() => {
     load();
   }, [id]);
+
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 5000);
+    return () => clearTimeout(timer);
+  }, [undo]);
 
   const filteredParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -65,6 +71,19 @@ export default function MailParticipantsPage({
       method: currentlyReceived ? "DELETE" : "POST",
     });
     setTogglingKey(null);
+    setUndo({ participantId, docTypeId, wasReceived: currentlyReceived });
+    load();
+  }
+
+  async function undoToggle() {
+    if (!undo) return;
+    const { participantId, docTypeId, wasReceived } = undo;
+    setUndo(null);
+    // wasReceived = the state BEFORE the toggle that's being undone, so restoring it is
+    // the opposite HTTP verb of what the original click did.
+    await fetch(`/api/events/${id}/participants/${participantId}/documents/${docTypeId}`, {
+      method: wasReceived ? "POST" : "DELETE",
+    });
     load();
   }
 
@@ -77,9 +96,10 @@ export default function MailParticipantsPage({
         ← {t("nav.mail")}
       </a>
 
-      <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">
+      <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">
         {event.name} — {t("participantsPage.mailListTitle")} ({participants.length})
       </h1>
+      <p className="mb-4 text-[13px] text-ink-secondary">{t("mailParticipantsPage.intro")}</p>
 
       <div className="mb-4 relative max-w-sm">
         <input
@@ -111,62 +131,60 @@ export default function MailParticipantsPage({
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
-                {fields.map((f) => (
-                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
-                ))}
                 {documentColumns.map((d) => (
                   <th key={d.id} className="p-2 text-[12px] font-medium text-ink-secondary">{d.name}</th>
                 ))}
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.contactEmailLabel")}</th>
               </tr>
             </thead>
             <tbody>
-              {filteredParticipants.map((p) => {
-                const age = calculateAge(p.dateOfBirth);
-                return (
-                  <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
-                    <td className="p-2 text-[14px] text-ink">{p.name}</td>
-                    <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
-                    <td className="p-2 text-[13px]">
-                      {p.registrationStatus === "accepted" ? (
-                        <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">
-                          {t("participantsPage.statusAccepted")}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-mist px-2 py-0.5 text-ink-secondary">
-                          {t("participantsPage.statusPending")}
-                        </span>
-                      )}
-                    </td>
-                    {fields.map((f) => (
-                      <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
-                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+              {filteredParticipants.map((p) => (
+                <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
+                  <td className="p-2 text-[14px] text-ink">{participantListName(p)}</td>
+                  <td className="p-2 text-[13px]">
+                    {p.registrationStatus === "accepted" ? (
+                      <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">
+                        {t("participantsPage.statusAccepted")}
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-mist px-2 py-0.5 text-ink-secondary">
+                        {t("participantsPage.statusPending")}
+                      </span>
+                    )}
+                  </td>
+                  {p.documents.map((d) => {
+                    const key = `${p.id}:${d.eventListItemId}`;
+                    return (
+                      <td key={d.eventListItemId} className="p-2 text-[13px]">
+                        <button
+                          onClick={() => toggleDoc(p.id, d.eventListItemId, d.received)}
+                          disabled={togglingKey === key}
+                          className={
+                            "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+                            (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+                          }
+                          title={t("participantsPage.toggleDocumentHint")}
+                        >
+                          {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+                        </button>
                       </td>
-                    ))}
-                    {p.documents.map((d) => {
-                      const key = `${p.id}:${d.eventListItemId}`;
-                      return (
-                        <td key={d.eventListItemId} className="p-2 text-[13px]">
-                          <button
-                            onClick={() => toggleDoc(p.id, d.eventListItemId, d.received)}
-                            disabled={togglingKey === key}
-                            className={
-                              "rounded-full px-2 py-0.5 disabled:opacity-50 " +
-                              (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
-                            }
-                            title={t("participantsPage.toggleDocumentHint")}
-                          >
-                            {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                    );
+                  })}
+                  <td className="p-2 text-[13px] text-ink-secondary">{p.contactEmail || "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {undo && (
+        <div className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-ink px-4 py-2.5 text-[13px] text-white shadow-lg">
+          <span>{undo.wasReceived ? t("mailParticipantsPage.undoToastMarkedMissing") : t("mailParticipantsPage.undoToastMarkedReceived")}</span>
+          <button onClick={undoToggle} className="font-medium text-ember-hover hover:underline">
+            {t("mailParticipantsPage.undoButton")}
+          </button>
         </div>
       )}
     </div>

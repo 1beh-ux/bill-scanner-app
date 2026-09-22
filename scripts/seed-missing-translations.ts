@@ -249,6 +249,24 @@ export const ROWS: Row[] = [
   { key: "participantFieldAdmin.category.health", cs: "Zdraví", en: "Health" },
   { key: "participantFieldAdmin.category.mail", cs: "Dokumenty a pošta", en: "Documents and mail" },
   { key: "participantFieldAdmin.category.custom", cs: "Vlastní", en: "Custom" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 2: Health working list ----------------
+  { key: "healthPage.title", cs: "Zdraví", en: "Health" },
+  { key: "healthPage.intro", cs: "Vyberte účastníka a založte zdravotní záznam. Úpravu jména, skupiny a dalších údajů dělejte v seznamu účastníků.", en: "Pick a participant and log a health record. Edit name, group and other core data in the participant list." },
+  { key: "healthPage.colIncidents", cs: "Záznamy", en: "Records" },
+  { key: "healthPage.colMeds", cs: "Léky dnes", en: "Meds today" },
+  { key: "healthPage.openInRosterLink", cs: "Otevřít v seznamu účastníků", en: "Open in the participant list" },
+  { key: "healthPage.incidentTooltip", cs: "Poslední záznam: {date}", en: "Last record: {date}" },
+  { key: "healthPage.medsTooltip", cs: "Má aktivní plán léků", en: "Has an active medication plan" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 2: Mail working list ------------------
+  { key: "mailParticipantsPage.intro", cs: "Označte, které dokumenty od koho dorazily. Úpravu jména, skupiny a dalších údajů dělejte v seznamu účastníků.", en: "Mark which documents have arrived from whom. Edit name, group and other core data in the participant list." },
+  { key: "mailParticipantsPage.undoButton", cs: "Vrátit zpět", en: "Undo" },
+  { key: "mailParticipantsPage.undoToastMarkedReceived", cs: "Označeno jako doručeno.", en: "Marked as received." },
+  { key: "mailParticipantsPage.undoToastMarkedMissing", cs: "Označení „doručeno“ zrušeno.", en: "The “received” mark was removed." },
+  { key: "participantsPage.contactEmailLabel", cs: "Kontaktní e-mail", en: "Contact e-mail" },
+  { key: "mailActionLogModal.action.document_marked", cs: "označen dokument jako doručený", en: "document marked as received" },
+  { key: "mailActionLogModal.action.document_unmarked", cs: "zrušeno označení dokumentu jako doručený", en: "document's received mark removed" },
 ];
 
 async function main() {

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
-import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
+import { participantListName } from "@/lib/participant-name";
 import IncidentFormModal from "@/components/health/IncidentFormModal";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 
@@ -12,11 +12,16 @@ type EventBasic = { id: string; name: string };
 type Participant = {
   id: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
   groupName: string | null;
   dateOfBirth: string | null;
-  documentsTotal: number;
-  documentsReceived: number;
-  customFieldValues: Record<string, string> | null;
+};
+
+type HealthSignals = {
+  incidentCount: Record<string, number>;
+  lastIncidentAt: Record<string, string>;
+  medPlanParticipantIds: string[];
 };
 
 export default function EventHealthPage({
@@ -25,28 +30,28 @@ export default function EventHealthPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, lang } = useTranslations();
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [signals, setSignals] = useState<HealthSignals>({ incidentCount: {}, lastIncidentAt: {}, medPlanParticipantIds: [] });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
   const [statusModalOpen, setStatusModalOpen] = useState(false);
-  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes, fieldsRes] = await Promise.all([
+    const [evRes, partRes, signalsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/participants`),
-      fetch(`/api/events/${id}/participant-fields?surface=health_list`),
+      fetch(`/api/events/${id}/participants/health-signals`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
-    if (fieldsRes.ok) setFields(await fieldsRes.json());
+    if (signalsRes.ok) setSignals(await signalsRes.json());
     setLoading(false);
   }
 
@@ -64,6 +69,8 @@ export default function EventHealthPage({
     return participants.filter((p) => p.name.toLowerCase().includes(query));
   }, [participants, searchQuery]);
 
+  const medSet = useMemo(() => new Set(signals.medPlanParticipantIds), [signals]);
+
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
@@ -73,9 +80,10 @@ export default function EventHealthPage({
         ← {t("billsPage.back")}
       </a>
 
-      <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">
-        {event.name} — {t("participantsPage.title")} ({participants.length})
+      <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">
+        {event.name} — {t("healthPage.title")} ({participants.length})
       </h1>
+      <p className="mb-4 text-[13px] text-ink-secondary">{t("healthPage.intro")}</p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
@@ -122,39 +130,59 @@ export default function EventHealthPage({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] border-collapse">
+          <table className="w-full min-w-[560px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
-                {fields.map((f) => (
-                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
-                ))}
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colIncidents")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colMeds")}</th>
                 <th className="p-2"></th>
               </tr>
             </thead>
             <tbody>
               {filteredParticipants.map((p) => {
                 const age = calculateAge(p.dateOfBirth);
+                const count = signals.incidentCount[p.id] ?? 0;
+                const lastAt = signals.lastIncidentAt[p.id];
                 return (
                   <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
                     <td className="p-2 text-[14px]">
                       <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
-                        {p.name}
+                        {participantListName(p)}
+                      </a>
+                      <a
+                        href={`/events/${id}/participants?edit=${p.id}`}
+                        className="ml-2 text-[11.5px] text-ink-secondary hover:text-ink hover:underline"
+                      >
+                        {t("healthPage.openInRosterLink")}
                       </a>
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
-                    <td className="p-2 text-[13px] text-ink-secondary">
-                      {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
+                    <td className="p-2 text-[13px]">
+                      {count > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2 py-0.5 text-red-700"
+                          title={lastAt ? t("healthPage.incidentTooltip", { date: new Date(lastAt).toLocaleString(lang === "cs" ? "cs-CZ" : "en-GB") }) : undefined}
+                        >
+                          <span className="h-[7px] w-[7px] rounded-full bg-red-600" />
+                          {count}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
                     </td>
-                    {fields.map((f) => (
-                      <td key={f.id} className="p-2 text-[14px] text-ink-secondary">
-                        {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
-                      </td>
-                    ))}
+                    <td className="p-2 text-[13px]">
+                      {medSet.has(p.id) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800" title={t("healthPage.medsTooltip")}>
+                          <span className="h-[7px] w-[7px] rounded-full bg-amber-600" />
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="whitespace-nowrap p-2 text-right">
                       <button
                         onClick={() => setIncidentParticipantId(p.id)}

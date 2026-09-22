@@ -105,6 +105,11 @@ enum MailActionType {
   bulk_move
   bulk_delete
   attachment_saved
+  // Manual received/missing toggle on the Mail participants working list
+  // (Part 2 of the participants/settings/Health/Mail prompt) -- see
+  // .../participants/[participantId]/documents/[docTypeId]/route.ts.
+  document_marked
+  document_unmarked
 }
 
 enum MailActionStatus {
