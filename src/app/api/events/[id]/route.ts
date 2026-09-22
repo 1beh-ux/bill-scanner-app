@@ -58,6 +58,7 @@ export async function PATCH(
     mailQuestionnaireUrl,
     qrSizeMm,
     billsListColumns,
+    registrationDeadline,
   } = body;
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
@@ -128,6 +129,7 @@ export async function PATCH(
       }),
       ...(qrSizeMm !== undefined && { qrSizeMm: qrSizeMm === null ? null : Math.min(150, Math.max(10, Math.round(Number(qrSizeMm)) || 35)) }),
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
+      ...(registrationDeadline !== undefined && { registrationDeadline: registrationDeadline ? new Date(registrationDeadline) : null }),
     },
   });
   if (savesDrive) invalidateDriveIdentity(id);

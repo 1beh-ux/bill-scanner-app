@@ -30,6 +30,8 @@ type EventDetail = {
   registrationBankAccountNumber: string | null;
   registrationBankCode: string | null;
   mailQuestionnaireUrl: string | null;
+  registrationDeadline: string | null;
+  senderEmail: string | null;
 };
 
 type Category = {
@@ -59,7 +61,23 @@ const inputClass =
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-type Tab = "categories" | "drive" | "access" | "health" | "mail" | "modules" | "participants";
+// Part 5/10 of the participants/settings/Health/Mail prompt: a left section list
+// replaces the old horizontal tab row, regrouped by topic (the old grouping mixed
+// event data, connections and templates on the same tab -- e.g. the sender mailbox
+// used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
+// `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
+// to change, including bookmarks and the mail-oauth callback redirect.
+type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta";
+const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta"];
+const OLD_TAB_MAP: Record<string, Tab> = {
+  categories: "uctenky",
+  drive: "pripojeni",
+  access: "lide",
+  health: "zdravi",
+  mail: "posta",
+  modules: "akce",
+  participants: "ucastnici",
+};
 
 export default function EventDetailPage({
   params,
@@ -75,7 +93,10 @@ export default function EventDetailPage({
   const mailConnect = searchParams.get("mailConnect");
   const driveConnect = searchParams.get("driveConnect");
 
-  const [tab, setTab] = useState<Tab>(requestedTab === "health" ? "health" : "categories");
+  const [tab, setTab] = useState<Tab>(() => {
+    if (!requestedTab) return "akce";
+    return OLD_TAB_MAP[requestedTab] ?? (SECTION_KEYS.includes(requestedTab as Tab) ? (requestedTab as Tab) : "akce");
+  });
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [event, setEvent] = useState<EventDetail | null>(null);
@@ -92,6 +113,7 @@ export default function EventDetailPage({
   const [nonMemberPriceCzk, setNonMemberPriceCzk] = useState("");
   const [registrationBankAccountNumber, setRegistrationBankAccountNumber] = useState("");
   const [registrationBankCode, setRegistrationBankCode] = useState("");
+  const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [feeError, setFeeError] = useState<string | null>(null);
   const [feeSaving, setFeeSaving] = useState(false);
 
@@ -102,6 +124,19 @@ export default function EventDetailPage({
 
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+
+  // Setup checklist (Part 10 §4): kept to a few objectively checkable signals rather
+  // than the full 7-item list the brief sketches -- "pole účastníků nastavena" and
+  // "e-mailové šablony zkontrolovány" have no clean yes/no signal in the data model,
+  // so they're left out rather than faked. Each item links to the section that fixes it.
+  const [documentTypeCount, setDocumentTypeCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!moduleAccess.mail) return;
+    fetch(`/api/events/${id}/list-items?kind=document&all=false`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: unknown[]) => setDocumentTypeCount(items.length))
+      .catch(() => {});
+  }, [id, moduleAccess.mail]);
 
   async function load() {
     setLoading(true);
@@ -123,9 +158,9 @@ export default function EventDetailPage({
   }, [id]);
 
   useEffect(() => {
-    if (tab === "health" && !moduleAccess.health) setTab("categories");
-    if (tab === "mail" && !moduleAccess.mail) setTab("categories");
-    if (tab === "participants" && !moduleAccess.health && !moduleAccess.mail) setTab("categories");
+    if (tab === "zdravi" && !moduleAccess.health) setTab("akce");
+    if (tab === "posta" && !moduleAccess.mail) setTab("akce");
+    if (tab === "ucastnici" && !moduleAccess.health && !moduleAccess.mail) setTab("akce");
   }, [tab, moduleAccess]);
 
   useEffect(() => {
@@ -135,6 +170,7 @@ export default function EventDetailPage({
       setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
       setRegistrationBankCode(event.registrationBankCode ?? "");
       setMailQuestionnaireUrl(event.mailQuestionnaireUrl ?? "");
+      setRegistrationDeadline(event.registrationDeadline ? event.registrationDeadline.slice(0, 10) : "");
     }
   }, [event?.id]);
 
@@ -163,6 +199,7 @@ export default function EventDetailPage({
         nonMemberPriceCzk: nonMemberPriceCzk.trim() === "" ? null : Number(nonMemberPriceCzk),
         registrationBankAccountNumber: registrationBankAccountNumber.trim() || null,
         registrationBankCode: registrationBankCode.trim() || null,
+        registrationDeadline: registrationDeadline || null,
       }),
     });
     setFeeSaving(false);
@@ -266,6 +303,27 @@ export default function EventDetailPage({
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
 
+  const checklist: { labelKey: string; done: boolean; section: Tab }[] = [
+    { labelKey: "eventDetail.checklistDrive", done: !!(event.driveIngestFolderId || event.driveExportFolderId), section: "pripojeni" },
+    { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni" },
+    { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky" },
+    ...(moduleAccess.mail
+      ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "posta" as Tab }]
+      : []),
+    { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce" },
+  ];
+  const checklistDone = checklist.filter((c) => c.done).length;
+
+  const visibleSections: { key: Tab; labelKey: string }[] = [
+    { key: "akce", labelKey: "eventSettings.tabAkce" },
+    ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess" }] : []),
+    { key: "pripojeni", labelKey: "eventSettings.tabPripojeni" },
+    { key: "uctenky", labelKey: "eventSettings.tabUctenky" },
+    ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants" }] : []),
+    ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth" }] : []),
+    ...(moduleAccess.mail ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail" }] : []),
+  ];
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href="/events" className="text-[13px] text-ink-secondary hover:text-ink">
@@ -303,307 +361,295 @@ export default function EventDetailPage({
         {lifecycleError && <p className="mt-1.5 text-[13px] text-red-600">{t(`eventDetail.error.${lifecycleError}`)}</p>}
       </div>
 
-      <div className="mb-6 flex flex-wrap gap-1 border-b border-mist">
-        <button
-          onClick={() => setTab("categories")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "categories" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("eventSettings.tabSettings")}
-        </button>
-        <button
-          onClick={() => setTab("drive")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "drive" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("eventSettings.tabDrive")}
-        </button>
-        {isAdmin && (
-        <button
-          onClick={() => setTab("access")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "access" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("eventSettings.tabAccess")}
-        </button>
-        )}
-        {moduleAccess.health && (
-          <button
-            onClick={() => setTab("health")}
-            className={
-              "border-b-2 px-3 py-2 text-[13px] font-medium " +
-              (tab === "health" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-            }
-          >
-            {t("eventSettings.tabHealth")}
-          </button>
-        )}
-        {moduleAccess.mail && (
-          <button
-            onClick={() => setTab("mail")}
-            className={
-              "border-b-2 px-3 py-2 text-[13px] font-medium " +
-              (tab === "mail" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-            }
-          >
-            {t("eventSettings.tabMail")}
-          </button>
-        )}
-        {(moduleAccess.health || moduleAccess.mail) && (
-          <button
-            onClick={() => setTab("participants")}
-            className={
-              "border-b-2 px-3 py-2 text-[13px] font-medium " +
-              (tab === "participants" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-            }
-          >
-            {t("eventSettings.tabParticipants")}
-          </button>
-        )}
-        {isAdmin && (
-        <button
-          onClick={() => setTab("modules")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "modules" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("eventSettings.tabModules")}
-        </button>
-        )}
+      <div className="mb-6 rounded-lg border border-mist bg-paper-2 p-3">
+        <p className="mb-2 text-[13px] font-medium text-ink">
+          {t("eventDetail.checklistTitle", { done: String(checklistDone), total: String(checklist.length) })}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {checklist.map((item) => (
+            <button
+              key={item.labelKey}
+              onClick={() => setTab(item.section)}
+              className={
+                "rounded-full px-2.5 py-0.5 text-[12px] " +
+                (item.done ? "bg-pine/15 text-pine" : "bg-amber-100 text-amber-800 hover:bg-amber-200")
+              }
+            >
+              {item.done ? "✓ " : ""}
+              {t(item.labelKey)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {tab === "access" && isAdmin && <AccessTab eventId={id} t={t} />}
-
-      {tab === "modules" && isAdmin && <ModulesTab eventId={id} t={t} />}
-
-      {tab === "health" && moduleAccess.health && (
-        <div className="flex flex-col gap-6">
-          {mailConnect === "connected" && (
-            <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
-              {t("senderEmailField.connectSuccessBanner")}
-            </p>
-          )}
-          {mailConnect === "error" && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-              {t("senderEmailField.connectErrorBanner")}
-            </p>
-          )}
-          <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
-          <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
-          <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
-          <SenderEmailField eventId={id} />
-          <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />
-          <EmailTemplateAdmin
-            scope="event"
-            eventId={id}
-            purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
-            label={t("healthTemplatesPage.tabRegistrationEmail")}
-          />
-          <div>
-            <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">
-              {t("bulkSendSummaries.entryPoint")}
-            </a>
-          </div>
-        </div>
-      )}
-
-      {tab === "mail" && moduleAccess.mail && (
-        <div className="flex flex-col gap-6">
-          {mailConnect === "connected" && (
-            <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
-              {t("senderEmailField.connectSuccessBanner")}
-            </p>
-          )}
-          {mailConnect === "error" && (
-            <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
-              {t("senderEmailField.connectErrorBanner")}
-            </p>
-          )}
-          <div>
-            <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
-            {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
-            <form onSubmit={handleSaveFeeSettings} className="flex max-w-md flex-col gap-2">
-              <input
-                type="number"
-                placeholder={t("feeSettings.memberPriceLabel")}
-                value={memberPriceCzk}
-                onChange={(e) => setMemberPriceCzk(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="number"
-                placeholder={t("feeSettings.nonMemberPriceLabel")}
-                value={nonMemberPriceCzk}
-                onChange={(e) => setNonMemberPriceCzk(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="text"
-                placeholder={t("feeSettings.bankAccountLabel")}
-                value={registrationBankAccountNumber}
-                onChange={(e) => setRegistrationBankAccountNumber(e.target.value)}
-                className={inputClass}
-              />
-              <input
-                type="text"
-                placeholder={t("feeSettings.bankCodeLabel")}
-                value={registrationBankCode}
-                onChange={(e) => setRegistrationBankCode(e.target.value)}
-                className={inputClass}
-              />
-              <div className="mt-1 flex justify-end">
-                <button type="submit" disabled={feeSaving} className={btnPrimary}>
-                  {t("common.save")}
-                </button>
-              </div>
-            </form>
-          </div>
-          <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
-          <div>
-            <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("mailTab.questionnaireTitle")}</h3>
-            <p className="mb-2 text-[12px] text-ink-secondary">{t("mailTab.questionnaireHint")}</p>
-            <form onSubmit={handleSaveQuestionnaireUrl} className="flex max-w-md flex-col gap-2">
-              <input
-                type="url"
-                placeholder={t("mailTab.questionnaireUrlLabel")}
-                value={mailQuestionnaireUrl}
-                onChange={(e) => {
-                  setMailQuestionnaireUrl(e.target.value);
-                  setQuestionnaireSaved(false);
-                }}
-                className={inputClass}
-              />
-              <div className="mt-1 flex items-center gap-3">
-                <button type="submit" disabled={questionnaireSaving} className={btnPrimary}>
-                  {questionnaireSaving ? t("common.loading") : t("common.save")}
-                </button>
-                {questionnaireSaved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
-              </div>
-            </form>
-          </div>
-          <SenderEmailField eventId={id} purpose="mail" />
-          <EmailTemplateAdmin
-            scope="event"
-            eventId={id}
-            purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
-            label={t("mailTab.bulkStatusTemplateLabel")}
-          />
-          <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />
-          <div>
-            <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
-              {t("mailTab.openInboxLink")}
-            </a>
-          </div>
-        </div>
-      )}
-
-      {tab === "participants" && (moduleAccess.health || moduleAccess.mail) && (
-        <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
-      )}
-
-      {tab === "categories" && (
-        <>
-          {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
-
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[16px] font-semibold text-ink">{t("eventDetail.categoriesTitle")}</h2>
+      <div className="flex flex-col gap-6 md:flex-row">
+        {/* Narrow screens: a select instead of the vertical list (Part 5: "works on
+            narrow screens as a select"). */}
+        <select
+          value={tab}
+          onChange={(e) => setTab(e.target.value as Tab)}
+          className={inputClass + " md:hidden"}
+        >
+          {visibleSections.map((s) => (
+            <option key={s.key} value={s.key}>
+              {t(s.labelKey)}
+            </option>
+          ))}
+        </select>
+        <nav className="hidden w-44 shrink-0 flex-col gap-0.5 self-start md:sticky md:top-4 md:flex">
+          {visibleSections.map((s) => (
             <button
-              onClick={syncCategoriesFromTemplates}
-              disabled={syncingCategories}
-              className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
+              key={s.key}
+              onClick={() => setTab(s.key)}
+              className={
+                "rounded-lg px-3 py-2 text-left text-[13px] font-medium " +
+                (tab === s.key ? "bg-ember/15 text-ink" : "text-ink-secondary hover:bg-paper-2 hover:text-ink")
+              }
             >
-              {syncingCategories ? t("common.loading") : t("eventDetail.syncFromTemplates")}
+              {t(s.labelKey)}
             </button>
-          </div>
+          ))}
+        </nav>
 
-          <div className="mb-6 overflow-x-auto">
-            <table className="w-full min-w-[420px] border-collapse">
-              <thead>
-                <tr className="border-b border-mist text-left">
-                  <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
-                  <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
-                  <th className="p-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((cat) => (
-                  <tr key={cat.id} className="border-b border-mist/60">
-                    <td className="p-2 text-[14px] text-ink">
-                      <div>{cat.name}</div>
-                      {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
-                    </td>
-                    <td className="p-2 text-[14px] text-ink">
-                      {editingId === cat.id ? (
-                        <input
-                          type="number"
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-                          autoFocus
-                        />
-                      ) : (
-                        <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap p-2">
-                      {editingId === cat.id ? (
-                        <>
-                          <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
-                            {t("common.save")}
-                          </button>
-                          <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
-                            {t("common.cancel")}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button onClick={() => startEdit(cat)} className="mr-3 text-[13px] text-ember hover:underline">
-                            {t("common.edit")}
-                          </button>
-                          <button onClick={() => handleDeleteCategory(cat.id)} className="text-[13px] text-red-600 hover:underline">
-                            {t("common.delete")}
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
-                  <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")} Kč</td>
-                  <td></td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <div className="min-w-0 flex-1">
+          {tab === "akce" && (
+            <div className="flex flex-col gap-6">
+              {isAdmin && <ModulesTab eventId={id} t={t} />}
+              <div>
+                <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
+                {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
+                <form onSubmit={handleSaveFeeSettings} className="flex max-w-md flex-col gap-2">
+                  <input
+                    type="number"
+                    placeholder={t("feeSettings.memberPriceLabel")}
+                    value={memberPriceCzk}
+                    onChange={(e) => setMemberPriceCzk(e.target.value)}
+                    className={inputClass}
+                  />
+                  <input
+                    type="number"
+                    placeholder={t("feeSettings.nonMemberPriceLabel")}
+                    value={nonMemberPriceCzk}
+                    onChange={(e) => setNonMemberPriceCzk(e.target.value)}
+                    className={inputClass}
+                  />
+                  <input
+                    type="text"
+                    placeholder={t("feeSettings.bankAccountLabel")}
+                    value={registrationBankAccountNumber}
+                    onChange={(e) => setRegistrationBankAccountNumber(e.target.value)}
+                    className={inputClass}
+                  />
+                  <input
+                    type="text"
+                    placeholder={t("feeSettings.bankCodeLabel")}
+                    value={registrationBankCode}
+                    onChange={(e) => setRegistrationBankCode(e.target.value)}
+                    className={inputClass}
+                  />
+                  <label className="text-[13px] text-ink-secondary">
+                    {t("eventDetail.registrationDeadlineLabel")}
+                    <input
+                      type="date"
+                      value={registrationDeadline}
+                      onChange={(e) => setRegistrationDeadline(e.target.value)}
+                      className={inputClass + " mt-1"}
+                    />
+                  </label>
+                  <div className="mt-1 flex justify-end">
+                    <button type="submit" disabled={feeSaving} className={btnPrimary}>
+                      {t("common.save")}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
 
-          <form onSubmit={handleAddCategory} className="mb-8 flex gap-2">
-            <input
-              type="text"
-              placeholder={t("eventDetail.newCategoryPlaceholder")}
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-            />
-            <button type="submit" className={btnPrimary}>
-              {t("eventDetail.addCategory")}
-            </button>
-          </form>
-        </>
-      )}
+          {tab === "lide" && isAdmin && <AccessTab eventId={id} t={t} />}
 
-      {tab === "drive" && (
-        <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} />
-      )}
+          {tab === "pripojeni" && (
+            <div className="flex flex-col gap-6">
+              {mailConnect === "connected" && (
+                <p className="rounded-lg bg-green-50 px-3 py-2 text-[13px] text-green-700">
+                  {t("senderEmailField.connectSuccessBanner")}
+                </p>
+              )}
+              {mailConnect === "error" && (
+                <p className="rounded-lg bg-red-50 px-3 py-2 text-[13px] text-red-700">
+                  {t("senderEmailField.connectErrorBanner")}
+                </p>
+              )}
+              <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} />
+              {/* One control for both modules now (Part 5: "not repeated elsewhere") -- the
+                  gmail.modify scope warning only matters when Mail is enabled (it reads/
+                  moves inbound mail; Health only ever sends), so purpose follows that. */}
+              {(moduleAccess.health || moduleAccess.mail) && (
+                <SenderEmailField eventId={id} purpose={moduleAccess.mail ? "mail" : "health"} />
+              )}
+            </div>
+          )}
+
+          {tab === "uctenky" && (
+            <>
+              {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
+
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-[16px] font-semibold text-ink">{t("eventDetail.categoriesTitle")}</h2>
+                <button
+                  onClick={syncCategoriesFromTemplates}
+                  disabled={syncingCategories}
+                  className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
+                >
+                  {syncingCategories ? t("common.loading") : t("eventDetail.syncFromTemplates")}
+                </button>
+              </div>
+
+              <div className="mb-6 overflow-x-auto">
+                <table className="w-full min-w-[420px] border-collapse">
+                  <thead>
+                    <tr className="border-b border-mist text-left">
+                      <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colCategory")}</th>
+                      <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("eventDetail.colBudget")}</th>
+                      <th className="p-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map((cat) => (
+                      <tr key={cat.id} className="border-b border-mist/60">
+                        <td className="p-2 text-[14px] text-ink">
+                          <div>{cat.name}</div>
+                          {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
+                        </td>
+                        <td className="p-2 text-[14px] text-ink">
+                          {editingId === cat.id ? (
+                            <input
+                              type="number"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                              autoFocus
+                            />
+                          ) : (
+                            <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap p-2">
+                          {editingId === cat.id ? (
+                            <>
+                              <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                                {t("common.save")}
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                                {t("common.cancel")}
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => startEdit(cat)} className="mr-3 text-[13px] text-ember hover:underline">
+                                {t("common.edit")}
+                              </button>
+                              <button onClick={() => handleDeleteCategory(cat.id)} className="text-[13px] text-red-600 hover:underline">
+                                {t("common.delete")}
+                              </button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td className="p-2 text-[14px] font-semibold text-ink">{t("eventDetail.total")}</td>
+                      <td className="p-2 text-[14px] font-semibold text-ink">{totalBudget.toLocaleString("cs-CZ")} Kč</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <form onSubmit={handleAddCategory} className="mb-8 flex gap-2">
+                <input
+                  type="text"
+                  placeholder={t("eventDetail.newCategoryPlaceholder")}
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  className="flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                />
+                <button type="submit" className={btnPrimary}>
+                  {t("eventDetail.addCategory")}
+                </button>
+              </form>
+            </>
+          )}
+
+          {tab === "ucastnici" && (moduleAccess.health || moduleAccess.mail) && (
+            <div className="flex flex-col gap-6">
+              <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
+              <EmailTemplateAdmin
+                scope="event"
+                eventId={id}
+                purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
+                label={t("healthTemplatesPage.tabRegistrationEmail")}
+              />
+              <div>
+                <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("mailTab.questionnaireTitle")}</h3>
+                <p className="mb-2 text-[12px] text-ink-secondary">{t("mailTab.questionnaireHint")}</p>
+                <form onSubmit={handleSaveQuestionnaireUrl} className="flex max-w-md flex-col gap-2">
+                  <input
+                    type="url"
+                    placeholder={t("mailTab.questionnaireUrlLabel")}
+                    value={mailQuestionnaireUrl}
+                    onChange={(e) => {
+                      setMailQuestionnaireUrl(e.target.value);
+                      setQuestionnaireSaved(false);
+                    }}
+                    className={inputClass}
+                  />
+                  <div className="mt-1 flex items-center gap-3">
+                    <button type="submit" disabled={questionnaireSaving} className={btnPrimary}>
+                      {questionnaireSaving ? t("common.loading") : t("common.save")}
+                    </button>
+                    {questionnaireSaved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {tab === "zdravi" && moduleAccess.health && (
+            <div className="flex flex-col gap-6">
+              <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
+              <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
+              <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
+              <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />
+              <div>
+                <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">
+                  {t("bulkSendSummaries.entryPoint")}
+                </a>
+              </div>
+            </div>
+          )}
+
+          {tab === "posta" && moduleAccess.mail && (
+            <div className="flex flex-col gap-6">
+              <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
+              <EmailTemplateAdmin
+                scope="event"
+                eventId={id}
+                purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
+                label={t("mailTab.bulkStatusTemplateLabel")}
+              />
+              <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />
+              <div>
+                <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
+                  {t("mailTab.openInboxLink")}
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -753,7 +799,8 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
     <div>
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
-      <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
+      <h2 className="mb-1 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
+      <p className="mb-3 text-[12px] text-ink-secondary">{t("accessTab.modulesHelp")}</p>
       <div className="flex flex-col gap-2">
         {modules.map((m) => (
           <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">
@@ -764,7 +811,9 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
               className="h-4 w-4"
             />
             {moduleLabel(m.moduleKey)}
-            <span className="text-[12px] text-ink-secondary">({t("accessTab.moduleEnabledHint")})</span>
+            <span className="text-[12px] text-ink-secondary">
+              ({m.enabled ? t("accessTab.moduleOn") : t("accessTab.moduleOff")})
+            </span>
           </label>
         ))}
       </div>
@@ -819,7 +868,8 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
 
       {rows.length > 0 && (
         <>
-          <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("accessTab.usersTitle")}</h2>
+          <h2 className="mb-1 text-[16px] font-semibold text-ink">{t("accessTab.usersTitle")}</h2>
+          <p className="mb-3 text-[12px] text-ink-secondary">{t("accessTab.usersHelp")}</p>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[420px] border-collapse">
               <thead>

@@ -285,6 +285,23 @@ export const ROWS: Row[] = [
 
   // -- Participants/settings/Health/Mail prompt, Part 11-I/E: documents/variables -----------
   { key: "templateCheck.emptyValue", cs: "prázdná hodnota", en: "empty value" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 5/10: event settings restructure ------
+  { key: "eventSettings.tabAkce", cs: "Akce", en: "Event" },
+  { key: "eventSettings.tabPripojeni", cs: "Připojení", en: "Connections" },
+  { key: "eventSettings.tabUctenky", cs: "Účtenky", en: "Bills" },
+  { key: "eventDetail.registrationDeadlineLabel", cs: "Termín odpovědi rodičů (nepovinné)", en: "Parent response deadline (optional)" },
+  { key: "eventDetail.checklistTitle", cs: "Akce je připravená: {done} / {total}", en: "Event readiness: {done} / {total}" },
+  { key: "eventDetail.checklistDrive", cs: "Složka na Disku připojena", en: "Drive folder connected" },
+  { key: "eventDetail.checklistMailbox", cs: "Schránka připojena", en: "Mailbox connected" },
+  { key: "eventDetail.checklistCategories", cs: "Kategorie účtenek", en: "Bill categories" },
+  { key: "eventDetail.checklistDocumentTypes", cs: "Typy dokumentů", en: "Document types" },
+  { key: "eventDetail.checklistDeadline", cs: "Termín odpovědi rodičů", en: "Parent response deadline" },
+  { key: "accessTab.moduleOn", cs: "Zapnuto", en: "On" },
+  { key: "accessTab.moduleOff", cs: "Vypnuto", en: "Off" },
+  { key: "accessTab.modulesHelp", cs: "Zapněte jen to, co akce používá. Vypnutý modul zmizí z menu a jeho pole se nezobrazují, data zůstanou zachována.", en: "Turn on only what this event uses. A disabled module disappears from the menu and its fields stop showing, but its data is kept." },
+  { key: "accessTab.usersHelp", cs: "Určuje, kdo v této akci vidí které moduly. Administrátor vidí vše vždy.", en: "Decides who sees which modules in this event. An administrator always sees everything." },
+  { key: "billsPage.uploadButton", cs: "Nahrát účtenky", en: "Upload bills" },
 ];
 
 async function main() {

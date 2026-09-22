@@ -562,9 +562,16 @@ export default function EventBillsPage({
 
   return (
     <div className="mx-auto max-w-[1088px] p-4 md:p-8">
-      <h1 className="mb-5 text-[22px] font-semibold text-ink">
-        {event.name} — {t("billsPage.title")}
-      </h1>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold text-ink">
+          {event.name} — {t("billsPage.title")}
+        </h1>
+        {/* Part 10: Import is no longer a permanent sidebar item -- it's a one-off action,
+            reachable as a button from the page it feeds. */}
+        <a href={`/events/${id}/import`} className={btnPrimary}>
+          {t("billsPage.uploadButton")}
+        </a>
+      </div>
 
       <div className="mb-3 relative max-w-sm">
         <input

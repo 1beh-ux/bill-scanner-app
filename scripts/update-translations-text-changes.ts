@@ -42,6 +42,12 @@ export const CHANGES: { key: string; cs: string; en: string }[] = [
   // Was a plain dropdown; Part 3 of the participants/settings prompt turns it into a
   // combobox that also accepts a new name -- wording updated to say so.
   { key: "medPlansSection.selectMed", cs: "Vyberte nebo napište nový lék", en: "Pick or type a new medication" },
+  // Part 10 §2 nav rename: "Čerpání rozpočtu" -> "Rozpočet", "Výdej léků" -> "Léky a výdej"
+  // (also the meds page's own h1 -- same name everywhere is the point), "Seznam účastníků —
+  // pošta" -> "Dokumenty" (same, it's the Mail working list's h1 too).
+  { key: "nav.budget", cs: "Rozpočet", en: "Budget" },
+  { key: "medChecklistPage.title", cs: "Léky a výdej", en: "Medications and handout" },
+  { key: "participantsPage.mailListTitle", cs: "Dokumenty", en: "Documents" },
   // Part 3 terminology: "Katalog léků" (event/org settings) / "Plán léků" (per
   // participant) / "Výdej léků" (the grid, already correct) -- were all "Léky".
   { key: "healthTemplatesPage.tabMeds", cs: "Katalog léků", en: "Medication catalog" },

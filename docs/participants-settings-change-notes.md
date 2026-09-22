@@ -14,45 +14,21 @@ health notes already in `customFieldValues`. NOT present: firstName/
 lastName split, a `contact_email` computed type, a leftover duplicate
 "Jméno a příjmení dítěte" custom field.
 
-## Status
-- **Part 1** (names, contact e-mail) — done. `firstName`/`lastName` split
-  (`Participant`, migration `add_participant_name_split`); `Email` fixed
-  field is now `computed`/`contact_email` (first guardian with
-  `receivesCommunications`, else first) instead of plain `guardians[0]`,
-  key unchanged so `{{Email}}` still resolves in existing docs. Scripts:
-  `split-participant-names`, `backfill-contact-email-field`,
-  `deactivate-duplicate-name-field` (all dry-run). Deferred to Part 5:
-  full canonical-name/alias resolution for documents (email already has
-  `contact_email`/`participant_first_name`/`participant_last_name`).
-- **Part 4** (field visibility by module) — done. `allowedParticipantFieldKeys`
-  now gates by whether the module is enabled for the EVENT, not the
-  caller's own grant. `fieldCategory`/`surfacesForCategory` (Základní/
-  Zdraví/Dokumenty a pošta/Vlastní) replace the 5-checkbox surface grid in
-  `ParticipantFieldAdmin` with one category + a "show in list" toggle.
-  Script: `normalize-participant-field-surfaces` (dry-run). Minor known
-  deviation: the admin UI's "which categories to offer for a new field"
-  filter still reads grant-based `/modules/mine`, not event enablement —
-  cosmetic only, real enforcement is correct.
-- **Part 2** (working lists + central roster) — done. Health list: Příjmení
-  Jméno/Skupina/Věk/incident dot (last-24h, tooltip)/med-plan dot/
-  "+ Záznam"; dropped Dokumenty + dynamic columns. New route
-  `.../participants/health-signals`. Deviation: "unresolved incidents" not
-  representable (no resolved/closed concept anywhere in the schema) — dot
-  is "logged in the last 24h" only. Mail list: Příjmení Jméno/Registrace/
-  doc-type columns/Kontaktní e-mail; dropped Věk + dynamic columns; the
-  manual doc toggle now logs `MailActionLog` (`document_marked`/
-  `document_unmarked`, migration `add_mail_action_document_toggle`) with a
-  5s undo toast. Central roster: fixed columns now Příjmení/Jméno (split)/
-  Skupina/Věk/Registrace/Dokumenty/Kontaktní e-mail; edit modal grouped
-  into Základní údaje/Zákonní zástupci/Údaje/Zdravotní poznámky; guardians
-  now genuinely editable (name/e-mail/relationship/phone/"dostává
-  e-maily") with per-row save. Found & fixed two real gaps: guardian POST/
-  PATCH/DELETE routes were health-only (blocked mail-only users, widened
-  to health-or-mail); guardian PATCH silently dropped `phone`. "Přijmout
-  hned" checkbox on add (no registration number assigned yet, deferred
-  like the existing accept flow). Bulk accept from toolbar already
-  existed. Editable "Věk": never existed, brief already satisfied. Script:
-  `fix-tshirt-size-casing` (dry-run, production data not a seed default).
+## Status (Parts 1-4 compressed -- full detail in git log, one commit per part)
+- **Part 1** (names, contact e-mail) — done. firstName/lastName split;
+  `Email` field is now computed/contact_email (receivesCommunications
+  guardian, else first), key unchanged. Scripts: split-participant-names,
+  backfill-contact-email-field, deactivate-duplicate-name-field.
+- **Part 4** (field visibility by module) — done. Gating moved from
+  caller's-own-grant to module-enabled-for-the-event; per-surface checkbox
+  grid replaced with one derived category + a "show in list" toggle.
+  Script: normalize-participant-field-surfaces.
+- **Part 2** (working lists + central roster) — done. Health/Mail lists cut
+  to fixed columns + real signals (incident/med dots, doc-type columns,
+  Kontaktní e-mail); central roster's edit panel grouped into sections with
+  real guardian CRUD (found & fixed: guardian routes were health-only-
+  gated, blocking mail-only users; PATCH silently dropped phone);
+  "Přijmout hned" on add. Script: fix-tshirt-size-casing.
 - **Part 3** (medications) — done. Deviation: the brief's premise ("dose and notes
   exist in the schema but the form doesn't show them") was already stale — the
   add-plan form and plan rows already showed both; the real gaps were: (a) the
@@ -101,7 +77,44 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   the reported issue is that Pavel's actual Google Doc has the price typed in by
   hand instead of using the variable, which is template content, not something
   this codebase can fix.
-- **Parts 5–10, 11 A-D/F-H**: pending.
+- **Part 5 + Part 10 §1-2** (event settings restructure + nav regroup) — done.
+  `events/[id]/page.tsx`'s 7 horizontal tabs replaced with a left section list
+  (sticky on desktop, a `<select>` on narrow screens): Akce (name/dates read-only
+  as before, Moduly -- moved in from its own tab, Poplatek za tábor -- moved in
+  from Pošta, new Termín odpovědi rodičů date field), Lidé a přístup, Připojení
+  (Drive + the ONE sender-mailbox control -- was duplicated on both Zdraví and
+  Pošta with different wording for the same `Event.senderEmail`, now one),
+  Účtenky (unchanged), Účastníci (fields + registration-acceptance template +
+  questionnaire URL, both moved in from Zdraví/Pošta), Zdraví (mailbox removed),
+  Pošta (fee block and questionnaire URL removed). Old `?tab=` values (including
+  the mail-oauth callback's own redirects, updated to the new key) still resolve
+  via `OLD_TAB_MAP` -- verified against every old value plus garbage input.
+  Setup checklist at the top ("Akce je připravená: N / 4-5"): Drive connected,
+  mailbox connected, categories exist, registration deadline set, document types
+  exist (only counted if Mail is enabled) -- each links to its section. Deviation:
+  not the full 7-item list the brief sketches -- "pole účastníků nastavena" and
+  "e-mailové šablony zkontrolovány" have no clean objective signal in the data
+  model, left out rather than faked.
+  Fixed a real bug found while moving `ModulesTab`: every module showed
+  "(Zapnuto pro tuto akci)" regardless of its actual state; now Zapnuto/Vypnuto.
+  Added two Part 10 §5.1 help texts (Moduly, Přístup uživatelů) as a cheap side
+  effect of touching those sections; the rest of §5.1 is not done.
+  Nav regroup (Part 10 §2): Import removed from the sidebar (now a "Nahrát
+  účtenky" button on the bills page); "Čerpání rozpočtu"/"Výdej léků"/"Seznam
+  účastníků — pošta" renamed to "Rozpočet"/"Léky a výdej"/"Dokumenty". The
+  ÚČTENKY/ÚČASTNÍCI/ZDRAVÍ/POŠTA grouping and the "Plátci"-under-Organizace move
+  the brief asks for already existed from prompt 1's retest fixes.
+  NOT done: "Odeslané" (sent-mail log nav item + page) -- bundled into Part 8's
+  "Poslední akce must show every send" instead of building it twice; an
+  ORGANIZACE "Připojení" nav item -- genuinely ambiguous what it should link to
+  (no existing distinct "organization connections" page; `/settings` already
+  covers personal Google-account connection), skipped rather than guessed;
+  the e-mail template catalog with Výchozí/Upraveno badges and "Obnovit
+  z organizace" (Part 10 §3); "Přehled akce" (explicitly marked optional in
+  the brief); the rest of the §5.1 help-text table; participant registration
+  sheet connection moved into Připojení (stays on the import page, tied to
+  Part 6).
+- **Parts 6–9, 10 §3-7, 11 A-D/F-H**: pending.
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum

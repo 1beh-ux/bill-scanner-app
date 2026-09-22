@@ -15,7 +15,6 @@ import {
   Sun,
   Moon,
   Tent,
-  Upload,
   HeartPulse,
   Pill,
   Mail,
@@ -86,8 +85,9 @@ export default function AppSidebar() {
     // context so event-scoped links pick up the new id, stay put otherwise.
   }
 
+  // Part 10: Import is no longer a permanent menu item -- it's a one-off action, now a
+  // button on the bills page itself.
   const billsNavItems = [
-    { href: eventId ? `/events/${eventId}/import` : "/events", label: t("nav.import"), icon: Upload },
     { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
     { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
     { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },

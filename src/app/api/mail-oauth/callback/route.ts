@@ -16,14 +16,17 @@ function redirectToEvent(
   purpose: "health" | "mail" | "drive",
   result: "connected" | "error" | "in_use"
 ): NextResponse {
+  // Both Drive and the sender-mailbox picker now live on the event settings page's
+  // "Připojení" section (Part 5 of the participants/settings prompt) -- ?tab=pripojeni
+  // for both, old ?tab=drive/health links still resolve there via OLD_TAB_MAP.
   const target =
     purpose === "drive"
       ? eventId === "-"
         ? `${origin}/settings?driveConnect=${result}`
-        : `${origin}/events/${eventId}?tab=drive&driveConnect=${result}`
+        : `${origin}/events/${eventId}?tab=pripojeni&driveConnect=${result}`
       : purpose === "mail"
       ? `${origin}/events/${eventId}/mail?mailConnect=${result}`
-      : `${origin}/events/${eventId}?tab=health&mailConnect=${result}`;
+      : `${origin}/events/${eventId}?tab=pripojeni&mailConnect=${result}`;
   const response = NextResponse.redirect(target);
   response.cookies.delete("mail_oauth_state");
   return response;
