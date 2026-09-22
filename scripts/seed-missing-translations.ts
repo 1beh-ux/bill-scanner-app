@@ -342,6 +342,9 @@ export const ROWS: Row[] = [
 
   // -- Participants/settings/Health/Mail prompt, Part 11-G: styled file input in mail dialog --
   { key: "composeEmailModal.noFileChosen", cs: "Žádný soubor nevybrán", en: "No file chosen" },
+
+  // -- Participants/settings/Health/Mail prompt, Part 11-G: "missing translations" filter --
+  { key: "translationsPage.missingOnlyLabel", cs: "Jen chybějící překlady", en: "Missing translations only" },
 ];
 
 async function main() {

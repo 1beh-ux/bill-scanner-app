@@ -22,6 +22,7 @@ export default function TranslationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [missingOnly, setMissingOnly] = useState(false);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -89,7 +90,7 @@ export default function TranslationsPage() {
 
   const groups = useMemo(() => {
     const query = search.trim().toLowerCase();
-    const filtered = query
+    let filtered = query
       ? rows.filter(
           (r) =>
             r.key.toLowerCase().includes(query) ||
@@ -97,6 +98,7 @@ export default function TranslationsPage() {
             r.en.toLowerCase().includes(query)
         )
       : rows;
+    if (missingOnly) filtered = filtered.filter((r) => !r.cs.trim() || !r.en.trim());
 
     const map = new Map<string, TranslationRow[]>();
     for (const row of filtered) {
@@ -106,7 +108,7 @@ export default function TranslationsPage() {
       map.get(prefix)!.push(row);
     }
     return Array.from(map.entries());
-  }, [rows, search]);
+  }, [rows, search, missingOnly]);
 
   if (!roleLoaded || currentUserRole !== "admin") return null;
 
@@ -114,15 +116,23 @@ export default function TranslationsPage() {
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("nav.translations")}</h1>
 
-      <div className="mb-4 max-w-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t("translationsPage.searchPlaceholder")}
           aria-label={t("translationsPage.searchPlaceholder")}
-          className="w-full rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-ember"
+          className="w-full max-w-sm rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink placeholder:text-ink-secondary focus:outline-none focus:ring-1 focus:ring-ember"
         />
+        <label className="flex items-center gap-1.5 text-[13px] text-ink-secondary">
+          <input
+            type="checkbox"
+            checked={missingOnly}
+            onChange={(e) => setMissingOnly(e.target.checked)}
+          />
+          {t("translationsPage.missingOnlyLabel")}
+        </label>
       </div>
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}

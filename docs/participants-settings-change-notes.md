@@ -139,13 +139,17 @@ lastName split, a `contact_email` computed type, a leftover duplicate
   "Žádný soubor nevybrán" line next to it. Also fixed a literal
   `{{proměnných}}` left in stored translation copy (documentVariablesPage
   .intro) — currently an orphaned/unused key, fixed as a precaution.
+- **Part 11-G (rest) + 11-H** — done. Překlady page gained a "Jen
+  chybějící překlady" checkbox (filters to rows with empty cs or en)
+  alongside the existing search box. 11-H: confirmed by code reading, no
+  change needed — `currentEventId` lives in the app-wide `I18nProvider`
+  (persisted to `localStorage`), not page-local state, and `AppSidebar`
+  (which renders the switcher) is mounted once in `providers.tsx` for
+  every route — the switcher already persists across Šablony/Překlady.
 - **Pending**: 10 §3-7 (e-mail template catalog w/ Výchozí/Upraveno
   badges + org-compare, most of §5.1 help text, Přehled akce — optional),
   11-A.4 (real recipient list in the accept-dialog ComposeEmailModal),
-  11-F (incident photo/marker/body-location UI polish), rest of 11-G
-  (Překlady page "Chybějící překlady" filter+search), 11-H (verify event
-  switcher persists on org pages — likely already correct, needs only
-  checking, no code expected).
+  11-F (incident photo/marker/body-location UI polish).
 
 ## Deploy order so far (grows as later parts land)
 1. `prisma migrate deploy` — additive only (name split + contact_email enum
