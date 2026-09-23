@@ -82,6 +82,7 @@ export type PlanBlockRow = {
   leaderId: string | null;
   locationId: string | null;
   notes: string | null;
+  groupNames: string[]; // empty = everyone
 };
 export type PlanState = { windows: PlanWindowRow[]; slots: PlanSlotRow[]; blocks: PlanBlockRow[] };
 
@@ -109,5 +110,7 @@ export type PlanPayload = PlanState & {
   leaders: PlanListItem<PlanLeaderData>[];
   dayTemplates: PlanListItem<PlanDayTemplateData>[];
   baseActivities: PlanListItem<PlanBaseActivityData>[];
+  // Distinct Participant.groupName values of the event, plus any still used on blocks.
+  groups: string[];
 };
 

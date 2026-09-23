@@ -90,7 +90,7 @@ async function main() {
     { key: "planBoard.deleteBlock", cs: "Odebrat aktivitu", en: "Remove activity" },
     { key: "planBoard.confirmDeleteSlot", cs: "Smazat celý blok včetně všech souběžných aktivit?", en: "Delete the whole slot including all parallel activities?" },
     { key: "planBoard.confirmDeleteBlock", cs: "Odebrat tuto aktivitu z plánu?", en: "Remove this activity from the plan?" },
-    { key: "planBoard.conflictHint", cs: "Kolize: stejný vedoucí nebo místo ve stejný čas", en: "Conflict: same leader or location at the same time" },
+    { key: "planBoard.conflictHint", cs: "Kolize: stejný vedoucí, místo nebo skupina ve stejný čas", en: "Conflict: same leader, location or group at the same time" },
     { key: "planBoard.copyHint", cs: "Přetažení přesouvá · s Alt/Ctrl kopíruje · přetažení na aktivitu = souběžně · spodní hrana mění délku", en: "Drag moves · hold Alt/Ctrl to copy · drop onto an activity = parallel · bottom edge changes duration" },
     { key: "planBoard.copyBadge", cs: "kopie", en: "copy" },
     { key: "planBoard.searchPlaceholder", cs: "Hledat aktivitu…", en: "Search activities…" },
@@ -129,6 +129,13 @@ async function main() {
     { key: "planBoard.allLeaders", cs: "Všichni vedoucí", en: "All leaders" },
     { key: "planBoard.printFor", cs: "Program pro: {name}", en: "Schedule for: {name}" },
     { key: "planBoard.printEmpty", cs: "Na tento den není nic naplánováno.", en: "Nothing planned for this day." },
+
+    // Step 8: participant groups
+    { key: "planBoard.groups", cs: "Skupiny", en: "Groups" },
+    { key: "planBoard.groupsHint", cs: "Bez výběru = pro všechny. Skupiny se berou ze seznamu účastníků (pole Skupina).", en: "None selected = everyone. Groups come from the participant list (Group field)." },
+    { key: "planBoard.groupsNone", cs: "Účastníci zatím nemají vyplněnou skupinu.", en: "No participant has a group yet." },
+    { key: "planBoard.allGroups", cs: "Všechny skupiny", en: "All groups" },
+    { key: "planBoard.warnGroup", cs: "Skupina {name} má v {time} současně „{a}“ a „{b}“", en: "Group {name} has “{a}” and “{b}” at the same time ({time})" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

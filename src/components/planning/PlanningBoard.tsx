@@ -191,7 +191,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
     // what the server builds (api/.../planning/ops resolveInsert).
     const empty: BlockFields = {
       activityId: null, customName: null, description: null, primaryCategoryId: null,
-      secondaryCategoryId: null, leaderId: null, locationId: null, notes: null,
+      secondaryCategoryId: null, leaderId: null, locationId: null, notes: null, groupNames: [],
     };
     if (drag.type === "activity") {
       const a = p.activities.find((x) => x.id === drag.activityId);

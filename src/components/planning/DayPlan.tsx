@@ -239,6 +239,7 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
       {(leader || location) && (
         <div className="truncate text-[11.5px] text-ink-secondary">{[leader, location].filter(Boolean).join(" · ")}</div>
       )}
+      {b.groupNames.length > 0 && <div className="truncate text-[11px] font-medium text-ember">{b.groupNames.join(", ")}</div>}
       <button
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}

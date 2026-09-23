@@ -73,6 +73,7 @@ export default function SummaryPanel({
       <CategoryTable title={t("planLists.secondaryCategory")} rows={s.secondaryCategories} name={(id) => nameIn(payload.categories, id)} />
       <EntityTable title={t("planLists.leadersLabel")} rows={s.leaders} name={(id) => nameIn(payload.leaders, id)} />
       <EntityTable title={t("planLists.locationsLabel")} rows={s.locations} name={(id) => nameIn(payload.locations, id)} />
+      <EntityTable title={t("planBoard.groups")} rows={s.groups} name={(g) => g} />
 
       {(overflowing.length > 0 || scopedConflicts.length > 0) && (
         <section>
@@ -91,8 +92,8 @@ export default function SummaryPanel({
               return (
                 <li key={`${c.type}:${c.blockIds.join(":")}`}>
                   {scope === "event" && `${dayLabel(c.dayId)}: `}
-                  {t(c.type === "leader" ? "planBoard.warnLeader" : "planBoard.warnLocation", {
-                    name: nameIn(c.type === "leader" ? payload.leaders : payload.locations, c.refId),
+                  {t(c.type === "leader" ? "planBoard.warnLeader" : c.type === "location" ? "planBoard.warnLocation" : "planBoard.warnGroup", {
+                    name: c.type === "group" ? c.refId : nameIn(c.type === "leader" ? payload.leaders : payload.locations, c.refId),
                     time: start !== undefined ? minutesToHhmm(start) : "",
                     a: block ? blockLabel(payload, block) : "",
                     b: other ? blockLabel(payload, other) : "",

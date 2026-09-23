@@ -25,7 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!block) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
-  const data: Record<string, string | null> = {};
+  const data: Record<string, string | string[] | null> = {};
 
   for (const key of TEXT_FIELDS) {
     if (body[key] === undefined) continue;
@@ -44,6 +44,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     else if (typeof body.activityId === "string" && (await prisma.planActivity.count({ where: { id: body.activityId, eventId } })) > 0) {
       data.activityId = body.activityId;
     } else return NextResponse.json({ error: "invalid_reference" }, { status: 400 });
+  }
+
+  if (body.groupNames !== undefined) {
+    // Free names (the board offers Participant.groupName values); trimmed, deduped, bounded.
+    if (!Array.isArray(body.groupNames) || body.groupNames.length > 50 || body.groupNames.some((g: unknown) => typeof g !== "string" || g.length > 100)) {
+      return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+    }
+    data.groupNames = [...new Set((body.groupNames as string[]).map((g) => g.trim()).filter(Boolean))];
   }
 
   await prisma.planBlock.update({ where: { id: blockId }, data });

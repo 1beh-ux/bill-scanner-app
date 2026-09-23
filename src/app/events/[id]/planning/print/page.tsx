@@ -11,7 +11,8 @@ const selectClass =
   "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 // Printable schedule (step 7): ?day=<id> (default all days, one page each),
-// ?leader=<id> for a leader's own schedule. Filters live in the URL so a
+// ?leader=<id> for a leader's own schedule, ?group=<name> for a participant
+// group's (its blocks plus those for everyone). Filters live in the URL so a
 // filtered view can be bookmarked or shared.
 export default function PlanningPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
@@ -20,6 +21,7 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
   const search = useSearchParams();
   const day = search.get("day") ?? "";
   const leader = search.get("leader") ?? "";
+  const group = search.get("group") ?? "";
   const [payload, setPayload] = useState<PlanPayload | null>(null);
 
   useEffect(() => {
@@ -29,11 +31,14 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
   }, [eventId]);
 
   const rows = useMemo(
-    () => (payload ? scheduleRows(payload, { dayIds: day ? new Set([day]) : undefined, leaderId: leader || undefined }) : []),
-    [payload, day, leader]
+    () =>
+      payload
+        ? scheduleRows(payload, { dayIds: day ? new Set([day]) : undefined, leaderId: leader || undefined, group: group || undefined })
+        : [],
+    [payload, day, leader, group]
   );
 
-  function setFilter(key: "day" | "leader", value: string) {
+  function setFilter(key: "day" | "leader" | "group", value: string) {
     const next = new URLSearchParams(search);
     if (value) next.set(key, value);
     else next.delete(key);
@@ -68,6 +73,16 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
             </option>
           ))}
         </select>
+        {payload.groups.length > 0 && (
+          <select value={group} onChange={(e) => setFilter("group", e.target.value)} className={selectClass}>
+            <option value="">{t("planBoard.allGroups")}</option>
+            {payload.groups.map((g) => (
+              <option key={g} value={g}>
+                {g}
+              </option>
+            ))}
+          </select>
+        )}
         <a href={`/api/events/${eventId}/planning/export${csvQuery ? `?${csvQuery}` : ""}`} className="ml-auto text-[13px] text-ember hover:underline">
           {t("planBoard.csv")}
         </a>
@@ -82,17 +97,36 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
             {payload.event.name} — {d.label}
             {d.date && <span className="ml-2 font-normal text-ink-secondary">{formatDayDate(d.date)}</span>}
           </h1>
-          {(leaderName || d.theme) && (
-            <p className="mb-2 text-[13px] text-ink-secondary">{[leaderName && t("planBoard.printFor", { name: leaderName }), d.theme].filter(Boolean).join(" · ")}</p>
+          {(leaderName || group || d.theme) && (
+            <p className="mb-2 text-[13px] text-ink-secondary">
+              {[leaderName && t("planBoard.printFor", { name: leaderName }), group && t("planBoard.printFor", { name: group }), d.theme]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
           )}
-          <DayTable rows={rows.filter((r) => r.dayId === d.id)} hideLeader={Boolean(leader)} t={t} />
+          <DayTable
+            rows={rows.filter((r) => r.dayId === d.id)}
+            hideLeader={Boolean(leader)}
+            showGroups={!group && rows.some((r) => r.groups)}
+            t={t}
+          />
         </section>
       ))}
     </div>
   );
 }
 
-function DayTable({ rows, hideLeader, t }: { rows: ScheduleRow[]; hideLeader: boolean; t: (key: string) => string }) {
+function DayTable({
+  rows,
+  hideLeader,
+  showGroups,
+  t,
+}: {
+  rows: ScheduleRow[];
+  hideLeader: boolean;
+  showGroups: boolean;
+  t: (key: string) => string;
+}) {
   if (rows.length === 0) return <p className="text-[13px] text-ink-secondary">{t("planBoard.printEmpty")}</p>;
   const cell = "border-b border-mist px-2 py-1 align-top";
   return (
@@ -103,13 +137,14 @@ function DayTable({ rows, hideLeader, t }: { rows: ScheduleRow[]; hideLeader: bo
           <th className={cell + " font-medium"}>{t("planBoard.activity")}</th>
           {!hideLeader && <th className={cell + " font-medium"}>{t("planBoard.leader")}</th>}
           <th className={cell + " font-medium"}>{t("planBoard.location")}</th>
+          {showGroups && <th className={cell + " font-medium"}>{t("planBoard.groups")}</th>}
         </tr>
       </thead>
       <tbody>
         {rows.map((r, i) => {
           const newWindow = i === 0 || rows[i - 1].windowName !== r.windowName;
           return (
-            <FragmentRows key={i} newWindow={newWindow} windowLabel={`${r.windowName} (${r.windowStart}–${r.windowEnd})`} colSpan={hideLeader ? 3 : 4}>
+            <FragmentRows key={i} newWindow={newWindow} windowLabel={`${r.windowName} (${r.windowStart}–${r.windowEnd})`} colSpan={2 + (hideLeader ? 0 : 1) + 1 + (showGroups ? 1 : 0)}>
               <tr style={{ breakInside: "avoid" }}>
                 <td className={cell + " whitespace-nowrap text-ink"}>
                   {r.start}–{r.end}
@@ -122,6 +157,7 @@ function DayTable({ rows, hideLeader, t }: { rows: ScheduleRow[]; hideLeader: bo
                 </td>
                 {!hideLeader && <td className={cell + " text-ink"}>{r.leader}</td>}
                 <td className={cell + " text-ink"}>{r.location}</td>
+                {showGroups && <td className={cell + " text-ink"}>{r.groups}</td>}
               </tr>
             </FragmentRows>
           );

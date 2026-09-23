@@ -971,6 +971,10 @@ model PlanBlock {
   leaderId            String? @map("leader_id")
   locationId          String? @map("location_id")
   notes               String?
+  // Participant groups this branch is for -- values of Participant.groupName
+  // (plain names, no group table; see planning design doc, decision 5). Empty =
+  // everyone.
+  groupNames          String[] @default([]) @map("group_names")
 
   slot              PlanSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
   activity          PlanActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)

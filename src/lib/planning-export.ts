@@ -23,10 +23,12 @@ export type ScheduleRow = {
   leader: string;
   leaderId: string | null;
   location: string;
+  groups: string; // comma-separated; empty = everyone
   notes: string;
 };
 
-export function scheduleRows(p: PlanPayload, opts: { dayIds?: Set<string>; leaderId?: string } = {}): ScheduleRow[] {
+// `group` keeps that group's blocks plus blocks without groups (meant for everyone).
+export function scheduleRows(p: PlanPayload, opts: { dayIds?: Set<string>; leaderId?: string; group?: string } = {}): ScheduleRow[] {
   const times = computeTimes(p);
   const name = (list: { id: string; name: string }[], id: string | null) => (id && list.find((x) => x.id === id)?.name) || "";
   const rows: ScheduleRow[] = [];
@@ -39,6 +41,7 @@ export function scheduleRows(p: PlanPayload, opts: { dayIds?: Set<string>; leade
         const blocks = p.blocks.filter((b) => b.slotId === slot.id).sort(byBranch);
         for (const b of blocks) {
           if (opts.leaderId && b.leaderId !== opts.leaderId) continue;
+          if (opts.group && b.groupNames.length > 0 && !b.groupNames.includes(opts.group)) continue;
           rows.push({
             dayId: day.id,
             dayLabel: day.label,
@@ -58,6 +61,7 @@ export function scheduleRows(p: PlanPayload, opts: { dayIds?: Set<string>; leade
             leader: name(p.leaders, b.leaderId),
             leaderId: b.leaderId,
             location: name(p.locations, b.locationId),
+            groups: b.groupNames.join(", "),
             notes: b.notes ?? "",
           });
         }

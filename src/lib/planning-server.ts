@@ -36,6 +36,7 @@ export async function loadPlanState(eventId: string, db: Db = prisma) {
         leaderId: b.leaderId,
         locationId: b.locationId,
         notes: b.notes,
+        groupNames: b.groupNames,
       })
     ),
   };
@@ -52,7 +53,7 @@ export async function loadPlanState(eventId: string, db: Db = prisma) {
 
 // Everything the board needs in one request.
 export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
-  const [event, plan, activities, listItems, baseActivities] = await Promise.all([
+  const [event, plan, activities, listItems, baseActivities, participantGroups] = await Promise.all([
     prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { id: true, name: true, startDate: true, endDate: true } }),
     loadPlanState(eventId),
     prisma.planActivity.findMany({ where: { eventId, active: true }, orderBy: { name: "asc" } }),
@@ -66,7 +67,14 @@ export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, data: true },
     }),
+    prisma.participant.findMany({
+      where: { eventId, active: true, groupName: { not: null } },
+      distinct: ["groupName"],
+      select: { groupName: true },
+    }),
   ]);
+  const groups = new Set(participantGroups.map((p) => p.groupName!.trim()).filter(Boolean));
+  for (const b of plan.state.blocks) for (const g of b.groupNames) groups.add(g);
   // `data` JSON holds the plan_* shapes from src/lib/planning.ts.
   const ofKind = (kind: string) => listItems.filter((i) => i.kind === kind).map(({ id, name, data }) => ({ id, name, data: data as never }));
   return {
@@ -79,6 +87,7 @@ export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
     leaders: ofKind("plan_leader"),
     dayTemplates: ofKind("plan_day_template"),
     baseActivities: baseActivities.map(({ id, name, data }) => ({ id, name, data: data as never })),
+    groups: [...groups].sort((a, b) => a.localeCompare(b, "cs", { numeric: true })),
   };
 }
 

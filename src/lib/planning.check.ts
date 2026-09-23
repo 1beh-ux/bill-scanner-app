@@ -8,7 +8,7 @@ let n = 0;
 const newId = () => `new${++n}`;
 const blk = (id: string, slotId: string, branchOrder: number, extra: Partial<PlanBlockRow> = {}): PlanBlockRow => ({
   id, slotId, branchOrder, activityId: null, customName: id, description: null,
-  primaryCategoryId: null, secondaryCategoryId: null, leaderId: null, locationId: null, notes: null, ...extra,
+  primaryCategoryId: null, secondaryCategoryId: null, leaderId: null, locationId: null, notes: null, groupNames: [], ...extra,
 });
 
 const base: PlanState = {
@@ -46,6 +46,17 @@ assert.equal(sum.leaders.find((l) => l.refId === "tom")?.totalMin, 60 + 90 + 90)
 const conflicts = findConflicts(base, () => "d1");
 assert.equal(conflicts.length, 1);
 assert.deepEqual([conflicts[0].type, conflicts[0].refId], ["leader", "tom"]);
+
+// Groups: overlap only when a group is shared; no groups = everyone, never a conflict.
+const grouped: PlanState = {
+  ...base,
+  blocks: base.blocks.map((b) =>
+    b.id === "b1" ? { ...b, leaderId: null, groupNames: ["Vlci", "Lišky"] } : b.id === "b2" ? { ...b, leaderId: null, groupNames: ["Lišky"] } : b
+  ),
+};
+const groupConflicts = findConflicts(grouped, () => "d1").filter((c) => c.type === "group");
+assert.deepEqual(groupConflicts.map((c) => c.refId), ["Lišky"]);
+assert.equal(summarize(grouped, new Set(["am"]), []).groups.find((g) => g.refId === "Vlci")?.totalMin, 90);
 
 // Reorder within a window, gap index counted with the dragged slot present.
 assert.equal(order(applyOp(base, { op: "move", kind: "slot", id: "A", target: { windowId: "am", index: 2 }, copy: false }, newId), "am"), "BAC");

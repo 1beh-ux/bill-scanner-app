@@ -17,7 +17,8 @@ export type ComputedWindow = {
   freeMin: number;
   overflowMin: number;
 };
-export type Conflict = { type: "leader" | "location"; refId: string; blockIds: [string, string]; dayId: string };
+// refId: list item id for leader/location, the group name for group.
+export type Conflict = { type: "leader" | "location" | "group"; refId: string; blockIds: [string, string]; dayId: string };
 
 export const byOrder = <T extends { sortOrder: number }>(a: T, b: T) => a.sortOrder - b.sortOrder;
 export const byPosition = (a: PlanSlotRow, b: PlanSlotRow) => a.position - b.position;
@@ -56,6 +57,7 @@ export type Summary = {
   secondaryCategories: CategoryRow[];
   leaders: EntityRow[];
   locations: EntityRow[];
+  groups: EntityRow[];
 };
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -81,6 +83,7 @@ export function summarize(
     secondaryCategories: [],
     leaders: [],
     locations: [],
+    groups: [],
   };
   for (const id of windowIds) {
     const w = cw[id];
@@ -95,6 +98,7 @@ export function summarize(
   const secondary = new Map<string, number>();
   const leaders = new Map<string, number>();
   const locations = new Map<string, number>();
+  const groups = new Map<string, number>();
   const add = (m: Map<string, number>, key: string | null, min: number) => key && m.set(key, (m.get(key) ?? 0) + min);
 
   for (const slot of state.slots) {
@@ -105,6 +109,7 @@ export function summarize(
     for (const b of blocks) {
       add(leaders, b.leaderId, slot.durationMin);
       add(locations, b.locationId, slot.durationMin);
+      for (const g of b.groupNames) add(groups, g, slot.durationMin);
     }
   }
 
@@ -122,21 +127,23 @@ export function summarize(
   summary.secondaryCategories = toCategoryRows(secondary);
   summary.leaders = toEntityRows(leaders);
   summary.locations = toEntityRows(locations);
+  summary.groups = toEntityRows(groups);
   return summary;
 }
 
 /**
- * The same leader or location in two blocks whose computed times overlap on
- * the same day -- two branches of one parallel slot, or two overlapping
- * windows. New vs. the original tool. Keyed generically so participant groups
- * (phase 2) plug in as one more entry in KEYS.
+ * The same leader, location or participant group in two blocks whose computed
+ * times overlap on the same day -- two branches of one parallel slot, or two
+ * overlapping windows. New vs. the original tool. Blocks without groups are
+ * "everyone" and never raise a group conflict.
  */
 export function findConflicts(state: PlanState, dayIdOfWindow: (windowId: string) => string | undefined): Conflict[] {
   const { slots: times } = computeTimes(state);
   const slotById = new Map(state.slots.map((s) => [s.id, s]));
   const KEYS = [
-    ["leader", (b: PlanBlockRow) => b.leaderId],
-    ["location", (b: PlanBlockRow) => b.locationId],
+    ["leader", (b: PlanBlockRow) => (b.leaderId ? [b.leaderId] : [])],
+    ["location", (b: PlanBlockRow) => (b.locationId ? [b.locationId] : [])],
+    ["group", (b: PlanBlockRow) => b.groupNames],
   ] as const;
 
   const timed = state.blocks.flatMap((b) => {
@@ -151,12 +158,12 @@ export function findConflicts(state: PlanState, dayIdOfWindow: (windowId: string
     // ponytail: O(n^2) per day; a camp has a few hundred blocks at most.
     for (let i = 0; i < timed.length; i++) {
       const a = timed[i];
-      const ref = keyOf(a.b);
-      if (!ref) continue;
-      for (let j = i + 1; j < timed.length; j++) {
-        const c = timed[j];
-        if (c.dayId !== a.dayId || keyOf(c.b) !== ref) continue;
-        if (a.start < c.end && c.start < a.end) conflicts.push({ type, refId: ref, blockIds: [a.b.id, c.b.id], dayId: a.dayId });
+      for (const ref of keyOf(a.b)) {
+        for (let j = i + 1; j < timed.length; j++) {
+          const c = timed[j];
+          if (c.dayId !== a.dayId || !keyOf(c.b).includes(ref)) continue;
+          if (a.start < c.end && c.start < a.end) conflicts.push({ type, refId: ref, blockIds: [a.b.id, c.b.id], dayId: a.dayId });
+        }
       }
     }
   }

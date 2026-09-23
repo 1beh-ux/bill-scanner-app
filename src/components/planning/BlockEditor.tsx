@@ -13,7 +13,7 @@ const btnPrimary =
 
 type Fields = Pick<
   PlanBlockRow,
-  "activityId" | "customName" | "description" | "primaryCategoryId" | "secondaryCategoryId" | "leaderId" | "locationId" | "notes"
+  "activityId" | "customName" | "description" | "primaryCategoryId" | "secondaryCategoryId" | "leaderId" | "locationId" | "notes" | "groupNames"
 >;
 
 // Side panel for one scheduled block (step 6). Fields are the block's own
@@ -52,6 +52,7 @@ export default function BlockEditor({
           leaderId: block.leaderId,
           locationId: block.locationId,
           notes: block.notes,
+          groupNames: block.groupNames,
         }
       : null
   );
@@ -99,7 +100,7 @@ export default function BlockEditor({
   const select = (key: keyof Fields, items: { id: string; name: string }[], label: string) => (
     <label className={labelClass}>
       {label}
-      <select value={fields[key] ?? ""} onChange={(e) => set({ [key]: e.target.value || null })} className={inputClass}>
+      <select value={(fields[key] as string | null) ?? ""} onChange={(e) => set({ [key]: e.target.value || null })} className={inputClass}>
         <option value="">—</option>
         {items.map((i) => (
           <option key={i.id} value={i.id}>
@@ -163,6 +164,33 @@ export default function BlockEditor({
           {select("secondaryCategoryId", categories("secondary"), t("planLists.secondaryCategory"))}
           {select("leaderId", payload.leaders, t("planBoard.leader"))}
           {select("locationId", payload.locations, t("planBoard.location"))}
+        </div>
+        <div className={labelClass}>
+          {t("planBoard.groups")}
+          {payload.groups.length === 0 ? (
+            <span className="text-[12px]">{t("planBoard.groupsNone")}</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {payload.groups.map((g) => {
+                const on = fields.groupNames.includes(g);
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set({ groupNames: on ? fields.groupNames.filter((x) => x !== g) : [...fields.groupNames, g] })}
+                    className={
+                      "rounded-full border px-2.5 py-1 text-[12.5px] " +
+                      (on ? "border-ember bg-ember text-white" : "border-mist bg-paper-2 text-ink hover:bg-mist")
+                    }
+                  >
+                    {g}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <span className="text-[11.5px]">{t("planBoard.groupsHint")}</span>
         </div>
         <label className={labelClass}>
           {t("planLists.description")}

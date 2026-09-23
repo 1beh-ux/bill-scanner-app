@@ -34,6 +34,7 @@ async function resolveInsert(eventId: string, source: Record<string, unknown>) {
     leaderId: a.defaultLeaderId,
     locationId: a.defaultLocationId,
     notes: null,
+    groupNames: [],
   };
   return { durationMin: a.defaultDurationMin, block };
 }

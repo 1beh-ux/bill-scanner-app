@@ -59,7 +59,7 @@ async function main() {
     include: { windows: true },
   });
   const [am, , pm] = day.windows.sort((a, b) => a.sortOrder - b.sortOrder);
-  const block = { activityId: act.id, customName: null, description: null, primaryCategoryId: cat.id, secondaryCategoryId: null, leaderId: leader.id, locationId: null, notes: null };
+  const block = { activityId: act.id, customName: null, description: null, primaryCategoryId: cat.id, secondaryCategoryId: null, leaderId: leader.id, locationId: null, notes: null, groupNames: ["Vlci"] };
 
   async function run(op: (s: PlanState) => PlanOp) {
     let expected!: PlanState;
@@ -112,6 +112,12 @@ async function main() {
   assert.equal(rows.length, after.state.blocks.length);
   assert.deepEqual([...new Set(rows.map((r) => r.dayLabel))], ["Den 1", "Den 2"]);
   assert.equal(scheduleRows(await loadPlanPayload(ev.id), { leaderId: leader.id }).every((r) => r.leader === "Tom"), true);
+  // Groups survive moves/copies/day copy (the run() deepEquals above include groupNames) and filter exports.
+  assert.ok(after.state.blocks.every((b) => b.groupNames.join() === "Vlci"));
+  assert.equal(scheduleRows(await loadPlanPayload(ev.id), { group: "Vlci" }).length, rows.length);
+  assert.equal(scheduleRows(await loadPlanPayload(ev.id), { group: "Lišky" }).length, 0);
+  await prisma.participant.create({ data: { eventId: ev.id, name: "Anna", groupName: "Lišky" } });
+  assert.deepEqual((await loadPlanPayload(ev.id)).groups, ["Lišky", "Vlci"]);
   await prisma.planDay.delete({ where: { id: copy.id } });
 
   // Cascade: deleting the day removes everything under it.
