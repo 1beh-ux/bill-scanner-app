@@ -20,7 +20,8 @@ export const PLAN_WINDOW_KINDS: PlanWindowKind[] = ["flexible", "partial", "fixe
 export type PlanCategoryData = { group?: "primary" | "secondary"; color?: string; targetPercent?: number };
 export type PlanLocationData = { capacity?: number; notes?: string };
 export type PlanLeaderData = { role?: string; phone?: string; notes?: string };
-export type PlanDayTemplateWindow = { name: string; startMin: number; endMin: number; kind: PlanWindowKind };
+// `id` only when editing an existing day's windows (never stored in a template).
+export type PlanDayTemplateWindow = { id?: string; name: string; startMin: number; endMin: number; kind: PlanWindowKind };
 export type PlanDayTemplateData = { windows?: PlanDayTemplateWindow[] };
 // Base library item. Categories are referenced by *name*, resolved against the
 // event's plan_category items when imported (event items copied from org
@@ -52,3 +53,34 @@ export function hhmmToMinutes(value: string): number | null {
   if (h > 23 || m > 59) return null;
   return h * 60 + m;
 }
+
+// ---------------------------------------------------------------------------
+// Plan state as sent to the board (GET /api/events/[id]/planning) and used by
+// planning-engine.ts / planning-moves.ts. Plain rows, no computed times.
+
+export type PlanDayRow = { id: string; date: string | null; label: string; theme: string | null; notes: string | null; sortOrder: number };
+export type PlanWindowRow = {
+  id: string;
+  dayId: string;
+  name: string;
+  startMin: number;
+  endMin: number;
+  kind: PlanWindowKind;
+  color: string | null;
+  sortOrder: number;
+};
+export type PlanSlotRow = { id: string; windowId: string; durationMin: number; position: number; notes: string | null };
+export type PlanBlockRow = {
+  id: string;
+  slotId: string;
+  branchOrder: number;
+  activityId: string | null;
+  customName: string | null;
+  description: string | null;
+  primaryCategoryId: string | null;
+  secondaryCategoryId: string | null;
+  leaderId: string | null;
+  locationId: string | null;
+  notes: string | null;
+};
+export type PlanState = { windows: PlanWindowRow[]; slots: PlanSlotRow[]; blocks: PlanBlockRow[] };

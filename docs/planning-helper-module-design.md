@@ -350,6 +350,23 @@ only new package.
 - `migrateLegacyBlocksToSlots_` and the demo seeding, which are one-off sheet history.
 - Silent day deletion from the Days manager (it cascaded with no confirm).
 
+## Build status
+
+- **Done (steps 1–5):** foundation, lists and activity library, engine
+  (`src/lib/planning-engine.ts`), board, and drag & drop. Also pulled forward from
+  step 6 because the board is unusable without them: add day (previous, template
+  or empty), edit day (label, date, windows), save day as template, delete day.
+- All structural edits go through one pure `applyOp` (`src/lib/planning-moves.ts`).
+  The board applies it optimistically, then `POST …/planning/ops` applies it again
+  to the stored state and persists the diff (`persistPlanDiff`).
+- Checks: `npx tsx src/lib/planning.check.ts` (engine and moves, pure) and
+  `scripts/verify-planning-db.ts` (persistence against a local throwaway Postgres).
+- **Next:** step 6 (block side panel: activity, title, description, categories,
+  leader, location, notes; duplicate day with blocks; reorder days), step 7
+  (print + CSV), step 8 (groups).
+- **Known limits:** last write wins between concurrent editors; on narrow screens
+  the library panel stacks above the plan (no bottom drawer yet).
+
 ## Build order (proposed)
 
 1. Schema + migration + module registration and gating (sidebar entry, empty page).
