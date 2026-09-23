@@ -22,6 +22,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import type { PlanState } from "@/lib/planning";
 import { computeTimes, findConflicts } from "@/lib/planning-engine";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
+import BlockEditor from "./BlockEditor";
 import DayPlan from "./DayPlan";
 import DayTabs from "./DayTabs";
 import LibraryPanel from "./LibraryPanel";
@@ -49,6 +50,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
   const [copyMode, setCopyMode] = useState(false);
+  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -316,6 +318,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
                 onResizeCommit={commitResize}
                 onDeleteSlot={deleteSlot}
                 onDeleteBlock={deleteBlock}
+                onEditBlock={setEditingBlockId}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-mist p-8 text-center text-[14px] text-ink-secondary">
@@ -326,9 +329,23 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
           </div>
 
           <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
-            <SummaryPanel payload={view} plan={plan} dayId={selectedDayId} conflicts={conflicts} />
+            <SummaryPanel eventId={eventId} payload={view} plan={plan} dayId={selectedDayId} conflicts={conflicts} />
           </div>
         </div>
+
+        {editingBlockId && (
+          <BlockEditor
+            key={editingBlockId}
+            eventId={eventId}
+            payload={view}
+            blockId={editingBlockId}
+            time={times.slots[view.blocks.find((b) => b.id === editingBlockId)?.slotId ?? ""]}
+            onClose={() => setEditingBlockId(null)}
+            onSaved={(next) => commit(next)}
+            onResize={commitResize}
+            onDelete={deleteBlock}
+          />
+        )}
 
         <DragOverlay dropAnimation={null}>
           {activeDrag && (

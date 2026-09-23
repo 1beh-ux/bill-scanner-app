@@ -349,11 +349,11 @@ export default function AppSidebar() {
 
   return (
     <>
-      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-night-border bg-night md:sticky md:top-0 md:flex md:h-screen">
+      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-night-border bg-night md:sticky md:top-0 md:flex md:h-screen print:!hidden">
         {sidebarContent}
       </aside>
 
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-night-border bg-night px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-night-border bg-night px-4 py-3 md:hidden print:hidden">
         <button onClick={() => setDrawerOpen(true)} aria-label={t("nav.openMenu")} className="text-paper">
           <Menu size={20} aria-hidden="true" />
         </button>

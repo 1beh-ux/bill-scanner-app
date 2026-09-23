@@ -30,7 +30,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     data.date = body.date ? new Date(`${body.date}T00:00:00Z`) : null;
   }
 
-  await prisma.planDay.update({ where: { id: dayId }, data });
+  await prisma.$transaction(async (tx) => {
+    await tx.planDay.update({ where: { id: dayId }, data });
+    // Days follow their dates -- changing a date is how a day is reordered.
+    // Undated days keep their place relative to each other, after dated ones.
+    if (data.date !== undefined) {
+      const days = await tx.planDay.findMany({ where: { eventId }, orderBy: { sortOrder: "asc" }, select: { id: true, date: true } });
+      const sorted = [...days].sort((a, b) => (a.date?.getTime() ?? Infinity) - (b.date?.getTime() ?? Infinity));
+      for (const [i, d] of sorted.entries()) await tx.planDay.update({ where: { id: d.id }, data: { sortOrder: i } });
+    }
+  });
   return NextResponse.json(await loadPlanPayload(eventId));
 }
 

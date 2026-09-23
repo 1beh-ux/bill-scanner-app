@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import type { PlanBlockRow, PlanDayRow, PlanSlotRow, PlanState, PlanWindowRow } from "@/lib/planning";
+import type { PlanBlockRow, PlanDayRow, PlanPayload, PlanSlotRow, PlanState, PlanWindowRow } from "@/lib/planning";
 import { fieldsOf } from "@/lib/planning-moves";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -51,7 +51,7 @@ export async function loadPlanState(eventId: string, db: Db = prisma) {
 }
 
 // Everything the board needs in one request.
-export async function loadPlanPayload(eventId: string) {
+export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
   const [event, plan, activities, listItems, baseActivities] = await Promise.all([
     prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { id: true, name: true, startDate: true, endDate: true } }),
     loadPlanState(eventId),
@@ -67,7 +67,8 @@ export async function loadPlanPayload(eventId: string) {
       select: { id: true, name: true, data: true },
     }),
   ]);
-  const ofKind = (kind: string) => listItems.filter((i) => i.kind === kind).map(({ id, name, data }) => ({ id, name, data }));
+  // `data` JSON holds the plan_* shapes from src/lib/planning.ts.
+  const ofKind = (kind: string) => listItems.filter((i) => i.kind === kind).map(({ id, name, data }) => ({ id, name, data: data as never }));
   return {
     event: { id: event.id, name: event.name, startDate: isoDate(event.startDate), endDate: isoDate(event.endDate) },
     days: plan.days,
@@ -77,7 +78,7 @@ export async function loadPlanPayload(eventId: string) {
     locations: ofKind("plan_location"),
     leaders: ofKind("plan_leader"),
     dayTemplates: ofKind("plan_day_template"),
-    baseActivities,
+    baseActivities: baseActivities.map(({ id, name, data }) => ({ id, name, data: data as never })),
   };
 }
 
@@ -124,4 +125,32 @@ export async function authorizePlanning(eventId: string): Promise<NextResponse |
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   return requireModuleAccess(user, eventId, "planning");
+}
+
+/** Full copy of a day (windows + slots + blocks) as a new day. Null if the source isn't this event's. */
+export async function copyPlanDay(eventId: string, sourceDayId: string, as: { sortOrder: number; date: Date | null; label: string }) {
+  const src = await prisma.planDay.findFirst({
+    where: { id: sourceDayId, eventId },
+    include: { windows: { include: { slots: { include: { blocks: true } } } } },
+  });
+  if (!src) return null;
+  return prisma.planDay.create({
+    data: {
+      eventId,
+      ...as,
+      theme: src.theme,
+      notes: src.notes,
+      windows: {
+        create: src.windows.map((w) => ({
+          name: w.name, startMin: w.startMin, endMin: w.endMin, kind: w.kind, color: w.color, notes: w.notes, sortOrder: w.sortOrder,
+          slots: {
+            create: w.slots.map((s) => ({
+              durationMin: s.durationMin, position: s.position, notes: s.notes,
+              blocks: { create: s.blocks.map((b) => ({ ...fieldsOf(b), branchOrder: b.branchOrder })) },
+            })),
+          },
+        })),
+      },
+    },
+  });
 }

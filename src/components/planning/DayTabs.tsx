@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { MoreHorizontal, Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import type { PlanDayRow, PlanDayTemplateWindow } from "@/lib/planning";
@@ -35,7 +35,6 @@ export default function DayTabs(props: Props) {
   const confirm = useConfirm();
   const { payload, eventId } = props;
   const [addOpen, setAddOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState<PlanDayRow | null>(null);
   const days = [...payload.days].sort((a, b) => a.sortOrder - b.sortOrder);
   const current = days.find((d) => d.id === props.selectedDayId) ?? null;
@@ -53,7 +52,7 @@ export default function DayTabs(props: Props) {
     return (await res.json()) as PlanPayload;
   }
 
-  async function addDay(source: "previous" | "empty" | { templateId: string }) {
+  async function addDay(source: "previous" | "empty" | { templateId: string } | { copyDayId: string }) {
     setAddOpen(false);
     const next = await call(`/api/events/${eventId}/planning/days`, "POST", { source });
     if (next) {
@@ -62,18 +61,24 @@ export default function DayTabs(props: Props) {
     }
   }
 
-  async function deleteDay() {
-    setMenuOpen(false);
-    if (!current) return;
-    if (!(await confirm({ message: t("planBoard.confirmDeleteDay", { day: current.label }), danger: true }))) return;
-    const next = await call(`/api/events/${eventId}/planning/days/${current.id}`, "DELETE");
+  async function deleteDay(day: PlanDayRow) {
+    if (!(await confirm({ message: t("planBoard.confirmDeleteDay", { day: day.label }), danger: true }))) return false;
+    const next = await call(`/api/events/${eventId}/planning/days/${day.id}`, "DELETE");
     if (next) props.onPayload(next, next.days[0]?.id);
+    return Boolean(next);
   }
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-1.5">
       {days.map((d) => (
-        <DayTab key={d.id} day={d} active={d.id === props.selectedDayId} onClick={() => props.onSelect(d.id)} />
+        <DayTab
+          key={d.id}
+          day={d}
+          active={d.id === props.selectedDayId}
+          editHint={t("planBoard.editDay")}
+          // Clicking the day that's already open edits it.
+          onClick={() => (d.id === props.selectedDayId ? setEditing(d) : props.onSelect(d.id))}
+        />
       ))}
 
       <div className="relative">
@@ -88,6 +93,11 @@ export default function DayTabs(props: Props) {
             <button className={menuItem} disabled={days.length === 0} onClick={() => addDay("previous")}>
               {t("planBoard.addDayPrevious")}
             </button>
+            {current && (
+              <button className={menuItem} onClick={() => addDay({ copyDayId: current.id })}>
+                {t("planBoard.addDayCopyWithProgram", { day: current.label })}
+              </button>
+            )}
             {payload.dayTemplates.map((tpl) => (
               <button key={tpl.id} className={menuItem} onClick={() => addDay({ templateId: tpl.id })}>
                 {t("planBoard.addDayFromTemplate", { name: tpl.name })}
@@ -100,63 +110,45 @@ export default function DayTabs(props: Props) {
         )}
       </div>
 
-      {current && (
-        <div className="relative ml-auto">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="rounded-lg p-1.5 text-ink-secondary hover:bg-mist hover:text-ink"
-            aria-label={t("planBoard.dayMenu")}
-          >
-            <MoreHorizontal size={18} />
-          </button>
-          {menuOpen && (
-            <Menu onClose={() => setMenuOpen(false)} right>
-              <button
-                className={menuItem}
-                onClick={() => {
-                  setMenuOpen(false);
-                  setEditing(current);
-                }}
-              >
-                {t("planBoard.editDay")}
-              </button>
-              <button className={menuItem + " text-red-600"} onClick={deleteDay}>
-                {t("planBoard.deleteDay")}
-              </button>
-            </Menu>
-          )}
-        </div>
+      {editing && (
+        <DayEditor
+          {...props}
+          day={editing}
+          onClose={() => setEditing(null)}
+          onDelete={async () => (await deleteDay(editing)) && setEditing(null)}
+          call={call}
+        />
       )}
-
-      {editing && <DayEditor {...props} day={editing} onClose={() => setEditing(null)} call={call} />}
     </div>
   );
 }
 
-function DayTab({ day, active, onClick }: { day: PlanDayRow; active: boolean; onClick: () => void }) {
+function DayTab({ day, active, editHint, onClick }: { day: PlanDayRow; active: boolean; editHint: string; onClick: () => void }) {
   const data: DropData = { type: "daytab", dayId: day.id };
   const { setNodeRef, isOver } = useDroppable({ id: `daytab:${day.id}`, data });
   return (
     <button
       ref={setNodeRef}
       onClick={onClick}
+      title={active ? editHint : undefined}
       className={
-        "rounded-lg px-3 py-1.5 text-[13px] transition-colors " +
+        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[13px] transition-colors " +
         (active ? "bg-ember font-medium text-white" : "bg-paper-2 text-ink hover:bg-mist") +
         (isOver ? " ring-2 ring-ember" : "")
       }
     >
       {day.label}
-      {day.date && <span className={"ml-1.5 text-[11px] " + (active ? "text-white/80" : "text-ink-secondary")}>{formatDayDate(day.date)}</span>}
+      {day.date && <span className={"text-[11px] " + (active ? "text-white/80" : "text-ink-secondary")}>{formatDayDate(day.date)}</span>}
+      {active && <Pencil size={12} className="text-white/80" aria-hidden="true" />}
     </button>
   );
 }
 
-function Menu({ children, onClose, right }: { children: React.ReactNode; onClose: () => void; right?: boolean }) {
+function Menu({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <>
       <div className="fixed inset-0 z-30" onClick={onClose} />
-      <div className={"absolute top-full z-40 mt-1 min-w-[220px] rounded-lg border border-mist bg-paper py-1 shadow-lg " + (right ? "right-0" : "left-0")}>
+      <div className={"absolute left-0 top-full z-40 mt-1 min-w-[260px] rounded-lg border border-mist bg-paper py-1 shadow-lg"}>
         {children}
       </div>
     </>
@@ -168,9 +160,15 @@ function DayEditor({
   payload,
   day,
   onClose,
+  onDelete,
   onPayload,
   call,
-}: Props & { day: PlanDayRow; onClose: () => void; call: (url: string, method: string, body?: unknown) => Promise<PlanPayload | null> }) {
+}: Props & {
+  day: PlanDayRow;
+  onClose: () => void;
+  onDelete: () => void;
+  call: (url: string, method: string, body?: unknown) => Promise<PlanPayload | null>;
+}) {
   const { t } = useTranslations();
   const confirm = useConfirm();
   const [label, setLabel] = useState(day.label);
@@ -269,7 +267,10 @@ function DayEditor({
         </div>
         {message && <p className="text-[13px] text-ink-secondary">{message}</p>}
 
-        <div className="flex justify-end gap-2">
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={onDelete} disabled={busy} className="mr-auto text-[13px] text-red-600 hover:underline">
+            {t("planBoard.deleteDay")}
+          </button>
           <button onClick={onClose} className="text-[13px] text-ink-secondary hover:underline">
             {t("common.cancel")}
           </button>

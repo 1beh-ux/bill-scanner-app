@@ -12,7 +12,8 @@ if (!/@(127\.0\.0\.1|localhost)[:/]/.test(process.env.DATABASE_URL ?? "")) {
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
-import { loadPlanState, persistPlanDiff } from "../src/lib/planning-server";
+import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff } from "../src/lib/planning-server";
+import { scheduleRows } from "../src/lib/planning-export";
 import { applyOp, type PlanOp } from "../src/lib/planning-moves";
 import { copyActivitiesFromEvent, importBaseActivities, parseActivityInput } from "../src/lib/planning-activities";
 import type { PlanState } from "../src/lib/planning";
@@ -98,6 +99,20 @@ async function main() {
   const copied = await prisma.planActivity.findFirstOrThrow({ where: { eventId: ev2.id } });
   assert.equal(copied.defaultLeaderId, foreignLeader.id);
   assert.equal(copied.primaryCategoryId, null); // ev2 has no "Hra" category
+
+  // Full day copy (windows + slots + blocks) and the flat export rows.
+  const before = await loadPlanState(ev.id);
+  const copy = await copyPlanDay(ev.id, day.id, { sortOrder: 1, date: null, label: "Den 2" });
+  assert.ok(copy);
+  assert.equal(await copyPlanDay(ev2.id, day.id, { sortOrder: 0, date: null, label: "x" }), null); // other event's day
+  const after = await loadPlanState(ev.id);
+  assert.equal(after.state.slots.length, before.state.slots.length * 2);
+  assert.equal(after.state.blocks.length, before.state.blocks.length * 2);
+  const rows = scheduleRows(await loadPlanPayload(ev.id));
+  assert.equal(rows.length, after.state.blocks.length);
+  assert.deepEqual([...new Set(rows.map((r) => r.dayLabel))], ["Den 1", "Den 2"]);
+  assert.equal(scheduleRows(await loadPlanPayload(ev.id), { leaderId: leader.id }).every((r) => r.leader === "Tom"), true);
+  await prisma.planDay.delete({ where: { id: copy.id } });
 
   // Cascade: deleting the day removes everything under it.
   await prisma.planDay.delete({ where: { id: day.id } });

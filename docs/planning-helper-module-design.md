@@ -1,6 +1,6 @@
 # Planning Helper Module — Design Draft v1
 
-Status: decisions confirmed (see end of doc), building. Fourth module on the event platform, after Bills, Health and
+Status: built and deployed (steps 1–7, see *Build status*); step 8 (groups) pending. Fourth module on the event platform, after Bills, Health and
 Mail Helper. It is ported from a working Google Apps Script tool ("Event Planner MVP")
 that kept its data in Sheets tabs (Events, Days, Windows, Activities, ScheduleSlots,
 ScheduleBlocks, Categories, People, Locations, App_Settings, Export_Schedule).
@@ -352,20 +352,33 @@ only new package.
 
 ## Build status
 
-- **Done (steps 1–5):** foundation, lists and activity library, engine
-  (`src/lib/planning-engine.ts`), board, and drag & drop. Also pulled forward from
-  step 6 because the board is unusable without them: add day (previous, template
-  or empty), edit day (label, date, windows), save day as template, delete day.
+- **Done (steps 1–7), deployed:** foundation, lists and activity library, engine
+  (`src/lib/planning-engine.ts`), board with drag & drop, block side panel,
+  day management, print and CSV.
+- **Days:** "+ den" offers a copy of the previous day's windows, a template, a copy
+  of the current day *including its program*, or an empty day. Clicking the open
+  day's tab edits it (name, date, windows, save as template, delete). Days are
+  ordered by date, so changing a date is how a day moves. There's no separate
+  reorder control.
+- **Blocks:** clicking a branch opens the side panel: activity (picking one refills
+  its defaults), custom title, duration, categories, leader, location, description
+  and notes. Saved via `PATCH …/planning/blocks/[blockId]`; references are
+  validated against the event's own lists.
+- **Export:** `/events/[id]/planning/print?day=&leader=` gives one page per day,
+  with a per-leader schedule option. `…/planning/export` gives CSV with the same
+  filters (semicolon-separated with a BOM, for Czech Excel). Both are built from
+  `scheduleRows` (`src/lib/planning-export.ts`).
 - All structural edits go through one pure `applyOp` (`src/lib/planning-moves.ts`).
   The board applies it optimistically, then `POST …/planning/ops` applies it again
   to the stored state and persists the diff (`persistPlanDiff`).
 - Checks: `npx tsx src/lib/planning.check.ts` (engine and moves, pure) and
-  `scripts/verify-planning-db.ts` (persistence against a local throwaway Postgres).
-- **Next:** step 6 (block side panel: activity, title, description, categories,
-  leader, location, notes; duplicate day with blocks; reorder days), step 7
-  (print + CSV), step 8 (groups).
+  `scripts/verify-planning-db.ts` (persistence, imports, day copy and export rows,
+  against a local throwaway Postgres).
+- **Next:** step 8, participant groups on blocks (`groupNames` from
+  `Participant.groupName`, group conflicts, per-group print).
 - **Known limits:** last write wins between concurrent editors; on narrow screens
-  the library panel stacks above the plan (no bottom drawer yet).
+  the library panel stacks above the plan (no bottom drawer); applying a template
+  to an existing day isn't supported (edit its windows instead).
 
 ## Build order (proposed)
 

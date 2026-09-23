@@ -84,3 +84,30 @@ export type PlanBlockRow = {
   notes: string | null;
 };
 export type PlanState = { windows: PlanWindowRow[]; slots: PlanSlotRow[]; blocks: PlanBlockRow[] };
+
+// Shape of GET /api/events/[id]/planning (src/lib/planning-server.ts loadPlanPayload).
+export type PlanActivity = {
+  id: string;
+  name: string;
+  defaultDurationMin: number;
+  description: string | null;
+  primaryCategoryId: string | null;
+  secondaryCategoryId: string | null;
+  defaultLeaderId: string | null;
+  defaultLocationId: string | null;
+  repeatable: boolean;
+  sourceTemplateId: string | null;
+};
+export type PlanListItem<D> = { id: string; name: string; data: D | null };
+
+export type PlanPayload = PlanState & {
+  event: { id: string; name: string; startDate: string | null; endDate: string | null };
+  days: PlanDayRow[];
+  activities: PlanActivity[];
+  categories: PlanListItem<PlanCategoryData>[];
+  locations: PlanListItem<PlanLocationData>[];
+  leaders: PlanListItem<PlanLeaderData>[];
+  dayTemplates: PlanListItem<PlanDayTemplateData>[];
+  baseActivities: PlanListItem<PlanBaseActivityData>[];
+};
+

@@ -68,8 +68,7 @@ async function main() {
     { key: "planBoard.addDayPrevious", cs: "Kopie předchozího dne (jen okna)", en: "Copy of previous day (windows only)" },
     { key: "planBoard.addDayFromTemplate", cs: "Ze šablony: {name}", en: "From template: {name}" },
     { key: "planBoard.addDayEmpty", cs: "Prázdný den", en: "Empty day" },
-    { key: "planBoard.dayMenu", cs: "Možnosti dne", en: "Day options" },
-    { key: "planBoard.editDay", cs: "Upravit den a časová okna", en: "Edit day and time windows" },
+    { key: "planBoard.editDay", cs: "Upravit den (název, datum, časová okna)", en: "Edit day (name, date, time windows)" },
     { key: "planBoard.deleteDay", cs: "Smazat den", en: "Delete day" },
     { key: "planBoard.confirmDeleteDay", cs: 'Smazat den "{day}" včetně všech naplánovaných aktivit?', en: 'Delete day "{day}" including all scheduled activities?' },
     { key: "planBoard.date", cs: "Datum", en: "Date" },
@@ -80,7 +79,7 @@ async function main() {
     { key: "planBoard.errorWindowTimes", cs: "Konec okna musí být po jeho začátku.", en: "A window must end after it starts." },
     { key: "planBoard.noDays", cs: "Zatím žádné dny. Přidejte první den tlačítkem + den.", en: "No days yet. Add the first one with + day." },
     { key: "planBoard.noTemplatesHint", cs: "Tip: šablony dnů (časová okna) nastavíte v Nastavení akce → Plánování.", en: "Tip: set up day templates (time windows) in Event settings → Planning." },
-    { key: "planBoard.noWindows", cs: "Tento den nemá časová okna. Přidejte je přes ⋯ → Upravit den.", en: "This day has no time windows. Add them via ⋯ → Edit day." },
+    { key: "planBoard.noWindows", cs: "Tento den nemá časová okna. Klikněte na záložku dne a přidejte je.", en: "This day has no time windows. Click the day tab to add them." },
     { key: "planBoard.usage", cs: "{used} / {capacity} min", en: "{used} / {capacity} min" },
     { key: "planBoard.overflow", cs: "{used} / {capacity} min — přečerpáno o {over} min", en: "{used} / {capacity} min — over by {over} min" },
     { key: "planBoard.usagePartial", cs: "{used} min naplánováno", en: "{used} min planned" },
@@ -114,6 +113,22 @@ async function main() {
     { key: "planBoard.errorStale", cs: "Změnu se nepodařilo uložit, plán byl znovu načten.", en: "The change could not be saved; the plan was reloaded." },
     { key: "planBoard.errorFixedWindow", cs: "Do pevného bloku (např. oběd) nelze vkládat aktivity.", en: "Activities can't be placed in a fixed block (e.g. lunch)." },
     { key: "planBoard.errorNoWindow", cs: "Cílový den nemá žádné okno pro program.", en: "The target day has no program window." },
+
+    // Steps 6-7: block editor, duplicate day, print + CSV
+    { key: "planBoard.addDayCopyWithProgram", cs: "Kopie dne {day} včetně programu", en: "Copy of {day} including its program" },
+    { key: "planBoard.activity", cs: "Aktivita", en: "Activity" },
+    { key: "planBoard.titleOverride", cs: "Vlastní název (jinak název aktivity)", en: "Custom title (otherwise the activity name)" },
+    { key: "planBoard.slotDuration", cs: "Délka (min)", en: "Duration (min)" },
+    { key: "planBoard.slotDurationShared", cs: "Platí pro všechny souběžné aktivity v tomto bloku.", en: "Applies to all parallel activities in this slot." },
+    { key: "planBoard.leader", cs: "Vedoucí", en: "Leader" },
+    { key: "planBoard.location", cs: "Místo", en: "Location" },
+    { key: "planBoard.time", cs: "Čas", en: "Time" },
+    { key: "planBoard.parallel", cs: "Souběžně s jinou aktivitou", en: "Runs in parallel with another activity" },
+    { key: "planBoard.print", cs: "Tisk", en: "Print" },
+    { key: "planBoard.csv", cs: "CSV", en: "CSV" },
+    { key: "planBoard.allLeaders", cs: "Všichni vedoucí", en: "All leaders" },
+    { key: "planBoard.printFor", cs: "Program pro: {name}", en: "Schedule for: {name}" },
+    { key: "planBoard.printEmpty", cs: "Na tento den není nic naplánováno.", en: "Nothing planned for this day." },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

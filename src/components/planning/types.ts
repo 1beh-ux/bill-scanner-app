@@ -1,38 +1,4 @@
-import type {
-  PlanBaseActivityData,
-  PlanCategoryData,
-  PlanDayRow,
-  PlanDayTemplateData,
-  PlanLeaderData,
-  PlanLocationData,
-  PlanState,
-} from "@/lib/planning";
-
-// Shape of GET /api/events/[id]/planning (src/lib/planning-server.ts loadPlanPayload).
-export type PlanActivity = {
-  id: string;
-  name: string;
-  defaultDurationMin: number;
-  description: string | null;
-  primaryCategoryId: string | null;
-  secondaryCategoryId: string | null;
-  defaultLeaderId: string | null;
-  defaultLocationId: string | null;
-  repeatable: boolean;
-  sourceTemplateId: string | null;
-};
-type Item<D> = { id: string; name: string; data: D | null };
-
-export type PlanPayload = PlanState & {
-  event: { id: string; name: string; startDate: string | null; endDate: string | null };
-  days: PlanDayRow[];
-  activities: PlanActivity[];
-  categories: Item<PlanCategoryData>[];
-  locations: Item<PlanLocationData>[];
-  leaders: Item<PlanLeaderData>[];
-  dayTemplates: Item<PlanDayTemplateData>[];
-  baseActivities: Item<PlanBaseActivityData>[];
-};
+export type { PlanActivity, PlanPayload } from "@/lib/planning";
 
 // dnd-kit `data` payloads.
 export type DragData =

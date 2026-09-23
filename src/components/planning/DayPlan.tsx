@@ -17,6 +17,7 @@ export type DayPlanProps = {
   onResizeCommit: (slotId: string, durationMin: number) => void;
   onDeleteSlot: (slotId: string) => void;
   onDeleteBlock: (blockId: string) => void;
+  onEditBlock: (blockId: string) => void;
 };
 
 export function blockLabel(payload: PlanPayload, b: PlanBlockRow) {
@@ -225,6 +226,7 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
       ref={setNodeRef}
       {...listeners}
       {...attributes}
+      onClick={() => props.onEditBlock(b.id)}
       style={{ borderLeftColor: color }}
       title={conflict ? t("planBoard.conflictHint") : undefined}
       className={
@@ -240,7 +242,10 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
       <button
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
-        onClick={() => props.onDeleteBlock(b.id)}
+        onClick={(e) => {
+          e.stopPropagation();
+          props.onDeleteBlock(b.id);
+        }}
         className="absolute right-0.5 top-0.5 hidden rounded p-0.5 text-ink-secondary hover:bg-mist hover:text-red-600 group-hover/branch:block"
         aria-label={t("planBoard.deleteBlock")}
         title={t("planBoard.deleteBlock")}

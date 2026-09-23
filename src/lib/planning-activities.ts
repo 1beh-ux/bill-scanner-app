@@ -47,13 +47,16 @@ export async function parseActivityInput(
       data[key] = null;
       continue;
     }
-    if (typeof value !== "string") return { error: "invalid_reference" };
-    const item = await prisma.eventListItem.findFirst({ where: { id: value, eventId, kind }, select: { id: true } });
-    if (!item) return { error: "invalid_reference" };
+    if (typeof value !== "string" || !(await isEventListItem(eventId, value, kind))) return { error: "invalid_reference" };
     data[key] = value;
   }
 
   return { data };
+}
+
+/** True if `id` is this event's own list item of `kind` (guards cross-event references). */
+export async function isEventListItem(eventId: string, id: string, kind: ListTemplateKind) {
+  return (await prisma.eventListItem.count({ where: { id, eventId, kind } })) > 0;
 }
 
 // name (lowercased) -> id, per plan list kind, for resolving references by name.

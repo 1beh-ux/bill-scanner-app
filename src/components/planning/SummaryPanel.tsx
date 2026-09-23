@@ -8,11 +8,13 @@ import { blockLabel } from "./DayPlan";
 import type { PlanPayload } from "./types";
 
 export default function SummaryPanel({
+  eventId,
   payload,
   plan,
   dayId,
   conflicts,
 }: {
+  eventId: string;
   payload: PlanPayload;
   plan: PlanState;
   dayId: string | null;
@@ -30,6 +32,9 @@ export default function SummaryPanel({
   const scopedConflicts = conflicts.filter((c) => scope === "event" || c.dayId === dayId);
   const dayLabel = (id: string) => payload.days.find((d) => d.id === id)?.label ?? "";
 
+  const dayQuery = scope === "day" && dayId ? `?day=${dayId}` : "";
+  const exportLink = "rounded-lg border border-mist bg-paper-2 px-2.5 py-1 text-[12px] text-ink hover:bg-mist";
+
   return (
     <aside className="flex flex-col gap-3 text-[13px]">
       <div className="flex gap-1 rounded-lg bg-mist/50 p-0.5">
@@ -42,6 +47,15 @@ export default function SummaryPanel({
             {t(key === "day" ? "planBoard.scopeDay" : "planBoard.scopeEvent")}
           </button>
         ))}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <a href={`/events/${eventId}/planning/print${dayQuery}`} className={exportLink}>
+          {t("planBoard.print")}
+        </a>
+        <a href={`/api/events/${eventId}/planning/export${dayQuery}`} className={exportLink}>
+          {t("planBoard.csv")}
+        </a>
       </div>
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
