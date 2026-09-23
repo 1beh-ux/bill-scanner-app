@@ -51,7 +51,7 @@ export async function requireAnyModuleAccess(
 
 // The generic ListTemplate/EventListItem mechanism (see Milestone 1) is
 // shared across modules by `kind`: med/slot/situation are Health's,
-// `document` (Mail Helper) belongs to `mail`. Callers must not gate the
+// `document` (Mail Helper) belongs to `mail`, `plan_*` to `planning`. Callers must not gate the
 // whole route on a single module -- the caller-supplied `kind` decides
 // which module's grant is required, so a mail-only volunteer can't reach
 // health's med/slot/situation rows (or vice versa) through the same route.
@@ -60,7 +60,8 @@ export async function requireListItemAccess(
   eventId: string,
   kind: ListTemplateKind
 ): Promise<NextResponse | null> {
-  const moduleKey: ModuleKey = kind === "document" ? "mail" : "health";
+  const moduleKey: ModuleKey =
+    kind === "document" ? "mail" : kind.startsWith("plan_") ? "planning" : "health";
   return requireModuleAccess(user, eventId, moduleKey);
 }
 

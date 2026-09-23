@@ -8,7 +8,7 @@ import { fieldCategory, surfacesForCategory, type ParticipantFieldCategory } fro
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
-type ModuleKey = "bills" | "health" | "mail";
+type ModuleKey = "bills" | "health" | "mail" | "planning";
 type FieldKind = "custom" | "builtin" | "guardian" | "computed";
 type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
 

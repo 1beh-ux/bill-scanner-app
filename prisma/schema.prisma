@@ -60,6 +60,7 @@ enum ModuleKey {
   bills
   health
   mail
+  planning
 }
 
 enum IncidentCategory {
@@ -85,6 +86,13 @@ enum ListTemplateKind {
   slot
   situation
   document
+  // Planning Helper (see docs/planning-helper-module-design.md)
+  plan_category
+  plan_location
+  plan_leader
+  plan_day_template
+  // org base library only -- event activities live in PlanActivity
+  plan_activity
 }
 
 enum ParentEmailStatus {
@@ -279,6 +287,8 @@ model Event {
   eventEmailTemplates  EventEmailTemplate[]
   mailActionLogs       MailActionLog[]
   eventParticipantFields EventParticipantField[]
+  planDays             PlanDay[]
+  planActivities       PlanActivity[]
 
   @@map("events")
 }
@@ -709,6 +719,14 @@ model EventListItem {
   checklistAsMed   MedChecklist[]       @relation("MedChecklistMed")
   checklistAsSlot  MedChecklist[]       @relation("MedChecklistSlot")
   documents        ParticipantDocument[] @relation("ParticipantDocumentType")
+  planBlocksAsPrimary     PlanBlock[]    @relation("PlanBlockPrimaryCategory")
+  planBlocksAsSecondary   PlanBlock[]    @relation("PlanBlockSecondaryCategory")
+  planBlocksAsLeader      PlanBlock[]    @relation("PlanBlockLeader")
+  planBlocksAsLocation    PlanBlock[]    @relation("PlanBlockLocation")
+  planActivitiesAsPrimary   PlanActivity[] @relation("PlanActivityPrimaryCategory")
+  planActivitiesAsSecondary PlanActivity[] @relation("PlanActivitySecondaryCategory")
+  planActivitiesAsLeader    PlanActivity[] @relation("PlanActivityLeader")
+  planActivitiesAsLocation  PlanActivity[] @relation("PlanActivityLocation")
 
   @@map("event_list_items")
 }
@@ -876,4 +894,119 @@ model MailActionLog {
   participant Participant? @relation(fields: [participantId], references: [id])
 
   @@map("mail_action_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Planning Helper -- see docs/planning-helper-module-design.md. Slot start/end
+// times are never stored: they're computed from the window start plus the
+// durations of the preceding slots (src/lib/planning-engine.ts). Categories,
+// locations and leaders are EventListItem rows (kinds plan_*).
+
+enum PlanWindowKind {
+  flexible // capacity enforced: shows free/overflow
+  partial  // slots allowed, capacity not enforced (e.g. evening program)
+  fixed    // locked, holds no slots (e.g. lunch)
+}
+
+model PlanDay {
+  id        String    @id @default(uuid())
+  eventId   String    @map("event_id")
+  date      DateTime? @db.Date
+  label     String
+  theme     String?
+  notes     String?
+  sortOrder Int       @map("sort_order")
+
+  event   Event        @relation(fields: [eventId], references: [id])
+  windows PlanWindow[]
+
+  @@index([eventId])
+  @@map("plan_days")
+}
+
+model PlanWindow {
+  id        String         @id @default(uuid())
+  dayId     String         @map("day_id")
+  name      String
+  startMin  Int            @map("start_min") // minutes from midnight
+  endMin    Int            @map("end_min")
+  kind      PlanWindowKind @default(flexible)
+  color     String?
+  notes     String?
+  sortOrder Int            @map("sort_order")
+
+  day   PlanDay    @relation(fields: [dayId], references: [id], onDelete: Cascade)
+  slots PlanSlot[]
+
+  @@index([dayId])
+  @@map("plan_windows")
+}
+
+model PlanSlot {
+  id          String  @id @default(uuid())
+  windowId    String  @map("window_id")
+  durationMin Int     @map("duration_min")
+  position    Int
+  notes       String?
+
+  window PlanWindow  @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  blocks PlanBlock[]
+
+  @@index([windowId])
+  @@map("plan_slots")
+}
+
+// One branch of a slot; a slot with 2+ blocks is a parallel slot. Fields are a
+// snapshot taken from the activity at creation, so later library edits don't
+// rewrite existing plans.
+model PlanBlock {
+  id                  String  @id @default(uuid())
+  slotId              String  @map("slot_id")
+  branchOrder         Int     @map("branch_order")
+  activityId          String? @map("activity_id")
+  customName          String? @map("custom_name")
+  description         String?
+  primaryCategoryId   String? @map("primary_category_id")
+  secondaryCategoryId String? @map("secondary_category_id")
+  leaderId            String? @map("leader_id")
+  locationId          String? @map("location_id")
+  notes               String?
+
+  slot              PlanSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  activity          PlanActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  primaryCategory   EventListItem? @relation("PlanBlockPrimaryCategory", fields: [primaryCategoryId], references: [id], onDelete: SetNull)
+  secondaryCategory EventListItem? @relation("PlanBlockSecondaryCategory", fields: [secondaryCategoryId], references: [id], onDelete: SetNull)
+  leader            EventListItem? @relation("PlanBlockLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  location          EventListItem? @relation("PlanBlockLocation", fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@index([slotId])
+  @@map("plan_blocks")
+}
+
+model PlanActivity {
+  id                  String  @id @default(uuid())
+  eventId             String  @map("event_id")
+  name                String
+  defaultDurationMin  Int     @map("default_duration_min")
+  description         String?
+  primaryCategoryId   String? @map("primary_category_id")
+  secondaryCategoryId String? @map("secondary_category_id")
+  defaultLeaderId     String? @map("default_leader_id")
+  defaultLocationId   String? @map("default_location_id")
+  energyLevel         String? @map("energy_level")
+  repeatable          Boolean @default(false)
+  active              Boolean @default(true)
+  // Set when created from an org base-library ListTemplate (plan_activity), so
+  // dragging the same base item again reuses this row instead of duplicating it.
+  sourceTemplateId    String? @map("source_template_id")
+
+  event             Event          @relation(fields: [eventId], references: [id])
+  primaryCategory   EventListItem? @relation("PlanActivityPrimaryCategory", fields: [primaryCategoryId], references: [id], onDelete: SetNull)
+  secondaryCategory EventListItem? @relation("PlanActivitySecondaryCategory", fields: [secondaryCategoryId], references: [id], onDelete: SetNull)
+  defaultLeader     EventListItem? @relation("PlanActivityLeader", fields: [defaultLeaderId], references: [id], onDelete: SetNull)
+  defaultLocation   EventListItem? @relation("PlanActivityLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
+  blocks            PlanBlock[]
+
+  @@index([eventId])
+  @@map("plan_activities")
 }

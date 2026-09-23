@@ -15,7 +15,7 @@ export async function GET(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { id: eventId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["bills", "health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["bills", "health", "mail", "planning"]);
   if (denied) return denied;
 
   const [identity, mine, event] = await Promise.all([

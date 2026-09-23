@@ -124,7 +124,7 @@ export default function SettingsPage() {
 
         <div className="text-[13px] text-ink-secondary">
           <p className="mb-1">{t("settingsPage.modulesLabel")}</p>
-          {(["health", "mail"] as const).map((key) => (
+          {(["health", "mail", "planning"] as const).map((key) => (
             <label key={key} className="mr-4 inline-flex items-center gap-2 text-ink">
               <input
                 type="checkbox"

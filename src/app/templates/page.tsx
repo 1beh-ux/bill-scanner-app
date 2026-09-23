@@ -17,7 +17,7 @@ const btnPrimary =
 
 export default function TemplatesPage() {
   const { t } = useTranslations();
-  const [tab, setTab] = useState<"health" | "mail" | "bills" | "participants">("health");
+  const [tab, setTab] = useState<"health" | "mail" | "bills" | "participants" | "planning">("health");
 
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-8">
@@ -60,12 +60,31 @@ export default function TemplatesPage() {
         >
           {t("templatesPage.tabParticipants")}
         </button>
+        <button
+          onClick={() => setTab("planning")}
+          className={
+            "border-b-2 px-3 py-2 text-[13px] font-medium " +
+            (tab === "planning" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
+          }
+        >
+          {t("nav.planning")}
+        </button>
       </div>
 
       {tab === "health" && <HealthTemplatesTab />}
       {tab === "mail" && <ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} />}
       {tab === "bills" && <BillsTemplatesTab />}
       {tab === "participants" && <ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} />}
+      {tab === "planning" && (
+        <div className="flex flex-col gap-6">
+          <p className="text-[14px] text-ink-secondary">{t("planLists.templatesSubtitle")}</p>
+          <ListTemplateAdmin kind="plan_activity" scope="org" label={t("planLists.baseLibraryLabel")} />
+          <ListTemplateAdmin kind="plan_category" scope="org" label={t("planLists.categoriesLabel")} />
+          <ListTemplateAdmin kind="plan_day_template" scope="org" label={t("planLists.dayTemplatesLabel")} />
+          <ListTemplateAdmin kind="plan_location" scope="org" label={t("planLists.locationsLabel")} />
+          <ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} />
+        </div>
+      )}
     </div>
   );
 }

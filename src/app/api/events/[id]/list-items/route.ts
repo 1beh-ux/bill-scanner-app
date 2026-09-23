@@ -3,8 +3,9 @@ import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireListItemAccess } from "@/lib/module-access";
+import { PLAN_EVENT_LIST_KINDS } from "@/lib/planning";
 
-const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document"];
+const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document", ...PLAN_EVENT_LIST_KINDS];
 
 // Slice of the generic EventListItem table (see the ListTemplate/
 // EventListItem design in Milestone 1) -- used both by the incident form

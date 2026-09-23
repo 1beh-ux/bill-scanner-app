@@ -8,6 +8,7 @@ const MODULE_SURFACES: Record<ModuleKey, ParticipantFieldSurface[]> = {
   bills: [],
   health: ["health_list", "health_detail"],
   mail: ["mail_list"],
+  planning: [],
 };
 
 /**

@@ -42,7 +42,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "health" | "mail";
+type ModuleKey = "bills" | "health" | "mail" | "planning";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -54,7 +54,7 @@ type AccessRow = {
   access: Record<ModuleKey, boolean>;
 };
 
-const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail"];
+const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail", "planning"];
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -67,8 +67,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta";
-const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta"];
+type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "planovani";
+const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -170,6 +170,7 @@ export default function EventDetailPage({
   useEffect(() => {
     if (tab === "zdravi" && !moduleAccess.health) setTab("akce");
     if (tab === "posta" && !moduleAccess.mail) setTab("akce");
+    if (tab === "planovani" && !moduleAccess.planning) setTab("akce");
     if (tab === "ucastnici" && !moduleAccess.health && !moduleAccess.mail) setTab("akce");
   }, [tab, moduleAccess]);
 
@@ -332,6 +333,7 @@ export default function EventDetailPage({
     ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants" }] : []),
     ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth" }] : []),
     ...(moduleAccess.mail ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail" }] : []),
+    ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
   ];
 
   return (
@@ -668,6 +670,23 @@ export default function EventDetailPage({
               </div>
             </div>
           )}
+
+          {tab === "planovani" && moduleAccess.planning && (
+            <div className="flex flex-col gap-6">
+              <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} label={t("planLists.categoriesLabel")} />
+              <ListTemplateAdmin kind="plan_location" scope="event" eventId={id} label={t("planLists.locationsLabel")} />
+              <ListTemplateAdmin kind="plan_leader" scope="event" eventId={id} label={t("planLists.leadersLabel")} />
+              <ListTemplateAdmin kind="plan_day_template" scope="event" eventId={id} label={t("planLists.dayTemplatesLabel")} />
+              <div className="flex gap-4">
+                <a href={`/events/${id}/planning/activities`} className="text-[13px] text-ember hover:underline">
+                  {t("planActivities.title")}
+                </a>
+                <a href={`/events/${id}/planning`} className="text-[13px] text-ember hover:underline">
+                  {t("nav.planning")}
+                </a>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -813,7 +832,15 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
   if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
   const moduleLabel = (key: ModuleKey) =>
-    key === "bills" ? t("accessTab.moduleBills") : key === "health" ? t("accessTab.moduleHealth") : t("accessTab.moduleMail");
+    t(
+      key === "bills"
+        ? "accessTab.moduleBills"
+        : key === "health"
+          ? "accessTab.moduleHealth"
+          : key === "mail"
+            ? "accessTab.moduleMail"
+            : "accessTab.modulePlanning"
+    );
 
   return (
     <div>
@@ -880,7 +907,15 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
   if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
   const moduleLabel = (key: ModuleKey) =>
-    key === "bills" ? t("accessTab.moduleBills") : key === "health" ? t("accessTab.moduleHealth") : t("accessTab.moduleMail");
+    t(
+      key === "bills"
+        ? "accessTab.moduleBills"
+        : key === "health"
+          ? "accessTab.moduleHealth"
+          : key === "mail"
+            ? "accessTab.moduleMail"
+            : "accessTab.modulePlanning"
+    );
 
   return (
     <div>

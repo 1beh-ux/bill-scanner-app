@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import PlanListDataFields, { type PlanKind } from "@/components/planning/PlanListDataFields";
+import type { PlanDayTemplateWindow } from "@/lib/planning";
 
-type Kind = "med" | "slot" | "situation" | "document";
+type Kind = "med" | "slot" | "situation" | "document" | PlanKind;
 type IncidentCategory = "illness" | "injury" | "parasite" | "medication" | "other";
 
 const CATEGORIES: IncidentCategory[] = ["illness", "injury", "parasite", "medication", "other"];
@@ -29,7 +31,7 @@ type Item = {
   id: string;
   name: string;
   active: boolean;
-  data: SituationData | DocumentData | null;
+  data: SituationData | DocumentData | Record<string, unknown> | null;
 };
 
 const inputClass =
@@ -49,6 +51,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const confirm = useConfirm();
   const isSituation = kind === "situation";
   const isDocument = kind === "document";
+  const isPlan = kind.startsWith("plan_");
 
   const basePath = scope === "org" ? "/api/list-templates" : `/api/events/${eventId}/list-items`;
   const listUrl = scope === "org" ? `${basePath}?kind=${kind}` : `${basePath}?kind=${kind}&all=true`;
@@ -71,6 +74,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   const [filenameSuffix, setFilenameSuffix] = useState("");
   const [templateGoogleDocId, setTemplateGoogleDocId] = useState("");
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
+  const [planData, setPlanData] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -119,6 +123,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setFilenameSuffix("");
     setTemplateGoogleDocId("");
     setAutoAttachOnAccept(true);
+    setPlanData({});
     setEditingId(null);
   }
 
@@ -143,6 +148,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setFilenameSuffix((item.data as DocumentData | null)?.filenameSuffix ?? "");
     setTemplateGoogleDocId((item.data as DocumentData | null)?.templateGoogleDocId ?? "");
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
+    setPlanData((item.data as Record<string, unknown> | null) ?? {});
     setFormOpen(true);
   }
 
@@ -152,7 +158,14 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setSaving(true);
     setError(null);
 
-    const data: SituationData | DocumentData | undefined = isSituation
+    const data: SituationData | DocumentData | Record<string, unknown> | undefined = isPlan
+      ? kind === "plan_day_template"
+        ? {
+            ...planData,
+            windows: ((planData.windows as PlanDayTemplateWindow[] | undefined) ?? []).filter((w) => w.name.trim()),
+          }
+        : planData
+      : isSituation
       ? {
           category,
           shortDescription: shortDescription.trim() || undefined,
@@ -252,7 +265,14 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
               key={item.id}
               className="flex items-center justify-between gap-2 border-b border-mist/60 py-2"
             >
-              <span className={"text-[14px] " + (item.active ? "text-ink" : "text-ink-secondary line-through")}>
+              <span className={"flex items-center gap-2 text-[14px] " + (item.active ? "text-ink" : "text-ink-secondary line-through")}>
+                {kind === "plan_category" && typeof (item.data as { color?: string } | null)?.color === "string" && (
+                  <span
+                    className="inline-block h-3 w-3 rounded-full"
+                    style={{ backgroundColor: (item.data as { color: string }).color }}
+                    aria-hidden="true"
+                  />
+                )}
                 {item.name}
               </span>
               <div className="flex items-center gap-3">
@@ -329,6 +349,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
               />
             </>
           )}
+          {isPlan && <PlanListDataFields kind={kind as PlanKind} data={planData} onChange={setPlanData} />}
           {isDocument && (
             <>
               <input

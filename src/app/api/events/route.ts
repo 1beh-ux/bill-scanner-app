@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   // Admin sees every event; everyone else only events they hold at least one
   // module grant on (the event switcher and pickers are built from this).
   const requested = new URL(req.url).searchParams.get("module");
-  const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" ? requested : undefined;
+  const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" || requested === "planning" ? requested : undefined;
   const events = await prisma.event.findMany({
     where:
       user.role === "admin"
@@ -70,7 +70,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const listTemplates = await tx.listTemplate.findMany({ where: { active: true } });
+    // plan_activity is the org base library -- imported into PlanActivity on
+    // demand, never copied as an event list item.
+    const listTemplates = await tx.listTemplate.findMany({ where: { active: true, kind: { not: "plan_activity" } } });
     if (listTemplates.length > 0) {
       await tx.eventListItem.createMany({
         data: listTemplates.map((lt) => ({

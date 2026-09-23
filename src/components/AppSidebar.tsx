@@ -18,6 +18,8 @@ import {
   HeartPulse,
   Pill,
   Mail,
+  CalendarClock,
+  Library,
 } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
@@ -100,6 +102,7 @@ export default function AppSidebar() {
   // Own-view layer on top of the admin-granted access (see User.hiddenModules).
   const showHealth = moduleAccess.health && !hiddenModules.includes("health");
   const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
+  const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
 
   const participantsNavItems = [
     ...(showHealth || showMail
@@ -134,6 +137,19 @@ export default function AppSidebar() {
             href: eventId ? `/events/${eventId}/mail/participants` : "/events",
             label: t("participantsPage.mailListTitle"),
             icon: Users,
+          },
+        ]
+      : []),
+  ];
+
+  const planningNavItems = [
+    ...(showPlanning
+      ? [
+          { href: eventId ? `/events/${eventId}/planning` : "/events", label: t("nav.planning"), icon: CalendarClock },
+          {
+            href: eventId ? `/events/${eventId}/planning/activities` : "/events",
+            label: t("planActivities.title"),
+            icon: Library,
           },
         ]
       : []),
@@ -245,6 +261,20 @@ export default function AppSidebar() {
           </div>
           <nav className="flex flex-col gap-0.5">
             {mailNavItems.map((item) => (
+              <NavLink key={item.label} {...item} />
+            ))}
+          </nav>
+        </>
+      )}
+
+      {planningNavItems.length > 0 && (
+        <>
+          <div className="my-3 h-px bg-night-border" />
+          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+            {t("nav.sectionPlanning")}
+          </div>
+          <nav className="flex flex-col gap-0.5">
+            {planningNavItems.map((item) => (
               <NavLink key={item.label} {...item} />
             ))}
           </nav>

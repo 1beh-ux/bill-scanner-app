@@ -3,8 +3,9 @@ import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireListItemAccess } from "@/lib/module-access";
+import { PLAN_EVENT_LIST_KINDS } from "@/lib/planning";
 
-const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document"];
+const ALLOWED_KINDS: ListTemplateKind[] = ["med", "slot", "situation", "document", ...PLAN_EVENT_LIST_KINDS];
 
 // Copies active org-wide ListTemplate rows into this event's EventListItem
 // list, skipping any name already present so it's safe to call more than
