@@ -135,7 +135,8 @@ async function main() {
   assert.deepEqual(lead.counts, { updated: 1, created: 1 });
   const tom = await prisma.eventListItem.findFirstOrThrow({ where: { eventId: ev3.id, kind: "plan_leader", name: "Tom" } });
   assert.deepEqual(tom.data, { phone: "123", role: "hlavní" });
-  const cats = await runImport(ev3.id, "categories", [{ name: "Hra", group: "Hlavní", color: "zelená", targetPercent: "60 %" }, { name: "X", color: "blah" }], opts, false);
+  const cats = await runImport(ev3.id, "categories", [{ name: "Hra", group: "Hlavní", color: "zelená", targetPercent: "60 %" }, { name: "X", color: "blah" }, { name: "Snídaně", group: "hlavní", countInAnalysis: "ne" }], opts, false);
+  assert.deepEqual((await prisma.eventListItem.findFirstOrThrow({ where: { eventId: ev3.id, name: "Snídaně" } })).data, { group: "primary", countInAnalysis: false });
   assert.equal(cats.warnings[0].code, "invalid_color");
   assert.deepEqual((await prisma.eventListItem.findFirstOrThrow({ where: { eventId: ev3.id, name: "Hra" } })).data, { group: "primary", color: "#22c55e", targetPercent: 60 });
 

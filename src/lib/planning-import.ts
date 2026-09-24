@@ -54,6 +54,7 @@ export const IMPORT_FIELDS: Record<PlanImportTarget, ImportField[]> = {
     { key: "group", aliases: ["skupina", "typ", "hlavni/vedlejsi", "group", "type"] },
     { key: "color", aliases: ["barva", "color", "colour"] },
     { key: "targetPercent", aliases: ["cil", "cil %", "cil (%)", "podil", "procento", "target", "target %"] },
+    { key: "countInAnalysis", aliases: ["analyza", "do analyzy", "merit", "pocitat", "analyze", "count"] },
   ],
 };
 

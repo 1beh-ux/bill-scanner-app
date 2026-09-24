@@ -128,6 +128,11 @@ export async function runImport(
         if (!c) warnings.push({ row, code: "invalid_color", value: get(r, "color") });
         else data.color = c;
       }
+      if (get(r, "countInAnalysis")) {
+        const b = parseBool(get(r, "countInAnalysis"));
+        if (b === null) warnings.push({ row, code: "invalid_bool", value: get(r, "countInAnalysis") });
+        else data.countInAnalysis = b;
+      }
       if (get(r, "targetPercent")) {
         const p = parsePercent(get(r, "targetPercent"));
         if (p === null) warnings.push({ row, code: "invalid_number", value: get(r, "targetPercent") });

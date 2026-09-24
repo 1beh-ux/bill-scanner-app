@@ -241,6 +241,30 @@ async function main() {
     { key: "planImport.issue.missing_end", cs: "chybí konec nebo délka", en: "end or duration missing" },
     { key: "planImport.issue.invalid_end", cs: "konec musí být po začátku (min. 5 min)", en: "end must be after start (min. 5 min)" },
     { key: "planImport.issue.parallel_length_unified", cs: "souběžné aktivity měly různou délku — použita nejdelší", en: "parallel activities had different lengths — the longest is used" },
+
+    // Round of changes: name field, move/copy, library width, card settings, analysis base
+    { key: "planBoard.editActivity", cs: "Upravit aktivitu", en: "Edit activity" },
+    { key: "planBoard.activityName", cs: "Název aktivity", en: "Activity name" },
+    { key: "planBoard.moveToDescription", cs: "↓ Přesunout označený text do popisu", en: "↓ Move selected text to the description" },
+    { key: "planBoard.libraryName", cs: "V knihovně: {name}", en: "In the library: {name}" },
+    { key: "planBoard.moveTitle", cs: "Přesunout nebo kopírovat", en: "Move or copy" },
+    { key: "planBoard.movePick", cs: "Vyberte místo…", en: "Choose a position…" },
+    { key: "planBoard.moveStartOf", cs: "Na začátek okna {window}", en: "At the start of {window}" },
+    { key: "planBoard.moveInto", cs: "Do okna {window}", en: "Into {window}" },
+    { key: "planBoard.moveWith", cs: "Souběžně s: {slot}", en: "In parallel with: {slot}" },
+    { key: "planBoard.moveAfter", cs: "Za: {slot}", en: "After: {slot}" },
+    { key: "planBoard.moveAction", cs: "Přesunout", en: "Move" },
+    { key: "planBoard.copyAction", cs: "Kopírovat", en: "Copy" },
+    { key: "planBoard.resizeLibrary", cs: "Táhnutím změníte šířku knihovny", en: "Drag to change the library width" },
+    { key: "planBoard.analysisBase", cs: "Analyzovaný čas: {analysed} z {used} min", en: "Analysed time: {analysed} of {used} min" },
+    { key: "planLists.countInAnalysis", cs: "Počítat do analýzy času (vypněte např. pro snídani, organizační bloky)", en: "Count in the time analysis (turn off e.g. for breakfast, logistics)" },
+    { key: "planImport.field.countInAnalysis", cs: "Počítat do analýzy", en: "Count in analysis" },
+    { key: "settingsPage.planningCardsLabel", cs: "Plánování – co zobrazit na kartách aktivit (název je vždy celý):", en: "Planning – what activity cards show (the name is always in full):" },
+    { key: "settingsPage.planningCardShowDescription", cs: "Popis", en: "Description" },
+    { key: "settingsPage.planningCardShowMeta", cs: "Vedoucí a místo", en: "Leader and location" },
+    { key: "settingsPage.planningCardShowGroups", cs: "Skupiny", en: "Groups" },
+    { key: "settingsPage.planningCardDescriptionChars", cs: "Max. znaků popisu:", en: "Max. description characters:" },
+    { key: "settingsPage.planningCardsHint", cs: "Celý popis se zobrazí po najetí myší. Šířku knihovny změníte tažením jejího okraje na plánu.", en: "The full description shows on hover. Change the library width by dragging its edge on the board." },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

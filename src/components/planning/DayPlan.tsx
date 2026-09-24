@@ -4,7 +4,8 @@ import { useRef } from "react";
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { GripVertical, Trash2, X } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
-import { MIN_SLOT_MINUTES, minutesToHhmm, type PlanBlockRow, type PlanSlotRow, type PlanWindowRow } from "@/lib/planning";
+import type { UiPrefs } from "@/lib/ui-prefs";
+import { MIN_SLOT_MINUTES, clipName, minutesToHhmm, type PlanBlockRow, type PlanSlotRow, type PlanWindowRow } from "@/lib/planning";
 import { byBranch, byPosition, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
 import { MIN_SLOT_PX, PX_PER_MIN, type DragData, type DropData, type PlanPayload } from "./types";
 
@@ -18,6 +19,7 @@ export type DayPlanProps = {
   onDeleteSlot: (slotId: string) => void;
   onDeleteBlock: (blockId: string) => void;
   onEditBlock: (blockId: string) => void;
+  cardPrefs: Required<UiPrefs>;
 };
 
 export function blockLabel(payload: PlanPayload, b: PlanBlockRow) {
@@ -235,11 +237,19 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
         (isDragging ? "opacity-40" : "")
       }
     >
-      <div className="truncate pr-4 text-[13px] font-medium text-ink">{label}</div>
-      {(leader || location) && (
-        <div className="truncate text-[11.5px] text-ink-secondary">{[leader, location].filter(Boolean).join(" · ")}</div>
+      {/* Name always in full; the rest per the user's card settings (Nastavení -> Plánování). */}
+      <div className="break-words pr-4 text-[13px] font-medium leading-snug text-ink">{label}</div>
+      {props.cardPrefs.planningCardShowDescription && b.description && (
+        <div className="break-words text-[11.5px] leading-snug text-ink-secondary" title={b.description}>
+          {clipName(b.description, props.cardPrefs.planningCardDescriptionChars)}
+        </div>
       )}
-      {b.groupNames.length > 0 && <div className="truncate text-[11px] font-medium text-ember">{b.groupNames.join(", ")}</div>}
+      {props.cardPrefs.planningCardShowMeta && (leader || location) && (
+        <div className="truncate text-[11.5px] italic text-ink-secondary">{[leader, location].filter(Boolean).join(" · ")}</div>
+      )}
+      {props.cardPrefs.planningCardShowGroups && b.groupNames.length > 0 && (
+        <div className="truncate text-[11px] font-medium text-ember">{b.groupNames.join(", ")}</div>
+      )}
       <button
         onMouseDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}

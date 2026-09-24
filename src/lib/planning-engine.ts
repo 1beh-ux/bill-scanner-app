@@ -53,6 +53,9 @@ export type Summary = {
   usedMin: number;
   freeMin: number;
   overflowMin: number;
+  // Minutes of slots holding at least one counted primary category -- the base
+  // for the primary categories' percentages.
+  analysisMin: number;
   primaryCategories: CategoryRow[];
   secondaryCategories: CategoryRow[];
   leaders: EntityRow[];
@@ -65,7 +68,9 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 /**
  * Totals over the given windows (one day, or the whole event). Category rule
  * (kept from the original tool): in a parallel slot each *distinct* category
- * present counts the full slot duration once. Leaders/locations: every block
+ * present counts the full slot duration once. Primary percentages are of the
+ * analysed time only (slots with a counted primary category); secondary ones
+ * of all planned time. Leaders/locations: every block
  * counts its full slot duration.
  */
 export function summarize(
@@ -79,6 +84,7 @@ export function summarize(
     usedMin: 0,
     freeMin: 0,
     overflowMin: 0,
+    analysisMin: 0,
     primaryCategories: [],
     secondaryCategories: [],
     leaders: [],
@@ -94,6 +100,8 @@ export function summarize(
     summary.overflowMin += w.overflowMin;
   }
 
+  // Primary categories count toward the analysis unless switched off (countInAnalysis: false).
+  const isCounted = (id: string) => categories.find((c) => c.id === id)?.data?.countInAnalysis !== false;
   const primary = new Map<string, number>();
   const secondary = new Map<string, number>();
   const leaders = new Map<string, number>();
@@ -104,7 +112,9 @@ export function summarize(
   for (const slot of state.slots) {
     if (!windowIds.has(slot.windowId)) continue;
     const blocks = state.blocks.filter((b) => b.slotId === slot.id);
-    for (const id of new Set(blocks.map((b) => b.primaryCategoryId))) add(primary, id, slot.durationMin);
+    const counted = [...new Set(blocks.map((b) => b.primaryCategoryId))].filter((id) => id && isCounted(id));
+    for (const id of counted) add(primary, id, slot.durationMin);
+    if (counted.length > 0) summary.analysisMin += slot.durationMin;
     for (const id of new Set(blocks.map((b) => b.secondaryCategoryId))) add(secondary, id, slot.durationMin);
     for (const b of blocks) {
       add(leaders, b.leaderId, slot.durationMin);
@@ -114,17 +124,17 @@ export function summarize(
   }
 
   const target = (id: string) => categories.find((c) => c.id === id)?.data?.targetPercent ?? null;
-  const toCategoryRows = (m: Map<string, number>) =>
+  const toCategoryRows = (m: Map<string, number>, base: number) =>
     [...m].map(([categoryId, totalMin]) => ({
       categoryId,
       totalMin,
-      percent: summary.usedMin > 0 ? round1((totalMin / summary.usedMin) * 100) : 0,
+      percent: base > 0 ? round1((totalMin / base) * 100) : 0,
       targetPercent: target(categoryId),
     }));
   const toEntityRows = (m: Map<string, number>) => [...m].map(([refId, totalMin]) => ({ refId, totalMin }));
 
-  summary.primaryCategories = toCategoryRows(primary);
-  summary.secondaryCategories = toCategoryRows(secondary);
+  summary.primaryCategories = toCategoryRows(primary, summary.analysisMin);
+  summary.secondaryCategories = toCategoryRows(secondary, summary.usedMin);
   summary.leaders = toEntityRows(leaders);
   summary.locations = toEntityRows(locations);
   summary.groups = toEntityRows(groups);

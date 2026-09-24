@@ -65,6 +65,16 @@ export default function PlanListDataFields({
             className={inputClass}
           />
         </label>
+        {(str("group") || "primary") === "primary" && (
+          <label className="flex items-center gap-2 text-[13px] text-ink-secondary sm:col-span-3">
+            <input
+              type="checkbox"
+              checked={data.countInAnalysis !== false}
+              onChange={(e) => onChange({ ...data, countInAnalysis: e.target.checked })}
+            />
+            {t("planLists.countInAnalysis")}
+          </label>
+        )}
       </div>
     );
   }

@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useUiPrefs } from "@/lib/use-ui-prefs";
 import type { PlanState } from "@/lib/planning";
 import { computeTimes, findConflicts } from "@/lib/planning-engine";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
@@ -49,8 +50,14 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
   const [resizePreview, setResizePreview] = useState<{ slotId: string; durationMin: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeDrag, setActiveDrag] = useState<DragData | null>(null);
+  // dnd-kit reads the dragged item's data from its mounted node; hovering a day
+  // tab switches days and unmounts that node, after which e.active.data is
+  // empty -- so the data is kept from drag start instead.
+  const dragRef = useRef<DragData | null>(null);
   const [copyMode, setCopyMode] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const { prefs, setLocal: setPrefsLocal, save: savePrefs } = useUiPrefs();
+  const libraryResize = useRef<{ startX: number; startWidth: number } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
@@ -132,7 +139,8 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
 
   function onDragStart(e: DragStartEvent) {
     setError(null);
-    setActiveDrag(e.active.data.current as DragData);
+    dragRef.current = e.active.data.current as DragData;
+    setActiveDrag(dragRef.current);
     setCopyMode(isCopyGesture(e.activatorEvent));
   }
 
@@ -163,7 +171,8 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
 
   function onDragEnd(e: DragEndEvent) {
     clearHover();
-    const drag = e.active.data.current as DragData | undefined;
+    const drag = dragRef.current;
+    dragRef.current = null;
     const drop = e.over?.data.current as DropData | undefined;
     const copy = copyMode;
     setActiveDrag(null);
@@ -297,6 +306,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
         onDragEnd={onDragEnd}
         onDragCancel={() => {
           clearHover();
+          dragRef.current = null;
           setActiveDrag(null);
           setCopyMode(false);
         }}
@@ -310,9 +320,34 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
           onError={setError}
         />
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[230px_minmax(0,1fr)_260px]">
-          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
-            <LibraryPanel payload={view} eventId={eventId} />
+        <div
+          className="grid grid-cols-1 gap-4 lg:grid-cols-[var(--library-width)_minmax(0,1fr)_260px]"
+          style={{ "--library-width": `${prefs.planningLibraryWidth}px` } as React.CSSProperties}
+        >
+          <div className="relative lg:sticky lg:top-4 lg:self-start">
+            <div className="lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+              <LibraryPanel payload={view} eventId={eventId} />
+            </div>
+            {/* Drag the edge to widen the library; the width is saved to the user's account. */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("planBoard.resizeLibrary")}
+              title={t("planBoard.resizeLibrary")}
+              onPointerDown={(e) => {
+                (e.target as HTMLElement).setPointerCapture(e.pointerId);
+                libraryResize.current = { startX: e.clientX, startWidth: prefs.planningLibraryWidth };
+              }}
+              onPointerMove={(e) => {
+                const r = libraryResize.current;
+                if (r) setPrefsLocal({ planningLibraryWidth: Math.min(640, Math.max(180, r.startWidth + e.clientX - r.startX)) });
+              }}
+              onPointerUp={() => {
+                if (libraryResize.current) savePrefs({ planningLibraryWidth: prefs.planningLibraryWidth });
+                libraryResize.current = null;
+              }}
+              className="absolute -right-3 top-0 hidden h-full w-2 cursor-col-resize touch-none rounded hover:bg-ember/30 lg:block"
+            />
           </div>
 
           <div className="min-w-0">
@@ -327,6 +362,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
                 onDeleteSlot={deleteSlot}
                 onDeleteBlock={deleteBlock}
                 onEditBlock={setEditingBlockId}
+                cardPrefs={prefs}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-mist p-8 text-center text-[14px] text-ink-secondary">
@@ -352,6 +388,10 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             onSaved={(next) => commit(next)}
             onResize={commitResize}
             onDelete={deleteBlock}
+            onMove={(id, target, copy) => {
+              const op: PlanOp = { op: "move", kind: "block", id, target, copy };
+              runOp(op, op);
+            }}
           />
         )}
 

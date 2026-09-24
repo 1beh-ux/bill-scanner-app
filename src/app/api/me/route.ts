@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -17,6 +18,7 @@ export async function GET() {
     landingPath: user.landingPath,
     emailSignature: user.emailSignature,
     hiddenModules: user.hiddenModules,
+    uiPrefs: user.uiPrefs ?? {},
   });
 }
 
@@ -29,7 +31,7 @@ export async function PATCH(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const { preferredLang, preferredTheme, landingPath, emailSignature, hiddenModules } = await req.json();
+  const { preferredLang, preferredTheme, landingPath, emailSignature, hiddenModules, uiPrefs } = await req.json();
 
   const updated = await prisma.user.update({
     where: { id: user.id },
@@ -39,6 +41,8 @@ export async function PATCH(req: NextRequest) {
       ...(landingPath !== undefined && { landingPath: landingPath || null }),
       ...(emailSignature !== undefined && { emailSignature: emailSignature || null }),
       ...(hiddenModules !== undefined && { hiddenModules }),
+      // Merged, not replaced: each screen saves only its own keys.
+      ...(uiPrefs !== undefined && { uiPrefs: { ...sanitizeUiPrefs(user.uiPrefs), ...sanitizeUiPrefs(uiPrefs) } }),
     },
   });
 
@@ -52,5 +56,6 @@ export async function PATCH(req: NextRequest) {
     landingPath: updated.landingPath,
     emailSignature: updated.emailSignature,
     hiddenModules: updated.hiddenModules,
+    uiPrefs: updated.uiPrefs ?? {},
   });
 }

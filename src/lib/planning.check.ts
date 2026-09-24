@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { PlanBlockRow, PlanState } from "@/lib/planning";
 import { byPosition, computeTimes, findConflicts, summarize } from "@/lib/planning-engine";
 import { applyOp } from "@/lib/planning-moves";
+import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 
 let n = 0;
 const newId = () => `new${++n}`;
@@ -41,6 +42,11 @@ assert.deepEqual(t.windows.am, { windowId: "am", usedMin: 195, capacityMin: 180,
 const sum = summarize(base, new Set(["am"]), [{ id: "prax", data: { targetPercent: 60 } }]);
 assert.equal(sum.primaryCategories.find((c) => c.categoryId === "prax")?.totalMin, 150);
 assert.equal(sum.leaders.find((l) => l.refId === "tom")?.totalMin, 60 + 90 + 90);
+
+// Analysis base: switching a primary category off drops its slots from the base.
+const withBreakfast = summarize(base, new Set(["am"]), [{ id: "prax", data: {} }, { id: "teorie", data: { countInAnalysis: false } }]);
+assert.equal(withBreakfast.analysisMin, 150); // slots A + B (prax); C (teorie) excluded
+assert.deepEqual(withBreakfast.primaryCategories.map((c) => [c.categoryId, c.percent]), [["prax", 100]]);
 
 // Conflicts: tom in both branches of B; hall in b2 (B) and c1 (C) don't overlap.
 const conflicts = findConflicts(base, () => "d1");
@@ -95,6 +101,12 @@ assert.equal(ins.slots.filter((s) => s.windowId === "am").length, 4);
 assert.equal(order(ins, "am").replace(/new\d+/, "X"), "AXBC");
 assert.equal(applyOp(base, { op: "resize", slotId: "A", durationMin: 2 }, newId).slots.find((s) => s.id === "A")!.durationMin, 5);
 assert.equal(order(applyOp(base, { op: "deleteBlock", blockId: "a1" }, newId), "am"), "BC");
+
+// User UI prefs: unknown keys dropped, numbers clamped, wrong types ignored.
+assert.deepEqual(
+  sanitizeUiPrefs({ planningLibraryWidth: 9999, planningCardDescriptionChars: 3, planningCardShowMeta: false, planningCardShowGroups: "yes", evil: 1 }),
+  { planningLibraryWidth: 640, planningCardDescriptionChars: 10, planningCardShowMeta: false }
+);
 
 // Input state is never mutated.
 assert.equal(order(base, "am"), "ABC");

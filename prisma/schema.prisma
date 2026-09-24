@@ -157,6 +157,9 @@ model User {
   // sidebar. Admin decides what they *have* (UserEventModuleAccess); this only
   // narrows their own view, never grants anything.
   hiddenModules   ModuleKey[] @default([]) @map("hidden_modules")
+  // Small per-person UI preferences that should follow the user across
+  // devices (see src/lib/ui-prefs.ts for the allowed keys).
+  uiPrefs         Json?       @map("ui_prefs")
 
   moduleAccess       UserEventModuleAccess[]
   driveAccount           DriveAccount?     @relation("DriveAccountConnectedBy")

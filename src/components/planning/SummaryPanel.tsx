@@ -69,6 +69,11 @@ export default function SummaryPanel({
         <dd className={"text-right " + (s.overflowMin > 0 ? "font-medium text-red-600" : "text-ink")}>{s.overflowMin} min</dd>
       </dl>
 
+      {s.primaryCategories.length > 0 && (
+        <p className="-mb-2 text-[12px] text-ink-secondary">
+          {t("planBoard.analysisBase", { analysed: String(s.analysisMin), used: String(s.usedMin) })}
+        </p>
+      )}
       <CategoryTable title={t("planLists.primaryCategory")} rows={s.primaryCategories} name={(id) => nameIn(payload.categories, id)} />
       <CategoryTable title={t("planLists.secondaryCategory")} rows={s.secondaryCategories} name={(id) => nameIn(payload.categories, id)} />
       <EntityTable title={t("planLists.leadersLabel")} rows={s.leaders} name={(id) => nameIn(payload.leaders, id)} />

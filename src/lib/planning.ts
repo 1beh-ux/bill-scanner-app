@@ -17,7 +17,9 @@ export const PLAN_ORG_LIST_KINDS: ListTemplateKind[] = [...PLAN_EVENT_LIST_KINDS
 export type PlanWindowKind = "flexible" | "partial" | "fixed";
 export const PLAN_WINDOW_KINDS: PlanWindowKind[] = ["flexible", "partial", "fixed"];
 
-export type PlanCategoryData = { group?: "primary" | "secondary"; color?: string; targetPercent?: number };
+// countInAnalysis (primary categories): false keeps e.g. breakfast/logistics out
+// of the time analysis -- see summarize() in planning-engine.ts. Default true.
+export type PlanCategoryData = { group?: "primary" | "secondary"; color?: string; targetPercent?: number; countInAnalysis?: boolean };
 export type PlanLocationData = { capacity?: number; notes?: string };
 export type PlanLeaderData = { role?: string; phone?: string; notes?: string };
 // `id` only when editing an existing day's windows (never stored in a template).
@@ -126,3 +128,8 @@ export type PlanningSettings = {
   exportSheetId?: string;
   exportSyncedAt?: string;
 };
+
+/** Name shortened to `max` characters for cards (full name goes in a tooltip). */
+export function clipName(name: string, max: number): string {
+  return name.length > max ? `${name.slice(0, Math.max(1, max - 1)).trimEnd()}…` : name;
+}
