@@ -184,6 +184,9 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
         <button onClick={() => runImport({ source: "base" })} disabled={busy} className={btnSecondary}>
           {t("planActivities.importBase")}
         </button>
+        <a href={`/events/${eventId}/planning/import`} className={btnSecondary}>
+          {t("planImport.fromTable")}
+        </a>
         {otherEvents.length > 0 && (
           <>
             <span className="mx-2 h-5 w-px bg-mist" aria-hidden="true" />

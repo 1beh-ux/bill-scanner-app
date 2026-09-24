@@ -51,7 +51,7 @@ export default function SummaryPanel({
 
       <div className="flex flex-wrap gap-1.5">
         <a href={`/events/${eventId}/planning/print${dayQuery}`} className={exportLink}>
-          {t("planBoard.print")}
+          {t("planBoard.exportPage")}
         </a>
         <a href={`/api/events/${eventId}/planning/export${dayQuery}`} className={exportLink}>
           {t("planBoard.csv")}

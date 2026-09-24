@@ -1,19 +1,20 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import type { PlanPayload } from "@/lib/planning";
-import { scheduleRows, type ScheduleRow } from "@/lib/planning-export";
-import { formatDayDate } from "@/components/planning/DayTabs";
+import { scheduleDays } from "@/lib/planning-export";
+import { scheduleHtml } from "@/lib/planning-pdf";
+import DriveSheetExport from "@/components/planning/DriveSheetExport";
 
 const selectClass =
   "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
+const btnSecondary = "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist";
 
-// Printable schedule (step 7): ?day=<id> (default all days, one page each),
-// ?leader=<id> for a leader's own schedule, ?group=<name> for a participant
-// group's (its blocks plus those for everyone). Filters live in the URL so a
-// filtered view can be bookmarked or shared.
+// Schedule export page: filters live in the URL (?day, ?leader, ?group) so a
+// filtered view can be bookmarked. The preview is the exact HTML the PDF
+// service renders (src/lib/planning-pdf.ts), so preview, print and PDF match.
 export default function PlanningPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
   const { t } = useTranslations();
@@ -23,6 +24,7 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
   const leader = search.get("leader") ?? "";
   const group = search.get("group") ?? "";
   const [payload, setPayload] = useState<PlanPayload | null>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}/planning`)
@@ -30,13 +32,16 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
       .then(setPayload);
   }, [eventId]);
 
-  const rows = useMemo(
-    () =>
-      payload
-        ? scheduleRows(payload, { dayIds: day ? new Set([day]) : undefined, leaderId: leader || undefined, group: group || undefined })
-        : [],
-    [payload, day, leader, group]
-  );
+  const html = useMemo(() => {
+    if (!payload) return "";
+    const leaderName = payload.leaders.find((l) => l.id === leader)?.name;
+    return scheduleHtml({
+      eventName: payload.event.name,
+      days: scheduleDays(payload, { dayIds: day ? new Set([day]) : undefined, leaderId: leader || undefined, group: group || undefined }),
+      subtitle: [leaderName, group].filter(Boolean).map((n) => t("planBoard.printFor", { name: String(n) })).join(" · ") || undefined,
+      showLeader: !leader,
+    });
+  }, [payload, day, leader, group, t]);
 
   function setFilter(key: "day" | "leader" | "group", value: string) {
     const next = new URLSearchParams(search);
@@ -46,14 +51,11 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
   }
 
   if (!payload) return <div className="p-4 text-[14px] text-ink-secondary md:p-8">{t("common.loading")}</div>;
-
-  const days = [...payload.days].sort((a, b) => a.sortOrder - b.sortOrder).filter((d) => !day || d.id === day);
-  const leaderName = payload.leaders.find((l) => l.id === leader)?.name;
-  const csvQuery = new URLSearchParams(search).toString();
+  const query = search.toString() ? `?${search}` : "";
 
   return (
-    <div className="mx-auto max-w-4xl p-4 md:p-8 print:max-w-none print:p-0">
-      <div className="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+    <div className="flex h-[calc(100vh-1px)] flex-col p-4 md:p-6">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <a href={`/events/${eventId}/planning`} className="mr-2 text-[13px] text-ink-secondary hover:text-ink">
           ← {t("nav.planning")}
         </a>
@@ -83,101 +85,26 @@ export default function PlanningPrintPage({ params }: { params: Promise<{ id: st
             ))}
           </select>
         )}
-        <a href={`/api/events/${eventId}/planning/export${csvQuery ? `?${csvQuery}` : ""}`} className="ml-auto text-[13px] text-ember hover:underline">
-          {t("planBoard.csv")}
-        </a>
-        <button onClick={() => window.print()} className="rounded-lg bg-ember px-4 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover">
-          {t("planBoard.print")}
-        </button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <a href={`/api/events/${eventId}/planning/export${query}`} className={btnSecondary}>
+            {t("planBoard.csv")}
+          </a>
+          <button onClick={() => frame.current?.contentWindow?.print()} className={btnSecondary}>
+            {t("planBoard.print")}
+          </button>
+          <a
+            href={`/api/events/${eventId}/planning/pdf${query}`}
+            className="rounded-lg bg-ember px-4 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover"
+          >
+            {t("planBoard.downloadPdf")}
+          </a>
+        </div>
       </div>
-
-      {days.map((d, i) => (
-        <section key={d.id} className="mb-8" style={i > 0 ? { breakBefore: "page" } : undefined}>
-          <h1 className="text-[20px] font-semibold text-ink">
-            {payload.event.name} — {d.label}
-            {d.date && <span className="ml-2 font-normal text-ink-secondary">{formatDayDate(d.date)}</span>}
-          </h1>
-          {(leaderName || group || d.theme) && (
-            <p className="mb-2 text-[13px] text-ink-secondary">
-              {[leaderName && t("planBoard.printFor", { name: leaderName }), group && t("planBoard.printFor", { name: group }), d.theme]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          )}
-          <DayTable
-            rows={rows.filter((r) => r.dayId === d.id)}
-            hideLeader={Boolean(leader)}
-            showGroups={!group && rows.some((r) => r.groups)}
-            t={t}
-          />
-        </section>
-      ))}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 px-3 py-2">
+        <span className="text-[13px] font-medium text-ink">{t("planBoard.driveTitle")}</span>
+        <DriveSheetExport eventId={eventId} />
+      </div>
+      <iframe ref={frame} srcDoc={html} title={t("planBoard.print")} className="min-h-[60vh] w-full flex-1 rounded-lg border border-mist bg-white" />
     </div>
-  );
-}
-
-function DayTable({
-  rows,
-  hideLeader,
-  showGroups,
-  t,
-}: {
-  rows: ScheduleRow[];
-  hideLeader: boolean;
-  showGroups: boolean;
-  t: (key: string) => string;
-}) {
-  if (rows.length === 0) return <p className="text-[13px] text-ink-secondary">{t("planBoard.printEmpty")}</p>;
-  const cell = "border-b border-mist px-2 py-1 align-top";
-  return (
-    <table className="w-full border-collapse text-[12.5px]">
-      <thead>
-        <tr className="text-left text-ink-secondary">
-          <th className={cell + " w-[90px] font-medium"}>{t("planBoard.time")}</th>
-          <th className={cell + " font-medium"}>{t("planBoard.activity")}</th>
-          {!hideLeader && <th className={cell + " font-medium"}>{t("planBoard.leader")}</th>}
-          <th className={cell + " font-medium"}>{t("planBoard.location")}</th>
-          {showGroups && <th className={cell + " font-medium"}>{t("planBoard.groups")}</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => {
-          const newWindow = i === 0 || rows[i - 1].windowName !== r.windowName;
-          return (
-            <FragmentRows key={i} newWindow={newWindow} windowLabel={`${r.windowName} (${r.windowStart}–${r.windowEnd})`} colSpan={2 + (hideLeader ? 0 : 1) + 1 + (showGroups ? 1 : 0)}>
-              <tr style={{ breakInside: "avoid" }}>
-                <td className={cell + " whitespace-nowrap text-ink"}>
-                  {r.start}–{r.end}
-                  {r.parallel && <span className="ml-1 text-ink-secondary" title={t("planBoard.parallel")}>∥</span>}
-                </td>
-                <td className={cell + " text-ink"}>
-                  <div className="font-medium">{r.activity}</div>
-                  {r.description && <div className="text-[11.5px] text-ink-secondary">{r.description}</div>}
-                  {r.notes && <div className="text-[11.5px] italic text-ink-secondary">{r.notes}</div>}
-                </td>
-                {!hideLeader && <td className={cell + " text-ink"}>{r.leader}</td>}
-                <td className={cell + " text-ink"}>{r.location}</td>
-                {showGroups && <td className={cell + " text-ink"}>{r.groups}</td>}
-              </tr>
-            </FragmentRows>
-          );
-        })}
-      </tbody>
-    </table>
-  );
-}
-
-function FragmentRows({ newWindow, windowLabel, colSpan, children }: { newWindow: boolean; windowLabel: string; colSpan: number; children: React.ReactNode }) {
-  return (
-    <>
-      {newWindow && (
-        <tr>
-          <td colSpan={colSpan} className="bg-mist/40 px-2 pb-1 pt-3 text-[12px] font-semibold uppercase tracking-wide text-ink-secondary">
-            {windowLabel}
-          </td>
-        </tr>
-      )}
-      {children}
-    </>
   );
 }

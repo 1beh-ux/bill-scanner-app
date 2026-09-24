@@ -268,7 +268,15 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
         <h1 className="text-[22px] font-semibold text-ink">
           {view.event.name} — {t("nav.planning")}
         </h1>
-        <p className="text-[12px] text-ink-secondary">{t("planBoard.copyHint")}</p>
+        <div className="flex items-center gap-3">
+          <p className="text-[12px] text-ink-secondary">{t("planBoard.copyHint")}</p>
+          <a href={`/events/${eventId}/planning/import`} className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist">
+            {t("planImport.title")}
+          </a>
+          <a href={`/events/${eventId}/planning/print`} className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist">
+            {t("planBoard.exportPage")}
+          </a>
+        </div>
       </div>
 
       {error && (

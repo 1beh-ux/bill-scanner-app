@@ -114,3 +114,15 @@ export type PlanPayload = PlanState & {
   groups: string[];
 };
 
+
+// Event.planningSettings JSON.
+export type PlanImportTarget = "schedule" | "activities" | "leaders" | "locations" | "categories";
+export const PLAN_IMPORT_TARGETS: PlanImportTarget[] = ["schedule", "activities", "leaders", "locations", "categories"];
+// mapping: sheet header text -> import field key (by header, not column index,
+// so reordered sheet columns still map -- same as the participant import).
+export type PlanImportConnection = { sheetId: string; tab?: string; mapping: Record<string, string> };
+export type PlanningSettings = {
+  imports?: Partial<Record<PlanImportTarget, PlanImportConnection>>;
+  exportSheetId?: string;
+  exportSyncedAt?: string;
+};

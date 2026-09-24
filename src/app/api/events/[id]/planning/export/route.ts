@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authorizePlanning, loadPlanPayload } from "@/lib/planning-server";
-import { scheduleRows } from "@/lib/planning-export";
+import { CSV_HEADER, rowCells, scheduleRows } from "@/lib/planning-export";
 
 // CSV of the schedule (the old Export_Schedule sheet). ?day=<dayId> or all days;
 // ?leader=<leaderId> narrows to one leader's blocks, ?group=<name> to one
@@ -18,14 +18,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const payload = await loadPlanPayload(eventId);
   const rows = scheduleRows(payload, { dayIds: day ? new Set([day]) : undefined, leaderId: leader ?? undefined, group: group ?? undefined });
 
-  const header = ["Den", "Datum", "Okno", "Začátek okna", "Konec okna", "Začátek", "Konec", "Délka (min)", "Souběžně", "Aktivita", "Popis", "Hlavní kategorie", "Vedlejší kategorie", "Vedoucí", "Místo", "Skupiny", "Poznámka"];
   const cell = (v: string | number) => {
     const s = String(v);
     return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const lines = [
-    header,
-    ...rows.map((r) => [r.dayLabel, r.date ?? "", r.windowName, r.windowStart, r.windowEnd, r.start, r.end, r.durationMin, r.parallel ? "ano" : "", r.activity, r.description, r.primaryCategory, r.secondaryCategory, r.leader, r.location, r.groups, r.notes]),
+    CSV_HEADER,
+    ...rows.map(rowCells),
   ].map((cols) => cols.map(cell).join(";"));
 
   const filename = `program-${payload.event.name.normalize("NFD").replace(/[^\w-]+/g, "-").replace(/-+/g, "-").toLowerCase()}.csv`;

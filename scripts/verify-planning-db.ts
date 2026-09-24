@@ -13,7 +13,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
 import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff } from "../src/lib/planning-server";
-import { scheduleRows } from "../src/lib/planning-export";
+import { scheduleDays, scheduleRows } from "../src/lib/planning-export";
+import { scheduleHtml } from "../src/lib/planning-pdf";
+import { runImport } from "../src/lib/planning-import-run";
 import { applyOp, type PlanOp } from "../src/lib/planning-moves";
 import { copyActivitiesFromEvent, importBaseActivities, parseActivityInput } from "../src/lib/planning-activities";
 import type { PlanState } from "../src/lib/planning";
@@ -124,6 +126,73 @@ async function main() {
   await prisma.planDay.delete({ where: { id: day.id } });
   assert.equal(await prisma.planSlot.count(), 0);
   assert.equal(await prisma.planBlock.count(), 0);
+  // ---- Import (runImport) on a separate event --------------------------------
+  const ev3 = await mk("Import");
+  const opts = { mode: "replace" as const, createMissing: true };
+  // Lists: create, then update by name (case-insensitive), parsed fields.
+  await runImport(ev3.id, "leaders", [{ name: "Tom", phone: "123" }], opts, false);
+  const lead = await runImport(ev3.id, "leaders", [{ name: "tom", role: "hlavní" }, { name: "Eva" }], opts, false);
+  assert.deepEqual(lead.counts, { updated: 1, created: 1 });
+  const tom = await prisma.eventListItem.findFirstOrThrow({ where: { eventId: ev3.id, kind: "plan_leader", name: "Tom" } });
+  assert.deepEqual(tom.data, { phone: "123", role: "hlavní" });
+  const cats = await runImport(ev3.id, "categories", [{ name: "Hra", group: "Hlavní", color: "zelená", targetPercent: "60 %" }, { name: "X", color: "blah" }], opts, false);
+  assert.equal(cats.warnings[0].code, "invalid_color");
+  assert.deepEqual((await prisma.eventListItem.findFirstOrThrow({ where: { eventId: ev3.id, name: "Hra" } })).data, { group: "primary", color: "#22c55e", targetPercent: 60 });
+
+  // Activities: missing location created on the fly; bad duration is a warning.
+  const acts = await runImport(ev3.id, "activities", [{ name: "Lukostřelba", duration: "1,5 h", location: "Louka", leader: "Eva", primaryCategory: "Hra" }, { name: "Oběd", duration: "??" }], opts, false);
+  assert.equal(acts.counts.created, 2);
+  assert.equal(acts.counts.plan_locationCreated, 1);
+  assert.equal(acts.warnings[0].code, "invalid_duration");
+  const archery = await prisma.planActivity.findFirstOrThrow({ where: { eventId: ev3.id, name: "Lukostřelba" } });
+  assert.equal(archery.defaultDurationMin, 90);
+  assert.ok(archery.defaultLocationId && archery.defaultLeaderId && archery.primaryCategoryId);
+
+  // Schedule: two days, parallel rows, a gap, a range column, errors skipped.
+  const sched: Record<string, string>[] = [
+    { date: "10.7.", time: "9:00-10:00", activity: "Rozcvička", groups: "Vlci, Lišky" },
+    { date: "10.7.", start: "10:00", activity: "Lukostřelba" }, // 90 min from the library
+    { date: "10.7.", start: "10.00", end: "11:30", activity: "Hra v lese", leader: "Tom", groups: "Lišky" },
+    { date: "10.7.", start: "14:00", duration: "45", activity: "Koupání", location: "Rybník" },
+    { date: "11.7.", start: "9:00", duration: "60", activity: "Výlet" },
+    { date: "11.7.", start: "xx", activity: "Špatně" }, // error
+    { activity: "Bez dne" }, // error
+  ];
+  const dry = await runImport(ev3.id, "schedule", sched, opts, true);
+  assert.equal(await prisma.planDay.count({ where: { eventId: ev3.id } }), 0); // dry run writes nothing
+  assert.deepEqual(dry.errors.map((e) => [e.row, e.code]), [[5, "invalid_start"], [6, "day_required"]]);
+  assert.deepEqual(
+    [dry.counts.daysCreated, dry.counts.windowsCreated, dry.counts.slotsCreated, dry.counts.blocksCreated, dry.counts.activitiesCreated, dry.counts.plan_locationCreated],
+    [2, 3, 4, 5, 4, 1]
+  );
+  const real = await runImport(ev3.id, "schedule", sched, opts, false);
+  assert.deepEqual(real.counts, dry.counts);
+  let pl = await loadPlanPayload(ev3.id);
+  assert.deepEqual(pl.days.map((d) => [d.label, d.date]), [["Den 1", "2026-07-10"], ["Den 2", "2026-07-11"]]);
+  const day1Rows = scheduleRows(pl, { dayIds: new Set([pl.days[0].id]) });
+  assert.deepEqual(day1Rows.map((r) => [r.start, r.end, r.activity, r.parallel]), [
+    ["09:00", "10:00", "Rozcvička", false],
+    ["10:00", "11:30", "Lukostřelba", true],
+    ["10:00", "11:30", "Hra v lese", true],
+    ["14:00", "14:45", "Koupání", false],
+  ]);
+  assert.equal(day1Rows[1].location, "Louka"); // empty cell -> activity default
+  assert.equal(day1Rows[2].leader, "Tom");
+  assert.equal(scheduleRows(pl, { group: "Vlci" }).some((r) => r.activity === "Hra v lese"), false);
+  // PDF layout: the parallel slot renders its two branches side by side in one row.
+  const html = scheduleHtml({ eventName: "Import", days: scheduleDays(pl), showLeader: true });
+  assert.match(html, /<div class="row"><div class="b"[^]*?Lukostřelba[^]*?<div class="b"[^]*?Hra v lese/);
+
+  // Replace re-import is idempotent; append adds; a day whose rows all fail is left alone.
+  await runImport(ev3.id, "schedule", sched, opts, false);
+  pl = await loadPlanPayload(ev3.id);
+  assert.equal(pl.blocks.length, 5);
+  await runImport(ev3.id, "schedule", sched.slice(4, 5), { ...opts, mode: "append" }, false);
+  assert.equal((await loadPlanPayload(ev3.id)).blocks.length, 6);
+  const bad = await runImport(ev3.id, "schedule", [{ date: "10.7.", start: "nope", activity: "X" }], opts, false);
+  assert.equal(bad.counts.daysReplaced, undefined);
+  assert.equal((await loadPlanPayload(ev3.id)).blocks.length, 6);
+
   console.log("verify-planning-db: ok");
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

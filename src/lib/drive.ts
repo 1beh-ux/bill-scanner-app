@@ -501,6 +501,20 @@ export async function readSheetValues(eventId: string, spreadsheetId: string, ra
   );
 }
 
+/** Tab (sheet) titles of a spreadsheet, in order. Same sharing requirement as readSheetValues. */
+export async function listSheetTabs(eventId: string, spreadsheetId: string): Promise<string[]> {
+  return withRetry(
+    eventId,
+    async () => {
+      const sheets = await getSheetsClient(eventId);
+      const res = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
+      return (res.data.sheets ?? []).map((s) => s.properties?.title ?? "").filter(Boolean);
+    },
+    `list sheet tabs ${spreadsheetId}`,
+    { purpose: "read" }
+  );
+}
+
 export async function writeManifestValues(
   eventId: string,
   spreadsheetId: string,

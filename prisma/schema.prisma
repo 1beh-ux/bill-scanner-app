@@ -272,6 +272,9 @@ model Event {
   // event, so everyone with access sees the same columns; null = the default set.
   // (A Json array like participantsListColumns -- Prisma has no nullable scalar list.)
   billsListColumns Json? @map("bills_list_columns")
+  // Planning Helper settings (src/lib/planning.ts PlanningSettings): saved
+  // import sheet connections per import target, and the Drive export sheet id.
+  planningSettings Json? @map("planning_settings")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 

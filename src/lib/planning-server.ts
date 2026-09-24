@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import type { PlanBlockRow, PlanDayRow, PlanPayload, PlanSlotRow, PlanState, PlanWindowRow } from "@/lib/planning";
+import type { PlanBlockRow, PlanDayRow, PlanPayload, PlanningSettings, PlanSlotRow, PlanState, PlanWindowRow } from "@/lib/planning";
 import { fieldsOf } from "@/lib/planning-moves";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -162,4 +162,16 @@ export async function copyPlanDay(eventId: string, sourceDayId: string, as: { so
       },
     },
   });
+}
+
+export async function getPlanningSettings(eventId: string): Promise<PlanningSettings> {
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { planningSettings: true } });
+  return (event.planningSettings ?? {}) as PlanningSettings;
+}
+
+/** Shallow-merges into Event.planningSettings (read-modify-write; settings edits are rare and single-user). */
+export async function updatePlanningSettings(eventId: string, patch: Partial<PlanningSettings>): Promise<PlanningSettings> {
+  const next = { ...(await getPlanningSettings(eventId)), ...patch };
+  await prisma.event.update({ where: { id: eventId }, data: { planningSettings: next } });
+  return next;
 }
