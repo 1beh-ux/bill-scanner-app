@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import type { PlanBlockRow, PlanDayRow, PlanPayload, PlanningSettings, PlanSlotRow, PlanState, PlanWindowRow } from "@/lib/planning";
+import { readCategoryShares, type PlanBlockRow, type PlanDayRow, type PlanPayload, type PlanningSettings, type PlanSlotRow, type PlanState, type PlanWindowRow } from "@/lib/planning";
 import { fieldsOf } from "@/lib/planning-moves";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -31,8 +31,7 @@ export async function loadPlanState(eventId: string, db: Db = prisma) {
         activityId: b.activityId,
         customName: b.customName,
         description: b.description,
-        primaryCategoryId: b.primaryCategoryId,
-        secondaryCategoryId: b.secondaryCategoryId,
+        categories: readCategoryShares(b.categories),
         leaderId: b.leaderId,
         locationId: b.locationId,
         notes: b.notes,
@@ -81,7 +80,7 @@ export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
     event: { id: event.id, name: event.name, startDate: isoDate(event.startDate), endDate: isoDate(event.endDate) },
     days: plan.days,
     ...plan.state,
-    activities,
+    activities: activities.map((a) => ({ ...a, categories: readCategoryShares(a.categories) })),
     categories: ofKind("plan_category"),
     locations: ofKind("plan_location"),
     leaders: ofKind("plan_leader"),
@@ -155,7 +154,7 @@ export async function copyPlanDay(eventId: string, sourceDayId: string, as: { so
           slots: {
             create: w.slots.map((s) => ({
               durationMin: s.durationMin, position: s.position, notes: s.notes,
-              blocks: { create: s.blocks.map((b) => ({ ...fieldsOf(b), branchOrder: b.branchOrder })) },
+              blocks: { create: s.blocks.map((b) => ({ ...fieldsOf({ ...b, categories: readCategoryShares(b.categories) }), branchOrder: b.branchOrder })) },
             })),
           },
         })),

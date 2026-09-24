@@ -1,7 +1,7 @@
 // Self-check for planning-engine + planning-moves: `npx tsx src/lib/planning.check.ts`
 import assert from "node:assert/strict";
 import type { PlanBlockRow, PlanState } from "@/lib/planning";
-import { byPosition, computeTimes, findConflicts, summarize } from "@/lib/planning-engine";
+import { byPosition, categoryMinutes, computeTimes, findConflicts, summarize } from "@/lib/planning-engine";
 import { applyOp } from "@/lib/planning-moves";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 
@@ -9,7 +9,7 @@ let n = 0;
 const newId = () => `new${++n}`;
 const blk = (id: string, slotId: string, branchOrder: number, extra: Partial<PlanBlockRow> = {}): PlanBlockRow => ({
   id, slotId, branchOrder, activityId: null, customName: id, description: null,
-  primaryCategoryId: null, secondaryCategoryId: null, leaderId: null, locationId: null, notes: null, groupNames: [], ...extra,
+  categories: [], leaderId: null, locationId: null, notes: null, groupNames: [], ...extra,
 });
 
 const base: PlanState = {
@@ -24,10 +24,10 @@ const base: PlanState = {
     { id: "C", windowId: "am", durationMin: 45, position: 2, notes: null },
   ],
   blocks: [
-    blk("a1", "A", 0, { primaryCategoryId: "prax", leaderId: "tom" }),
-    blk("b1", "B", 0, { primaryCategoryId: "prax", leaderId: "tom" }),
-    blk("b2", "B", 1, { primaryCategoryId: "prax", leaderId: "tom", locationId: "hall" }),
-    blk("c1", "C", 0, { primaryCategoryId: "teorie", locationId: "hall" }),
+    blk("a1", "A", 0, { categories: [{ categoryId: "prax", minutes: null }], leaderId: "tom" }),
+    blk("b1", "B", 0, { categories: [{ categoryId: "prax", minutes: null }], leaderId: "tom" }),
+    blk("b2", "B", 1, { categories: [{ categoryId: "prax", minutes: null }], leaderId: "tom", locationId: "hall" }),
+    blk("c1", "C", 0, { categories: [{ categoryId: "teorie", minutes: null }], locationId: "hall" }),
   ],
 };
 const order = (s: PlanState, w: string) => s.slots.filter((x) => x.windowId === w).sort(byPosition).map((x) => x.id).join("");
@@ -42,6 +42,30 @@ assert.deepEqual(t.windows.am, { windowId: "am", usedMin: 195, capacityMin: 180,
 const sum = summarize(base, new Set(["am"]), [{ id: "prax", data: { targetPercent: 60 } }]);
 assert.equal(sum.primaryCategories.find((c) => c.categoryId === "prax")?.totalMin, 150);
 assert.equal(sum.leaders.find((l) => l.refId === "tom")?.totalMin, 60 + 90 + 90);
+
+// Minute split (categoryMinutes): per group; no minutes = whole duration;
+// entered minutes count as entered, scaled down only past the duration;
+// categories without minutes share the rest.
+const groupOf = (id: string) => (id.startsWith("s:") ? "secondary" : id === "gone" ? null : "primary");
+const cm = (shares: [string, number | null][], d: number) =>
+  Object.fromEntries(categoryMinutes(shares.map(([categoryId, minutes]) => ({ categoryId, minutes })), d, groupOf));
+assert.deepEqual(cm([["teorie", 10], ["prax", 20]], 30), { teorie: 10, prax: 20 });
+assert.deepEqual(cm([["teorie", 10], ["prax", 20]], 60), { teorie: 10, prax: 20 }); // resize doesn't rescale
+assert.deepEqual(cm([["teorie", 40], ["prax", 20]], 30), { teorie: 20, prax: 10 }); // over -> scaled down
+assert.deepEqual(cm([["teorie", 10], ["prax", null]], 30), { teorie: 10, prax: 20 }); // rest
+assert.deepEqual(cm([["teorie", null], ["s:venku", null], ["gone", 5]], 30), { teorie: 30, "s:venku": 30 });
+
+// Summary with a split block: mikrosimulace 30 min = teorie 10 + prax 20.
+const splitPlan: PlanState = {
+  ...base,
+  blocks: base.blocks.map((b) =>
+    b.id === "c1" ? { ...b, categories: [{ categoryId: "teorie", minutes: 10 }, { categoryId: "prax", minutes: 20 }] } : b
+  ),
+};
+const splitSum = summarize(splitPlan, new Set(["am"]), [{ id: "prax", data: {} }, { id: "teorie", data: {} }]);
+assert.equal(splitSum.primaryCategories.find((c) => c.categoryId === "teorie")?.totalMin, 10);
+assert.equal(splitSum.primaryCategories.find((c) => c.categoryId === "prax")?.totalMin, 60 + 90 + 20);
+assert.equal(splitSum.analysisMin, 60 + 90 + 30);
 
 // Analysis base: switching a primary category off drops its slots from the base.
 const withBreakfast = summarize(base, new Set(["am"]), [{ id: "prax", data: {} }, { id: "teorie", data: { countInAnalysis: false } }]);

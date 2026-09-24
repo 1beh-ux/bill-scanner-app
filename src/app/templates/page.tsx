@@ -79,7 +79,8 @@ export default function TemplatesPage() {
         <div className="flex flex-col gap-6">
           <p className="text-[14px] text-ink-secondary">{t("planLists.templatesSubtitle")}</p>
           <ListTemplateAdmin kind="plan_activity" scope="org" label={t("planLists.baseLibraryLabel")} />
-          <ListTemplateAdmin kind="plan_category" scope="org" label={t("planLists.categoriesLabel")} />
+          <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="primary" label={t("planLists.primaryCategoriesLabel")} />
+          <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="secondary" label={t("planLists.secondaryCategoriesLabel")} />
           <ListTemplateAdmin kind="plan_day_template" scope="org" label={t("planLists.dayTemplatesLabel")} />
           <ListTemplateAdmin kind="plan_location" scope="org" label={t("planLists.locationsLabel")} />
           <ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} />

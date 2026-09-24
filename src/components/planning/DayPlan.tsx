@@ -6,7 +6,7 @@ import { GripVertical, Trash2, X } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import type { UiPrefs } from "@/lib/ui-prefs";
 import { MIN_SLOT_MINUTES, clipName, minutesToHhmm, type PlanBlockRow, type PlanSlotRow, type PlanWindowRow } from "@/lib/planning";
-import { byBranch, byPosition, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
+import { byBranch, byPosition, mainCategoryColor, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
 import { MIN_SLOT_PX, PX_PER_MIN, type DragData, type DropData, type PlanPayload } from "./types";
 
 export type DayPlanProps = {
@@ -218,7 +218,7 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
   const dragData: DragData = { type: "block", blockId: b.id, label };
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: `drag-block:${b.id}`, data: dragData });
 
-  const color = payload.categories.find((c) => c.id === b.primaryCategoryId)?.data?.color ?? "#9ca3af";
+  const color = mainCategoryColor(payload.categories, b.categories) ?? "#9ca3af";
   const leader = payload.leaders.find((l) => l.id === b.leaderId)?.name;
   const location = payload.locations.find((l) => l.id === b.locationId)?.name;
   const conflict = props.conflictBlockIds.has(b.id);

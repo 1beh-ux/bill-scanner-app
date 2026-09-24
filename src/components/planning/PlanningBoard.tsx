@@ -199,8 +199,8 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
     // Library drop -> new slot or new parallel branch. The local block mirrors
     // what the server builds (api/.../planning/ops resolveInsert).
     const empty: BlockFields = {
-      activityId: null, customName: null, description: null, primaryCategoryId: null,
-      secondaryCategoryId: null, leaderId: null, locationId: null, notes: null, groupNames: [],
+      activityId: null, customName: null, description: null, categories: [],
+      leaderId: null, locationId: null, notes: null, groupNames: [],
     };
     if (drag.type === "activity") {
       const a = p.activities.find((x) => x.id === drag.activityId);
@@ -215,8 +215,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             ...empty,
             activityId: a.id,
             description: a.description,
-            primaryCategoryId: a.primaryCategoryId,
-            secondaryCategoryId: a.secondaryCategoryId,
+            categories: a.categories,
             leaderId: a.defaultLeaderId,
             locationId: a.defaultLocationId,
           },

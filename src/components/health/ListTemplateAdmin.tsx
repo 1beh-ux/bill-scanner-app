@@ -44,9 +44,11 @@ interface ListTemplateAdminProps {
   scope: "org" | "event";
   eventId?: string;
   label: string;
+  // plan_category only: show just one group's categories; new ones join it.
+  categoryGroup?: "primary" | "secondary";
 }
 
-export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListTemplateAdminProps) {
+export default function ListTemplateAdmin({ kind, scope, eventId, label, categoryGroup }: ListTemplateAdminProps) {
   const { t } = useTranslations();
   const confirm = useConfirm();
   const isSituation = kind === "situation";
@@ -82,7 +84,11 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
   async function load() {
     setLoading(true);
     const res = await fetch(listUrl);
-    if (res.ok) setItems(await res.json());
+    if (res.ok) {
+      const all: Item[] = await res.json();
+      // Categories without a group count as primary (same rule as the engine).
+      setItems(categoryGroup ? all.filter((i) => ((i.data as { group?: string } | null)?.group ?? "primary") === categoryGroup) : all);
+    }
     setLoading(false);
   }
 
@@ -123,7 +129,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
     setFilenameSuffix("");
     setTemplateGoogleDocId("");
     setAutoAttachOnAccept(true);
-    setPlanData({});
+    setPlanData(categoryGroup ? { group: categoryGroup } : {});
     setEditingId(null);
   }
 
@@ -349,7 +355,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label }: ListT
               />
             </>
           )}
-          {isPlan && <PlanListDataFields kind={kind as PlanKind} data={planData} onChange={setPlanData} />}
+          {isPlan && <PlanListDataFields kind={kind as PlanKind} data={planData} onChange={setPlanData} fixedGroup={Boolean(categoryGroup)} />}
           {isDocument && (
             <>
               <input

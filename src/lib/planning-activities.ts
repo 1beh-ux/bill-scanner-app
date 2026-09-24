@@ -1,11 +1,9 @@
 import type { ListTemplateKind, Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { MIN_SLOT_MINUTES, type PlanBaseActivityData } from "@/lib/planning";
+import { MIN_SLOT_MINUTES, baseActivityCategories, readCategoryShares, type PlanBaseActivityData, type PlanCategoryShare } from "@/lib/planning";
 
 // Reference fields on PlanActivity and the EventListItem kind each must point at.
 const REF_KINDS = {
-  primaryCategoryId: "plan_category",
-  secondaryCategoryId: "plan_category",
   defaultLeaderId: "plan_leader",
   defaultLocationId: "plan_location",
 } as const satisfies Record<string, ListTemplateKind>;
@@ -40,6 +38,12 @@ export async function parseActivityInput(
     if (body[key] !== undefined) data[key] = Boolean(body[key]);
   }
 
+  if (body.categories !== undefined) {
+    const categories = await validateCategoryShares(eventId, body.categories);
+    if (!categories) return { error: "invalid_reference" };
+    data.categories = categories;
+  }
+
   for (const [key, kind] of Object.entries(REF_KINDS) as [keyof typeof REF_KINDS, ListTemplateKind][]) {
     const value = body[key];
     if (value === undefined) continue;
@@ -52,6 +56,20 @@ export async function parseActivityInput(
   }
 
   return { data };
+}
+
+/**
+ * A submitted category list: at most 20 entries, each this event's own
+ * plan_category, minutes a positive integer or null; duplicates collapsed.
+ * Null if anything is off.
+ */
+export async function validateCategoryShares(eventId: string, value: unknown): Promise<PlanCategoryShare[] | null> {
+  if (!Array.isArray(value) || value.length > 20) return null;
+  const shares = readCategoryShares(value);
+  if (shares.length !== value.length) return null;
+  const unique = [...new Map(shares.map((s) => [s.categoryId, s])).values()];
+  const found = await prisma.eventListItem.count({ where: { eventId, kind: "plan_category", id: { in: unique.map((s) => s.categoryId) } } });
+  return found === unique.length ? unique : null;
 }
 
 /** True if `id` is this event's own list item of `kind` (guards cross-event references). */
@@ -106,8 +124,10 @@ export async function importBaseActivities(eventId: string, templateIds?: string
         name: tpl.name,
         defaultDurationMin: Math.max(MIN_SLOT_MINUTES, Math.round(d.defaultDurationMin ?? 30)),
         description: d.description || null,
-        primaryCategoryId: resolve("plan_category", d.primaryCategoryName),
-        secondaryCategoryId: resolve("plan_category", d.secondaryCategoryName),
+        categories: baseActivityCategories(d).flatMap((c) => {
+          const categoryId = resolve("plan_category", c.name);
+          return categoryId ? [{ categoryId, minutes: c.minutes }] : [];
+        }),
         energyLevel: d.energyLevel || null,
         repeatable: Boolean(d.repeatable),
         sourceTemplateId: tpl.id,
@@ -133,14 +153,15 @@ export async function copyActivitiesFromEvent(eventId: string, fromEventId: stri
   const source = await prisma.planActivity.findMany({
     where: { eventId: fromEventId, active: true },
     include: {
-      primaryCategory: { select: { name: true } },
-      secondaryCategory: { select: { name: true } },
       defaultLeader: { select: { name: true } },
       defaultLocation: { select: { name: true } },
     },
     orderBy: { name: "asc" },
   });
   const [resolve, existing] = await Promise.all([eventItemIdsByName(eventId), existingActivityKeys(eventId)]);
+  const sourceCategoryNames = new Map(
+    (await prisma.eventListItem.findMany({ where: { eventId: fromEventId, kind: "plan_category" }, select: { id: true, name: true } })).map((c) => [c.id, c.name])
+  );
 
   const toCreate = source.filter((a) => !existing.names.has(a.name.trim().toLowerCase()));
   if (toCreate.length > 0) {
@@ -150,8 +171,11 @@ export async function copyActivitiesFromEvent(eventId: string, fromEventId: stri
         name: a.name,
         defaultDurationMin: a.defaultDurationMin,
         description: a.description,
-        primaryCategoryId: resolve("plan_category", a.primaryCategory?.name),
-        secondaryCategoryId: resolve("plan_category", a.secondaryCategory?.name),
+        // Category ids are the source event's -- re-resolve them by name here.
+        categories: readCategoryShares(a.categories).flatMap((c) => {
+          const categoryId = resolve("plan_category", sourceCategoryNames.get(c.categoryId));
+          return categoryId ? [{ categoryId, minutes: c.minutes }] : [];
+        }),
         defaultLeaderId: resolve("plan_leader", a.defaultLeader?.name),
         defaultLocationId: resolve("plan_location", a.defaultLocation?.name),
         energyLevel: a.energyLevel,

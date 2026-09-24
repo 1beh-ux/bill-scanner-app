@@ -2,8 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import CategorySharesEditor from "./CategorySharesEditor";
 import {
   ENERGY_LEVELS,
+  baseActivityCategories,
+  type PlanBaseActivityData,
   PLAN_WINDOW_KINDS,
   hhmmToMinutes,
   minutesToHhmm,
@@ -25,10 +28,12 @@ export default function PlanListDataFields({
   kind,
   data,
   onChange,
+  fixedGroup,
 }: {
   kind: PlanKind;
   data: Data;
   onChange: (next: Data) => void;
+  fixedGroup?: boolean; // category group decided by the list it's in
 }) {
   const { t } = useTranslations();
   const set = (key: string, value: unknown) => onChange({ ...data, [key]: value === "" ? undefined : value });
@@ -38,13 +43,15 @@ export default function PlanListDataFields({
   if (kind === "plan_category") {
     return (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className={labelClass}>
-          {t("planLists.categoryGroup")}
-          <select value={str("group") || "primary"} onChange={(e) => set("group", e.target.value)} className={inputClass}>
-            <option value="primary">{t("planLists.groupPrimary")}</option>
-            <option value="secondary">{t("planLists.groupSecondary")}</option>
-          </select>
-        </label>
+        {!fixedGroup && (
+          <label className={labelClass}>
+            {t("planLists.categoryGroup")}
+            <select value={str("group") || "primary"} onChange={(e) => set("group", e.target.value)} className={inputClass}>
+              <option value="primary">{t("planLists.groupPrimary")}</option>
+              <option value="secondary">{t("planLists.groupSecondary")}</option>
+            </select>
+          </label>
+        )}
         <label className={labelClass}>
           {t("planLists.color")}
           <input
@@ -156,22 +163,6 @@ function BaseActivityFields({
       .then(setCategories);
   }, []);
 
-  const categorySelect = (key: string, group: "primary" | "secondary", label: string) => (
-    <label className={labelClass}>
-      {label}
-      <select value={str(key)} onChange={(e) => set(key, e.target.value)} className={inputClass}>
-        <option value="">—</option>
-        {categories
-          .filter((c) => (c.data?.group ?? "primary") === group)
-          .map((c) => (
-            <option key={c.name} value={c.name}>
-              {c.name}
-            </option>
-          ))}
-      </select>
-    </label>
-  );
-
   return (
     <>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -186,9 +177,14 @@ function BaseActivityFields({
             className={inputClass}
           />
         </label>
-        {categorySelect("primaryCategoryName", "primary", t("planLists.primaryCategory"))}
-        {categorySelect("secondaryCategoryName", "secondary", t("planLists.secondaryCategory"))}
       </div>
+      {/* Org templates reference categories by name (resolved per event on import). */}
+      <CategorySharesEditor
+        options={categories.map((c) => ({ key: c.name, name: c.name, group: c.data?.group === "secondary" ? "secondary" : "primary" }))}
+        value={baseActivityCategories(data as PlanBaseActivityData).map((c) => ({ key: c.name, minutes: c.minutes }))}
+        onChange={(next) => set("categories", next.map((c) => ({ name: c.key, minutes: c.minutes })))}
+        durationMin={typeof data.defaultDurationMin === "number" ? data.defaultDurationMin : undefined}
+      />
       <textarea
         placeholder={t("planLists.description")}
         value={str("description")}

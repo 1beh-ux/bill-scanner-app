@@ -3,15 +3,16 @@
 import { use, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { ENERGY_LEVELS, type PlanCategoryData } from "@/lib/planning";
+import { ENERGY_LEVELS, type PlanCategoryData, type PlanCategoryShare } from "@/lib/planning";
+import { mainCategoryColor } from "@/lib/planning-engine";
+import CategorySharesEditor from "@/components/planning/CategorySharesEditor";
 
 type Activity = {
   id: string;
   name: string;
   defaultDurationMin: number;
   description: string | null;
-  primaryCategoryId: string | null;
-  secondaryCategoryId: string | null;
+  categories: PlanCategoryShare[];
   defaultLeaderId: string | null;
   defaultLocationId: string | null;
   energyLevel: string | null;
@@ -25,8 +26,7 @@ const EMPTY_FORM: Form = {
   name: "",
   defaultDurationMin: 30,
   description: "",
-  primaryCategoryId: null,
-  secondaryCategoryId: null,
+  categories: [],
   defaultLeaderId: null,
   defaultLocationId: null,
   energyLevel: null,
@@ -78,7 +78,7 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
   }, [eventId]);
 
   const nameOf = (items: ListItem[], id: string | null) => items.find((i) => i.id === id)?.name;
-  const colorOf = (id: string | null) => categories.find((c) => c.id === id)?.data?.color;
+  const colorOf = (a: Activity) => mainCategoryColor(categories, a.categories) ?? undefined;
 
   function openAdd() {
     setError(null);
@@ -166,7 +166,11 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
       </select>
     </label>
   );
-  const isGroup = (group: "primary" | "secondary") => (c: ListItem) => (c.data?.group ?? "primary") === group;
+  const categoryOptions = categories.map((c) => ({
+    key: c.id,
+    name: c.name,
+    group: c.data?.group === "secondary" ? ("secondary" as const) : ("primary" as const),
+  }));
 
   return (
     <div className="mx-auto max-w-[1000px] p-4 md:p-8">
@@ -237,9 +241,13 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
               />
             </label>
           </div>
+          <CategorySharesEditor
+            options={categoryOptions}
+            value={form.categories.map((c) => ({ key: c.categoryId, minutes: c.minutes }))}
+            onChange={(next) => setForm({ ...form, categories: next.map((c) => ({ categoryId: c.key, minutes: c.minutes })) })}
+            durationMin={form.defaultDurationMin}
+          />
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {select("primaryCategoryId", categories, t("planLists.primaryCategory"), isGroup("primary"))}
-            {select("secondaryCategoryId", categories, t("planLists.secondaryCategory"), isGroup("secondary"))}
             {select("defaultLeaderId", leaders, t("planActivities.defaultLeader"))}
             {select("defaultLocationId", locations, t("planActivities.defaultLocation"))}
           </div>
@@ -292,8 +300,8 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
             <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-mist/60 py-2.5">
               <div className={"min-w-0 " + (a.active ? "" : "opacity-50")}>
                 <div className="flex items-center gap-2 text-[14px] text-ink">
-                  {colorOf(a.primaryCategoryId) && (
-                    <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(a.primaryCategoryId) }} aria-hidden="true" />
+                  {colorOf(a) && (
+                    <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(a) }} aria-hidden="true" />
                   )}
                   <span className={a.active ? "" : "line-through"}>{a.name}</span>
                   <span className="text-[12px] text-ink-secondary">{a.defaultDurationMin} min</span>
@@ -301,8 +309,10 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
                 </div>
                 <div className="text-[12px] text-ink-secondary">
                   {[
-                    nameOf(categories, a.primaryCategoryId),
-                    nameOf(categories, a.secondaryCategoryId),
+                    ...a.categories.map((c) => {
+                      const n = nameOf(categories, c.categoryId);
+                      return n && c.minutes ? `${n} ${c.minutes}′` : n;
+                    }),
                     nameOf(leaders, a.defaultLeaderId),
                     nameOf(locations, a.defaultLocationId),
                   ]

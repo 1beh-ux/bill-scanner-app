@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizePlanning, loadPlanPayload, loadPlanState, persistPlanDiff } from "@/lib/planning-server";
 import { importBaseActivities } from "@/lib/planning-activities";
+import { readCategoryShares } from "@/lib/planning";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
 
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
@@ -29,8 +30,7 @@ async function resolveInsert(eventId: string, source: Record<string, unknown>) {
     activityId: a.id,
     customName: null,
     description: a.description,
-    primaryCategoryId: a.primaryCategoryId,
-    secondaryCategoryId: a.secondaryCategoryId,
+    categories: readCategoryShares(a.categories),
     leaderId: a.defaultLeaderId,
     locationId: a.defaultLocationId,
     notes: null,

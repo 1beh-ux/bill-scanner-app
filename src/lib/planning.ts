@@ -20,6 +20,26 @@ export const PLAN_WINDOW_KINDS: PlanWindowKind[] = ["flexible", "partial", "fixe
 // countInAnalysis (primary categories): false keeps e.g. breakfast/logistics out
 // of the time analysis -- see summarize() in planning-engine.ts. Default true.
 export type PlanCategoryData = { group?: "primary" | "secondary"; color?: string; targetPercent?: number; countInAnalysis?: boolean };
+// A block's/activity's category assignment; minutes null = the whole duration.
+export type PlanCategoryShare = { categoryId: string; minutes: number | null };
+
+/** Tolerant reader for the categories JSON columns (and untrusted bodies' shape). */
+export function readCategoryShares(value: unknown): PlanCategoryShare[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((v) =>
+    v && typeof v === "object" && typeof (v as { categoryId?: unknown }).categoryId === "string"
+      ? [{ categoryId: (v as { categoryId: string }).categoryId, minutes: validMinutes((v as { minutes?: unknown }).minutes) }]
+      : []
+  );
+}
+const validMinutes = (m: unknown) => (typeof m === "number" && Number.isInteger(m) && m > 0 && m <= 24 * 60 ? m : null);
+
+/** Base-library categories, including the older primary/secondary name fields. */
+export function baseActivityCategories(d: PlanBaseActivityData): { name: string; minutes: number | null }[] {
+  if (Array.isArray(d.categories)) return d.categories.filter((c) => c && typeof c.name === "string" && c.name.trim());
+  return [d.primaryCategoryName, d.secondaryCategoryName].filter((n): n is string => !!n).map((name) => ({ name, minutes: null }));
+}
+
 export type PlanLocationData = { capacity?: number; notes?: string };
 export type PlanLeaderData = { role?: string; phone?: string; notes?: string };
 // `id` only when editing an existing day's windows (never stored in a template).
@@ -31,6 +51,8 @@ export type PlanDayTemplateData = { windows?: PlanDayTemplateWindow[] };
 export type PlanBaseActivityData = {
   defaultDurationMin?: number;
   description?: string;
+  categories?: { name: string; minutes: number | null }[];
+  // Before multi-category support (still read, never written).
   primaryCategoryName?: string;
   secondaryCategoryName?: string;
   energyLevel?: string;
@@ -79,8 +101,7 @@ export type PlanBlockRow = {
   activityId: string | null;
   customName: string | null;
   description: string | null;
-  primaryCategoryId: string | null;
-  secondaryCategoryId: string | null;
+  categories: PlanCategoryShare[];
   leaderId: string | null;
   locationId: string | null;
   notes: string | null;
@@ -94,8 +115,7 @@ export type PlanActivity = {
   name: string;
   defaultDurationMin: number;
   description: string | null;
-  primaryCategoryId: string | null;
-  secondaryCategoryId: string | null;
+  categories: PlanCategoryShare[];
   defaultLeaderId: string | null;
   defaultLocationId: string | null;
   repeatable: boolean;

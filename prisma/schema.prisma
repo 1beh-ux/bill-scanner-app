@@ -725,12 +725,8 @@ model EventListItem {
   checklistAsMed   MedChecklist[]       @relation("MedChecklistMed")
   checklistAsSlot  MedChecklist[]       @relation("MedChecklistSlot")
   documents        ParticipantDocument[] @relation("ParticipantDocumentType")
-  planBlocksAsPrimary     PlanBlock[]    @relation("PlanBlockPrimaryCategory")
-  planBlocksAsSecondary   PlanBlock[]    @relation("PlanBlockSecondaryCategory")
   planBlocksAsLeader      PlanBlock[]    @relation("PlanBlockLeader")
   planBlocksAsLocation    PlanBlock[]    @relation("PlanBlockLocation")
-  planActivitiesAsPrimary   PlanActivity[] @relation("PlanActivityPrimaryCategory")
-  planActivitiesAsSecondary PlanActivity[] @relation("PlanActivitySecondaryCategory")
   planActivitiesAsLeader    PlanActivity[] @relation("PlanActivityLeader")
   planActivitiesAsLocation  PlanActivity[] @relation("PlanActivityLocation")
 
@@ -972,8 +968,11 @@ model PlanBlock {
   activityId          String? @map("activity_id")
   customName          String? @map("custom_name")
   description         String?
-  primaryCategoryId   String? @map("primary_category_id")
-  secondaryCategoryId String? @map("secondary_category_id")
+  // [{categoryId, minutes|null}] -- main and secondary categories (EventListItem
+  // plan_category ids), optional minute split; see categoryMinutes() in
+  // planning-engine.ts. JSON rather than a join table: copied wholesale by
+  // every move/copy, and unknown ids (a deleted category) are simply ignored.
+  categories          Json    @default("[]")
   leaderId            String? @map("leader_id")
   locationId          String? @map("location_id")
   notes               String?
@@ -984,8 +983,6 @@ model PlanBlock {
 
   slot              PlanSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
   activity          PlanActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  primaryCategory   EventListItem? @relation("PlanBlockPrimaryCategory", fields: [primaryCategoryId], references: [id], onDelete: SetNull)
-  secondaryCategory EventListItem? @relation("PlanBlockSecondaryCategory", fields: [secondaryCategoryId], references: [id], onDelete: SetNull)
   leader            EventListItem? @relation("PlanBlockLeader", fields: [leaderId], references: [id], onDelete: SetNull)
   location          EventListItem? @relation("PlanBlockLocation", fields: [locationId], references: [id], onDelete: SetNull)
 
@@ -999,8 +996,7 @@ model PlanActivity {
   name                String
   defaultDurationMin  Int     @map("default_duration_min")
   description         String?
-  primaryCategoryId   String? @map("primary_category_id")
-  secondaryCategoryId String? @map("secondary_category_id")
+  categories          Json    @default("[]") // same shape as PlanBlock.categories
   defaultLeaderId     String? @map("default_leader_id")
   defaultLocationId   String? @map("default_location_id")
   energyLevel         String? @map("energy_level")
@@ -1011,8 +1007,6 @@ model PlanActivity {
   sourceTemplateId    String? @map("source_template_id")
 
   event             Event          @relation(fields: [eventId], references: [id])
-  primaryCategory   EventListItem? @relation("PlanActivityPrimaryCategory", fields: [primaryCategoryId], references: [id], onDelete: SetNull)
-  secondaryCategory EventListItem? @relation("PlanActivitySecondaryCategory", fields: [secondaryCategoryId], references: [id], onDelete: SetNull)
   defaultLeader     EventListItem? @relation("PlanActivityLeader", fields: [defaultLeaderId], references: [id], onDelete: SetNull)
   defaultLocation   EventListItem? @relation("PlanActivityLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
   blocks            PlanBlock[]

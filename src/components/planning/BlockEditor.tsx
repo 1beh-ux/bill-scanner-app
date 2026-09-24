@@ -6,6 +6,7 @@ import { MIN_SLOT_MINUTES, minutesToHhmm, type PlanBlockRow, type PlanPayload } 
 import { byPosition, computeTimes, type ComputedSlot } from "@/lib/planning-engine";
 import type { MoveTarget } from "@/lib/planning-moves";
 import { blockLabel } from "./DayPlan";
+import CategorySharesEditor from "./CategorySharesEditor";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -15,7 +16,7 @@ const btnPrimary =
 
 type Fields = Pick<
   PlanBlockRow,
-  "activityId" | "customName" | "description" | "primaryCategoryId" | "secondaryCategoryId" | "leaderId" | "locationId" | "notes" | "groupNames"
+  "activityId" | "customName" | "description" | "categories" | "leaderId" | "locationId" | "notes" | "groupNames"
 >;
 
 // Side panel for one scheduled block (step 6). Fields are the block's own
@@ -51,8 +52,7 @@ export default function BlockEditor({
           activityId: block.activityId,
           customName: block.customName,
           description: block.description,
-          primaryCategoryId: block.primaryCategoryId,
-          secondaryCategoryId: block.secondaryCategoryId,
+          categories: block.categories,
           leaderId: block.leaderId,
           locationId: block.locationId,
           notes: block.notes,
@@ -147,7 +147,11 @@ export default function BlockEditor({
     save(() => onMove(blockId, target, copy));
   };
 
-  const categories = (group: "primary" | "secondary") => payload.categories.filter((c) => (c.data?.group ?? "primary") === group);
+  const categoryOptions = payload.categories.map((c) => ({
+    key: c.id,
+    name: c.name,
+    group: c.data?.group === "secondary" ? ("secondary" as const) : ("primary" as const),
+  }));
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
@@ -198,9 +202,13 @@ export default function BlockEditor({
             <span className="text-[11.5px]">{t("planBoard.slotDurationShared")}</span>
           )}
         </label>
+        <CategorySharesEditor
+          options={categoryOptions}
+          value={fields.categories.map((c) => ({ key: c.categoryId, minutes: c.minutes }))}
+          onChange={(next) => set({ categories: next.map((c) => ({ categoryId: c.key, minutes: c.minutes })) })}
+          durationMin={duration}
+        />
         <div className="grid grid-cols-2 gap-3">
-          {select("primaryCategoryId", categories("primary"), t("planLists.primaryCategory"))}
-          {select("secondaryCategoryId", categories("secondary"), t("planLists.secondaryCategory"))}
           {select("leaderId", payload.leaders, t("planBoard.leader"))}
           {select("locationId", payload.locations, t("planBoard.location"))}
         </div>

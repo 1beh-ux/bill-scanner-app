@@ -7,7 +7,7 @@
 // durations in that window. A slot with 2+ blocks is parallel -- its blocks
 // share the slot's time.
 
-import type { PlanBlockRow, PlanCategoryData, PlanSlotRow, PlanState } from "@/lib/planning";
+import type { PlanBlockRow, PlanCategoryData, PlanCategoryShare, PlanSlotRow, PlanState } from "@/lib/planning";
 
 export type ComputedSlot = { slotId: string; startMin: number; endMin: number; overflow: boolean };
 export type ComputedWindow = {
@@ -19,6 +19,50 @@ export type ComputedWindow = {
 };
 // refId: list item id for leader/location, the group name for group.
 export type Conflict = { type: "leader" | "location" | "group"; refId: string; blockIds: [string, string]; dayId: string };
+
+/**
+ * Minutes each category gets in a block of `durationMin`. Rules, per group
+ * (main and secondary are split separately):
+ * - no minutes entered -> every category counts the whole duration;
+ * - minutes entered count as entered (scaled down if they exceed the block);
+ *   categories without minutes share what's left.
+ * Unknown category ids (deleted categories) are ignored.
+ */
+export function categoryMinutes(
+  shares: PlanCategoryShare[],
+  durationMin: number,
+  groupOf: (categoryId: string) => "primary" | "secondary" | null
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const group of ["primary", "secondary"] as const) {
+    const entries = shares.filter((s) => groupOf(s.categoryId) === group);
+    const given = entries.filter((s) => s.minutes !== null);
+    if (given.length === 0) {
+      for (const s of entries) out.set(s.categoryId, durationMin);
+      continue;
+    }
+    const sum = given.reduce((n, s) => n + (s.minutes ?? 0), 0);
+    const scale = sum > durationMin ? durationMin / sum : 1;
+    for (const s of given) out.set(s.categoryId, Math.round((s.minutes ?? 0) * scale * 10) / 10);
+    const rest = entries.filter((s) => s.minutes === null);
+    const left = Math.max(0, durationMin - sum * scale);
+    for (const s of rest) out.set(s.categoryId, Math.round((left / rest.length) * 10) / 10);
+  }
+  return out;
+}
+
+/** categoryId -> group for a category list; unknown ids -> null (ignored everywhere). */
+export function categoryGroupLookup(categories: { id: string; data: PlanCategoryData | null }[]) {
+  const map = new Map(categories.map((c) => [c.id, c.data?.group === "secondary" ? ("secondary" as const) : ("primary" as const)]));
+  return (id: string) => map.get(id) ?? null;
+}
+
+/** Color of the first main category in a list (cards, PDF), else null. */
+export function mainCategoryColor(categories: { id: string; data: PlanCategoryData | null }[], shares: PlanCategoryShare[]) {
+  const groupOf = categoryGroupLookup(categories);
+  const first = shares.find((s) => groupOf(s.categoryId) === "primary");
+  return categories.find((c) => c.id === first?.categoryId)?.data?.color ?? null;
+}
 
 export const byOrder = <T extends { sortOrder: number }>(a: T, b: T) => a.sortOrder - b.sortOrder;
 export const byPosition = (a: PlanSlotRow, b: PlanSlotRow) => a.position - b.position;
@@ -102,6 +146,7 @@ export function summarize(
 
   // Primary categories count toward the analysis unless switched off (countInAnalysis: false).
   const isCounted = (id: string) => categories.find((c) => c.id === id)?.data?.countInAnalysis !== false;
+  const groupOf = categoryGroupLookup(categories);
   const primary = new Map<string, number>();
   const secondary = new Map<string, number>();
   const leaders = new Map<string, number>();
@@ -112,10 +157,26 @@ export function summarize(
   for (const slot of state.slots) {
     if (!windowIds.has(slot.windowId)) continue;
     const blocks = state.blocks.filter((b) => b.slotId === slot.id);
-    const counted = [...new Set(blocks.map((b) => b.primaryCategoryId))].filter((id) => id && isCounted(id));
-    for (const id of counted) add(primary, id, slot.durationMin);
-    if (counted.length > 0) summary.analysisMin += slot.durationMin;
-    for (const id of new Set(blocks.map((b) => b.secondaryCategoryId))) add(secondary, id, slot.durationMin);
+    // Parallel branches: a category counts the most any one branch gives it
+    // (so a category shared by two branches counts once, as before); the
+    // analysed time is the most counted-main-category time of any branch.
+    const perCategory = new Map<string, number>();
+    let analysed = 0;
+    for (const b of blocks) {
+      const minutes = categoryMinutes(b.categories, slot.durationMin, groupOf);
+      let countedHere = 0;
+      for (const [id, min] of minutes) {
+        perCategory.set(id, Math.max(perCategory.get(id) ?? 0, min));
+        if (groupOf(id) === "primary" && isCounted(id)) countedHere += min;
+      }
+      analysed = Math.max(analysed, Math.min(slot.durationMin, countedHere));
+    }
+    for (const [id, min] of perCategory) {
+      if (groupOf(id) === "primary") {
+        if (isCounted(id)) add(primary, id, min);
+      } else add(secondary, id, min);
+    }
+    summary.analysisMin += analysed;
     for (const b of blocks) {
       add(leaders, b.leaderId, slot.durationMin);
       add(locations, b.locationId, slot.durationMin);

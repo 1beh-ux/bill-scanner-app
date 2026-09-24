@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
+import { mainCategoryColor } from "@/lib/planning-engine";
 import type { DragData, PlanPayload } from "./types";
 
 const REMAINING_KEY = "planning.libraryRemainingOnly";
@@ -36,7 +37,6 @@ export default function LibraryPanel({ payload, eventId }: { payload: PlanPayloa
   const base = payload.baseActivities.filter(
     (b) => !imported.has(b.id) && !imported.has(b.name.trim().toLowerCase()) && b.name.toLowerCase().includes(q)
   );
-  const colorOf = (id: string | null) => payload.categories.find((c) => c.id === id)?.data?.color;
 
   return (
     <aside className="flex flex-col gap-2">
@@ -66,7 +66,7 @@ export default function LibraryPanel({ payload, eventId }: { payload: PlanPayloa
             data={{ type: "activity", activityId: a.id, label: a.name }}
             name={a.name}
             durationMin={a.defaultDurationMin}
-            color={colorOf(a.primaryCategoryId)}
+            color={mainCategoryColor(payload.categories, a.categories) ?? undefined}
             repeatable={a.repeatable}
           />
         ))}

@@ -38,7 +38,7 @@ async function main() {
   const imp = await importBaseActivities(ev.id, [tpl.id]);
   assert.equal(imp.added, 1);
   const act = await prisma.planActivity.findUniqueOrThrow({ where: { id: imp.idsByTemplate[tpl.id] } });
-  assert.equal(act.primaryCategoryId, cat.id);
+  assert.deepEqual(act.categories, [{ categoryId: cat.id, minutes: null }]);
   assert.equal(act.defaultDurationMin, 45);
   assert.equal((await importBaseActivities(ev.id, [tpl.id])).added, 0);
 
@@ -61,7 +61,7 @@ async function main() {
     include: { windows: true },
   });
   const [am, , pm] = day.windows.sort((a, b) => a.sortOrder - b.sortOrder);
-  const block = { activityId: act.id, customName: null, description: null, primaryCategoryId: cat.id, secondaryCategoryId: null, leaderId: leader.id, locationId: null, notes: null, groupNames: ["Vlci"] };
+  const block = { activityId: act.id, customName: null, description: null, categories: [{ categoryId: cat.id, minutes: null }], leaderId: leader.id, locationId: null, notes: null, groupNames: ["Vlci"] };
 
   async function run(op: (s: PlanState) => PlanOp) {
     let expected!: PlanState;
@@ -100,7 +100,7 @@ async function main() {
   assert.equal((await copyActivitiesFromEvent(ev2.id, ev.id)).added, 1);
   const copied = await prisma.planActivity.findFirstOrThrow({ where: { eventId: ev2.id } });
   assert.equal(copied.defaultLeaderId, foreignLeader.id);
-  assert.equal(copied.primaryCategoryId, null); // ev2 has no "Hra" category
+  assert.deepEqual(copied.categories, []); // ev2 has no "Hra" category
 
   // Full day copy (windows + slots + blocks) and the flat export rows.
   const before = await loadPlanState(ev.id);
@@ -147,7 +147,18 @@ async function main() {
   assert.equal(acts.warnings[0].code, "invalid_duration");
   const archery = await prisma.planActivity.findFirstOrThrow({ where: { eventId: ev3.id, name: "Lukostřelba" } });
   assert.equal(archery.defaultDurationMin, 90);
-  assert.ok(archery.defaultLocationId && archery.defaultLeaderId && archery.primaryCategoryId);
+  assert.ok(archery.defaultLocationId && archery.defaultLeaderId && (archery.categories as unknown[]).length === 1);
+
+  // Category cells with minutes (and a new secondary category) in the activity import.
+  await runImport(ev3.id, "activities", [{ name: "Mikrosimulace", duration: "30", primaryCategory: "Teorie 10, Hra 20", secondaryCategory: "Venku" }], opts, false);
+  const micro = await prisma.planActivity.findFirstOrThrow({ where: { eventId: ev3.id, name: "Mikrosimulace" } });
+  const ids = Object.fromEntries((await prisma.eventListItem.findMany({ where: { eventId: ev3.id, kind: "plan_category" } })).map((c) => [c.name, c]));
+  assert.deepEqual(micro.categories, [
+    { categoryId: ids["Teorie"].id, minutes: 10 },
+    { categoryId: ids["Hra"].id, minutes: 20 },
+    { categoryId: ids["Venku"].id, minutes: null },
+  ]);
+  assert.deepEqual(ids["Venku"].data, { group: "secondary" });
 
   // Schedule: two days, parallel rows, a gap, a range column, errors skipped.
   const sched: Record<string, string>[] = [

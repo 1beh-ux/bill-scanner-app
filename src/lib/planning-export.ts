@@ -1,8 +1,8 @@
 // Schedule exports, pure: structured days (PDF / print, parallel blocks side by
 // side) and flat rows (CSV, Drive sheet -- the old Export_Schedule sheet).
 
-import { minutesToHhmm, type PlanPayload } from "@/lib/planning";
-import { byBranch, byPosition, computeTimes } from "@/lib/planning-engine";
+import { minutesToHhmm, type PlanCategoryShare, type PlanPayload } from "@/lib/planning";
+import { byBranch, byPosition, categoryGroupLookup, categoryMinutes, computeTimes, mainCategoryColor } from "@/lib/planning-engine";
 
 export type ScheduleRow = {
   dayId: string;
@@ -18,15 +18,36 @@ export type ScheduleRow = {
   parallel: boolean;
   activity: string;
   description: string;
-  primaryCategory: string;
-  primaryColor: string | null;
+  primaryCategory: string; // "Teorie (10), Praxe (20)"
+  primaryColor: string | null; // first main category's color
   secondaryCategory: string;
+  categoryMinutes: Record<string, number>; // categoryId -> minutes (per categoryMinutes())
   leader: string;
   leaderId: string | null;
   location: string;
   groups: string; // comma-separated; empty = everyone
   notes: string;
 };
+
+/** A block's category list as export columns. */
+export function categoryColumns(p: PlanPayload, shares: PlanCategoryShare[], durationMin: number) {
+  const groupOf = categoryGroupLookup(p.categories);
+  const minutes = categoryMinutes(shares, durationMin, groupOf);
+  const label = (group: "primary" | "secondary") =>
+    shares
+      .filter((s) => groupOf(s.categoryId) === group)
+      .map((s) => {
+        const n = p.categories.find((c) => c.id === s.categoryId)?.name ?? "";
+        return s.minutes !== null ? `${n} (${minutes.get(s.categoryId)})` : n;
+      })
+      .join(", ");
+  return {
+    primaryCategory: label("primary"),
+    primaryColor: mainCategoryColor(p.categories, shares),
+    secondaryCategory: label("secondary"),
+    categoryMinutes: Object.fromEntries(minutes),
+  };
+}
 
 export type ScheduleFilter = { dayIds?: Set<string>; leaderId?: string; group?: string };
 export type ScheduleSlot = { start: string; end: string; startMin: number; durationMin: number; branches: ScheduleRow[] };
@@ -74,9 +95,7 @@ export function scheduleDays(p: PlanPayload, opts: ScheduleFilter = {}): Schedul
                   parallel: blocks.length > 1,
                   activity: b.customName || name(p.activities, b.activityId) || "—",
                   description: b.description ?? "",
-                  primaryCategory: name(p.categories, b.primaryCategoryId),
-                  primaryColor: p.categories.find((c) => c.id === b.primaryCategoryId)?.data?.color ?? null,
-                  secondaryCategory: name(p.categories, b.secondaryCategoryId),
+                  ...categoryColumns(p, b.categories, slot.durationMin),
                   leader: name(p.leaders, b.leaderId),
                   leaderId: b.leaderId,
                   location: name(p.locations, b.locationId),

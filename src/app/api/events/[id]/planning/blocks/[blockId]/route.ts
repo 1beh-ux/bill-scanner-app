@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { ListTemplateKind } from "@/generated/prisma";
+import type { ListTemplateKind, Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { authorizePlanning, loadPlanPayload } from "@/lib/planning-server";
-import { isEventListItem } from "@/lib/planning-activities";
+import { isEventListItem, validateCategoryShares } from "@/lib/planning-activities";
 
 const REF_KINDS: Record<string, ListTemplateKind> = {
-  primaryCategoryId: "plan_category",
-  secondaryCategoryId: "plan_category",
   leaderId: "plan_leader",
   locationId: "plan_location",
 };
@@ -25,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!block) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const body = await req.json().catch(() => ({}));
-  const data: Record<string, string | string[] | null> = {};
+  const data: Prisma.PlanBlockUncheckedUpdateInput & Record<string, unknown> = {};
 
   for (const key of TEXT_FIELDS) {
     if (body[key] === undefined) continue;
@@ -46,6 +44,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     } else return NextResponse.json({ error: "invalid_reference" }, { status: 400 });
   }
 
+  if (body.categories !== undefined) {
+    const categories = await validateCategoryShares(eventId, body.categories);
+    if (!categories) return NextResponse.json({ error: "invalid_reference" }, { status: 400 });
+    data.categories = categories;
+  }
   if (body.groupNames !== undefined) {
     // Free names (the board offers Participant.groupName values); trimmed, deduped, bounded.
     if (!Array.isArray(body.groupNames) || body.groupNames.length > 50 || body.groupNames.some((g: unknown) => typeof g !== "string" || g.length > 100)) {

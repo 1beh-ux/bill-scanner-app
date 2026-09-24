@@ -1,6 +1,6 @@
 // Self-check for the pure import helpers: `npx tsx src/lib/planning-import.check.ts`
 import assert from "node:assert/strict";
-import { guessMapping, layoutDay, parseDate, parseDuration, parseGroupNames, parseTable, parseTimeOfDay, parseTimeRange } from "@/lib/planning-import";
+import { guessMapping, layoutDay, parseCategoryList, parseDate, parseDuration, parseGroupNames, parseTable, parseTimeOfDay, parseTimeRange } from "@/lib/planning-import";
 
 // Tables: tabs win; else ; vs , by column count; CSV quoting incl. newlines.
 assert.deepEqual(parseTable("a\tb\n1\t2\n"), [["a", "b"], ["1", "2"]]);
@@ -44,4 +44,8 @@ assert.deepEqual(windows.map((w) => [w.name, w.startMin, w.endMin, w.slots.map((
   ["Večerní program", 1140, 1200, [[5]]],
 ]);
 assert.deepEqual(unequal.map((g) => g.map((x) => x.index)), [[1, 2]]);
+// Category cells: names with optional trailing minutes.
+assert.deepEqual(parseCategoryList("Teorie 10, Praxe 20"), [{ name: "Teorie", minutes: 10 }, { name: "Praxe", minutes: 20 }]);
+assert.deepEqual(parseCategoryList("Teorie (10 min); Praxe"), [{ name: "Teorie", minutes: 10 }, { name: "Praxe", minutes: null }]);
+assert.deepEqual(parseCategoryList("Hra"), [{ name: "Hra", minutes: null }]);
 console.log("planning-import.check: ok");

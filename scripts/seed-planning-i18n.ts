@@ -265,6 +265,14 @@ async function main() {
     { key: "settingsPage.planningCardShowGroups", cs: "Skupiny", en: "Groups" },
     { key: "settingsPage.planningCardDescriptionChars", cs: "Max. znaků popisu:", en: "Max. description characters:" },
     { key: "settingsPage.planningCardsHint", cs: "Celý popis se zobrazí po najetí myší. Šířku knihovny změníte tažením jejího okraje na plánu.", en: "The full description shows on hover. Change the library width by dragging its edge on the board." },
+
+    // Split category lists + multiple categories with minutes
+    { key: "planLists.primaryCategoriesLabel", cs: "Hlavní kategorie", en: "Main categories" },
+    { key: "planLists.secondaryCategoriesLabel", cs: "Vedlejší kategorie", en: "Secondary categories" },
+    { key: "planBoard.categoryAdd", cs: "+ přidat kategorii…", en: "+ add category…" },
+    { key: "planBoard.categoryWhole", cs: "celá", en: "whole" },
+    { key: "planBoard.categoryMinutes", cs: "Minut v této kategorii (prázdné = celá délka)", en: "Minutes in this category (empty = whole duration)" },
+    { key: "planBoard.categorySplit", cs: "Rozděleno {assigned} z {duration} min", en: "Split {assigned} of {duration} min" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

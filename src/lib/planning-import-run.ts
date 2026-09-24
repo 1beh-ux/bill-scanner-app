@@ -5,13 +5,14 @@
 
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { MIN_SLOT_MINUTES, type PlanImportTarget } from "@/lib/planning";
+import { MIN_SLOT_MINUTES, readCategoryShares, type PlanImportTarget } from "@/lib/planning";
 import {
   fold,
   layoutDay,
   parseBool,
   parseDate,
   parseDuration,
+  parseCategoryList,
   parseGroupNames,
   parseTimeOfDay,
   parseTimeRange,
@@ -100,6 +101,18 @@ export async function runImport(
     }
   }
   const idOf = (key: string | null) => (key ? known.get(key) ?? null : null);
+  // Category cells ("Teorie 10, Praxe 20") from the primary/secondary columns ->
+  // list keys + minutes; resolved to {categoryId, minutes} at write time.
+  type CatRef = { key: string; minutes: number | null };
+  const categoryRefs = (r: ImportRecord, row: number): CatRef[] =>
+    (["primary", "secondary"] as const).flatMap((group) =>
+      parseCategoryList(get(r, `${group}Category`)).flatMap(({ name, minutes }) => {
+        const key = ref("plan_category", name, row, { group });
+        return key ? [{ key, minutes }] : [];
+      })
+    );
+  const resolveCategories = (refs: CatRef[]) =>
+    refs.flatMap((c) => (idOf(c.key) ? [{ categoryId: idOf(c.key)!, minutes: c.minutes }] : []));
   const countCreatedLists = () => {
     for (const item of toCreate.values()) bump(`${item.kind}Created`);
   };
@@ -158,7 +171,7 @@ export async function runImport(
 
   // ---- activity library ---------------------------------------------------------
   if (target === "activities") {
-    type Act = { name: string; fields: Record<string, unknown>; refs: Record<string, string | null> };
+    type Act = { name: string; fields: Record<string, unknown>; refs: Record<string, string | null>; cats?: CatRef[] };
     const rows = new Map<string, Act>();
     records.forEach((r, row) => {
       const name = get(r, "name");
@@ -181,13 +194,12 @@ export async function runImport(
         if (b === null) warnings.push({ row, code: "invalid_bool", value: get(r, "repeatable") });
         else fields.repeatable = b;
       }
-      if (get(r, "primaryCategory")) refs.primaryCategoryId = ref("plan_category", get(r, "primaryCategory"), row, { group: "primary" });
-      if (get(r, "secondaryCategory")) refs.secondaryCategoryId = ref("plan_category", get(r, "secondaryCategory"), row, { group: "secondary" });
+      const cats = get(r, "primaryCategory") || get(r, "secondaryCategory") ? categoryRefs(r, row) : undefined;
       if (get(r, "leader")) refs.defaultLeaderId = ref("plan_leader", get(r, "leader"), row);
       if (get(r, "location")) refs.defaultLocationId = ref("plan_location", get(r, "location"), row);
       const key = fold(name);
       const prev = rows.get(key);
-      rows.set(key, { name, fields: { ...prev?.fields, ...fields }, refs: { ...prev?.refs, ...refs } });
+      rows.set(key, { name, fields: { ...prev?.fields, ...fields }, refs: { ...prev?.refs, ...refs }, cats: cats ?? prev?.cats });
     });
 
     countCreatedLists();
@@ -196,7 +208,10 @@ export async function runImport(
       await prisma.$transaction(async (tx) => {
         await createMissingLists(tx);
         for (const [key, a] of rows) {
-          const refs = Object.fromEntries(Object.entries(a.refs).map(([k, v]) => [k, idOf(v)]));
+          const refs = {
+            ...Object.fromEntries(Object.entries(a.refs).map(([k, v]) => [k, idOf(v)])),
+            ...(a.cats && { categories: resolveCategories(a.cats) }),
+          };
           const e = activityByName.get(key);
           if (e) await tx.planActivity.update({ where: { id: e.id }, data: { ...a.fields, ...refs } });
           else await tx.planActivity.create({ data: { eventId, name: a.name, defaultDurationMin: 30, ...a.fields, ...refs } });
@@ -218,6 +233,7 @@ export async function runImport(
     activityName: string;
     activityKey: string; // folded name
     refs: Record<string, string | null>; // list keys, resolved to ids at write time
+    cats: CatRef[];
     groupNames: string[];
     description: string | null;
     notes: string | null;
@@ -264,9 +280,8 @@ export async function runImport(
     if (!knownActivity && options.createMissing && !newActivities.has(activityKey)) {
       newActivities.set(activityKey, { name: activityName, duration: end - start });
     }
+    const cats = categoryRefs(r, index);
     const refs: Record<string, string | null> = {
-      primaryCategoryId: get(r, "primaryCategory") ? ref("plan_category", get(r, "primaryCategory"), index, { group: "primary" }) : null,
-      secondaryCategoryId: get(r, "secondaryCategory") ? ref("plan_category", get(r, "secondaryCategory"), index, { group: "secondary" }) : null,
       leaderId: get(r, "leader") ? ref("plan_leader", get(r, "leader"), index) : null,
       locationId: get(r, "location") ? ref("plan_location", get(r, "location"), index) : null,
     };
@@ -279,6 +294,7 @@ export async function runImport(
       activityName,
       activityKey,
       refs,
+      cats,
       groupNames: parseGroupNames(get(r, "groups")),
       description: get(r, "description") || null,
       notes: get(r, "notes") || null,
@@ -351,8 +367,7 @@ export async function runImport(
                         activityId: a?.id ?? null,
                         customName: a ? null : r.activityName,
                         description: r.description ?? a?.description ?? null,
-                        primaryCategoryId: idOf(r.refs.primaryCategoryId) ?? a?.primaryCategoryId ?? null,
-                        secondaryCategoryId: idOf(r.refs.secondaryCategoryId) ?? a?.secondaryCategoryId ?? null,
+                        categories: r.cats.length ? resolveCategories(r.cats) : readCategoryShares(a?.categories),
                         leaderId: idOf(r.refs.leaderId) ?? a?.defaultLeaderId ?? null,
                         locationId: idOf(r.refs.locationId) ?? a?.defaultLocationId ?? null,
                         notes: r.notes,

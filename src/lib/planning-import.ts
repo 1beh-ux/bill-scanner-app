@@ -243,3 +243,19 @@ export function layoutDay<R extends TimedRow>(rows: R[]): { windows: LaidOutWind
     unequal,
   };
 }
+
+/**
+ * A category cell -> names with optional minutes: "Teorie 10, Praxe 20",
+ * "Teorie (10 min); Praxe", "Hra". Minutes = a trailing number.
+ */
+export function parseCategoryList(raw: string): { name: string; minutes: number | null }[] {
+  return raw
+    .split(/[,;/]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const m = /^(.*?)[\s:(]+(\d+)\s*(?:min\.?|m|')?\s*\)?$/i.exec(part);
+      const minutes = m ? Number(m[2]) : null;
+      return m && m[1].trim() && minutes! > 0 && minutes! <= 1440 ? { name: m[1].trim(), minutes } : { name: part, minutes: null };
+    });
+}

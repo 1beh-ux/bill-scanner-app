@@ -673,7 +673,8 @@ export default function EventDetailPage({
 
           {tab === "planovani" && moduleAccess.planning && (
             <div className="flex flex-col gap-6">
-              <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} label={t("planLists.categoriesLabel")} />
+              <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} categoryGroup="primary" label={t("planLists.primaryCategoriesLabel")} />
+              <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} categoryGroup="secondary" label={t("planLists.secondaryCategoriesLabel")} />
               <ListTemplateAdmin kind="plan_location" scope="event" eventId={id} label={t("planLists.locationsLabel")} />
               <ListTemplateAdmin kind="plan_leader" scope="event" eventId={id} label={t("planLists.leadersLabel")} />
               <ListTemplateAdmin kind="plan_day_template" scope="event" eventId={id} label={t("planLists.dayTemplatesLabel")} />
