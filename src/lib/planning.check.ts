@@ -1,7 +1,7 @@
 // Self-check for planning-engine + planning-moves: `npx tsx src/lib/planning.check.ts`
 import assert from "node:assert/strict";
 import type { PlanBlockRow, PlanState } from "@/lib/planning";
-import { byPosition, categoryMinutes, computeTimes, findConflicts, summarize } from "@/lib/planning-engine";
+import { byPosition, categoryMinutes, computeTimes, findConflicts, mainCategorySegments, summarize } from "@/lib/planning-engine";
 import { applyOp } from "@/lib/planning-moves";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 import { buildSheetModel, DEFAULT_SHEET_STYLE, sanitizeSheetStyle, tint } from "@/lib/planning-sheet";
@@ -67,6 +67,16 @@ const splitSum = summarize(splitPlan, new Set(["am"]), [{ id: "prax", data: {} }
 assert.equal(splitSum.primaryCategories.find((c) => c.categoryId === "teorie")?.totalMin, 10);
 assert.equal(splitSum.primaryCategories.find((c) => c.categoryId === "prax")?.totalMin, 60 + 90 + 20);
 assert.equal(splitSum.analysisMin, 60 + 90 + 30);
+
+// Color mark: main categories weighted by minutes; no minutes -> equal parts.
+{
+  const cats = [{ id: "t", data: { color: "#111111" } }, { id: "p", data: { color: "#222222" } }, { id: "s", data: { group: "secondary" as const } }];
+  assert.deepEqual(mainCategorySegments(cats, [{ categoryId: "t", minutes: 10 }, { categoryId: "p", minutes: 5 }, { categoryId: "s", minutes: null }], 15), [
+    { color: "#111111", weight: 10 },
+    { color: "#222222", weight: 5 },
+  ]);
+  assert.deepEqual(mainCategorySegments(cats, [{ categoryId: "t", minutes: null }, { categoryId: "p", minutes: null }], 30).map((x) => x.weight), [30, 30]);
+}
 
 // Analysis base: switching a primary category off drops its slots from the base.
 const withBreakfast = summarize(base, new Set(["am"]), [{ id: "prax", data: {} }, { id: "teorie", data: { countInAnalysis: false } }]);

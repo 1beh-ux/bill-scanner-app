@@ -272,7 +272,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
               className="flex items-center justify-between gap-2 border-b border-mist/60 py-2"
             >
               <span className={"flex items-center gap-2 text-[14px] " + (item.active ? "text-ink" : "text-ink-secondary line-through")}>
-                {kind === "plan_category" && typeof (item.data as { color?: string } | null)?.color === "string" && (
+                {(kind === "plan_category" || kind === "plan_leader") && typeof (item.data as { color?: string } | null)?.color === "string" && (
                   <span
                     className="inline-block h-3 w-3 rounded-full"
                     style={{ backgroundColor: (item.data as { color: string }).color }}

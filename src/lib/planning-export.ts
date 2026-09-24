@@ -2,7 +2,7 @@
 // side) and flat rows (CSV, Drive sheet -- the old Export_Schedule sheet).
 
 import { minutesToHhmm, type PlanCategoryShare, type PlanPayload } from "@/lib/planning";
-import { byBranch, byPosition, categoryGroupLookup, categoryMinutes, computeTimes, mainCategoryColor } from "@/lib/planning-engine";
+import { byBranch, byPosition, categoryGroupLookup, categoryMinutes, computeTimes, mainCategoryColor, mainCategorySegments } from "@/lib/planning-engine";
 
 export type ScheduleRow = {
   dayId: string;
@@ -23,6 +23,7 @@ export type ScheduleRow = {
   secondaryCategory: string;
   categoryMinutes: Record<string, number>; // categoryId -> minutes (per categoryMinutes())
   mainCategoryIds: string[]; // in the block's order
+  mainSegments: { color: string; weight: number }[]; // color mark (mainCategorySegments)
   leader: string;
   leaderId: string | null;
   location: string;
@@ -48,6 +49,7 @@ export function categoryColumns(p: PlanPayload, shares: PlanCategoryShare[], dur
     secondaryCategory: label("secondary"),
     categoryMinutes: Object.fromEntries(minutes),
     mainCategoryIds: shares.filter((s) => groupOf(s.categoryId) === "primary").map((s) => s.categoryId),
+    mainSegments: mainCategorySegments(p.categories, shares, durationMin),
   };
 }
 

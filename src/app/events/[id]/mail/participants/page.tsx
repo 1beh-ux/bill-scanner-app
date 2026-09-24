@@ -90,6 +90,21 @@ export default function MailParticipantsPage({
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
+  // Received/missing toggle for one document (shared by the table and the mobile cards).
+  const docButton = (participantId: string, d: { eventListItemId: string; received: boolean }) => (
+    <button
+      onClick={() => toggleDoc(participantId, d.eventListItemId, d.received)}
+      disabled={togglingKey === `${participantId}:${d.eventListItemId}`}
+      className={
+        "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+        (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+      }
+      title={t("participantsPage.toggleDocumentHint")}
+    >
+      {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+    </button>
+  );
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href={`/events/${id}/mail`} className="text-[13px] text-ink-secondary hover:text-ink">
@@ -126,7 +141,8 @@ export default function MailParticipantsPage({
           {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
@@ -153,30 +169,45 @@ export default function MailParticipantsPage({
                       </span>
                     )}
                   </td>
-                  {p.documents.map((d) => {
-                    const key = `${p.id}:${d.eventListItemId}`;
-                    return (
-                      <td key={d.eventListItemId} className="p-2 text-[13px]">
-                        <button
-                          onClick={() => toggleDoc(p.id, d.eventListItemId, d.received)}
-                          disabled={togglingKey === key}
-                          className={
-                            "rounded-full px-2 py-0.5 disabled:opacity-50 " +
-                            (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
-                          }
-                          title={t("participantsPage.toggleDocumentHint")}
-                        >
-                          {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
-                        </button>
-                      </td>
-                    );
-                  })}
+                  {p.documents.map((d) => (
+                    <td key={d.eventListItemId} className="p-2 text-[13px]">
+                      {docButton(p.id, d)}
+                    </td>
+                  ))}
                   <td className="p-2 text-[13px] text-ink-secondary">{p.contactEmail || "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile: cards (same pattern as the bills list) */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {filteredParticipants.map((p) => (
+            <div key={p.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+              <div className="mb-1.5 flex items-start justify-between gap-2">
+                <span className="min-w-0 text-[14px] font-medium text-ink">{participantListName(p)}</span>
+                <span className="shrink-0 text-[12px]">
+                  {p.registrationStatus === "accepted" ? (
+                    <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">{t("participantsPage.statusAccepted")}</span>
+                  ) : (
+                    <span className="rounded-full bg-mist px-2 py-0.5 text-ink-secondary">{t("participantsPage.statusPending")}</span>
+                  )}
+                </span>
+              </div>
+              {p.contactEmail && <div className="mb-1.5 break-all text-[12px] text-ink-secondary">{p.contactEmail}</div>}
+              <dl className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 text-[12.5px]">
+                {p.documents.map((d) => (
+                  <div key={d.eventListItemId} className="contents">
+                    <dt className="min-w-0 text-ink-secondary">{d.name}</dt>
+                    <dd>{docButton(p.id, d)}</dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))}
+        </div>
+        </>
       )}
 
       {undo && (

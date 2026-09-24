@@ -188,7 +188,7 @@ export default function AppSidebar() {
   }
 
   const sidebarContent = (
-    <div className="flex h-full flex-col gap-1 px-3 py-4">
+    <div className="flex min-h-full flex-col gap-1 px-3 py-4 [&>*]:shrink-0">
       <div className="flex items-center gap-2 px-1 pb-4">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ember">
           <Tent size={16} className="text-night" aria-hidden="true" />
@@ -373,7 +373,7 @@ export default function AppSidebar() {
       {drawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-64 bg-night shadow-lg">
+          <div className="absolute left-0 top-0 h-full w-64 overflow-y-auto overscroll-contain bg-night shadow-lg">
             <div className="flex justify-end p-2">
               <button
                 onClick={() => setDrawerOpen(false)}

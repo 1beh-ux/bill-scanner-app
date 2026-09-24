@@ -57,6 +57,26 @@ export function categoryGroupLookup(categories: { id: string; data: PlanCategory
   return (id: string) => map.get(id) ?? null;
 }
 
+/**
+ * The color mark of a block/activity: one segment per main category, weighted
+ * by its minutes (same rules as the summary) -- 10 + 5 min -> 2/3 and 1/3;
+ * no minutes -> equal parts. Empty when there's no main category.
+ */
+export function mainCategorySegments(
+  categories: { id: string; data: PlanCategoryData | null }[],
+  shares: PlanCategoryShare[],
+  durationMin: number
+): { color: string; weight: number }[] {
+  const groupOf = categoryGroupLookup(categories);
+  const minutes = categoryMinutes(shares, Math.max(1, durationMin), groupOf);
+  return shares
+    .filter((s) => groupOf(s.categoryId) === "primary" && (minutes.get(s.categoryId) ?? 0) > 0)
+    .map((s) => ({
+      color: categories.find((c) => c.id === s.categoryId)?.data?.color ?? "#9ca3af",
+      weight: minutes.get(s.categoryId)!,
+    }));
+}
+
 /** Color of the first main category in a list (cards, PDF), else null. */
 export function mainCategoryColor(categories: { id: string; data: PlanCategoryData | null }[], shares: PlanCategoryShare[]) {
   const groupOf = categoryGroupLookup(categories);

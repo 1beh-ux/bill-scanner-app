@@ -129,7 +129,8 @@ export default function EventHealthPage({
           {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[560px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
@@ -197,6 +198,50 @@ export default function EventHealthPage({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile: cards (same pattern as the bills list) */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {filteredParticipants.map((p) => {
+            const age = calculateAge(p.dateOfBirth);
+            const count = signals.incidentCount[p.id] ?? 0;
+            return (
+              <div key={p.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+                <div className="mb-1 flex items-start justify-between gap-2">
+                  <a href={`/events/${id}/health/participants/${p.id}`} className="min-w-0 text-[14px] font-medium text-ember hover:underline">
+                    {participantListName(p)}
+                  </a>
+                  <div className="flex shrink-0 items-center gap-1.5 text-[12px]">
+                    {count > 0 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2 py-0.5 text-red-700" title={t("healthPage.colIncidents")}>
+                        <span className="h-[7px] w-[7px] rounded-full bg-red-600" />
+                        {count}
+                      </span>
+                    )}
+                    {medSet.has(p.id) && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800" title={t("healthPage.medsTooltip")}>
+                        <span className="h-[7px] w-[7px] rounded-full bg-amber-600" />
+                        {t("healthPage.colMeds")}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">
+                  {p.groupName && <span>{p.groupName}</span>}
+                  {age !== null && <span>{t("participantsPage.colAge")}: {age}</span>}
+                </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <a href={`/events/${id}/participants?edit=${p.id}`} className="text-[12px] text-ink-secondary hover:text-ink hover:underline">
+                    {t("healthPage.openInRosterLink")}
+                  </a>
+                  <button onClick={() => setIncidentParticipantId(p.id)} className="text-[13px] text-ember hover:underline">
+                    {t("participantsPage.addIncidentButton")}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        </>
       )}
 
       {incidentParticipantId && (

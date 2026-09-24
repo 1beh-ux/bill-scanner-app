@@ -321,6 +321,12 @@ async function main() {
     { key: "sheetStyle.showNotes", cs: "Poznámka", en: "Notes" },
     { key: "sheetStyle.previewHint", cs: "Náhled na ukázkových datech:", en: "Preview on sample data:" },
     { key: "sheetStyle.reset", cs: "Obnovit výchozí", en: "Reset to default" },
+
+    // Board: collapsible windows; app-wide: participant cards
+    { key: "planBoard.collapseWindow", cs: "Sbalit okno", en: "Collapse window" },
+    { key: "planBoard.expandWindow", cs: "Rozbalit okno", en: "Expand window" },
+    { key: "planBoard.windowSlotCount", cs: "{count} bloků", en: "{count} slots" },
+    { key: "participantsPage.selectAll", cs: "Vybrat vše", en: "Select all" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

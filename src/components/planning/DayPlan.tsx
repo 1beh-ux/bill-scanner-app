@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
-import { GripVertical, Trash2, X } from "lucide-react";
+import { ChevronDown, ChevronRight, GripVertical, Trash2, X } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import type { UiPrefs } from "@/lib/ui-prefs";
 import { MIN_SLOT_MINUTES, clipName, minutesToHhmm, type PlanBlockRow, type PlanSlotRow, type PlanWindowRow } from "@/lib/planning";
-import { byBranch, byPosition, mainCategoryColor, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
+import { byBranch, byPosition, mainCategorySegments, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
+import CategoryBar from "./CategoryBar";
 import { MIN_SLOT_PX, PX_PER_MIN, type DragData, type DropData, type PlanPayload } from "./types";
 
 export type DayPlanProps = {
@@ -26,8 +27,42 @@ export function blockLabel(payload: PlanPayload, b: PlanBlockRow) {
   return b.customName || payload.activities.find((a) => a.id === b.activityId)?.name || "—";
 }
 
+const COLLAPSED_KEY = "planning.collapsedWindows";
+
+// Collapsed windows are a per-viewer convenience (localStorage, per window id).
+function useCollapsedWindows() {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore after mount so SSR and client agree
+      setCollapsed(new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]")));
+    } catch {}
+  }, []);
+  const toggle = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  return { collapsed, toggle };
+}
+
+/** A time range, formatted the same everywhere on the board: "09:00 – 12:00". */
+function TimeRange({ start, end }: { start: number; end: number }) {
+  return (
+    <span className="whitespace-nowrap rounded-md border border-mist bg-paper px-1.5 py-0.5 text-[12.5px] font-semibold tabular-nums text-ink">
+      {minutesToHhmm(start)} – {minutesToHhmm(end)}
+    </span>
+  );
+}
+
 export default function DayPlan(props: DayPlanProps) {
   const { t } = useTranslations();
+  const { collapsed, toggle } = useCollapsedWindows();
   const windows = props.payload.windows.filter((w) => w.dayId === props.dayId).sort((a, b) => a.sortOrder - b.sortOrder);
 
   if (windows.length === 0) {
@@ -36,35 +71,59 @@ export default function DayPlan(props: DayPlanProps) {
   return (
     <div className="flex flex-col gap-3">
       {windows.map((w) => (
-        <WindowCard key={w.id} window={w} {...props} />
+        <WindowCard key={w.id} window={w} collapsed={collapsed.has(w.id)} onToggle={() => toggle(w.id)} {...props} />
       ))}
     </div>
   );
 }
 
-function WindowCard({ window: w, ...props }: DayPlanProps & { window: PlanWindowRow }) {
+function WindowCard({
+  window: w,
+  collapsed,
+  onToggle,
+  ...props
+}: DayPlanProps & { window: PlanWindowRow; collapsed: boolean; onToggle: () => void }) {
   const { t } = useTranslations();
   const cw = props.times.windows[w.id];
-  const range = `${minutesToHhmm(w.startMin)}–${minutesToHhmm(w.endMin)}`;
+  const slots = props.payload.slots.filter((s) => s.windowId === w.id).sort(byPosition);
+  // The header is a drop target too: dropping on it appends to the window -- the
+  // only way in while it's collapsed.
+  const headerDrop: DropData = { type: "gap", windowId: w.id, index: slots.length };
+  const { setNodeRef: setHeaderRef, isOver: headerOver } = useDroppable({ id: `winhead:${w.id}`, data: headerDrop, disabled: w.kind === "fixed" });
 
   if (w.kind === "fixed") {
     return (
-      <div className="flex items-center justify-between rounded-lg bg-mist/50 px-3 py-2 text-[13px] text-ink-secondary">
+      <div className="flex items-center justify-between gap-2 rounded-lg bg-mist/50 px-3 py-2 text-[13px] text-ink-secondary">
         <span className="font-medium">{w.name}</span>
-        <span>{range}</span>
+        <TimeRange start={w.startMin} end={w.endMin} />
       </div>
     );
   }
 
-  const slots = props.payload.slots.filter((s) => s.windowId === w.id).sort(byPosition);
   const over = (cw?.overflowMin ?? 0) > 0;
+  const Chevron = collapsed ? ChevronRight : ChevronDown;
   return (
     <section className={"rounded-lg border bg-paper-2 " + (over ? "border-red-400" : "border-mist")}>
-      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-mist px-3 py-2">
-        <div className="flex items-baseline gap-2">
+      <header
+        ref={setHeaderRef}
+        className={
+          "flex flex-wrap items-center justify-between gap-2 px-3 py-2 " +
+          (collapsed ? "" : "border-b border-mist ") +
+          (headerOver ? "rounded-t-lg bg-ember/10" : "")
+        }
+      >
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={!collapsed}
+          title={t(collapsed ? "planBoard.expandWindow" : "planBoard.collapseWindow")}
+          className="flex items-center gap-2 text-left"
+        >
+          <Chevron size={16} className="shrink-0 text-ink-secondary" aria-hidden="true" />
           <h3 className="text-[14px] font-semibold text-ink">{w.name}</h3>
-          <span className="text-[12px] text-ink-secondary">{range}</span>
-        </div>
+          <TimeRange start={w.startMin} end={w.endMin} />
+          {collapsed && <span className="text-[12px] text-ink-secondary">{t("planBoard.windowSlotCount", { count: String(slots.length) })}</span>}
+        </button>
         <span className={"text-[12px] " + (over ? "font-medium text-red-600" : "text-ink-secondary")}>
           {w.kind === "flexible"
             ? over
@@ -73,7 +132,7 @@ function WindowCard({ window: w, ...props }: DayPlanProps & { window: PlanWindow
             : t("planBoard.usagePartial", { used: String(cw?.usedMin ?? 0) })}
         </span>
       </header>
-      <div className="px-2 py-1">
+      <div className={"px-2 py-1" + (collapsed ? " hidden" : "")}>
         {slots.length === 0 ? (
           <Gap windowId={w.id} index={0} empty />
         ) : (
@@ -168,15 +227,16 @@ function SlotCard({ slot, ...props }: DayPlanProps & { slot: PlanSlotRow }) {
         aria-label={t("planBoard.dragSlot")}
         className={
           "flex w-[74px] shrink-0 cursor-grab touch-manipulation flex-col items-start gap-0.5 border-r border-mist px-2 py-1.5 active:cursor-grabbing " +
-          (time?.overflow ? "text-red-600" : "text-ink-secondary")
+          (time?.overflow ? "text-red-600" : "text-ink")
         }
       >
-        <span className="flex items-center gap-0.5 text-[12px] font-medium text-ink">
+        {/* Start and end formatted alike; overflow turns both red (via the parent). */}
+        <span className="flex items-center gap-0.5 text-[12.5px] font-semibold tabular-nums">
           <GripVertical size={12} className="-ml-1 text-ink-secondary" aria-hidden="true" />
           {time ? minutesToHhmm(time.startMin) : ""}
         </span>
-        <span className="text-[11px]">{time ? minutesToHhmm(time.endMin) : ""}</span>
-        <span className="text-[11px]">{slot.durationMin} min</span>
+        <span className="pl-[11px] text-[12.5px] font-semibold tabular-nums">{time ? minutesToHhmm(time.endMin) : ""}</span>
+        <span className="pl-[11px] text-[11px] font-normal text-ink-secondary">{slot.durationMin} min</span>
       </div>
 
       <div className="flex min-w-0 flex-1 gap-1.5 p-1.5">
@@ -218,7 +278,8 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
   const dragData: DragData = { type: "block", blockId: b.id, label };
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({ id: `drag-block:${b.id}`, data: dragData });
 
-  const color = mainCategoryColor(payload.categories, b.categories) ?? "#9ca3af";
+  const slotDuration = payload.slots.find((s) => s.id === b.slotId)?.durationMin ?? 0;
+  const segments = mainCategorySegments(payload.categories, b.categories, slotDuration);
   const leader = payload.leaders.find((l) => l.id === b.leaderId)?.name;
   const location = payload.locations.find((l) => l.id === b.locationId)?.name;
   const conflict = props.conflictBlockIds.has(b.id);
@@ -229,14 +290,14 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
       {...listeners}
       {...attributes}
       onClick={() => props.onEditBlock(b.id)}
-      style={{ borderLeftColor: color }}
       title={conflict ? t("planBoard.conflictHint") : undefined}
       className={
-        "group/branch relative min-w-0 flex-1 cursor-grab touch-manipulation rounded border border-l-4 bg-paper-2 px-2 py-1 active:cursor-grabbing " +
+        "group/branch relative min-w-0 flex-1 cursor-grab touch-manipulation rounded border bg-paper-2 py-1 pl-3 pr-2 active:cursor-grabbing " +
         (conflict ? "border-red-400 ring-1 ring-red-400 " : "border-mist ") +
         (isDragging ? "opacity-40" : "")
       }
     >
+      <CategoryBar segments={segments} />
       {/* Name always in full; the rest per the user's card settings (Nastavení -> Plánování). */}
       <div className="break-words pr-4 text-[13px] font-medium leading-snug text-ink">{label}</div>
       {props.cardPrefs.planningCardShowDescription && b.description && (

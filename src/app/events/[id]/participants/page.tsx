@@ -407,6 +407,25 @@ export default function EventParticipantsPage({
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
+  // Registration status chip -> acceptance dialog (shared by the table and the mobile cards).
+  const statusButton = (p: (typeof filteredParticipants)[number]) =>
+    p.registrationStatus === "accepted" ? (
+      <button
+        onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id], alreadyAccepted: true })}
+        title={t("participantsPage.regenerateHint")}
+        className="rounded-full bg-pine/15 px-2 py-0.5 text-pine hover:bg-pine/25"
+      >
+        {t("participantsPage.statusAccepted")}
+      </button>
+    ) : (
+      <button
+        onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id] })}
+        className="rounded-full bg-ember/15 px-2 py-0.5 text-ember hover:bg-ember/25"
+      >
+        {t("participantsPage.statusPendingAction")}
+      </button>
+    );
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <a href={`/events/${id}`} className="text-[13px] text-ink-secondary hover:text-ink">
@@ -531,7 +550,8 @@ export default function EventParticipantsPage({
           {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[720px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
@@ -574,22 +594,7 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
                     <td className="p-2 text-[13px]">
-                      {p.registrationStatus === "accepted" ? (
-                        <button
-                          onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id], alreadyAccepted: true })}
-                          title={t("participantsPage.regenerateHint")}
-                          className="rounded-full bg-pine/15 px-2 py-0.5 text-pine hover:bg-pine/25"
-                        >
-                          {t("participantsPage.statusAccepted")}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id] })}
-                          className="rounded-full bg-ember/15 px-2 py-0.5 text-ember hover:bg-ember/25"
-                        >
-                          {t("participantsPage.statusPendingAction")}
-                        </button>
-                      )}
+                      {statusButton(p)}
                     </td>
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
@@ -611,6 +616,61 @@ export default function EventParticipantsPage({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile: cards (same pattern as the bills list) */}
+        <div className="flex flex-col gap-2 md:hidden">
+          <label className="flex items-center gap-2 px-1 text-[13px] text-ink-secondary">
+            <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
+            {t("participantsPage.selectAll")}
+          </label>
+          {filteredParticipants.map((p) => {
+            const age = calculateAge(p.dateOfBirth);
+            const fullName = [p.lastName, p.firstName].filter(Boolean).join(" ") || p.name;
+            return (
+              <div key={p.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+                <div className="mb-1.5 flex items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="mt-1 shrink-0" />
+                    {moduleAccess.health ? (
+                      <a href={`/events/${id}/health/participants/${p.id}`} className="text-[14px] font-medium text-ember hover:underline">
+                        {fullName}
+                      </a>
+                    ) : (
+                      <span className="text-[14px] font-medium text-ink">{fullName}</span>
+                    )}
+                  </div>
+                  <span className="shrink-0 text-[12px]">{statusButton(p)}</span>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">
+                  {p.groupName && <span>{p.groupName}</span>}
+                  {age !== null && <span>{t("participantsPage.colAge")}: {age}</span>}
+                  {p.documentsTotal > 0 && (
+                    <span>
+                      {t("participantsPage.colDocuments")}: {p.documentsReceived}/{p.documentsTotal}
+                    </span>
+                  )}
+                  {p.computed.contact_email && <span className="break-all">{p.computed.contact_email}</span>}
+                </div>
+                {activeColumns.length > 0 && (
+                  <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px]">
+                    {activeColumns.map((f) => (
+                      <div key={f.id} className="contents">
+                        <dt className="text-ink-secondary">{f.label}</dt>
+                        <dd className="min-w-0 break-words text-ink">{resolveDynamicValue(f, p) || "—"}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <div className="mt-2 text-right">
+                  <button onClick={() => startEdit(p)} className="text-[13px] text-ember hover:underline">
+                    {t("common.edit")}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        </>
       )}
 
       {addOpen && (

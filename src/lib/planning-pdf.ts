@@ -20,9 +20,22 @@ function formatDate(date: string | null): string {
 // service renders -- hex only, so nothing like url(...) gets through.
 const safeColor = (c: string | null) => (c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : "#9ca3af");
 
+// Split color mark as hard-stop gradient segments (same weights as the board).
+function markGradient(segments: { color: string; weight: number }[]): string {
+  if (segments.length === 0) return safeColor(null);
+  const total = segments.reduce((n, s) => n + s.weight, 0);
+  let at = 0;
+  const stops = segments.map((s) => {
+    const from = (at / total) * 100;
+    at += s.weight;
+    return `${safeColor(s.color)} ${from.toFixed(1)}% ${((at / total) * 100).toFixed(1)}%`;
+  });
+  return `linear-gradient(to bottom, ${stops.join(", ")})`;
+}
+
 function branch(b: ScheduleRow, showLeader: boolean): string {
   const meta = [showLeader && b.leader, b.location, b.groups].filter(Boolean).map((x) => esc(String(x)));
-  return `<div class="b" style="border-left-color:${safeColor(b.primaryColor)}">
+  return `<div class="b"><div class="mark" style="background:${markGradient(b.mainSegments)}"></div>
   <div class="n">${esc(b.activity)}</div>
   ${meta.length ? `<div class="m">${meta.join(" · ")}</div>` : ""}
   ${b.description ? `<div class="d">${esc(b.description)}</div>` : ""}
@@ -68,7 +81,9 @@ ${rows ? `<table>${rows}</table>` : `<p class="empty">Na tento den není nic nap
   td.t { width: 22mm; white-space: nowrap; font-weight: 600; }
   td.t div { font-weight: 400; color: #666; font-size: 8.5pt; }
   .row { display: flex; gap: 2mm; }
-  .b { flex: 1 1 0; min-width: 0; border: 0.5pt solid #ccc; border-left: 2.5pt solid #9ca3af; border-radius: 1.5mm; padding: 1.2mm 2mm; }
+  .b { position: relative; flex: 1 1 0; min-width: 0; border: 0.5pt solid #ccc; border-radius: 1.5mm; padding: 1.2mm 2mm 1.2mm 3.5mm; overflow: hidden; }
+  .mark { position: absolute; left: 0; top: 0; bottom: 0; width: 2.5pt; }
+  .b { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .n { font-weight: 600; }
   .m { color: #444; font-size: 8.5pt; }
   .d { color: #555; font-size: 8.5pt; margin-top: .5mm; }

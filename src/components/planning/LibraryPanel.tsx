@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
-import { mainCategoryColor } from "@/lib/planning-engine";
+import { mainCategorySegments } from "@/lib/planning-engine";
+import CategoryBar from "./CategoryBar";
 import type { DragData, PlanPayload } from "./types";
 
 const REMAINING_KEY = "planning.libraryRemainingOnly";
@@ -71,7 +72,7 @@ export default function LibraryPanel({ payload, eventId, onNewActivity }: { payl
             data={{ type: "activity", activityId: a.id, label: a.name }}
             name={a.name}
             durationMin={a.defaultDurationMin}
-            color={mainCategoryColor(payload.categories, a.categories) ?? undefined}
+            segments={mainCategorySegments(payload.categories, a.categories, a.defaultDurationMin)}
             repeatable={a.repeatable}
           />
         ))}
@@ -105,14 +106,14 @@ function LibraryCard({
   data,
   name,
   durationMin,
-  color,
+  segments,
   repeatable,
   muted,
 }: {
   data: DragData;
   name: string;
   durationMin: number;
-  color?: string;
+  segments?: { color: string; weight: number }[];
   repeatable: boolean;
   muted?: boolean;
 }) {
@@ -123,13 +124,13 @@ function LibraryCard({
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      style={{ borderLeftColor: color ?? "#9ca3af" }}
       className={
-        "flex cursor-grab touch-manipulation items-start justify-between gap-2 rounded border border-l-4 px-2 py-1.5 text-[13px] active:cursor-grabbing " +
+        "relative flex cursor-grab touch-manipulation items-start justify-between gap-2 rounded border py-1.5 pl-3 pr-2 text-[13px] active:cursor-grabbing " +
         (muted ? "border-dashed border-mist bg-paper text-ink-secondary " : "border-mist bg-paper-2 text-ink ") +
         (isDragging ? "opacity-40" : "")
       }
     >
+      <CategoryBar segments={segments ?? []} />
       <span className="min-w-0 break-words">{name}</span>
       <span className="shrink-0 text-[11px] text-ink-secondary">
         {durationMin} min{repeatable ? " ↻" : ""}

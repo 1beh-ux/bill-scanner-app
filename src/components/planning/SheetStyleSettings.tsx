@@ -20,7 +20,7 @@ function row(partial: Partial<ScheduleRow> & { activity: string }): ScheduleRow 
   return {
     dayId: "", dayLabel: "", date: null, windowName: "", windowStart: "", windowEnd: "", start: "", end: "", startMin: 0,
     durationMin: 0, parallel: false, description: "", primaryCategory: "", primaryColor: null, secondaryCategory: "",
-    leader: "", leaderId: null, location: "", groups: "", notes: "", categoryMinutes: {}, mainCategoryIds: [],
+    leader: "", leaderId: null, location: "", groups: "", notes: "", categoryMinutes: {}, mainCategoryIds: [], mainSegments: [],
     ...partial,
   };
 }
