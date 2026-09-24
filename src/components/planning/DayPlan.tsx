@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useDndContext, useDraggable, useDroppable } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, GripVertical, Trash2, X } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
-import type { UiPrefs } from "@/lib/ui-prefs";
 import { MIN_SLOT_MINUTES, clipName, minutesToHhmm, type PlanBlockRow, type PlanSlotRow, type PlanWindowRow } from "@/lib/planning";
 import { byBranch, byPosition, mainCategorySegments, type ComputedSlot, type ComputedWindow } from "@/lib/planning-engine";
 import CategoryBar from "./CategoryBar";
@@ -20,7 +19,6 @@ export type DayPlanProps = {
   onDeleteSlot: (slotId: string) => void;
   onDeleteBlock: (blockId: string) => void;
   onEditBlock: (blockId: string) => void;
-  cardPrefs: Required<UiPrefs>;
 };
 
 export function blockLabel(payload: PlanPayload, b: PlanBlockRow) {
@@ -226,16 +224,15 @@ function SlotCard({ slot, ...props }: DayPlanProps & { slot: PlanSlotRow }) {
         {...attributes}
         aria-label={t("planBoard.dragSlot")}
         className={
-          "flex w-[74px] shrink-0 cursor-grab touch-manipulation flex-col items-start gap-0.5 border-r border-mist px-2 py-1.5 active:cursor-grabbing " +
+          "flex w-[112px] shrink-0 cursor-grab touch-manipulation flex-col items-start gap-0.5 border-r border-mist px-2 py-1.5 active:cursor-grabbing " +
           (time?.overflow ? "text-red-600" : "text-ink")
         }
       >
-        {/* Start and end formatted alike; overflow turns both red (via the parent). */}
-        <span className="flex items-center gap-0.5 text-[12.5px] font-semibold tabular-nums">
-          <GripVertical size={12} className="-ml-1 text-ink-secondary" aria-hidden="true" />
-          {time ? minutesToHhmm(time.startMin) : ""}
+        {/* "09:00 – 10:30" like the window range; overflow turns it red (via the parent). */}
+        <span className="flex items-center gap-0.5 whitespace-nowrap text-[12.5px] font-semibold tabular-nums">
+          <GripVertical size={12} className="-ml-1 shrink-0 text-ink-secondary" aria-hidden="true" />
+          {time ? `${minutesToHhmm(time.startMin)} – ${minutesToHhmm(time.endMin)}` : ""}
         </span>
-        <span className="pl-[11px] text-[12.5px] font-semibold tabular-nums">{time ? minutesToHhmm(time.endMin) : ""}</span>
         <span className="pl-[11px] text-[11px] font-normal text-ink-secondary">{slot.durationMin} min</span>
       </div>
 
@@ -298,17 +295,17 @@ function BranchCard({ block: b, ...props }: DayPlanProps & { block: PlanBlockRow
       }
     >
       <CategoryBar segments={segments} />
-      {/* Name always in full; the rest per the user's card settings (Nastavení -> Plánování). */}
+      {/* Name always in full; the rest per the user's card settings (Nastavení akce -> Plánování). */}
       <div className="break-words pr-4 text-[13px] font-medium leading-snug text-ink">{label}</div>
-      {props.cardPrefs.planningCardShowDescription && b.description && (
+      {props.payload.display.showDescription && b.description && (
         <div className="break-words text-[11.5px] leading-snug text-ink-secondary" title={b.description}>
-          {clipName(b.description, props.cardPrefs.planningCardDescriptionChars)}
+          {clipName(b.description, props.payload.display.descriptionChars)}
         </div>
       )}
-      {props.cardPrefs.planningCardShowMeta && (leader || location) && (
+      {props.payload.display.showMeta && (leader || location) && (
         <div className="truncate text-[11.5px] italic text-ink-secondary">{[leader, location].filter(Boolean).join(" · ")}</div>
       )}
-      {props.cardPrefs.planningCardShowGroups && b.groupNames.length > 0 && (
+      {props.payload.display.showGroups && b.groupNames.length > 0 && (
         <div className="truncate text-[11px] font-medium text-ember">{b.groupNames.join(", ")}</div>
       )}
       <button

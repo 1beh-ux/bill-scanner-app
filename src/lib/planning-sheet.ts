@@ -1,8 +1,7 @@
 // The designed Google Sheet export (design doc "Export"): the schedule as a
 // grid model -- values, colors, merges -- built by one pure function, so the
 // settings preview and the real Sheet (drive.ts writeFormattedSheet) match.
-// Style is per user (User.uiPrefs.planningSheetStyle); the exporting user's
-// style is what the event's shared Sheet gets.
+// Style is per event (Event.planningSettings.sheetStyle).
 
 import { scheduleDays, type ScheduleDay } from "@/lib/planning-export";
 

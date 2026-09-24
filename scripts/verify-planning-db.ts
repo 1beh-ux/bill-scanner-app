@@ -12,7 +12,7 @@ if (!/@(127\.0\.0\.1|localhost)[:/]/.test(process.env.DATABASE_URL ?? "")) {
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
-import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff } from "../src/lib/planning-server";
+import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff, validateRestoreState } from "../src/lib/planning-server";
 import { scheduleDays, scheduleRows } from "../src/lib/planning-export";
 import { scheduleHtml } from "../src/lib/planning-pdf";
 import { runImport } from "../src/lib/planning-import-run";
@@ -94,6 +94,30 @@ async function main() {
 
   // Fixed window rejected, nothing persisted.
   await assert.rejects(run(() => ({ op: "move", kind: "slot", id: slotsIn(s, pm.id)[0].id, target: { windowId: day.windows[1].id, index: 0 }, copy: false })));
+
+  // Undo restore: snapshot -> move + content edit -> restore == snapshot.
+  {
+    const snap = JSON.parse(JSON.stringify((await loadPlanState(ev.id)).state)) as PlanState;
+    const firstSlot = slotsIn(snap, am.id)[0] ?? slotsIn(snap, pm.id)[0];
+    await run(() => ({ op: "move", kind: "slot", id: firstSlot.id, target: { windowId: pm.id, index: 0 }, copy: true }));
+    const someBlock = snap.blocks[0];
+    await prisma.planBlock.update({ where: { id: someBlock.id }, data: { description: "changed", groupNames: ["X"] } });
+    const restore = async (raw: unknown) => {
+      let result: PlanState | null = null;
+      await prisma.$transaction(async (tx) => {
+        const { state } = await loadPlanState(ev.id, tx);
+        result = await validateRestoreState(ev.id, raw, state);
+        if (result) await persistPlanDiff(tx, state, result);
+      });
+      return result;
+    };
+    assert.ok(await restore({ slots: snap.slots, blocks: snap.blocks }));
+    assert.deepEqual(norm((await loadPlanState(ev.id)).state), norm(snap));
+    // Stale (a window that's gone) is refused; another event's leader is dropped.
+    assert.equal(await restore({ slots: [{ ...snap.slots[0], windowId: "gone" }], blocks: [] }), null);
+    const foreign = await validateRestoreState(ev.id, { slots: snap.slots, blocks: [{ ...someBlock, leaderId: foreignLeader.id }] }, (await loadPlanState(ev.id)).state);
+    assert.equal(foreign!.blocks[0].leaderId, null);
+  }
 
   // Copy library to another event: leader re-resolved by name there.
   await prisma.planActivity.update({ where: { id: act.id }, data: { defaultLeaderId: leader.id } });

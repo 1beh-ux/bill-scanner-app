@@ -4,6 +4,7 @@ import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
+import PlanningEventSettings from "@/components/planning/PlanningEventSettings";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
@@ -673,6 +674,7 @@ export default function EventDetailPage({
 
           {tab === "planovani" && moduleAccess.planning && (
             <div className="flex flex-col gap-6">
+              <PlanningEventSettings eventId={id} />
               <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} categoryGroup="primary" label={t("planLists.primaryCategoriesLabel")} />
               <ListTemplateAdmin kind="plan_category" scope="event" eventId={id} categoryGroup="secondary" label={t("planLists.secondaryCategoriesLabel")} />
               <ListTemplateAdmin kind="plan_location" scope="event" eventId={id} label={t("planLists.locationsLabel")} />

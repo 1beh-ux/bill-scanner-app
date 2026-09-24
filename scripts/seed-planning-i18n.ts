@@ -327,6 +327,15 @@ async function main() {
     { key: "planBoard.expandWindow", cs: "Rozbalit okno", en: "Expand window" },
     { key: "planBoard.windowSlotCount", cs: "{count} bloků", en: "{count} slots" },
     { key: "participantsPage.selectAll", cs: "Vybrat vše", en: "Select all" },
+
+    // Event-level display settings + undo
+    { key: "planSettings.displayTitle", cs: "Zobrazení plánu", en: "Plan display" },
+    { key: "planSettings.cardsHint", cs: "Platí pro všechny, kdo plánují tuto akci. Název aktivity je na kartě vždy celý.", en: "Applies to everyone planning this event. The activity name is always shown in full." },
+    { key: "planSettings.undoSteps", cs: "Počet kroků zpět (↶ Zpět / Ctrl+Z):", en: "Undo steps (↶ Undo / Ctrl+Z):" },
+    { key: "planSettings.sheetTitle", cs: "Vzhled exportu do Google tabulky", en: "Google Sheet export design" },
+    { key: "planBoard.undo", cs: "Zpět", en: "Undo" },
+    { key: "planBoard.undoHint", cs: "Vrátit poslední změnu (Ctrl+Z). K dispozici: {count}", en: "Undo the last change (Ctrl+Z). Available: {count}" },
+    { key: "planBoard.errorUndoStale", cs: "Změnu nešlo vrátit — plán se mezitím změnil (např. časová okna). Historie kroků byla vymazána.", en: "Couldn't undo — the plan changed meanwhile (e.g. time windows). The undo history was cleared." },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

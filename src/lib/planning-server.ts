@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { readCategoryShares, type PlanBlockRow, type PlanDayRow, type PlanPayload, type PlanningSettings, type PlanSlotRow, type PlanState, type PlanWindowRow } from "@/lib/planning";
+import { readCategoryShares, sanitizeDisplay, type PlanBlockRow, type PlanDayRow, type PlanPayload, type PlanningSettings, type PlanSlotRow, type PlanState, type PlanWindowRow } from "@/lib/planning";
 import { fieldsOf } from "@/lib/planning-moves";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -53,7 +53,7 @@ export async function loadPlanState(eventId: string, db: Db = prisma) {
 // Everything the board needs in one request.
 export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
   const [event, plan, activities, listItems, baseActivities, participantGroups] = await Promise.all([
-    prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { id: true, name: true, startDate: true, endDate: true } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { id: true, name: true, startDate: true, endDate: true, planningSettings: true } }),
     loadPlanState(eventId),
     prisma.planActivity.findMany({ where: { eventId, active: true }, orderBy: { name: "asc" } }),
     prisma.eventListItem.findMany({
@@ -87,6 +87,7 @@ export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
     dayTemplates: ofKind("plan_day_template"),
     baseActivities: baseActivities.map(({ id, name, data }) => ({ id, name, data: data as never })),
     groups: [...groups].sort((a, b) => a.localeCompare(b, "cs", { numeric: true })),
+    display: sanitizeDisplay((event.planningSettings as PlanningSettings | null)?.display),
   };
 }
 
@@ -106,8 +107,8 @@ export async function persistPlanDiff(tx: Prisma.TransactionClient, before: Plan
 
   for (const s of after.slots) {
     const prev = beforeSlots.get(s.id);
-    if (prev && (prev.windowId !== s.windowId || prev.position !== s.position || prev.durationMin !== s.durationMin)) {
-      await tx.planSlot.update({ where: { id: s.id }, data: { windowId: s.windowId, position: s.position, durationMin: s.durationMin } });
+    if (prev && (prev.windowId !== s.windowId || prev.position !== s.position || prev.durationMin !== s.durationMin || prev.notes !== s.notes)) {
+      await tx.planSlot.update({ where: { id: s.id }, data: { windowId: s.windowId, position: s.position, durationMin: s.durationMin, notes: s.notes } });
     }
   }
 
@@ -115,10 +116,11 @@ export async function persistPlanDiff(tx: Prisma.TransactionClient, before: Plan
   if (newBlocks.length) {
     await tx.planBlock.createMany({ data: newBlocks.map((b) => ({ ...fieldsOf(b), id: b.id, slotId: b.slotId, branchOrder: b.branchOrder })) });
   }
+  // Any field may differ: ops move blocks, an undo restore also brings back content.
   for (const b of after.blocks) {
     const prev = beforeBlocks.get(b.id);
-    if (prev && (prev.slotId !== b.slotId || prev.branchOrder !== b.branchOrder)) {
-      await tx.planBlock.update({ where: { id: b.id }, data: { slotId: b.slotId, branchOrder: b.branchOrder } });
+    if (prev && JSON.stringify(prev) !== JSON.stringify(b)) {
+      await tx.planBlock.update({ where: { id: b.id }, data: { ...fieldsOf(b), slotId: b.slotId, branchOrder: b.branchOrder } });
     }
   }
 
@@ -173,4 +175,58 @@ export async function updatePlanningSettings(eventId: string, patch: Partial<Pla
   const next = { ...(await getPlanningSettings(eventId)), ...patch };
   await prisma.event.update({ where: { id: eventId }, data: { planningSettings: next } });
   return next;
+}
+
+/**
+ * Undo: a board snapshot the client held (slots + blocks, as sent earlier in a
+ * payload) -> a PlanState safe to persist for this event. Slots must sit in
+ * this event's current windows (else the snapshot is stale -> null); block
+ * references that no longer exist here are dropped rather than failing.
+ */
+export async function validateRestoreState(eventId: string, raw: unknown, current: PlanState): Promise<PlanState | null> {
+  const src = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  if (!Array.isArray(src.slots) || !Array.isArray(src.blocks) || src.slots.length > 5000 || src.blocks.length > 10000) return null;
+  const windowIds = new Set(current.windows.map((w) => w.id));
+  const [items, activities] = await Promise.all([
+    prisma.eventListItem.findMany({ where: { eventId, kind: { in: ["plan_category", "plan_leader", "plan_location"] } }, select: { id: true, kind: true } }),
+    prisma.planActivity.findMany({ where: { eventId }, select: { id: true } }),
+  ]);
+  const ofKind = (kind: string) => new Set(items.filter((i) => i.kind === kind).map((i) => i.id));
+  const [categories, leaders, locations] = [ofKind("plan_category"), ofKind("plan_leader"), ofKind("plan_location")];
+  const activityIds = new Set(activities.map((a) => a.id));
+  const id = (v: unknown) => (typeof v === "string" && v.length > 0 && v.length <= 64 ? v : null);
+  const int = (v: unknown, min: number, max: number) => (Number.isInteger(v) && (v as number) >= min && (v as number) <= max ? (v as number) : null);
+  const text = (v: unknown) => (typeof v === "string" ? v.slice(0, 5000) : null);
+  const ref = (v: unknown, allowed: Set<string>) => (typeof v === "string" && allowed.has(v) ? v : null);
+
+  const slots: PlanSlotRow[] = [];
+  for (const s of src.slots as Record<string, unknown>[]) {
+    const slotId = id(s?.id);
+    const durationMin = int(s?.durationMin, 5, 24 * 60);
+    const position = int(s?.position, 0, 100000);
+    if (!slotId || durationMin === null || position === null) return null;
+    if (typeof s.windowId !== "string" || !windowIds.has(s.windowId)) return null; // windows changed since
+    slots.push({ id: slotId, windowId: s.windowId, durationMin, position, notes: text(s.notes) });
+  }
+  const slotIds = new Set(slots.map((s) => s.id));
+  const blocks: PlanBlockRow[] = [];
+  for (const b of src.blocks as Record<string, unknown>[]) {
+    const blockId = id(b?.id);
+    const branchOrder = int(b?.branchOrder, 0, 1000);
+    if (!blockId || branchOrder === null || typeof b.slotId !== "string" || !slotIds.has(b.slotId)) return null;
+    blocks.push({
+      id: blockId,
+      slotId: b.slotId,
+      branchOrder,
+      activityId: ref(b.activityId, activityIds),
+      customName: text(b.customName),
+      description: text(b.description),
+      categories: readCategoryShares(b.categories).filter((c) => categories.has(c.categoryId)),
+      leaderId: ref(b.leaderId, leaders),
+      locationId: ref(b.locationId, locations),
+      notes: text(b.notes),
+      groupNames: Array.isArray(b.groupNames) ? b.groupNames.filter((g): g is string => typeof g === "string").slice(0, 50) : [],
+    });
+  }
+  return { windows: current.windows, slots, blocks };
 }

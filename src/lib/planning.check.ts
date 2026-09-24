@@ -4,6 +4,7 @@ import type { PlanBlockRow, PlanState } from "@/lib/planning";
 import { byPosition, categoryMinutes, computeTimes, findConflicts, mainCategorySegments, summarize } from "@/lib/planning-engine";
 import { applyOp } from "@/lib/planning-moves";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
+import { DEFAULT_DISPLAY, sanitizeDisplay } from "@/lib/planning";
 import { buildSheetModel, DEFAULT_SHEET_STYLE, sanitizeSheetStyle, tint } from "@/lib/planning-sheet";
 
 let n = 0;
@@ -139,9 +140,15 @@ assert.equal(order(applyOp(base, { op: "deleteBlock", blockId: "a1" }, newId), "
 
 // User UI prefs: unknown keys dropped, numbers clamped, wrong types ignored.
 assert.deepEqual(
-  sanitizeUiPrefs({ planningLibraryWidth: 9999, planningCardDescriptionChars: 3, planningCardShowMeta: false, planningCardShowGroups: "yes", evil: 1 }),
-  { planningLibraryWidth: 640, planningCardDescriptionChars: 10, planningCardShowMeta: false }
+  sanitizeUiPrefs({ planningLibraryWidth: 9999, planningCardShowMeta: false, evil: 1 }),
+  { planningLibraryWidth: 640 }
 );
+assert.deepEqual(sanitizeDisplay({ descriptionChars: 3, showMeta: false, showGroups: "yes", undoSteps: 500 }), {
+  ...DEFAULT_DISPLAY,
+  descriptionChars: 10,
+  showMeta: false,
+  undoSteps: 50,
+});
 
 // Sheet model: title+header rows, days and parallel times merged, organisation
 // rows tinted with their category color, leader cells with the leader color,

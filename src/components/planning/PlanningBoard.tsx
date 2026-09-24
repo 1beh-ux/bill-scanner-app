@@ -90,12 +90,21 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
   function runOp(serverOp: ServerOp, local: PlanOp) {
     const current = payloadRef.current;
     if (!current) return;
+    let next: PlanState;
     try {
-      commit({ ...current, ...applyOp(stateOf(current), local, () => `tmp-${crypto.randomUUID()}`) });
+      next = applyOp(stateOf(current), local, () => `tmp-${crypto.randomUUID()}`);
     } catch (err) {
       if (err instanceof PlanOpError) setError(t(err.message === "window_fixed" ? "planBoard.errorFixedWindow" : "planBoard.errorStale"));
       return;
     }
+    pushUndo();
+    commit({ ...current, ...next });
+    send(serverOp);
+  }
+
+  // Requests go out one at a time, in order; the fresh payload is adopted once
+  // nothing later is still in flight.
+  function send(serverOp: ServerOp | { op: "restore"; state: Pick<PlanState, "slots" | "blocks"> }, onFail?: () => void) {
     pending.current++;
     queue.current = queue.current.then(async () => {
       const res = await fetch(`/api/events/${eventId}/planning/ops`, {
@@ -106,13 +115,58 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
       const next = res?.ok ? ((await res.json()) as PlanPayload) : null;
       pending.current--;
       if (!next) {
-        setError(t("planBoard.errorStale"));
+        onFail?.();
+        setError(t(onFail ? "planBoard.errorUndoStale" : "planBoard.errorStale"));
         if (pending.current === 0) await reload();
       } else if (pending.current === 0) {
         commit(next);
       }
     });
   }
+
+  // ---- undo --------------------------------------------------------------------
+  // Snapshots of slots+blocks taken before each board change; undo restores the
+  // last one on the server (op "restore"). Depth per event (Nastavení akce ->
+  // Plánování). Day/window edits clear it -- older snapshots may point at
+  // windows that no longer exist. Lives in the page only (a reload clears it).
+  const undoStack = useRef<PlanState[]>([]);
+  const [undoCount, setUndoCount] = useState(0);
+  function pushUndo() {
+    const current = payloadRef.current;
+    if (!current) return;
+    undoStack.current = [...undoStack.current, stateOf(current)].slice(-current.display.undoSteps);
+    setUndoCount(undoStack.current.length);
+  }
+  function clearUndo() {
+    undoStack.current = [];
+    setUndoCount(0);
+  }
+  function undo() {
+    const current = payloadRef.current;
+    const snapshot = undoStack.current.at(-1);
+    if (!current || !snapshot) return;
+    undoStack.current = undoStack.current.slice(0, -1);
+    setUndoCount(undoStack.current.length);
+    commit({ ...current, slots: snapshot.slots, blocks: snapshot.blocks });
+    send({ op: "restore", state: { slots: snapshot.slots, blocks: snapshot.blocks } }, clearUndo);
+  }
+  const undoRef = useRef(undo);
+  useEffect(() => {
+    undoRef.current = undo;
+  });
+  // Ctrl/Cmd+Z on the board -- not while typing or with a panel open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== "z") return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      if (document.querySelector("[data-planning-panel]")) return;
+      e.preventDefault();
+      undoRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // ---- drag & drop ---------------------------------------------------------
   const sensors = useSensors(
@@ -314,6 +368,15 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
         </h1>
         <div className="flex items-center gap-3">
           <p className="text-[12px] text-ink-secondary">{t("planBoard.copyHint")}</p>
+          <button
+            onClick={undo}
+            disabled={undoCount === 0}
+            title={t("planBoard.undoHint", { count: String(undoCount) })}
+            className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist disabled:opacity-40"
+          >
+            ↶ {t("planBoard.undo")}
+            {undoCount > 0 && <span className="ml-1 text-[11px] text-ink-secondary">({undoCount})</span>}
+          </button>
           <a href={`/events/${eventId}/planning/import`} className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist">
             {t("planImport.title")}
           </a>
@@ -351,7 +414,10 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
           payload={view}
           selectedDayId={selectedDayId}
           onSelect={setSelectedDayId}
-          onPayload={commit}
+          onPayload={(next, dayId) => {
+            clearUndo(); // days/windows changed: older snapshots may reference gone windows
+            commit(next, dayId);
+          }}
           onError={setError}
         />
 
@@ -397,7 +463,6 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
                 onDeleteSlot={deleteSlot}
                 onDeleteBlock={deleteBlock}
                 onEditBlock={setEditingBlockId}
-                cardPrefs={prefs}
               />
             ) : (
               <div className="rounded-lg border border-dashed border-mist p-8 text-center text-[14px] text-ink-secondary">
@@ -421,6 +486,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             defaultDayId={selectedDayId}
             onClose={() => setCreating(false)}
             onSaved={(next) => commit(next)}
+            onBeforeChange={pushUndo}
             onResize={commitResize}
             onDelete={deleteBlock}
             onMove={() => {}}
@@ -437,6 +503,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             time={times.slots[view.blocks.find((b) => b.id === editingBlockId)?.slotId ?? ""]}
             onClose={() => setEditingBlockId(null)}
             onSaved={(next) => commit(next)}
+            onBeforeChange={pushUndo}
             onResize={commitResize}
             onDelete={deleteBlock}
             onMove={(id, target, copy) => {

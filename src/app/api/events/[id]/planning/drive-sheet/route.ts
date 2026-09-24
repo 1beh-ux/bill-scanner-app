@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createManifestSheet, toDriveError, writeFormattedSheet } from "@/lib/drive";
-import { getCurrentUser } from "@/lib/auth";
-import { buildSheetModel, sheetInputFromPayload } from "@/lib/planning-sheet";
-import { sanitizeUiPrefs, UI_PREF_DEFAULTS } from "@/lib/ui-prefs";
+import { buildSheetModel, sanitizeSheetStyle, sheetInputFromPayload } from "@/lib/planning-sheet";
 import { httpStatusForDriveError } from "@/lib/drive-errors";
 import { authorizePlanning, getPlanningSettings, loadPlanPayload, updatePlanningSettings } from "@/lib/planning-server";
 
@@ -24,7 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // in the event's Drive export folder -- same folder and one-way pattern as
 // Mail's status export. Created on first export, overwritten in place
 // afterwards so the link stays stable; recreated if deleted or unshared. The
-// design is the exporting user's own (Nastavení -> vzhled exportu).
+// design is the event's (Nastavení akce -> Plánování).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = await params;
   const denied = await authorizePlanning(eventId);
@@ -33,8 +31,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, driveExportFolderId: true } });
   if (!event.driveExportFolderId) return NextResponse.json({ error: "no_export_folder" }, { status: 409 });
 
-  const [payload, settings, user] = await Promise.all([loadPlanPayload(eventId), getPlanningSettings(eventId), getCurrentUser()]);
-  const style = sanitizeUiPrefs(user?.uiPrefs).planningSheetStyle ?? UI_PREF_DEFAULTS.planningSheetStyle;
+  const [payload, settings] = await Promise.all([loadPlanPayload(eventId), getPlanningSettings(eventId)]);
+  const style = sanitizeSheetStyle(settings.sheetStyle);
   const model = buildSheetModel(sheetInputFromPayload(payload), style);
 
   try {

@@ -42,6 +42,7 @@ export default function BlockEditor({
   onMove,
   onCreate,
   defaultDayId,
+  onBeforeChange,
 }: {
   eventId: string;
   payload: PlanPayload;
@@ -54,6 +55,7 @@ export default function BlockEditor({
   onMove: (blockId: string, target: MoveTarget, copy: boolean) => void;
   onCreate?: (input: NewActivityInput) => Promise<boolean>;
   defaultDayId?: string | null;
+  onBeforeChange?: () => void; // board undo snapshot
 }) {
   const isNew = blockId === null;
   const { t } = useTranslations();
@@ -132,6 +134,7 @@ export default function BlockEditor({
 
   async function save(then?: () => void) {
     if (isNew) return create();
+    onBeforeChange?.();
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/events/${eventId}/planning/blocks/${blockId}`, {
@@ -199,7 +202,7 @@ export default function BlockEditor({
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
+    <div data-planning-panel className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
       <div className="flex h-full w-full max-w-md flex-col gap-3 overflow-y-auto bg-paper p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[17px] font-semibold text-ink">{t(isNew ? "planBoard.newActivity" : "planBoard.editActivity")}</h2>

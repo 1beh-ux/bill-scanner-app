@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { authorizePlanning, loadPlanPayload, loadPlanState, persistPlanDiff } from "@/lib/planning-server";
+import { authorizePlanning, loadPlanPayload, loadPlanState, persistPlanDiff, validateRestoreState } from "@/lib/planning-server";
 import { importBaseActivities, isEventListItem, validateCategoryShares } from "@/lib/planning-activities";
 import { MIN_SLOT_MINUTES, readCategoryShares } from "@/lib/planning";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
@@ -103,6 +103,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (denied) return denied;
 
   const body = await req.json().catch(() => ({}));
+
+  // Undo: put the board back to a snapshot the client kept (see validateRestoreState).
+  if (body.op === "restore") {
+    let stale = false;
+    await prisma.$transaction(async (tx) => {
+      const { state } = await loadPlanState(eventId, tx);
+      const restored = await validateRestoreState(eventId, body.state, state);
+      if (!restored) {
+        stale = true;
+        return;
+      }
+      await persistPlanDiff(tx, state, restored);
+    });
+    if (stale) return NextResponse.json({ error: "stale" }, { status: 409 });
+    return NextResponse.json(await loadPlanPayload(eventId));
+  }
+
   const op = await parseOp(eventId, body);
   if (!op) return NextResponse.json({ error: "invalid_op" }, { status: 400 });
 

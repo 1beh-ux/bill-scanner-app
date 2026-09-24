@@ -134,6 +134,7 @@ export type PlanPayload = PlanState & {
   baseActivities: PlanListItem<PlanBaseActivityData>[];
   // Distinct Participant.groupName values of the event, plus any still used on blocks.
   groups: string[];
+  display: PlanDisplaySettings;
 };
 
 
@@ -147,7 +148,35 @@ export type PlanningSettings = {
   imports?: Partial<Record<PlanImportTarget, PlanImportConnection>>;
   exportSheetId?: string;
   exportSyncedAt?: string;
+  display?: PlanDisplaySettings;
+  sheetStyle?: import("@/lib/planning-sheet").SheetStyle; // Google Sheet export design
 };
+
+// Per-event board display (Nastavení akce -> Plánování): what activity cards
+// show besides the always-full name, and how many undo steps the board keeps.
+export type PlanDisplaySettings = {
+  showDescription: boolean;
+  descriptionChars: number;
+  showMeta: boolean; // leader · location
+  showGroups: boolean;
+  undoSteps: number;
+};
+export const DEFAULT_DISPLAY: PlanDisplaySettings = { showDescription: true, descriptionChars: 120, showMeta: true, showGroups: true, undoSteps: 10 };
+
+/** Untrusted input -> complete display settings (bad values -> defaults, numbers clamped). */
+export function sanitizeDisplay(input: unknown): PlanDisplaySettings {
+  const src = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  const bool = (k: keyof PlanDisplaySettings) => (typeof src[k] === "boolean" ? (src[k] as boolean) : (DEFAULT_DISPLAY[k] as boolean));
+  const num = (k: keyof PlanDisplaySettings, min: number, max: number) =>
+    typeof src[k] === "number" && Number.isFinite(src[k]) ? Math.round(Math.min(max, Math.max(min, src[k] as number))) : (DEFAULT_DISPLAY[k] as number);
+  return {
+    showDescription: bool("showDescription"),
+    descriptionChars: num("descriptionChars", 10, 1000),
+    showMeta: bool("showMeta"),
+    showGroups: bool("showGroups"),
+    undoSteps: num("undoSteps", 1, 50),
+  };
+}
 
 /** Name shortened to `max` characters for cards (full name goes in a tooltip). */
 export function clipName(name: string, max: number): string {
