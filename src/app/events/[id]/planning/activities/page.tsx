@@ -18,6 +18,7 @@ type Activity = {
   energyLevel: string | null;
   repeatable: boolean;
   active: boolean;
+  templateStatus?: "template" | "modified" | "local";
 };
 type ListItem = { id: string; name: string; data: PlanCategoryData | null };
 type Form = Omit<Activity, "id" | "active">;
@@ -43,7 +44,9 @@ const btnSecondary =
 
 export default function PlanningActivitiesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
+  const isAdmin = role === "admin";
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const confirm = useConfirm();
 
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -57,6 +60,23 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  // Admin: event activities -> org base library (create or update the template).
+  async function toTemplates(ids: string[]) {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/events/${eventId}/planning/activities/to-templates`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ activityIds: ids }),
+    });
+    setBusy(false);
+    if (!res.ok) return setError(t("planActivities.errorSaveFailed"));
+    const { created, updated } = (await res.json()) as { created: number; updated: number };
+    setMessage(t("planActivities.templatesSaved", { created: String(created), updated: String(updated) }));
+    setSelected(new Set());
+    load();
+  }
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -292,13 +312,37 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
         </form>
       )}
 
+      {isAdmin && selected.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 text-[13px]">
+          <button onClick={() => toTemplates([...selected])} disabled={busy} className={btnSecondary}>
+            {t("planActivities.selectedToTemplates", { count: String(selected.size) })}
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-ink-secondary hover:underline">
+            {t("common.cancel")}
+          </button>
+        </div>
+      )}
+
       {activities.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">{t("planActivities.empty")}</p>
       ) : (
         <ul className="list-none p-0">
           {activities.map((a) => (
             <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-mist/60 py-2.5">
-              <div className={"min-w-0 " + (a.active ? "" : "opacity-50")}>
+              {isAdmin && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(a.id)}
+                  onChange={(e) => {
+                    const next = new Set(selected);
+                    if (e.target.checked) next.add(a.id);
+                    else next.delete(a.id);
+                    setSelected(next);
+                  }}
+                  aria-label={a.name}
+                />
+              )}
+              <div className={"min-w-0 flex-1 " + (a.active ? "" : "opacity-50")}>
                 <div className="flex items-center gap-2 text-[14px] text-ink">
                   {colorOf(a) && (
                     <span className="inline-block h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: colorOf(a) }} aria-hidden="true" />
@@ -306,6 +350,21 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
                   <span className={a.active ? "" : "line-through"}>{a.name}</span>
                   <span className="text-[12px] text-ink-secondary">{a.defaultDurationMin} min</span>
                   {a.repeatable && <span className="text-[12px] text-ink-secondary">↻</span>}
+                  {a.templateStatus && (
+                    <span
+                      className={
+                        "rounded-full px-2 py-0.5 text-[11px] " +
+                        (a.templateStatus === "template"
+                          ? "bg-pine-bg text-pine"
+                          : a.templateStatus === "modified"
+                          ? "bg-amber-100 text-amber-800"
+                          : "bg-mist text-ink-secondary")
+                      }
+                      title={t(`planActivities.status.${a.templateStatus}Hint`)}
+                    >
+                      {t(`planActivities.status.${a.templateStatus}`)}
+                    </span>
+                  )}
                 </div>
                 <div className="text-[12px] text-ink-secondary">
                   {[
@@ -321,6 +380,11 @@ export default function PlanningActivitiesPage({ params }: { params: Promise<{ i
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {isAdmin && a.templateStatus !== "template" && (
+                  <button onClick={() => toTemplates([a.id])} disabled={busy} className="text-[12px] text-ember hover:underline">
+                    {t(a.templateStatus === "modified" ? "planActivities.updateTemplate" : "planActivities.saveTemplate")}
+                  </button>
+                )}
                 <button onClick={() => patch(a, { active: !a.active })} className="text-[12px] text-ink-secondary hover:text-ink">
                   {a.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
                 </button>

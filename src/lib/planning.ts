@@ -41,7 +41,7 @@ export function baseActivityCategories(d: PlanBaseActivityData): { name: string;
 }
 
 export type PlanLocationData = { capacity?: number; notes?: string };
-export type PlanLeaderData = { role?: string; phone?: string; notes?: string };
+export type PlanLeaderData = { role?: string; phone?: string; notes?: string; color?: string };
 // `id` only when editing an existing day's windows (never stored in a template).
 export type PlanDayTemplateWindow = { id?: string; name: string; startMin: number; endMin: number; kind: PlanWindowKind };
 export type PlanDayTemplateData = { windows?: PlanDayTemplateWindow[] };

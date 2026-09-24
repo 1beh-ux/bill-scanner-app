@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authorizePlanning, loadPlanPayload, loadPlanState, persistPlanDiff } from "@/lib/planning-server";
-import { importBaseActivities } from "@/lib/planning-activities";
-import { readCategoryShares } from "@/lib/planning";
+import { importBaseActivities, isEventListItem, validateCategoryShares } from "@/lib/planning-activities";
+import { MIN_SLOT_MINUTES, readCategoryShares } from "@/lib/planning";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
 
 const isStr = (v: unknown): v is string => typeof v === "string" && v.length > 0;
@@ -16,9 +16,40 @@ function parseTarget(t: unknown): MoveTarget | null {
   return null;
 }
 
+// A new activity typed on the board ("+ Nová aktivita"): every reference
+// validated like the side panel's PATCH; activityId optionally links it to a
+// library activity that was just created for it.
+async function resolveInline(eventId: string, inline: Record<string, unknown>) {
+  const name = typeof inline.name === "string" ? inline.name.trim() : "";
+  const durationMin = Number(inline.durationMin);
+  if (!name || !Number.isInteger(durationMin) || durationMin < MIN_SLOT_MINUTES || durationMin > 24 * 60) return null;
+  const categories = await validateCategoryShares(eventId, inline.categories ?? []);
+  if (!categories) return null;
+  for (const [key, kind] of [["leaderId", "plan_leader"], ["locationId", "plan_location"]] as const) {
+    const v = inline[key];
+    if (v !== null && v !== undefined && (typeof v !== "string" || !(await isEventListItem(eventId, v, kind)))) return null;
+  }
+  const activity = typeof inline.activityId === "string" ? await prisma.planActivity.findFirst({ where: { id: inline.activityId, eventId } }) : null;
+  if (inline.activityId && !activity) return null;
+  const text = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 5000) : null);
+  const groupNames = Array.isArray(inline.groupNames) ? inline.groupNames.filter((g): g is string => typeof g === "string" && !!g.trim()).slice(0, 50) : [];
+  const block: BlockFields = {
+    activityId: activity?.id ?? null,
+    customName: activity && activity.name === name ? null : name,
+    description: text(inline.description),
+    categories,
+    leaderId: (inline.leaderId as string | null | undefined) ?? null,
+    locationId: (inline.locationId as string | null | undefined) ?? null,
+    notes: text(inline.notes),
+    groupNames,
+  };
+  return { durationMin, block };
+}
+
 // Library drops send a source, not block fields -- the block is built here from
 // the event's own activity (a base-library item is imported first).
 async function resolveInsert(eventId: string, source: Record<string, unknown>) {
+  if (source.inline && typeof source.inline === "object") return resolveInline(eventId, source.inline as Record<string, unknown>);
   let activityId = isStr(source.activityId) ? source.activityId : null;
   if (!activityId && isStr(source.baseTemplateId)) {
     activityId = (await importBaseActivities(eventId, [source.baseTemplateId])).idsByTemplate[source.baseTemplateId] ?? null;

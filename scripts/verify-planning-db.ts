@@ -17,7 +17,7 @@ import { scheduleDays, scheduleRows } from "../src/lib/planning-export";
 import { scheduleHtml } from "../src/lib/planning-pdf";
 import { runImport } from "../src/lib/planning-import-run";
 import { applyOp, type PlanOp } from "../src/lib/planning-moves";
-import { copyActivitiesFromEvent, importBaseActivities, parseActivityInput } from "../src/lib/planning-activities";
+import { copyActivitiesFromEvent, importBaseActivities, parseActivityInput, saveActivitiesAsTemplates, templateStatuses } from "../src/lib/planning-activities";
 import type { PlanState } from "../src/lib/planning";
 
 const norm = (s: PlanState) => ({
@@ -126,6 +126,25 @@ async function main() {
   await prisma.planDay.delete({ where: { id: day.id } });
   assert.equal(await prisma.planSlot.count(), 0);
   assert.equal(await prisma.planBlock.count(), 0);
+  // ---- Event library <-> org templates ---------------------------------------
+  {
+    const base = Object.values(imp.idsByTemplate)[0] as string;
+    const statusOf = async (id: string) => (await templateStatuses(ev.id, await prisma.planActivity.findMany({ where: { id } }))).get(id);
+    assert.equal(await statusOf(base), "template");
+    await prisma.planActivity.update({ where: { id: base }, data: { defaultDurationMin: 50 } });
+    assert.equal(await statusOf(base), "modified");
+    assert.deepEqual(await saveActivitiesAsTemplates(ev.id, [base]), { created: 0, updated: 1 });
+    assert.equal(await statusOf(base), "template");
+    assert.equal(((await prisma.listTemplate.findUniqueOrThrow({ where: { id: tpl.id } })).data as { defaultDurationMin: number }).defaultDurationMin, 50);
+    const local = await prisma.planActivity.create({ data: { eventId: ev.id, name: "Jen tady", defaultDurationMin: 20, categories: [{ categoryId: cat.id, minutes: 5 }] } });
+    assert.equal(await statusOf(local.id), "local");
+    assert.deepEqual(await saveActivitiesAsTemplates(ev.id, [local.id]), { created: 1, updated: 0 });
+    const linked = await prisma.planActivity.findUniqueOrThrow({ where: { id: local.id } });
+    const newTpl = await prisma.listTemplate.findUniqueOrThrow({ where: { id: linked.sourceTemplateId! } });
+    assert.deepEqual((newTpl.data as { categories: unknown }).categories, [{ name: "Hra", minutes: 5 }]);
+    assert.equal(await statusOf(local.id), "template");
+  }
+
   // ---- Import (runImport) on a separate event --------------------------------
   const ev3 = await mk("Import");
   const opts = { mode: "replace" as const, createMissing: true };

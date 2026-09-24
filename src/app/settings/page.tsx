@@ -5,6 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import { visibleNavSections } from "@/lib/nav-sections";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
+import SheetStyleSettings from "@/components/planning/SheetStyleSettings";
 
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
@@ -168,6 +169,12 @@ export default function SettingsPage() {
               />
             </label>
             <span className="text-[11.5px]">{t("settingsPage.planningCardsHint")}</span>
+          </fieldset>
+        )}
+        {!hiddenModules.includes("planning") && (
+          <fieldset className="flex flex-col gap-1.5 text-[13px] text-ink-secondary">
+            <legend className="mb-1">{t("sheetStyle.title")}</legend>
+            <SheetStyleSettings value={uiPrefs.planningSheetStyle} onChange={(next) => saveUiPrefs({ planningSheetStyle: next })} />
           </fieldset>
         )}
       </div>

@@ -42,6 +42,7 @@ export const IMPORT_FIELDS: Record<PlanImportTarget, ImportField[]> = {
     { key: "name", required: true, aliases: ["jmeno", "vedouci", "prezdivka", "name", "leader"] },
     { key: "role", aliases: ["role", "funkce", "pozice"] },
     { key: "phone", aliases: ["telefon", "tel", "mobil", "phone"] },
+    { key: "color", aliases: ["barva", "color", "colour"] },
     { key: "notes", aliases: ["poznamka", "poznamky", "notes", "note"] },
   ],
   locations: [

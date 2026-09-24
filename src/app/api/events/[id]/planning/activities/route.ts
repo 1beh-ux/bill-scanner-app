@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { parseActivityInput } from "@/lib/planning-activities";
+import { parseActivityInput, templateStatuses } from "@/lib/planning-activities";
 
 // Event activity library (Planning Helper). ?all=true includes inactive rows
 // (the library editor); the board uses the default, active only.
@@ -18,7 +18,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { eventId, ...(all ? {} : { active: true }) },
     orderBy: { name: "asc" },
   });
-  return NextResponse.json(activities);
+  const statuses = await templateStatuses(eventId, activities);
+  return NextResponse.json(activities.map((a) => ({ ...a, templateStatus: statuses.get(a.id) })));
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

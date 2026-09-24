@@ -118,6 +118,15 @@ export default function PlanListDataFields({
           onChange={(e) => set("role", e.target.value)}
           className={inputClass}
         />
+        <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
+          <input
+            type="color"
+            value={str("color") || "#9ca3af"}
+            onChange={(e) => set("color", e.target.value)}
+            className="h-[34px] w-12 rounded-lg border border-mist bg-paper-2"
+          />
+          {t("planLists.leaderColor")}
+        </label>
         <input
           type="tel"
           placeholder={t("planLists.phone")}

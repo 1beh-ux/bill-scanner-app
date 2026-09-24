@@ -23,7 +23,7 @@ import { useUiPrefs } from "@/lib/use-ui-prefs";
 import type { PlanState } from "@/lib/planning";
 import { computeTimes, findConflicts } from "@/lib/planning-engine";
 import { applyOp, PlanOpError, type BlockFields, type MoveTarget, type PlanOp } from "@/lib/planning-moves";
-import BlockEditor from "./BlockEditor";
+import BlockEditor, { type NewActivityInput } from "./BlockEditor";
 import DayPlan from "./DayPlan";
 import DayTabs from "./DayTabs";
 import LibraryPanel from "./LibraryPanel";
@@ -39,7 +39,9 @@ const isCopyGesture = (e: Event | null | undefined) =>
   !!e && ("altKey" in e) && ((e as KeyboardEvent).altKey || (e as KeyboardEvent).ctrlKey || (e as KeyboardEvent).metaKey);
 
 // Body sent to POST /planning/ops -- library drops send a source instead of block fields.
-type ServerOp = Exclude<PlanOp, { op: "insert" }> | { op: "insert"; target: MoveTarget; source: { activityId: string } | { baseTemplateId: string } };
+type ServerOp =
+  | Exclude<PlanOp, { op: "insert" }>
+  | { op: "insert"; target: MoveTarget; source: { activityId: string } | { baseTemplateId: string } | { inline: Record<string, unknown> } };
 
 export default function PlanningBoard({ eventId }: { eventId: string }) {
   const { t } = useTranslations();
@@ -56,6 +58,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
   const dragRef = useRef<DragData | null>(null);
   const [copyMode, setCopyMode] = useState(false);
   const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const { prefs, setLocal: setPrefsLocal, save: savePrefs } = useUiPrefs();
   const libraryResize = useRef<{ startX: number; startWidth: number } | null>(null);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -231,6 +234,39 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
     }
   }
 
+  // "+ Nová aktivita": optionally into the library, optionally straight into
+  // the plan (an inline insert, linked to the new library activity if any).
+  async function createActivity(input: NewActivityInput): Promise<boolean> {
+    const f = input.fields;
+    let activityId: string | null = null;
+    if (input.saveToLibrary) {
+      const res = await fetch(`/api/events/${eventId}/planning/activities`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: input.name,
+          defaultDurationMin: input.durationMin,
+          description: f.description,
+          categories: f.categories,
+          defaultLeaderId: f.leaderId,
+          defaultLocationId: f.locationId,
+          repeatable: input.repeatable,
+        }),
+      });
+      if (!res.ok) return false;
+      activityId = (await res.json()).id;
+    }
+    if (input.target) {
+      runOp(
+        { op: "insert", target: input.target, source: { inline: { ...f, name: input.name, durationMin: input.durationMin, activityId } } },
+        { op: "insert", target: input.target, durationMin: input.durationMin, block: { ...f, activityId, customName: input.name } }
+      );
+    } else {
+      await reload();
+    }
+    return true;
+  }
+
   async function deleteSlot(slotId: string) {
     if (!(await confirm({ message: t("planBoard.confirmDeleteSlot"), danger: true }))) return;
     const op: PlanOp = { op: "deleteSlot", slotId };
@@ -325,7 +361,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
         >
           <div className="relative lg:sticky lg:top-4 lg:self-start">
             <div className="lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              <LibraryPanel payload={view} eventId={eventId} />
+              <LibraryPanel payload={view} eventId={eventId} onNewActivity={() => setCreating(true)} />
             </div>
             {/* Drag the edge to widen the library; the width is saved to the user's account. */}
             <div
@@ -375,6 +411,22 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             <SummaryPanel eventId={eventId} payload={view} plan={plan} dayId={selectedDayId} conflicts={conflicts} />
           </div>
         </div>
+
+        {creating && (
+          <BlockEditor
+            eventId={eventId}
+            payload={view}
+            blockId={null}
+            time={undefined}
+            defaultDayId={selectedDayId}
+            onClose={() => setCreating(false)}
+            onSaved={(next) => commit(next)}
+            onResize={commitResize}
+            onDelete={deleteBlock}
+            onMove={() => {}}
+            onCreate={createActivity}
+          />
+        )}
 
         {editingBlockId && (
           <BlockEditor

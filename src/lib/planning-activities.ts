@@ -186,3 +186,88 @@ export async function copyActivitiesFromEvent(eventId: string, fromEventId: stri
   }
   return { added: toCreate.length };
 }
+
+// ---- event library <-> org base library (templates) -------------------------------
+
+type ActivityRow = Awaited<ReturnType<typeof prisma.planActivity.findMany>>[number];
+
+/** An event activity in base-library form (categories by name, as templates store them). */
+export function activityTemplateData(a: ActivityRow, categoryNames: Map<string, string>): { name: string; data: PlanBaseActivityData } {
+  return {
+    name: a.name,
+    data: {
+      defaultDurationMin: a.defaultDurationMin,
+      description: a.description ?? undefined,
+      categories: readCategoryShares(a.categories).flatMap((c) =>
+        categoryNames.has(c.categoryId) ? [{ name: categoryNames.get(c.categoryId)!, minutes: c.minutes }] : []
+      ),
+      energyLevel: a.energyLevel ?? undefined,
+      repeatable: a.repeatable,
+    },
+  };
+}
+
+// Category names compare like the import resolves them (trimmed, case-insensitive).
+const comparable = (name: string, d: PlanBaseActivityData) =>
+  JSON.stringify([
+    name.trim(),
+    d.defaultDurationMin ?? 30,
+    d.description ?? "",
+    baseActivityCategories(d).map((c) => [c.name.trim().toLowerCase(), c.minutes ?? null]),
+    d.energyLevel ?? "",
+    Boolean(d.repeatable),
+  ]);
+
+export type TemplateStatus = "template" | "modified" | "local";
+
+/** Per activity: still equal to its org template, changed since, or event-only. */
+export async function templateStatuses(eventId: string, activities: ActivityRow[]): Promise<Map<string, TemplateStatus>> {
+  const [templates, categoryNames] = await Promise.all([
+    prisma.listTemplate.findMany({
+      where: { kind: "plan_activity", id: { in: activities.map((a) => a.sourceTemplateId).filter((x): x is string => !!x) } },
+    }),
+    eventCategoryNames(eventId),
+  ]);
+  const byId = new Map(templates.map((t) => [t.id, t]));
+  return new Map(
+    activities.map((a) => {
+      const t = a.sourceTemplateId ? byId.get(a.sourceTemplateId) : undefined;
+      if (!t) return [a.id, "local"];
+      const mine = activityTemplateData(a, categoryNames);
+      return [a.id, comparable(mine.name, mine.data) === comparable(t.name, (t.data ?? {}) as PlanBaseActivityData) ? "template" : "modified"];
+    })
+  );
+}
+
+async function eventCategoryNames(eventId: string) {
+  const items = await prisma.eventListItem.findMany({ where: { eventId, kind: "plan_category" }, select: { id: true, name: true } });
+  return new Map(items.map((c) => [c.id, c.name]));
+}
+
+/**
+ * Admin: push event activities into the org base library -- update the
+ * template an activity came from, or create one and link the activity to it.
+ */
+export async function saveActivitiesAsTemplates(eventId: string, activityIds: string[]) {
+  const [activities, categoryNames] = await Promise.all([
+    prisma.planActivity.findMany({ where: { eventId, id: { in: activityIds } } }),
+    eventCategoryNames(eventId),
+  ]);
+  let created = 0;
+  let updated = 0;
+  for (const a of activities) {
+    const { name, data } = activityTemplateData(a, categoryNames);
+    const existing = a.sourceTemplateId
+      ? await prisma.listTemplate.findFirst({ where: { id: a.sourceTemplateId, kind: "plan_activity" } })
+      : null;
+    if (existing) {
+      await prisma.listTemplate.update({ where: { id: existing.id }, data: { name, data, active: true } });
+      updated++;
+    } else {
+      const t = await prisma.listTemplate.create({ data: { kind: "plan_activity", name, data } });
+      await prisma.planActivity.update({ where: { id: a.id }, data: { sourceTemplateId: t.id } });
+      created++;
+    }
+  }
+  return { created, updated };
+}

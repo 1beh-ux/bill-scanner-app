@@ -501,6 +501,89 @@ export async function readSheetValues(eventId: string, spreadsheetId: string, ra
   );
 }
 
+/**
+ * Replaces the first tab's content with a formatted grid (planning export,
+ * src/lib/planning-sheet.ts): clears values/formats/merges, then writes every
+ * cell's value + format in one updateCells request, plus merges, frozen rows
+ * and column widths -- one batchUpdate.
+ */
+export async function writeFormattedSheet(
+  eventId: string,
+  spreadsheetId: string,
+  model: {
+    rows: { v: string | number; bg?: string; color?: string; bold?: boolean; center?: boolean }[][];
+    merges: { row: number; col: number; rows: number; cols: number }[];
+    frozenRows: number;
+    colWidths: number[];
+  },
+  fontSize: number
+): Promise<void> {
+  const rgb = (hex?: string) =>
+    hex ? { red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 } : undefined;
+  await withRetry(
+    eventId,
+    async () => {
+      const sheets = await getSheetsClient(eventId);
+      const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties(sheetId,gridProperties)" });
+      const props = meta.data.sheets?.[0]?.properties;
+      const sheetId = props?.sheetId ?? 0;
+      const needRows = model.rows.length;
+      const needCols = Math.max(...model.rows.map((r) => r.length), 1);
+      const whole = { sheetId, startRowIndex: 0, startColumnIndex: 0 };
+      await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          requests: [
+            // Grow the grid if needed, then wipe the previous export entirely.
+            ...(needRows > (props?.gridProperties?.rowCount ?? 0)
+              ? [{ appendDimension: { sheetId, dimension: "ROWS", length: needRows - (props?.gridProperties?.rowCount ?? 0) } }]
+              : []),
+            ...(needCols > (props?.gridProperties?.columnCount ?? 0)
+              ? [{ appendDimension: { sheetId, dimension: "COLUMNS", length: needCols - (props?.gridProperties?.columnCount ?? 0) } }]
+              : []),
+            { unmergeCells: { range: whole } },
+            { updateCells: { range: whole, fields: "userEnteredValue,userEnteredFormat" } },
+            {
+              updateCells: {
+                start: { sheetId, rowIndex: 0, columnIndex: 0 },
+                fields: "userEnteredValue,userEnteredFormat",
+                rows: model.rows.map((row) => ({
+                  values: row.map((c) => ({
+                    userEnteredValue: typeof c.v === "number" ? { numberValue: c.v } : { stringValue: c.v },
+                    userEnteredFormat: {
+                      backgroundColor: rgb(c.bg),
+                      textFormat: { bold: !!c.bold, fontSize, foregroundColor: rgb(c.color) },
+                      horizontalAlignment: c.center ? "CENTER" : "LEFT",
+                      verticalAlignment: "MIDDLE",
+                      wrapStrategy: "WRAP",
+                    },
+                  })),
+                })),
+              },
+            },
+            ...model.merges.map((m) => ({
+              mergeCells: {
+                mergeType: "MERGE_ALL",
+                range: { sheetId, startRowIndex: m.row, endRowIndex: m.row + m.rows, startColumnIndex: m.col, endColumnIndex: m.col + m.cols },
+              },
+            })),
+            { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: model.frozenRows } }, fields: "gridProperties.frozenRowCount" } },
+            ...model.colWidths.map((px, i) => ({
+              updateDimensionProperties: {
+                range: { sheetId, dimension: "COLUMNS", startIndex: i, endIndex: i + 1 },
+                properties: { pixelSize: px },
+                fields: "pixelSize",
+              },
+            })),
+          ],
+        },
+      });
+    },
+    `write formatted sheet ${spreadsheetId}`,
+    { purpose: "write" }
+  );
+}
+
 /** Tab (sheet) titles of a spreadsheet, in order. Same sharing requirement as readSheetValues. */
 export async function listSheetTabs(eventId: string, spreadsheetId: string): Promise<string[]> {
   return withRetry(

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createManifestSheet, toDriveError, writeManifestValues } from "@/lib/drive";
+import { createManifestSheet, toDriveError, writeFormattedSheet } from "@/lib/drive";
+import { getCurrentUser } from "@/lib/auth";
+import { buildSheetModel, sheetInputFromPayload } from "@/lib/planning-sheet";
+import { sanitizeUiPrefs, UI_PREF_DEFAULTS } from "@/lib/ui-prefs";
 import { httpStatusForDriveError } from "@/lib/drive-errors";
 import { authorizePlanning, getPlanningSettings, loadPlanPayload, updatePlanningSettings } from "@/lib/planning-server";
-import { CSV_HEADER, rowCells, scheduleRows } from "@/lib/planning-export";
 
 const sheetUrl = (id: string) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
 
@@ -18,10 +20,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 }
 
-// Whole-event schedule as a Google Sheet in the event's Drive export folder
-// (same folder and one-way pattern as Mail's status export). Created on first
-// export, overwritten in place afterwards so the link stays stable; recreated
-// if the stored sheet was deleted or unshared.
+// Whole-event schedule as a designed Google Sheet (src/lib/planning-sheet.ts)
+// in the event's Drive export folder -- same folder and one-way pattern as
+// Mail's status export. Created on first export, overwritten in place
+// afterwards so the link stays stable; recreated if deleted or unshared. The
+// design is the exporting user's own (Nastavení -> vzhled exportu).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = await params;
   const denied = await authorizePlanning(eventId);
@@ -30,21 +33,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, driveExportFolderId: true } });
   if (!event.driveExportFolderId) return NextResponse.json({ error: "no_export_folder" }, { status: 409 });
 
-  const payload = await loadPlanPayload(eventId);
-  const rows = [CSV_HEADER, ...scheduleRows(payload).map(rowCells)];
-  const settings = await getPlanningSettings(eventId);
+  const [payload, settings, user] = await Promise.all([loadPlanPayload(eventId), getPlanningSettings(eventId), getCurrentUser()]);
+  const style = sanitizeUiPrefs(user?.uiPrefs).planningSheetStyle ?? UI_PREF_DEFAULTS.planningSheetStyle;
+  const model = buildSheetModel(sheetInputFromPayload(payload), style);
 
   try {
     let sheetId = settings.exportSheetId;
     if (sheetId) {
       try {
-        await writeManifestValues(eventId, sheetId, rows);
+        await writeFormattedSheet(eventId, sheetId, model, style.fontSize);
       } catch (err) {
         if ((await toDriveError(eventId, err, { purpose: "write" })).code !== "not_found_or_no_access") throw err;
         sheetId = undefined;
       }
     }
-    if (!sheetId) sheetId = await createManifestSheet(eventId, event.driveExportFolderId, `${event.name} – program`, rows);
+    if (!sheetId) {
+      sheetId = await createManifestSheet(eventId, event.driveExportFolderId, `${event.name} – program`, [[""]]);
+      await writeFormattedSheet(eventId, sheetId, model, style.fontSize);
+    }
 
     const syncedAt = new Date().toISOString();
     await updatePlanningSettings(eventId, { exportSheetId: sheetId, exportSyncedAt: syncedAt });

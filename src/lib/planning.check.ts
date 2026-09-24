@@ -4,6 +4,7 @@ import type { PlanBlockRow, PlanState } from "@/lib/planning";
 import { byPosition, categoryMinutes, computeTimes, findConflicts, summarize } from "@/lib/planning-engine";
 import { applyOp } from "@/lib/planning-moves";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
+import { buildSheetModel, DEFAULT_SHEET_STYLE, sanitizeSheetStyle, tint } from "@/lib/planning-sheet";
 
 let n = 0;
 const newId = () => `new${++n}`;
@@ -131,6 +132,46 @@ assert.deepEqual(
   sanitizeUiPrefs({ planningLibraryWidth: 9999, planningCardDescriptionChars: 3, planningCardShowMeta: false, planningCardShowGroups: "yes", evil: 1 }),
   { planningLibraryWidth: 640, planningCardDescriptionChars: 10, planningCardShowMeta: false }
 );
+
+// Sheet model: title+header rows, days and parallel times merged, organisation
+// rows tinted with their category color, leader cells with the leader color,
+// one minutes column per analysed main category.
+{
+  const r = (activity: string, extra: Record<string, unknown> = {}) =>
+    ({ activity, description: "", leader: "", leaderId: null, location: "", groups: "", secondaryCategory: "", notes: "", categoryMinutes: {}, mainCategoryIds: [], ...extra }) as never;
+  const model = buildSheetModel(
+    {
+      eventName: "Tábor",
+      days: [{ id: "d", label: "Den 1", date: null, theme: null, windows: [{ name: "w", start: "", end: "", slots: [
+        { start: "08:00", end: "08:30", startMin: 0, durationMin: 30, branches: [r("Snídaně", { mainCategoryIds: ["org"] })] },
+        { start: "09:00", end: "10:00", startMin: 0, durationMin: 60, branches: [
+          r("A", { leader: "Tom", leaderId: "tom", mainCategoryIds: ["t"], categoryMinutes: { t: 60 } }),
+          r("B", { mainCategoryIds: ["t", "p"], categoryMinutes: { t: 20, p: 40 } }),
+        ] },
+      ] }] }],
+      categories: [
+        { id: "t", name: "Teorie", color: "#0000ff", group: "primary", counted: true },
+        { id: "p", name: "Praxe", color: "#00ff00", group: "primary", counted: true },
+        { id: "org", name: "Org", color: "#ff0000", group: "primary", counted: false },
+      ],
+      leaderColors: { tom: "#000000" },
+    },
+    { ...DEFAULT_SHEET_STYLE, showDescription: false, showLocation: false, zebra: false }
+  );
+  assert.deepEqual(model.rows[1].map((c) => c.v), ["Den", "Čas", "Aktivita", "Vedoucí", "Teorie", "Praxe"]);
+  assert.deepEqual(model.rows.slice(2).map((row) => row.slice(1).map((c) => c.v)), [
+    ["08:00–08:30", "Snídaně", "", "", ""],
+    ["09:00–10:00", "A", "Tom", 60, ""],
+    ["09:00–10:00", "B", "", 20, 40],
+  ]);
+  assert.deepEqual(model.merges.slice(1), [{ row: 3, col: 1, rows: 2, cols: 1 }, { row: 2, col: 0, rows: 3, cols: 1 }]);
+  assert.equal(model.rows[2][2].bg, tint("#ff0000", 0.55)); // organisation row
+  assert.equal(model.rows[3][3].bg, tint("#000000", 0.45)); // leader cell
+  assert.equal(model.rows[3][2].bg, undefined);
+  assert.deepEqual(sanitizeSheetStyle({ fontSize: 99, titleBg: "red", zebra: "x", headerBg: "#ABCDEF" }).fontSize, 14);
+  assert.equal(sanitizeSheetStyle({ titleBg: "red", headerBg: "#ABCDEF" }).titleBg, DEFAULT_SHEET_STYLE.titleBg);
+  assert.equal(sanitizeSheetStyle({ headerBg: "#ABCDEF" }).headerBg, "#abcdef");
+}
 
 // Input state is never mutated.
 assert.equal(order(base, "am"), "ABC");

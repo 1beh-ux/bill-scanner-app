@@ -22,6 +22,7 @@ export type ScheduleRow = {
   primaryColor: string | null; // first main category's color
   secondaryCategory: string;
   categoryMinutes: Record<string, number>; // categoryId -> minutes (per categoryMinutes())
+  mainCategoryIds: string[]; // in the block's order
   leader: string;
   leaderId: string | null;
   location: string;
@@ -46,6 +47,7 @@ export function categoryColumns(p: PlanPayload, shares: PlanCategoryShare[], dur
     primaryColor: mainCategoryColor(p.categories, shares),
     secondaryCategory: label("secondary"),
     categoryMinutes: Object.fromEntries(minutes),
+    mainCategoryIds: shares.filter((s) => groupOf(s.categoryId) === "primary").map((s) => s.categoryId),
   };
 }
 

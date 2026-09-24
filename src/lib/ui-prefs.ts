@@ -1,3 +1,5 @@
+import { DEFAULT_SHEET_STYLE, sanitizeSheetStyle, type SheetStyle } from "@/lib/planning-sheet";
+
 // Per-user UI preferences (User.uiPrefs), saved through PATCH /api/me so they
 // follow the person across devices. Every key is optional; readers fall back
 // to the defaults below.
@@ -8,6 +10,7 @@ export type UiPrefs = {
   planningCardDescriptionChars?: number;
   planningCardShowMeta?: boolean; // leader · location
   planningCardShowGroups?: boolean;
+  planningSheetStyle?: SheetStyle; // Google Sheet export design (src/lib/planning-sheet.ts)
 };
 
 export const UI_PREF_DEFAULTS: Required<UiPrefs> = {
@@ -16,6 +19,7 @@ export const UI_PREF_DEFAULTS: Required<UiPrefs> = {
   planningCardDescriptionChars: 120,
   planningCardShowMeta: true,
   planningCardShowGroups: true,
+  planningSheetStyle: DEFAULT_SHEET_STYLE,
 };
 const NUMBER_LIMITS: Partial<Record<keyof UiPrefs, [number, number]>> = {
   planningLibraryWidth: [180, 640],
@@ -33,5 +37,7 @@ export function sanitizeUiPrefs(input: unknown): UiPrefs {
     if (typeof v === "number" && Number.isFinite(v)) out[key] = Math.round(Math.min(max, Math.max(min, v)));
   }
   for (const key of BOOLEAN_KEYS) if (typeof src[key] === "boolean") out[key] = src[key] as boolean;
-  return out as UiPrefs;
+  const result = out as UiPrefs;
+  if (src.planningSheetStyle !== undefined) result.planningSheetStyle = sanitizeSheetStyle(src.planningSheetStyle);
+  return result;
 }

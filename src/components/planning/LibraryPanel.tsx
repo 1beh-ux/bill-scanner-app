@@ -8,7 +8,7 @@ import type { DragData, PlanPayload } from "./types";
 
 const REMAINING_KEY = "planning.libraryRemainingOnly";
 
-export default function LibraryPanel({ payload, eventId }: { payload: PlanPayload; eventId: string }) {
+export default function LibraryPanel({ payload, eventId, onNewActivity }: { payload: PlanPayload; eventId: string; onNewActivity: () => void }) {
   const { t } = useTranslations();
   const [query, setQuery] = useState("");
   const [remainingOnly, setRemainingOnly] = useState(false);
@@ -42,9 +42,14 @@ export default function LibraryPanel({ payload, eventId }: { payload: PlanPayloa
     <aside className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className="text-[14px] font-semibold text-ink">{t("planActivities.title")}</h2>
-        <a href={`/events/${eventId}/planning/activities`} className="text-[12px] text-ember hover:underline">
-          {t("common.edit")}
-        </a>
+        <div className="flex gap-3">
+          <button onClick={onNewActivity} className="text-[12px] text-ember hover:underline">
+            {t("planBoard.newActivityShort")}
+          </button>
+          <a href={`/events/${eventId}/planning/activities`} className="text-[12px] text-ember hover:underline">
+            {t("common.edit")}
+          </a>
+        </div>
       </div>
       <input
         type="search"

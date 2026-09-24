@@ -19,9 +19,17 @@ type Fields = Pick<
   "activityId" | "customName" | "description" | "categories" | "leaderId" | "locationId" | "notes" | "groupNames"
 >;
 
-// Side panel for one scheduled block (step 6). Fields are the block's own
-// snapshot; picking another activity refills them from that activity's
-// defaults, like the original tool did.
+export type NewActivityInput = {
+  name: string;
+  durationMin: number;
+  fields: Fields;
+  saveToLibrary: boolean;
+  repeatable: boolean;
+  target: MoveTarget | null;
+};
+
+// Side panel for one scheduled block (step 6), or -- blockId null -- the
+// "+ Nová aktivita" form: same fields, plus save-to-library / place-in-plan.
 export default function BlockEditor({
   eventId,
   payload,
@@ -32,22 +40,29 @@ export default function BlockEditor({
   onResize,
   onDelete,
   onMove,
+  onCreate,
+  defaultDayId,
 }: {
   eventId: string;
   payload: PlanPayload;
-  blockId: string;
+  blockId: string | null;
   time: ComputedSlot | undefined;
   onClose: () => void;
   onSaved: (next: PlanPayload) => void;
   onResize: (slotId: string, durationMin: number) => void;
   onDelete: (blockId: string) => void;
   onMove: (blockId: string, target: MoveTarget, copy: boolean) => void;
+  onCreate?: (input: NewActivityInput) => Promise<boolean>;
+  defaultDayId?: string | null;
 }) {
+  const isNew = blockId === null;
   const { t } = useTranslations();
   const block = payload.blocks.find((b) => b.id === blockId);
   const slot = payload.slots.find((s) => s.id === block?.slotId);
   const [fields, setFields] = useState<Fields | null>(() =>
-    block
+    isNew
+      ? { activityId: null, customName: null, description: null, categories: [], leaderId: null, locationId: null, notes: null, groupNames: [] }
+      : block
       ? {
           activityId: block.activityId,
           customName: block.customName,
@@ -65,14 +80,19 @@ export default function BlockEditor({
   const [name, setName] = useState(() => block?.customName || payload.activities.find((a) => a.id === block?.activityId)?.name || "");
   const nameRef = useRef<HTMLTextAreaElement>(null);
   const [hasSelection, setHasSelection] = useState(false);
-  const ownDayId = payload.windows.find((w) => w.id === slot?.windowId)?.dayId ?? "";
+  const ownDayId = payload.windows.find((w) => w.id === slot?.windowId)?.dayId ?? defaultDayId ?? payload.days[0]?.id ?? "";
   const [moveDayId, setMoveDayId] = useState(ownDayId);
   const [moveTarget, setMoveTarget] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const linkedActivity = payload.activities.find((a) => a.id === block?.activityId);
+  const [saveToLibrary, setSaveToLibrary] = useState(true);
+  const [repeatable, setRepeatable] = useState(linkedActivity?.repeatable ?? false);
+  const [applyToOthers, setApplyToOthers] = useState(false);
 
-  if (!block || !slot || !fields) return null;
+  if (!fields || (!isNew && (!block || !slot))) return null;
   const activity = payload.activities.find((a) => a.id === fields.activityId);
+  const otherOccurrences = activity ? payload.blocks.filter((b) => b.activityId === activity.id && b.id !== blockId).length : 0;
   const set = (patch: Partial<Fields>) => setFields({ ...fields, ...patch });
 
   // Imported names often carry their detail text too: cut the selected part of
@@ -86,7 +106,32 @@ export default function BlockEditor({
     setHasSelection(false);
   }
 
+  async function create() {
+    if (!onCreate || !name.trim()) return setError(t("planBoard.errorNameRequired"));
+    const target = moveTarget ? (JSON.parse(moveTarget) as MoveTarget) : null;
+    if (!saveToLibrary && !target) return setError(t("planBoard.errorNewNowhere"));
+    setBusy(true);
+    setError(null);
+    const ok = await onCreate({ name: name.trim(), durationMin: duration, fields: fields!, saveToLibrary, repeatable, target });
+    setBusy(false);
+    if (ok) onClose();
+    else setError(t("planBoard.errorSaveFailed"));
+  }
+
+  // Save the panel first, then push the block into the event library.
+  function syncLibrary() {
+    save(async () => {
+      const res = await fetch(`/api/events/${eventId}/planning/blocks/${blockId}/library`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repeatable, applyToOthers }),
+      });
+      if (res.ok) onSaved(await res.json());
+    });
+  }
+
   async function save(then?: () => void) {
+    if (isNew) return create();
     setBusy(true);
     setError(null);
     const res = await fetch(`/api/events/${eventId}/planning/blocks/${blockId}`, {
@@ -136,7 +181,7 @@ export default function BlockEditor({
         { value: JSON.stringify({ windowId: w.id, index: 0 }), label: t(slots.length ? "planBoard.moveStartOf" : "planBoard.moveInto", { window: w.name }) },
       ];
       slots.forEach((s, i) => {
-        if (s.id !== slot.id) options.push({ value: JSON.stringify({ slotId: s.id }), label: t("planBoard.moveWith", { slot: label(s.id) }) });
+        if (s.id !== slot?.id) options.push({ value: JSON.stringify({ slotId: s.id }), label: t("planBoard.moveWith", { slot: label(s.id) }) });
         options.push({ value: JSON.stringify({ windowId: w.id, index: i + 1 }), label: t("planBoard.moveAfter", { slot: label(s.id) }) });
       });
       return { window: w, options };
@@ -144,7 +189,7 @@ export default function BlockEditor({
   const move = (copy: boolean) => {
     if (!moveTarget) return;
     const target = JSON.parse(moveTarget) as MoveTarget;
-    save(() => onMove(blockId, target, copy));
+    save(() => onMove(blockId!, target, copy));
   };
 
   const categoryOptions = payload.categories.map((c) => ({
@@ -157,7 +202,7 @@ export default function BlockEditor({
     <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={onClose}>
       <div className="flex h-full w-full max-w-md flex-col gap-3 overflow-y-auto bg-paper p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-[17px] font-semibold text-ink">{t("planBoard.editActivity")}</h2>
+          <h2 className="text-[17px] font-semibold text-ink">{t(isNew ? "planBoard.newActivity" : "planBoard.editActivity")}</h2>
           {time && (
             <span className="text-[13px] text-ink-secondary">
               {minutesToHhmm(time.startMin)}–{minutesToHhmm(time.endMin)}
@@ -198,7 +243,7 @@ export default function BlockEditor({
             onChange={(e) => setDuration(Number(e.target.value))}
             className={inputClass}
           />
-          {payload.blocks.filter((b) => b.slotId === slot.id).length > 1 && (
+          {slot && payload.blocks.filter((b) => b.slotId === slot.id).length > 1 && (
             <span className="text-[11.5px]">{t("planBoard.slotDurationShared")}</span>
           )}
         </label>
@@ -248,8 +293,46 @@ export default function BlockEditor({
           <textarea value={fields.notes ?? ""} onChange={(e) => set({ notes: e.target.value || null })} className={inputClass} rows={2} />
         </label>
 
+        {isNew ? (
+          <fieldset className="flex flex-col gap-2 rounded-lg border border-mist p-3 text-[13px]">
+            <legend className="px-1 text-[12px] text-ink-secondary">{t("planBoard.libraryTitle")}</legend>
+            <label className="flex items-center gap-2 text-ink">
+              <input type="checkbox" checked={saveToLibrary} onChange={(e) => setSaveToLibrary(e.target.checked)} />
+              {t("planBoard.saveToLibrary")}
+            </label>
+            {saveToLibrary && (
+              <label className="flex items-center gap-2 text-ink">
+                <input type="checkbox" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} />
+                {t("planLists.repeatable")}
+              </label>
+            )}
+          </fieldset>
+        ) : (
+          <fieldset className="flex flex-col gap-2 rounded-lg border border-mist p-3 text-[13px]">
+            <legend className="px-1 text-[12px] text-ink-secondary">{t("planBoard.libraryTitle")}</legend>
+            <label className="flex items-center gap-2 text-ink">
+              <input type="checkbox" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} />
+              {t("planLists.repeatable")}
+            </label>
+            {linkedActivity && otherOccurrences > 0 && (
+              <label className="flex items-center gap-2 text-ink">
+                <input type="checkbox" checked={applyToOthers} onChange={(e) => setApplyToOthers(e.target.checked)} />
+                {t("planBoard.applyToOthers", { count: String(otherOccurrences) })}
+              </label>
+            )}
+            <button
+              onClick={syncLibrary}
+              disabled={busy}
+              className="self-start rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-ink hover:bg-mist disabled:opacity-50"
+            >
+              {t(linkedActivity ? "planBoard.updateInLibrary" : "planBoard.saveAsNewToLibrary")}
+            </button>
+            <span className="text-[11.5px] text-ink-secondary">{t(linkedActivity ? "planBoard.updateInLibraryHint" : "planBoard.saveAsNewHint")}</span>
+          </fieldset>
+        )}
+
         <fieldset className="flex flex-col gap-2 rounded-lg border border-mist p-3">
-          <legend className="px-1 text-[12px] text-ink-secondary">{t("planBoard.moveTitle")}</legend>
+          <legend className="px-1 text-[12px] text-ink-secondary">{t(isNew ? "planBoard.placeInPlan" : "planBoard.moveTitle")}</legend>
           <div className="grid grid-cols-[auto_1fr] gap-2">
             <select
               value={moveDayId}
@@ -269,7 +352,7 @@ export default function BlockEditor({
                 ))}
             </select>
             <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} className={inputClass} aria-label={t("planBoard.moveTitle")}>
-              <option value="">{t("planBoard.movePick")}</option>
+              <option value="">{t(isNew ? "planBoard.placeNotNow" : "planBoard.movePick")}</option>
               {moveOptions.map(({ window: w, options }) => (
                 <optgroup key={w.id} label={w.name}>
                   {options.map((o) => (
@@ -281,7 +364,7 @@ export default function BlockEditor({
               ))}
             </select>
           </div>
-          <div className="flex gap-2">
+          <div className={"flex gap-2" + (isNew ? " hidden" : "")}>
             <button onClick={() => move(false)} disabled={busy || !moveTarget} className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist disabled:opacity-50">
               {t("planBoard.moveAction")}
             </button>
@@ -294,20 +377,22 @@ export default function BlockEditor({
         {error && <p className="text-[13px] text-red-600">{error}</p>}
 
         <div className="mt-auto flex items-center justify-end gap-2 border-t border-mist pt-3">
-          <button
-            onClick={() => {
-              onDelete(blockId);
-              onClose();
-            }}
-            className="mr-auto text-[13px] text-red-600 hover:underline"
-          >
-            {t("planBoard.deleteBlock")}
-          </button>
+          {!isNew && (
+            <button
+              onClick={() => {
+                onDelete(blockId!);
+                onClose();
+              }}
+              className="mr-auto text-[13px] text-red-600 hover:underline"
+            >
+              {t("planBoard.deleteBlock")}
+            </button>
+          )}
           <button onClick={onClose} className="text-[13px] text-ink-secondary hover:underline">
             {t("common.cancel")}
           </button>
           <button onClick={() => save()} disabled={busy} className={btnPrimary}>
-            {t("common.save")}
+            {t(isNew ? "planBoard.createActivity" : "common.save")}
           </button>
         </div>
       </div>
