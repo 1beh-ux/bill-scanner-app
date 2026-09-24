@@ -1,6 +1,6 @@
 # Planning Helper Module — Design Draft v1
 
-Status: built and deployed (steps 1–7, see *Build status*); step 8 (groups) pending. Fourth module on the event platform, after Bills, Health and
+Status: built and shipped (steps 1–9) — see planning-helper-module-build-summary.md for what changed since this design. Fourth module on the event platform, after Bills, Health and
 Mail Helper. It is ported from a working Google Apps Script tool ("Event Planner MVP")
 that kept its data in Sheets tabs (Events, Days, Windows, Activities, ScheduleSlots,
 ScheduleBlocks, Categories, People, Locations, App_Settings, Export_Schedule).
