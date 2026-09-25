@@ -349,7 +349,7 @@ export default function AppSidebar() {
 
   return (
     <>
-      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-night-border bg-night md:sticky md:top-0 md:flex md:h-screen print:!hidden">
+      <aside className="scrollbar-none hidden w-56 shrink-0 overflow-y-auto border-r border-night-border bg-night md:sticky md:top-0 md:flex md:h-screen print:!hidden">
         {sidebarContent}
       </aside>
 
@@ -373,7 +373,7 @@ export default function AppSidebar() {
       {drawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setDrawerOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-64 overflow-y-auto overscroll-contain bg-night shadow-lg">
+          <div className="scrollbar-none absolute left-0 top-0 h-full w-64 overflow-y-auto overscroll-contain bg-night shadow-lg">
             <div className="flex justify-end p-2">
               <button
                 onClick={() => setDrawerOpen(false)}

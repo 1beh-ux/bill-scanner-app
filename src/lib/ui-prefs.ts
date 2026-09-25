@@ -4,19 +4,21 @@
 // Event.planningSettings; old keys left in stored JSON are simply ignored.)
 export type UiPrefs = {
   planningLibraryWidth?: number; // px, the planning board's library panel
+  planningLibraryHidden?: boolean; // library collapsed to a narrow strip
 };
 
-export const UI_PREF_DEFAULTS: Required<UiPrefs> = { planningLibraryWidth: 240 };
-const NUMBER_LIMITS: Record<keyof UiPrefs, [number, number]> = { planningLibraryWidth: [180, 640] };
+export const UI_PREF_DEFAULTS: Required<UiPrefs> = { planningLibraryWidth: 240, planningLibraryHidden: false };
+const NUMBER_LIMITS: Partial<Record<keyof UiPrefs, [number, number]>> = { planningLibraryWidth: [180, 640] };
 
 /** Keeps only known keys with in-range numbers -- the PATCH body is untrusted. */
 export function sanitizeUiPrefs(input: unknown): UiPrefs {
   const out: UiPrefs = {};
   if (!input || typeof input !== "object") return out;
   const src = input as Record<string, unknown>;
-  for (const [key, [min, max]] of Object.entries(NUMBER_LIMITS) as [keyof UiPrefs, [number, number]][]) {
+  for (const [key, [min, max]] of Object.entries(NUMBER_LIMITS) as ["planningLibraryWidth", [number, number]][]) {
     const v = src[key];
     if (typeof v === "number" && Number.isFinite(v)) out[key] = Math.round(Math.min(max, Math.max(min, v)));
   }
+  if (typeof src.planningLibraryHidden === "boolean") out.planningLibraryHidden = src.planningLibraryHidden;
   return out;
 }

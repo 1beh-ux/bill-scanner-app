@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { ChevronRight } from "lucide-react";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import type { PlanState } from "@/lib/planning";
 import { computeTimes, findConflicts } from "@/lib/planning-engine";
@@ -423,11 +424,27 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
 
         <div
           className="grid grid-cols-1 gap-4 lg:grid-cols-[var(--library-width)_minmax(0,1fr)_260px]"
-          style={{ "--library-width": `${prefs.planningLibraryWidth}px` } as React.CSSProperties}
+          style={{ "--library-width": prefs.planningLibraryHidden ? "32px" : `${prefs.planningLibraryWidth}px` } as React.CSSProperties}
         >
+          {prefs.planningLibraryHidden ? (
+            // Collapsed library: a narrow strip to bring it back (saved per user, like the width).
+            <button
+              onClick={() => savePrefs({ planningLibraryHidden: false })}
+              title={t("planBoard.showLibrary")}
+              className="flex items-center justify-center gap-2 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink-secondary hover:bg-mist hover:text-ink lg:sticky lg:top-4 lg:h-auto lg:flex-col lg:self-start lg:px-1 lg:py-3"
+            >
+              <ChevronRight size={16} aria-hidden="true" />
+              <span className="lg:[writing-mode:vertical-rl]">{t("planActivities.title")}</span>
+            </button>
+          ) : (
           <div className="relative lg:sticky lg:top-4 lg:self-start">
-            <div className="lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              <LibraryPanel payload={view} eventId={eventId} onNewActivity={() => setCreating(true)} />
+            <div className="scrollbar-app lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+              <LibraryPanel
+                payload={view}
+                eventId={eventId}
+                onNewActivity={() => setCreating(true)}
+                onHide={() => savePrefs({ planningLibraryHidden: true })}
+              />
             </div>
             {/* Drag the edge to widen the library; the width is saved to the user's account. */}
             <div
@@ -450,6 +467,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
               className="absolute -right-3 top-0 hidden h-full w-2 cursor-col-resize touch-none rounded hover:bg-ember/30 lg:block"
             />
           </div>
+          )}
 
           <div className="min-w-0">
             {selectedDayId ? (
@@ -472,7 +490,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
             )}
           </div>
 
-          <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
+          <div className="scrollbar-app lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
             <SummaryPanel eventId={eventId} payload={view} plan={plan} dayId={selectedDayId} conflicts={conflicts} />
           </div>
         </div>

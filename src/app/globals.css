@@ -62,3 +62,29 @@ body {
   border-radius: 4px;
   text-decoration: none;
 }
+/* Scrollbars. `scrollbar-none`: still scrolls, no bar (app menu).
+   `scrollbar-app`: thin bar in the app's own colors (planning panels). */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility scrollbar-app {
+  scrollbar-width: thin;
+  scrollbar-color: var(--mist) transparent;
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--mist);
+    border-radius: 9999px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-secondary);
+  }
+}

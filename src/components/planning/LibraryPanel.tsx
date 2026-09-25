@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useDraggable } from "@dnd-kit/core";
+import { ChevronLeft } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { mainCategorySegments } from "@/lib/planning-engine";
 import CategoryBar from "./CategoryBar";
@@ -9,7 +10,17 @@ import type { DragData, PlanPayload } from "./types";
 
 const REMAINING_KEY = "planning.libraryRemainingOnly";
 
-export default function LibraryPanel({ payload, eventId, onNewActivity }: { payload: PlanPayload; eventId: string; onNewActivity: () => void }) {
+export default function LibraryPanel({
+  payload,
+  eventId,
+  onNewActivity,
+  onHide,
+}: {
+  payload: PlanPayload;
+  eventId: string;
+  onNewActivity: () => void;
+  onHide: () => void;
+}) {
   const { t } = useTranslations();
   const [query, setQuery] = useState("");
   const [remainingOnly, setRemainingOnly] = useState(false);
@@ -43,13 +54,16 @@ export default function LibraryPanel({ payload, eventId, onNewActivity }: { payl
     <aside className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <h2 className="text-[14px] font-semibold text-ink">{t("planActivities.title")}</h2>
-        <div className="flex gap-3">
+        <div className="flex items-center gap-3">
           <button onClick={onNewActivity} className="text-[12px] text-ember hover:underline">
             {t("planBoard.newActivityShort")}
           </button>
           <a href={`/events/${eventId}/planning/activities`} className="text-[12px] text-ember hover:underline">
             {t("common.edit")}
           </a>
+          <button onClick={onHide} title={t("planBoard.hideLibrary")} aria-label={t("planBoard.hideLibrary")} className="rounded p-0.5 text-ink-secondary hover:bg-mist hover:text-ink">
+            <ChevronLeft size={15} />
+          </button>
         </div>
       </div>
       <input

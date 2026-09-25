@@ -336,6 +336,10 @@ async function main() {
     { key: "planBoard.undo", cs: "Zpět", en: "Undo" },
     { key: "planBoard.undoHint", cs: "Vrátit poslední změnu (Ctrl+Z). K dispozici: {count}", en: "Undo the last change (Ctrl+Z). Available: {count}" },
     { key: "planBoard.errorUndoStale", cs: "Změnu nešlo vrátit — plán se mezitím změnil (např. časová okna). Historie kroků byla vymazána.", en: "Couldn't undo — the plan changed meanwhile (e.g. time windows). The undo history was cleared." },
+
+    // Hideable library
+    { key: "planBoard.hideLibrary", cs: "Skrýt knihovnu", en: "Hide library" },
+    { key: "planBoard.showLibrary", cs: "Zobrazit knihovnu", en: "Show library" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });
