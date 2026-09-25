@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { ingestBillFiles } from "@/lib/bill-ingest";
+import { requeueStuckBills } from "@/lib/requeue-stuck-bills";
 
 export async function GET(
   req: NextRequest,
@@ -17,6 +18,10 @@ export async function GET(
   const { id } = await params;
   const denied = await requireModuleAccess(user, id, "bills");
   if (denied) return denied;
+
+  // Self-heal stuck AI bills when someone looks (see requeue-stuck-bills.ts);
+  // the list then shows them as queued again. Never blocks the list on failure.
+  await requeueStuckBills(id).catch((err) => console.error("[bills] requeue on load failed", err));
 
   const bills = await prisma.bill.findMany({
     where: { eventId: id },

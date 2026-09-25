@@ -27,7 +27,10 @@ steps:
       - --cpu=1
       - --timeout=600
       - --max-instances=3
-      - --no-cpu-throttling
+      # Request-based billing: CPU only while handling a request. Background work
+      # goes through Cloud Tasks, so nothing needs CPU after the response. (Must
+      # stay explicit -- omitting the flag keeps whatever the service had.)
+      - --cpu-throttling
 substitutions:
   _REGION: europe-west3
 images:
