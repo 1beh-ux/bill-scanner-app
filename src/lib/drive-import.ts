@@ -44,7 +44,7 @@ export interface ImportSummary {
  * creation — folder names are typed by hand in Drive and trivial casing
  * differences shouldn't spawn duplicate author records.
  */
-async function findOrCreateAuthorForSubfolder(
+export async function findOrCreateAuthorForSubfolder(
   name: string
 ): Promise<{ author: Author; created: boolean }> {
   const trimmed = name.trim();
@@ -63,7 +63,7 @@ async function findOrCreateAuthorForSubfolder(
   return { author, created: true };
 }
 
-async function ensureAuthorEventAccess(authorId: string, eventId: string): Promise<void> {
+export async function ensureAuthorEventAccess(authorId: string, eventId: string): Promise<void> {
   const existing = await prisma.authorEventAccess.findUnique({
     where: { authorId_eventId: { authorId, eventId } },
   });

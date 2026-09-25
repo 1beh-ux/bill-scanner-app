@@ -88,7 +88,10 @@ export async function ingestBillFiles(
   eventId: string,
   userId: string,
   ingestChannel: IngestChannel,
-  rawFiles: RawFileInput[]
+  rawFiles: RawFileInput[],
+  // false: a multi-page PDF stays one bill (the table import -- one row = one
+  // file = one bill in the source data). Uploads and Drive-folder import split.
+  options: { splitPdfs?: boolean } = {}
 ): Promise<IngestResult> {
   const splitInfo: SplitInfo[] = [];
   const failures: FailureInfo[] = [];
@@ -99,11 +102,11 @@ export async function ingestBillFiles(
     const buffer = file.buffer;
     const isPdf = file.contentType === "application/pdf" || file.filename.toLowerCase().endsWith(".pdf");
 
-    if (!isPdf) {
+    if (!isPdf || options.splitPdfs === false) {
       items.push({
         filename: file.filename,
         buffer,
-        contentType: file.contentType || "application/octet-stream",
+        contentType: isPdf ? "application/pdf" : file.contentType || "application/octet-stream",
         contentHash: sha256(buffer),
         driveSourceFileId: file.driveSourceFileId,
         payerAuthorId: file.payerAuthorId,

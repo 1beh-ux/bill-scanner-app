@@ -16,6 +16,8 @@ import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff, validateR
 import { scheduleDays, scheduleRows } from "../src/lib/planning-export";
 import { scheduleHtml } from "../src/lib/planning-pdf";
 import { runImport } from "../src/lib/planning-import-run";
+import { applyImportedBillData, runBillImport } from "../src/lib/bills-import-run";
+import { approveBill } from "../src/lib/bill-actions";
 import { applyOp, type PlanOp } from "../src/lib/planning-moves";
 import { copyActivitiesFromEvent, importBaseActivities, parseActivityInput, saveActivitiesAsTemplates, templateStatuses } from "../src/lib/planning-activities";
 import type { PlanState } from "../src/lib/planning";
@@ -247,6 +249,40 @@ async function main() {
   const bad = await runImport(ev3.id, "schedule", [{ date: "10.7.", start: "nope", activity: "X" }], opts, false);
   assert.equal(bad.counts.daysReplaced, undefined);
   assert.equal((await loadPlanPayload(ev3.id)).blocks.length, 6);
+
+  // ---- Bill table import (no Drive here: dry run + applying row data) --------
+  {
+    const user = await prisma.user.create({ data: { email: `t${Date.now()}@x.cz`, displayName: "Test", role: "user" } });
+    const ev4 = await mk("Účtenky");
+    const jidlo = await prisma.eventCategory.create({ data: { eventId: ev4.id, name: "Jídlo", budgetAmount: 0 } });
+    const ID = (n: number) => `1AbCdEfGhIjKlMnOpQrStUvWx${n}yz01234`;
+    await prisma.bill.create({ data: { eventId: ev4.id, gcsObjectPath: "x", originalFilename: "old.pdf", contentHash: "h0", ingestChannel: "drive", driveSourceFileId: ID(0), createdByUserId: user.id } });
+    const dry = await runBillImport(ev4.id, user.id, [
+      { file: `https://drive.google.com/file/d/${ID(1)}/view`, amount: "1 250,50 Kč", date: "3.7.2026", categories: "Jídlo 1000; Doprava", payer: "Nový Plátce" },
+      { file: ID(0) }, // already imported
+      { file: "nothing" },
+      { file: ID(2), amount: "abc" },
+      { file: ID(1) }, // same file twice
+    ], { approveComplete: false, createMissing: true }, true);
+    assert.deepEqual(dry.errors.map((e) => [e.row, e.code]), [[2, "invalid_file_link"], [3, "invalid_amount"]]);
+    assert.deepEqual(dry.warnings.map((w) => w.code).sort(), ["already_imported", "duplicate_in_table"]);
+    assert.deepEqual([dry.counts.toImport, dry.counts.skipped, dry.counts.categoriesCreated, dry.counts.payersCreated], [1, 1, 1, 1]);
+    assert.equal(await prisma.eventCategory.count({ where: { eventId: ev4.id } }), 1); // dry run creates nothing
+
+    const doprava = await prisma.eventCategory.create({ data: { eventId: ev4.id, name: "Doprava", budgetAmount: 0 } });
+    const bill = await prisma.bill.create({ data: { eventId: ev4.id, gcsObjectPath: "y", originalFilename: "new.pdf", contentHash: "h1", ingestChannel: "drive", createdByUserId: user.id } });
+    await applyImportedBillData(bill.id, {
+      merchant: "Albert", date: "2026-07-03", amount: 1250.5, currency: "CZK", notes: "n", paid: true, hasPayer: false,
+      categories: [{ eventCategoryId: jidlo.id, amount: 1000 }, { eventCategoryId: doprava.id, amount: null }],
+    });
+    const b = await prisma.bill.findUniqueOrThrow({ where: { id: bill.id }, include: { categories: true } });
+    assert.equal(b.amountCzk?.toString(), "1250.5");
+    assert.equal(b.status, "to_review");
+    assert.equal(b.paidToAuthor, true); // no payer = paid by the event
+    assert.deepEqual(b.categories.map((c) => [c.eventCategoryId === jidlo.id ? "J" : "D", c.amount.toString(), c.amountCzk?.toString()]).sort(), [["D", "250.5", "250.5"], ["J", "1000", "1000"]]);
+    const approved = await approveBill(bill.id, user.id);
+    assert.ok(approved.ok);
+  }
 
   console.log("verify-planning-db: ok");
 }

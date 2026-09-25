@@ -316,6 +316,20 @@ export function isGoogleNativeFile(mimeType: string): boolean {
 }
 
 /** Downloads a file's raw bytes. Check isGoogleNativeFile first — don't call this on a native Google file. */
+/** Name + MIME type of one Drive file (the table import needs both before downloading). */
+export async function getDriveFileMeta(eventId: string, fileId: string): Promise<{ name: string; mimeType: string }> {
+  return withRetry(
+    eventId,
+    async () => {
+      const drive = await getDriveClient(eventId);
+      const res = await drive.files.get({ fileId, fields: "name,mimeType", supportsAllDrives: true });
+      return { name: res.data.name ?? fileId, mimeType: res.data.mimeType ?? "application/octet-stream" };
+    },
+    `file metadata ${fileId}`,
+    { purpose: "read" }
+  );
+}
+
 export async function downloadFileBuffer(eventId: string, fileId: string): Promise<Buffer> {
   return withRetry(
     eventId,

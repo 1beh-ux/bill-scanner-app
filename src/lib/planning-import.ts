@@ -63,7 +63,11 @@ export const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").to
 
 /** One field per column: exact alias match first, then the longest alias contained in the header. */
 export function guessMapping(headers: string[], target: PlanImportTarget): string[] {
-  const fields = IMPORT_FIELDS[target];
+  return guessMappingFor(headers, IMPORT_FIELDS[target]);
+}
+
+/** guessMapping for any field list (the bill import reuses it). */
+export function guessMappingFor(headers: string[], fields: ImportField[]): string[] {
   const used = new Set<string>();
   const result = headers.map(() => "");
   const pass = (match: (h: string, alias: string) => boolean) =>

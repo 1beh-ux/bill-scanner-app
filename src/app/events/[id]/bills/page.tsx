@@ -568,9 +568,17 @@ export default function EventBillsPage({
         </h1>
         {/* Part 10: Import is no longer a permanent sidebar item -- it's a one-off action,
             reachable as a button from the page it feeds. */}
-        <a href={`/events/${id}/import`} className={btnPrimary}>
-          {t("billsPage.uploadButton")}
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`/events/${id}/bills/import-table`}
+            className="rounded-lg border border-mist bg-paper-2 px-4 py-2 text-[14px] text-ink hover:bg-mist"
+          >
+            {t("billImport.button")}
+          </a>
+          <a href={`/events/${id}/import`} className={btnPrimary}>
+            {t("billsPage.uploadButton")}
+          </a>
+        </div>
       </div>
 
       <div className="mb-3 relative max-w-sm">
