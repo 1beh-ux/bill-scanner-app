@@ -4,7 +4,9 @@ export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const session = req.cookies.get("session");
 
-  const isPublicPage = pathname.startsWith("/login");
+  // /__/auth/* is Firebase's sign-in helper, proxied onto our own domain
+  // (next.config.ts rewrites) -- it runs before any session exists.
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
     pathname.startsWith("/api/cron") ||

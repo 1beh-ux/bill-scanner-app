@@ -1,8 +1,8 @@
 "use client";
-import { signInWithPopup } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { getRedirectResult, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
+import { auth, googleProvider, needsSameOriginAuth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Tent, Receipt, HeartPulse, Mail as MailIcon } from "lucide-react";
 
 const FEATURES = [
@@ -26,12 +26,50 @@ const FEATURES = [
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Back from a redirect sign-in (Apple browsers / home-screen app): finish it here.
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => result && finishSignIn(result.user))
+      .catch((err) => showError(err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function showError(err: unknown) {
+    const code = (err as { code?: string })?.code ?? "";
+    console.error(err);
+    setBusy(false);
+    if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") return;
+    setError(`Přihlášení se nepodařilo (${code || "neznámá chyba"}). Zkuste to znovu, případně napište Pavlovi.`);
+  }
 
   async function handleSignIn() {
     setError(null);
+    setBusy(true);
+    // Popups can't hand the result back from a home-screen app or through
+    // Safari's tracking protection -- use a full-page redirect there.
+    if (needsSameOriginAuth()) {
+      await signInWithRedirect(auth, googleProvider).catch(showError);
+      return;
+    }
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      const idToken = await result.user.getIdToken();
+      await finishSignIn(result.user);
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+        await signInWithRedirect(auth, googleProvider).catch(showError);
+        return;
+      }
+      showError(err);
+    }
+  }
+
+  async function finishSignIn(user: User) {
+    setBusy(true);
+    try {
+      const idToken = await user.getIdToken();
       const res = await fetch("/api/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,10 +83,11 @@ export default function LoginPage() {
           .catch(() => null);
         router.push(me?.landingPath || "/");
       } else {
+        setBusy(false);
         setError("Tento účet nemá přístup do aplikace. Přístup uděluje Pavel — napište mu, ať vás přidá.");
       }
     } catch (err) {
-      console.error(err);
+      showError(err);
     }
   }
 
@@ -78,9 +117,10 @@ export default function LoginPage() {
 
             <button
               onClick={handleSignIn}
-              className="rounded-lg bg-ember px-5 py-2.5 text-[14px] font-medium text-night transition-colors hover:bg-ember-hover"
+              disabled={busy}
+              className="rounded-lg bg-ember px-5 py-2.5 text-[14px] font-medium text-night transition-colors hover:bg-ember-hover disabled:opacity-60"
             >
-              Přihlásit se přes Google
+              {busy ? "Přihlašování…" : "Přihlásit se přes Google"}
             </button>
 
             {error && <p className="text-[13px] text-ink-secondary">{error}</p>}
