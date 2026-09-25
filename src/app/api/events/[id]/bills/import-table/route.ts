@@ -30,5 +30,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   );
   const options = { approveComplete: body.options?.approveComplete === true, createMissing: body.options?.createMissing !== false };
   const rowOffset = Number.isInteger(body.rowOffset) && body.rowOffset >= 0 ? body.rowOffset : 0;
-  return NextResponse.json(await runBillImport(eventId, user.id, records, options, dryRun, rowOffset));
+  const rowNumbers =
+    Array.isArray(body.rowNumbers) && body.rowNumbers.length === records.length && body.rowNumbers.every((n: unknown) => Number.isInteger(n) && (n as number) >= 0)
+      ? (body.rowNumbers as number[])
+      : undefined;
+  return NextResponse.json(await runBillImport(eventId, user.id, records, options, dryRun, rowOffset, rowNumbers));
 }

@@ -62,3 +62,29 @@ export function parseBillCategories(raw: string): { name: string; amount: number
       return m && m[1].trim() ? { name: m[1].trim(), amount: parseAmount(m[2]) } : { name: part, amount: null };
     });
 }
+
+// Fields that may take several columns (joined into one value); the rest take one.
+export const MULTI_COLUMN_FIELDS = new Set(["notes", "merchant", "categories"]);
+export type JoinSettings = { separator: "newline" | "dot" | "comma"; withHeaders: boolean };
+export const DEFAULT_JOIN: JoinSettings = { separator: "newline", withHeaders: true };
+const SEPARATORS = { newline: "\n", dot: " · ", comma: ", " };
+
+/**
+ * Table rows -> import records (field key -> text). Several columns mapped to a
+ * multi-column field are joined: categories always with "; " (that's what splits
+ * them), text fields with the chosen separator, optionally as "Header: value".
+ */
+export function buildRecords(headers: string[], rows: string[][], mapping: string[], join: JoinSettings): Record<string, string>[] {
+  return rows.map((row) => {
+    const parts = new Map<string, string[]>();
+    mapping.forEach((key, i) => {
+      const value = row[i]?.trim();
+      if (!key || !value) return;
+      const text = key !== "categories" && join.withHeaders && mapping.filter((k) => k === key).length > 1 && headers[i]?.trim() ? `${headers[i].trim()}: ${value}` : value;
+      parts.set(key, [...(parts.get(key) ?? []), text]);
+    });
+    return Object.fromEntries(
+      [...parts].map(([key, values]) => [key, MULTI_COLUMN_FIELDS.has(key) ? values.join(key === "categories" ? "; " : SEPARATORS[join.separator]) : values[values.length - 1]])
+    );
+  });
+}

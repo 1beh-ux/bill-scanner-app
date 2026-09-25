@@ -49,6 +49,20 @@ async function main() {
     { key: "billImport.issue.file_failed", cs: "stažení souboru selhalo", en: "downloading the file failed" },
     { key: "billImport.issue.chunk_failed", cs: "dávka od tohoto řádku selhala — zkuste import znovu (hotové se přeskočí)", en: "the batch from this row failed — run the import again (done rows are skipped)" },
     { key: "billImport.issue.event_closed", cs: "akce je uzavřená", en: "the event is closed" },
+    // Multi-column fields + preview with row selection
+    { key: "billImport.joinTitle", cs: "Spojování sloupců (pole označená ⊕ mohou mít víc sloupců)", en: "Joining columns (fields marked ⊕ can take several columns)" },
+    { key: "billImport.joinSeparator", cs: "Oddělit:", en: "Separate with:" },
+    { key: "billImport.sep.newline", cs: "novým řádkem", en: "new line" },
+    { key: "billImport.sep.dot", cs: "„ · “", en: "“ · ”" },
+    { key: "billImport.sep.comma", cs: "čárkou", en: "comma" },
+    { key: "billImport.joinWithHeaders", cs: "Přidat názvy sloupců („Sloupec: hodnota“)", en: "Prefix column names (“Column: value”)" },
+    { key: "billImport.joinHint", cs: "Pro spojení přiřaďte stejné pole (např. Poznámka) více sloupcům. Kategorie se spojují vždy středníkem.", en: "To join, map the same field (e.g. Notes) to several columns. Categories always join with a semicolon." },
+    { key: "billImport.joinActive", cs: "Některá pole se skládají z více sloupců — výsledek vidíte v náhledu níže.", en: "Some fields combine several columns — see the result in the preview below." },
+    { key: "billImport.previewTable", cs: "Náhled dat", en: "Data preview" },
+    { key: "billImport.selectedCount", cs: "vybráno {count} z {total}", en: "{count} of {total} selected" },
+    { key: "billImport.status", cs: "Stav (po kontrole)", en: "Status (after check)" },
+    { key: "billImport.fileLinked", cs: "odkaz", en: "link" },
+    { key: "billImport.runSelected", cs: "Importovat vybrané ({count})", en: "Import selected ({count})" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

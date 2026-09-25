@@ -1,11 +1,11 @@
 "use client";
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { driveErrorText } from "@/lib/drive-error-messages";
-import { BILL_IMPORT_FIELDS } from "@/lib/bills-import";
+import { BILL_IMPORT_FIELDS, DEFAULT_JOIN, MULTI_COLUMN_FIELDS, buildRecords, type JoinSettings } from "@/lib/bills-import";
 import { guessMappingFor, parseTable } from "@/lib/planning-import";
-import type { BillImportResult } from "@/lib/bills-import-run";
+import type { BillImportIssue, BillImportResult } from "@/lib/bills-import-run";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -16,6 +16,7 @@ const btnSecondary =
 const tabClass = (on: boolean) =>
   "border-b-2 px-3 py-2 text-[13px] font-medium " + (on ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink");
 const CHUNK = 10;
+const JOIN_KEY = "billImport.join";
 
 // Bills from a table (e.g. the old Apps Script export): paste or load a Google
 // Sheet tab, map columns, check (dry run, no downloads), import in chunks --
@@ -33,6 +34,8 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
   const [mapping, setMapping] = useState<string[]>([]);
   const [approveComplete, setApproveComplete] = useState(false);
   const [createMissing, setCreateMissing] = useState(true);
+  const [join, setJoin] = useState<JoinSettings>(DEFAULT_JOIN);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const [preview, setPreview] = useState<BillImportResult | null>(null);
   const [done, setDone] = useState<BillImportResult | null>(null);
@@ -40,10 +43,34 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Joining settings are a per-viewer convenience (localStorage).
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(JOIN_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restore after mount so SSR and client agree
+      if (saved) setJoin({ ...DEFAULT_JOIN, ...JSON.parse(saved) });
+    } catch {}
+  }, []);
+  function updateJoin(patch: Partial<JoinSettings>) {
+    const next = { ...join, ...patch };
+    setJoin(next);
+    setPreview(null);
+    try {
+      localStorage.setItem(JOIN_KEY, JSON.stringify(next));
+    } catch {}
+  }
+
+  // One column per field, except notes/merchant/categories which can take several.
+  function mapColumn(i: number, key: string) {
+    setMapping(mapping.map((m, j) => (j === i ? key : key && !MULTI_COLUMN_FIELDS.has(key) && m === key ? "" : m)));
+    setPreview(null);
+  }
+
   function load(nextHeaders: string[], nextRows: string[][]) {
     setHeaders(nextHeaders);
     setRows(nextRows);
     setMapping(guessMappingFor(nextHeaders, BILL_IMPORT_FIELDS));
+    setSelected(new Set(nextRows.map((_, i) => i)));
     setPreview(null);
     setDone(null);
     setError(null);
@@ -65,17 +92,18 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
     load(body.headers, body.rows);
   }
 
-  const records = useMemo(
-    () =>
-      rows.map((row) => {
-        const rec: Record<string, string> = {};
-        mapping.forEach((key, i) => {
-          if (key && row[i]?.trim()) rec[key] = row[i];
-        });
-        return rec;
-      }),
-    [rows, mapping]
-  );
+  const records = useMemo(() => buildRecords(headers, rows, mapping, join), [headers, rows, mapping, join]);
+  const selectedIdx = useMemo(() => records.map((_, i) => i).filter((i) => selected.has(i)), [records, selected]);
+  const hasMultiMapped = [...MULTI_COLUMN_FIELDS].some((k) => mapping.filter((m) => m === k).length > 1);
+  const mappedFields = BILL_IMPORT_FIELDS.filter((f) => mapping.includes(f.key));
+  // Issues from the last check/run, by table row index (the server reports rows as sent).
+  const issuesByRow = useMemo(() => {
+    const m = new Map<number, { level: "error" | "warning"; issue: BillImportIssue }[]>();
+    const r = done ?? preview;
+    for (const issue of r?.errors ?? []) m.set(issue.row, [...(m.get(issue.row) ?? []), { level: "error", issue }]);
+    for (const issue of r?.warnings ?? []) m.set(issue.row, [...(m.get(issue.row) ?? []), { level: "warning", issue }]);
+    return m;
+  }, [preview, done]);
   const missingRequired = BILL_IMPORT_FIELDS.filter((f) => f.required && !mapping.includes(f.key));
   const options = { approveComplete, createMissing };
 
@@ -91,7 +119,7 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
   async function check() {
     setBusy(true);
     setError(null);
-    const result = await post({ records, options, dryRun: true });
+    const result = await post({ records: selectedIdx.map((i) => records[i]), rowNumbers: selectedIdx, options, dryRun: true });
     setBusy(false);
     if (!result) return setError(t("billImport.errorFailed"));
     setPreview(result);
@@ -103,11 +131,12 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
     setBusy(true);
     setError(null);
     const total: BillImportResult = { counts: {}, errors: [], warnings: [] };
-    for (let start = 0; start < records.length; start += CHUNK) {
-      setProgress({ done: start, total: records.length });
-      const result = await post({ records: records.slice(start, start + CHUNK), options, dryRun: false, rowOffset: start });
+    for (let start = 0; start < selectedIdx.length; start += CHUNK) {
+      setProgress({ done: start, total: selectedIdx.length });
+      const chunk = selectedIdx.slice(start, start + CHUNK);
+      const result = await post({ records: chunk.map((i) => records[i]), rowNumbers: chunk, options, dryRun: false });
       if (!result) {
-        total.errors.push({ row: start, code: "chunk_failed" });
+        total.errors.push({ row: chunk[0], code: "chunk_failed" });
         continue;
       }
       for (const [k, n] of Object.entries(result.counts)) total.counts[k] = (total.counts[k] ?? 0) + n;
@@ -122,8 +151,8 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <a href={`/events/${eventId}/bills`} className="text-[13px] text-ink-secondary hover:text-ink">
-        ← {t("nav.bills")}
+      <a href={`/events/${eventId}/import`} className="text-[13px] text-ink-secondary hover:text-ink">
+        ← {t("importPage.title")}
       </a>
       <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">{t("billImport.title")}</h1>
       <p className="mb-4 text-[13px] text-ink-secondary">{t("billImport.hint")}</p>
@@ -197,10 +226,7 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
                     <td className="w-[220px] p-2">
                       <select
                         value={mapping[i] ?? ""}
-                        onChange={(e) => {
-                          setMapping(mapping.map((m, j) => (j === i ? e.target.value : m)));
-                          setPreview(null);
-                        }}
+                        onChange={(e) => mapColumn(i, e.target.value)}
                         className={inputClass + " py-1.5"}
                       >
                         <option value="">{t("planImport.ignoreColumn")}</option>
@@ -208,6 +234,7 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
                           <option key={f.key} value={f.key}>
                             {t(`billImport.field.${f.key}`)}
                             {f.required ? " *" : ""}
+                            {MULTI_COLUMN_FIELDS.has(f.key) ? " ⊕" : ""}
                           </option>
                         ))}
                       </select>
@@ -229,6 +256,42 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
             </label>
           </div>
 
+          <fieldset className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-mist p-3 text-[13px] text-ink">
+            <legend className="px-1 text-[12px] text-ink-secondary">{t("billImport.joinTitle")}</legend>
+            <span className="text-ink-secondary">{t("billImport.joinSeparator")}</span>
+            {(["newline", "dot", "comma"] as const).map((sep) => (
+              <label key={sep} className="flex items-center gap-1.5">
+                <input type="radio" checked={join.separator === sep} onChange={() => updateJoin({ separator: sep })} />
+                {t(`billImport.sep.${sep}`)}
+              </label>
+            ))}
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={join.withHeaders} onChange={(e) => updateJoin({ withHeaders: e.target.checked })} />
+              {t("billImport.joinWithHeaders")}
+            </label>
+            <span className="basis-full text-[11.5px] text-ink-secondary">{t(hasMultiMapped ? "billImport.joinActive" : "billImport.joinHint")}</span>
+          </fieldset>
+
+          {mappedFields.length > 0 && rows.length > 0 && (
+            <DataPreview
+              records={records}
+              fields={mappedFields.map((f) => f.key)}
+              selected={selected}
+              onToggle={(i) => {
+                const next = new Set(selected);
+                if (next.has(i)) next.delete(i);
+                else next.add(i);
+                setSelected(next);
+                setPreview(null);
+              }}
+              onToggleAll={(on) => {
+                setSelected(on ? new Set(records.map((_, i) => i)) : new Set());
+                setPreview(null);
+              }}
+              issuesByRow={issuesByRow}
+            />
+          )}
+
           {missingRequired.length > 0 && (
             <p className="mt-3 text-[13px] text-red-600">
               {t("planImport.missingRequired", { fields: missingRequired.map((f) => t(`billImport.field.${f.key}`)).join(", ") })}
@@ -236,11 +299,11 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
           )}
 
           <div className="mt-4 flex items-center gap-3">
-            <button onClick={check} disabled={busy || missingRequired.length > 0 || rows.length === 0} className={btnSecondary}>
+            <button onClick={check} disabled={busy || missingRequired.length > 0 || selectedIdx.length === 0} className={btnSecondary}>
               {busy && !progress ? t("common.loading") : t("planImport.check")}
             </button>
             <button onClick={run} disabled={busy || !preview} className={btnPrimary} title={preview ? undefined : t("planImport.checkFirst")}>
-              {t("planImport.run")}
+              {t("billImport.runSelected", { count: String(selectedIdx.length) })}
             </button>
             {progress && (
               <span className="flex items-center gap-2 text-[13px] text-ink-secondary">
@@ -301,6 +364,79 @@ function ResultView({ result, applied, eventId }: { result: BillImportResult; ap
             </details>
           )
       )}
+    </section>
+  );
+}
+
+/** The mapped values exactly as they'll be imported, one row per table row, with a checkbox and the last check's status. */
+function DataPreview({
+  records,
+  fields,
+  selected,
+  onToggle,
+  onToggleAll,
+  issuesByRow,
+}: {
+  records: Record<string, string>[];
+  fields: string[];
+  selected: Set<number>;
+  onToggle: (i: number) => void;
+  onToggleAll: (on: boolean) => void;
+  issuesByRow: Map<number, { level: "error" | "warning"; issue: BillImportIssue }[]>;
+}) {
+  const { t } = useTranslations();
+  const all = records.length > 0 && selected.size === records.length;
+  const cell = "border-b border-mist/60 px-2 py-1 align-top";
+  return (
+    <section className="mt-4">
+      <h2 className="mb-2 text-[16px] font-semibold text-ink">
+        {t("billImport.previewTable")}{" "}
+        <span className="text-[13px] font-normal text-ink-secondary">({t("billImport.selectedCount", { count: String(selected.size), total: String(records.length) })})</span>
+      </h2>
+      <div className="scrollbar-app max-h-[60vh] overflow-auto rounded-lg border border-mist">
+        <table className="w-full border-collapse text-[12.5px]">
+          <thead className="sticky top-0 z-10 bg-paper-2">
+            <tr className="text-left text-ink-secondary">
+              <th className={cell + " w-8"}>
+                <input type="checkbox" checked={all} onChange={(e) => onToggleAll(e.target.checked)} aria-label={t("participantsPage.selectAll")} />
+              </th>
+              <th className={cell + " w-10 font-medium"}>#</th>
+              {fields.map((f) => (
+                <th key={f} className={cell + " font-medium"}>
+                  {t(`billImport.field.${f}`)}
+                </th>
+              ))}
+              <th className={cell + " font-medium"}>{t("billImport.status")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((r, i) => {
+              const issues = issuesByRow.get(i) ?? [];
+              const hasError = issues.some((x) => x.level === "error");
+              return (
+                <tr key={i} className={(selected.has(i) ? "" : "opacity-40 ") + (hasError ? "bg-red-50 dark:bg-red-950/30" : "")}>
+                  <td className={cell}>
+                    <input type="checkbox" checked={selected.has(i)} onChange={() => onToggle(i)} aria-label={`#${i + 2}`} />
+                  </td>
+                  <td className={cell + " text-ink-secondary"}>{i + 2}</td>
+                  {fields.map((f) => (
+                    <td key={f} className={cell + " max-w-[260px] whitespace-pre-wrap break-words text-ink"}>
+                      {f === "file" ? <span className="text-ink-secondary">{r[f] ? "✓ " + t("billImport.fileLinked") : "—"}</span> : r[f] || <span className="text-ink-secondary">—</span>}
+                    </td>
+                  ))}
+                  <td className={cell + " min-w-[160px]"}>
+                    {issues.map(({ level, issue }, k) => (
+                      <div key={k} className={level === "error" ? "text-red-600" : "text-amber-700"}>
+                        {t(`billImport.issue.${issue.code}`)}
+                      </div>
+                    ))}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }

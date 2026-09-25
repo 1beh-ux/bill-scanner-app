@@ -420,6 +420,12 @@ export default function EventImportPage({
           >
             {t("importPage.driveImportButton")}
           </button>
+          <a
+            href={`/events/${eventId}/bills/import-table`}
+            className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
+          >
+            {t("billImport.button")}
+          </a>
         </div>
         {uploading && <p className="mt-2 text-[13px] text-ink-secondary">{t("common.loading")}</p>}
         {/* shown next to the buttons that caused it; cleared by the next action */}

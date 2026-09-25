@@ -42,7 +42,8 @@ export async function runBillImport(
   records: BillImportRecord[],
   options: BillImportOptions,
   dryRun: boolean,
-  rowOffset = 0 // the client sends big imports in chunks; issues report sheet rows
+  rowOffset = 0, // the client sends big imports in chunks; issues report sheet rows
+  rowNumbers?: number[] // explicit table row per record (rows can be unticked, so not contiguous)
 ): Promise<BillImportResult> {
   const counts: Record<string, number> = {};
   const errors: BillImportIssue[] = [];
@@ -58,7 +59,7 @@ export async function runBillImport(
   const parsed: ParsedRow[] = [];
   const seen = new Set<string>();
   records.forEach((r, i) => {
-    const row = i + rowOffset;
+    const row = rowNumbers?.[i] ?? i + rowOffset;
     const fileId = parseDriveFileId(get(r, "file"));
     if (!fileId) return errors.push({ row, code: get(r, "file") ? "invalid_file_link" : "missing_file", value: get(r, "file") });
     if (seen.has(fileId)) return warnings.push({ row, code: "duplicate_in_table" });
