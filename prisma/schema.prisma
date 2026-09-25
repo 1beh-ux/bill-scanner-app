@@ -247,6 +247,9 @@ model Event {
   // same guess-from-header-text heuristic as before.
   participantsSheetId      String?   @map("participants_sheet_id")
   participantsColumnMapping Json?    @map("participants_column_mapping")
+  // Participant table connections (src/lib/participant-sync.ts ParticipantSync[]);
+  // the two columns above are the old single connection, converted on first read.
+  participantSyncs         Json?     @map("participant_syncs")
   // Camp-fee collection, used by the registration-document merge (price +
   // QR payment code) -- deliberately separate from any bill/reimbursement
   // bank account elsewhere in the app; this is the org's own fee account.

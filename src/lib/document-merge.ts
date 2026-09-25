@@ -84,7 +84,7 @@ async function uploadTempImage(buffer: Buffer): Promise<{ path: string; url: str
 
 // Accepts either a bare doc ID or a full Google Docs URL -- same shape a
 // user would paste from their browser bar. Mirrors extractSpreadsheetId in
-// the Sheets-import route (src/app/api/events/[id]/health/participants/sheets-preview/route.ts).
+// src/lib/sheet-import.ts.
 export function extractGoogleDocId(input: string): string {
   const urlMatch = input.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
   return (urlMatch ? urlMatch[1] : input).trim();
