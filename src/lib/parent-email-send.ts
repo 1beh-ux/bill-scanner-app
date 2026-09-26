@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { resolveEmailTemplate, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
+import { resolveEmailTemplate, senderIdentity, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 import { generateParticipantSummaryPdf } from "@/lib/parent-summary-pdf";
 import { sendParentSummaryEmail } from "@/lib/mail";
 import { resolveVariables, resolveContactEmail } from "@/lib/document-variables";
@@ -20,7 +20,7 @@ export function formatDateRange(startDate: Date, endDate: Date): string {
 /** Resolved subject + body with the same variable substitution the real send uses, for a pre-send preview. */
 export async function resolveEmailPreview(
   participantId: string,
-  senderDisplayName: string
+  sender: { name: string; signature: string }
 ): Promise<{ subject: string; body: string }> {
   const participant = await prisma.participant.findUnique({
     where: { id: participantId },
@@ -44,7 +44,8 @@ export async function resolveEmailPreview(
     child_name: participant.name,
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
-    sender_name: senderDisplayName,
+    sender_name: sender.name,
+    signature: sender.signature,
     contact_email: resolveContactEmail(participant),
   };
   return {
@@ -97,7 +98,7 @@ export async function sendSummaryToGuardians(
   }
 
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
-  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Zdravotník";
+  const sender = senderIdentity(sentByUser, "Zdravotník");
 
   const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
     participant.eventId,
@@ -112,7 +113,8 @@ export async function sendSummaryToGuardians(
     child_name: participant.name,
     camp_name: participant.event.name,
     date_range: formatDateRange(participant.event.startDate, participant.event.endDate),
-    sender_name: senderDisplayName,
+    sender_name: sender.name,
+    signature: sender.signature,
     contact_email: resolveContactEmail(participant),
   };
   const subject = substituteVariables(templateSubject, vars);
@@ -147,7 +149,7 @@ export async function sendSummaryToGuardians(
     try {
       await sendParentSummaryEmail({
         to: guardian.email,
-        fromName: senderDisplayName,
+        fromName: sender.name,
         senderEmail,
         subject,
         body,

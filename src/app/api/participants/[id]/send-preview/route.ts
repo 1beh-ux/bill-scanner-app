@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { senderIdentity } from "@/lib/email-template";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -23,7 +24,7 @@ export async function GET(
   const denied = await requireModuleAccess(user, participant.eventId, "health");
   if (denied) return denied;
 
-  const { subject, body } = await resolveEmailPreview(participantId, user.emailSignature || user.displayName);
+  const { subject, body } = await resolveEmailPreview(participantId, senderIdentity(user, "Zdravotník"));
   return NextResponse.json({
     subject,
     body,

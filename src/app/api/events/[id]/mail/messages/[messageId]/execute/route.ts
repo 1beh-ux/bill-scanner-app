@@ -11,7 +11,7 @@ import {
   moveMessageToDoneLabel,
 } from "@/lib/mail-read";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
-import { MAIL_HELPER_REPLY_PURPOSE_KEY } from "@/lib/email-template";
+import { MAIL_HELPER_REPLY_PURPOSE_KEY, senderIdentity } from "@/lib/email-template";
 
 const DEFAULT_DONE_LABEL = "MailHelperDone";
 
@@ -159,7 +159,7 @@ export async function POST(
     }
     try {
       const to = await getReplyToAddress(senderEmail, messageId);
-      await replyToMessage(senderEmail, { messageId, to: to.email, subject, body: replyText, fromName: user.displayName });
+      await replyToMessage(senderEmail, { messageId, to: to.email, subject, body: replyText, fromName: senderIdentity(user, "Pošta tábora").name });
       const guardianId = await findOrCreateGuardian(participantId, to.email, to.name);
       await prisma.parentEmailLog.create({
         data: {

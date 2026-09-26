@@ -80,6 +80,19 @@ function defaultsFor(purposeKey: string): { subject: string; body: string } {
 }
 
 /** Which module's access grant should gate a given email-template purpose key. */
+/**
+ * The two personal signatures (Nastavení -> personal settings): `name` is the
+ * From display name and {{sender_name}}; `signature` is the multi-line
+ * signature for the e-mail text, {{signature}}, falling back to `name`.
+ */
+export function senderIdentity(
+  user: { emailSignature: string | null; emailBodySignature: string | null; displayName: string } | null,
+  fallback: string
+): { name: string; signature: string } {
+  const name = user?.emailSignature || user?.displayName || fallback;
+  return { name, signature: user?.emailBodySignature || name };
+}
+
 // Acceptance / open e-mails belong to the central participant roster, which
 // health or mail access reaches (same as the bulk-email send route).
 export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {

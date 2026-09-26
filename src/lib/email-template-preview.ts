@@ -5,15 +5,16 @@ import {
 } from "@/lib/email-template-purpose-keys";
 
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
-  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "sender_name"],
+  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "sender_name", "signature"],
   [MAIL_HELPER_BULK_STATUS_PURPOSE_KEY]: [
     "participant_name",
     "camp_name",
     "document_checklist",
     "questionnaire_url",
     "sender_name",
+    "signature",
   ],
-  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_name"],
+  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_name", "signature"],
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
@@ -22,6 +23,7 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     camp_name: "Letní tábor 2026",
     date_range: "1.–7. 8. 2026",
     sender_name: "Zdravotník",
+    signature: "S pozdravem\nZdravotník tábora",
   },
   [MAIL_HELPER_BULK_STATUS_PURPOSE_KEY]: {
     participant_name: "Anna Nováková",
@@ -29,11 +31,13 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     document_checklist: "- ✅ Přihláška,\n- ❌ Potvrzení od lékaře,",
     questionnaire_url: "https://forms.example.com/dotaznik",
     sender_name: "Pošta táboru",
+    signature: "S pozdravem\nPošta táboru",
   },
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: {
     participant_name: "Anna Nováková",
     camp_name: "Letní tábor 2026",
     sender_name: "Pavel",
+    signature: "S pozdravem\nPavel, hlavní vedoucí",
   },
 };
 

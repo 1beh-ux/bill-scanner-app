@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { resolveEmailTemplate, substituteVariables, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
+import { resolveEmailTemplate, senderIdentity, substituteVariables, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
 import { sendPlainTextEmail } from "@/lib/mail";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
@@ -27,7 +27,7 @@ export async function sendBulkStatusUpdates(
   const senderEmail = event.senderEmail;
   const documentTypes = await getActiveDocumentTypes(eventId);
   const sentByUser = await prisma.user.findUnique({ where: { id: sentByUserId } });
-  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Pošta tábora";
+  const sender = senderIdentity(sentByUser, "Pošta tábora");
 
   const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
     eventId,
@@ -54,7 +54,8 @@ export async function sendBulkStatusUpdates(
       camp_name: event.name,
       document_checklist: buildDocumentChecklistText(documentTypes, receivedItemIds),
       questionnaire_url: event.mailQuestionnaireUrl ?? "",
-      sender_name: senderDisplayName,
+      sender_name: sender.name,
+      signature: sender.signature,
       contact_email: resolveContactEmail(participant),
     };
     const subject = substituteVariables(templateSubject, vars);
@@ -78,7 +79,7 @@ export async function sendBulkStatusUpdates(
       }
 
       try {
-        await sendPlainTextEmail({ to: guardian.email, fromName: senderDisplayName, senderEmail, subject, body });
+        await sendPlainTextEmail({ to: guardian.email, fromName: sender.name, senderEmail, subject, body });
         await prisma.parentEmailLog.create({
           data: {
             participantId,

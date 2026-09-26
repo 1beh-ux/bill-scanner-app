@@ -17,6 +17,7 @@ export async function GET() {
     preferredTheme: user.preferredTheme,
     landingPath: user.landingPath,
     emailSignature: user.emailSignature,
+    emailBodySignature: user.emailBodySignature,
     hiddenModules: user.hiddenModules,
     uiPrefs: user.uiPrefs ?? {},
   });
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  const { preferredLang, preferredTheme, landingPath, emailSignature, hiddenModules, uiPrefs } = await req.json();
+  const { preferredLang, preferredTheme, landingPath, emailSignature, emailBodySignature, hiddenModules, uiPrefs } = await req.json();
 
   const updated = await prisma.user.update({
     where: { id: user.id },
@@ -40,6 +41,7 @@ export async function PATCH(req: NextRequest) {
       ...(preferredTheme !== undefined && { preferredTheme }),
       ...(landingPath !== undefined && { landingPath: landingPath || null }),
       ...(emailSignature !== undefined && { emailSignature: emailSignature || null }),
+      ...(typeof emailBodySignature === "string" || emailBodySignature === null ? { emailBodySignature: emailBodySignature?.trim().slice(0, 2000) || null } : {}),
       ...(hiddenModules !== undefined && { hiddenModules }),
       // Merged, not replaced: each screen saves only its own keys.
       ...(uiPrefs !== undefined && { uiPrefs: { ...sanitizeUiPrefs(user.uiPrefs), ...sanitizeUiPrefs(uiPrefs) } }),
@@ -55,6 +57,7 @@ export async function PATCH(req: NextRequest) {
     preferredTheme: updated.preferredTheme,
     landingPath: updated.landingPath,
     emailSignature: updated.emailSignature,
+    emailBodySignature: updated.emailBodySignature,
     hiddenModules: updated.hiddenModules,
     uiPrefs: updated.uiPrefs ?? {},
   });

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { substituteVariables } from "@/lib/email-template";
+import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber } from "@/lib/document-variables";
 import { mergeAndExportDocument } from "@/lib/document-merge";
@@ -186,7 +186,7 @@ export async function sendBulkParticipantEmail(opts: {
 
   const senderEmail = event.senderEmail;
   const sentByUser = await prisma.user.findUnique({ where: { id: opts.sentByUserId } });
-  const senderDisplayName = sentByUser?.emailSignature || sentByUser?.displayName || "Tábor";
+  const sender = senderIdentity(sentByUser, "Tábor");
 
   const results: BulkEmailResult[] = [];
   const sendEmail = opts.sendEmail !== false;
@@ -214,7 +214,8 @@ export async function sendBulkParticipantEmail(opts: {
       ...fieldVars,
       participant_name: participant.name,
       camp_name: event.name,
-      sender_name: senderDisplayName,
+      sender_name: sender.name,
+      signature: sender.signature,
       contact_email: resolveContactEmail(participant),
       attachments_list: generated.attachedDocumentNames.join(", "),
       sender_email: senderEmail ?? "",
@@ -248,7 +249,7 @@ export async function sendBulkParticipantEmail(opts: {
       try {
         await sendEmailWithOptionalAttachment({
           to: guardian.email,
-          fromName: senderDisplayName,
+          fromName: sender.name,
           senderEmail,
           subject,
           body,

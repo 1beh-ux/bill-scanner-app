@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { senderIdentity } from "@/lib/email-template";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -64,7 +65,7 @@ export async function POST(
   const questionnaireDocType = documentTypes.find((d) => d.key === "QUESTIONNAIRE");
   const questionnaireNeeded = Boolean(questionnaireDocType && !receivedItemIds.has(questionnaireDocType.id));
 
-  const signature = user.displayName || "Pošta tábora";
+  const { signature } = senderIdentity(user, "Pošta tábora");
 
   const replyText = buildSingleReplyText({
     documentTypes,

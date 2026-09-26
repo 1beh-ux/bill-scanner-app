@@ -29,6 +29,7 @@ export default function SettingsPage() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [landingPath, setLandingPath] = useState("");
   const [emailSignature, setEmailSignature] = useState("");
+  const [emailBodySignature, setEmailBodySignature] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -64,6 +65,7 @@ export default function SettingsPage() {
       .then((data) => {
         setLandingPath(data?.landingPath ?? "");
         setEmailSignature(data?.emailSignature ?? "");
+        setEmailBodySignature(data?.emailBodySignature ?? "");
       })
       .finally(() => setLoading(false));
   }, []);
@@ -85,7 +87,7 @@ export default function SettingsPage() {
     const res = await fetch("/api/me", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ landingPath: landingPath || null, emailSignature: emailSignature || null }),
+      body: JSON.stringify({ landingPath: landingPath || null, emailSignature: emailSignature || null, emailBodySignature: emailBodySignature || null }),
     });
     setSaving(false);
     if (res.ok) setSaved(true);
@@ -211,6 +213,18 @@ export default function SettingsPage() {
             className={inputClass + " mt-1"}
           />
           <span className="mt-1 block text-[11.5px] text-ink-secondary">{t("settingsPage.emailSignatureHint")}</span>
+        </label>
+
+        <label className="text-[13px] text-ink-secondary">
+          {t("settingsPage.emailBodySignatureLabel")}
+          <textarea
+            value={emailBodySignature}
+            onChange={(e) => setEmailBodySignature(e.target.value)}
+            placeholder={t("settingsPage.emailBodySignaturePlaceholder")}
+            rows={4}
+            className={inputClass + " mt-1"}
+          />
+          <span className="mt-1 block text-[11.5px] text-ink-secondary">{t("settingsPage.emailBodySignatureHint")}</span>
         </label>
 
         <div className="mt-2 flex items-center gap-3">
