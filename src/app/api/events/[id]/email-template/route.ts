@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
-import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY, moduleForEmailPurpose } from "@/lib/email-template";
+import { requireAnyModuleAccess } from "@/lib/module-access";
+import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY, modulesForEmailPurpose } from "@/lib/email-template";
 
 export async function GET(
   req: NextRequest,
@@ -14,7 +14,7 @@ export async function GET(
   }
   const { id: eventId } = await params;
   const purposeKey = req.nextUrl.searchParams.get("purposeKey") || PARENT_SUMMARY_PURPOSE_KEY;
-  const denied = await requireModuleAccess(user, eventId, moduleForEmailPurpose(purposeKey));
+  const denied = await requireAnyModuleAccess(user, eventId, modulesForEmailPurpose(purposeKey));
   if (denied) return denied;
 
   const override = await prisma.eventEmailTemplate.findUnique({
@@ -39,7 +39,7 @@ export async function PATCH(
   const { id: eventId } = await params;
   const { subject, body, purposeKey: purposeKeyRaw } = await req.json();
   const purposeKey = typeof purposeKeyRaw === "string" && purposeKeyRaw ? purposeKeyRaw : PARENT_SUMMARY_PURPOSE_KEY;
-  const denied = await requireModuleAccess(user, eventId, moduleForEmailPurpose(purposeKey));
+  const denied = await requireAnyModuleAccess(user, eventId, modulesForEmailPurpose(purposeKey));
   if (denied) return denied;
 
   if (!subject || !body || typeof subject !== "string" || typeof body !== "string") {
@@ -65,7 +65,7 @@ export async function DELETE(
   }
   const { id: eventId } = await params;
   const purposeKey = req.nextUrl.searchParams.get("purposeKey") || PARENT_SUMMARY_PURPOSE_KEY;
-  const denied = await requireModuleAccess(user, eventId, moduleForEmailPurpose(purposeKey));
+  const denied = await requireAnyModuleAccess(user, eventId, modulesForEmailPurpose(purposeKey));
   if (denied) return denied;
 
   await prisma.eventEmailTemplate.deleteMany({

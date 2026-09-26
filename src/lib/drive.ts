@@ -393,10 +393,18 @@ export async function updateFileContent(eventId: string, fileId: string, buffer:
   );
 }
 
+// Written as two explicit functions on purpose: the production build (Next 16
+// minifier) compiled the earlier `if (existing) return existing.id; return
+// withRetry(create...)` into `(await find(...)).id`, dropping the create branch
+// -- a missing folder crashed with "Cannot read properties of null (reading 'id')". Check the built chunk
+// (grep "create subfolder" in .next/server/chunks) after touching this.
 export async function getOrCreateSubfolder(eventId: string, parentFolderId: string, name: string, label?: DriveFolderLabel): Promise<string> {
   const existing = await findFileInFolder(eventId, parentFolderId, name, FOLDER_MIME_TYPE, label);
-  if (existing) return existing.id;
+  const id = existing?.id ?? (await createSubfolder(eventId, parentFolderId, name, label));
+  return id;
+}
 
+async function createSubfolder(eventId: string, parentFolderId: string, name: string, label?: DriveFolderLabel): Promise<string> {
   return withRetry(
     eventId,
     async () => {

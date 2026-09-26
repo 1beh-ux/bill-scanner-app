@@ -5,6 +5,7 @@ import {
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+  PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 // Re-exported for existing server-side callers -- client components must
@@ -79,8 +80,12 @@ function defaultsFor(purposeKey: string): { subject: string; body: string } {
 }
 
 /** Which module's access grant should gate a given email-template purpose key. */
-export function moduleForEmailPurpose(purposeKey: string): ModuleKey {
-  return purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY ? "mail" : "health";
+// Acceptance / open e-mails belong to the central participant roster, which
+// health or mail access reaches (same as the bulk-email send route).
+export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
+  if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) return ["mail"];
+  if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY) return ["health", "mail"];
+  return ["health"];
 }
 
 /** The single org-default row for this purpose, created on first read if missing. */
