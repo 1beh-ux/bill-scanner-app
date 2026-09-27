@@ -9,11 +9,11 @@ import {
   getReplyToAddress,
   replyToMessage,
   moveMessageToDoneLabel,
+  doneLabelName,
 } from "@/lib/mail-read";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
 import { MAIL_HELPER_REPLY_PURPOSE_KEY, senderIdentity } from "@/lib/email-template";
 
-const DEFAULT_DONE_LABEL = "MailHelperDone";
 
 type AttachmentAction = { attachmentId: string; filename: string; mimeType: string; eventListItemId: string | null; participantId: string };
 type ExecuteActions = { saveAttachments: boolean; sendReply: boolean; moveEmail: boolean; updateStatus: boolean };
@@ -195,7 +195,7 @@ export async function POST(
   if (actions.moveEmail) {
     const event = await prisma.event.findUnique({ where: { id: eventId }, select: { mailDoneLabelName: true } });
     try {
-      await moveMessageToDoneLabel(senderEmail, messageId, event?.mailDoneLabelName || DEFAULT_DONE_LABEL);
+      await moveMessageToDoneLabel(senderEmail, messageId, doneLabelName(event));
       await prisma.mailActionLog.create({
         data: { userId: user.id, eventId, action: "bulk_move", messageId, participantId, subject, status: "ok" },
       });

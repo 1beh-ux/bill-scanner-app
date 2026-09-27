@@ -3,9 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { requireEventSenderEmail } from "@/lib/mail-helper-context";
-import { moveMessageToDoneLabel } from "@/lib/mail-read";
-
-const DEFAULT_DONE_LABEL = "MailHelperDone";
+import { doneLabelName, moveMessageToDoneLabel } from "@/lib/mail-read";
 
 // Mirrors the old app's api_bulkMoveEmails -- per-message try/catch so one
 // failure doesn't block the rest, one MailActionLog row per message.
@@ -35,7 +33,7 @@ export async function POST(
   }
 
   const event = await prisma.event.findUnique({ where: { id: eventId }, select: { mailDoneLabelName: true } });
-  const labelName = event?.mailDoneLabelName || DEFAULT_DONE_LABEL;
+  const labelName = doneLabelName(event);
 
   const moved: string[] = [];
   const failed: { messageId: string; error: string }[] = [];

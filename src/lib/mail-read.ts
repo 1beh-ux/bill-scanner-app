@@ -207,27 +207,49 @@ export async function replyToMessage(
   await gmail.users.messages.send({ userId: "me", requestBody: { raw, threadId } });
 }
 
+// "Done" e-mails leave the inbox and get this Gmail label (Event.mailDoneLabelName,
+// Nastavení akce -> Pošta). "Parent/Child" names give a nested label.
+export const DEFAULT_DONE_LABEL = "MailHelperDone";
+
+export function doneLabelName(event: { mailDoneLabelName: string | null } | null): string {
+  return event?.mailDoneLabelName || DEFAULT_DONE_LABEL;
+}
+
+/**
+ * The label's id in the mailbox; created when missing and `create` is set
+ * (moving an e-mail always creates it). Gmail label names are unique
+ * case-insensitively, so the lookup is too -- otherwise "hotovo" vs "Hotovo"
+ * would fail the create with "label exists".
+ */
+export async function ensureDoneLabel(
+  senderEmail: string,
+  labelName: string,
+  create: boolean
+): Promise<{ id: string | null; created: boolean }> {
+  const gmail = await getGmailClient(senderEmail);
+  const labelsRes = await gmail.users.labels.list({ userId: "me" });
+  const found = (labelsRes.data.labels || []).find((l) => l.name?.toLowerCase() === labelName.toLowerCase());
+  if (found?.id) return { id: found.id, created: false };
+  if (!create) return { id: null, created: false };
+  const created = await gmail.users.labels.create({
+    userId: "me",
+    requestBody: { name: labelName, labelListVisibility: "labelShow", messageListVisibility: "show" },
+  });
+  if (!created.data.id) throw new Error("label_create_failed");
+  return { id: created.data.id, created: true };
+}
+
 export async function moveMessageToDoneLabel(
   senderEmail: string,
   messageId: string,
   labelName: string
 ): Promise<void> {
+  const { id } = await ensureDoneLabel(senderEmail, labelName, true);
   const gmail = await getGmailClient(senderEmail);
-  const labelsRes = await gmail.users.labels.list({ userId: "me" });
-  let label = (labelsRes.data.labels || []).find((l) => l.name === labelName);
-  if (!label) {
-    const created = await gmail.users.labels.create({
-      userId: "me",
-      requestBody: { name: labelName, labelListVisibility: "labelShow", messageListVisibility: "show" },
-    });
-    label = created.data;
-  }
-  if (!label?.id) throw new Error("label_create_failed");
-
   await gmail.users.messages.modify({
     userId: "me",
     id: messageId,
-    requestBody: { addLabelIds: [label.id], removeLabelIds: ["INBOX"] },
+    requestBody: { addLabelIds: [id!], removeLabelIds: ["INBOX"] },
   });
 }
 

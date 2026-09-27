@@ -18,12 +18,15 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
   const driveDocSyncEnabled = typeof body.driveDocSyncEnabled === "boolean" ? body.driveDocSyncEnabled : undefined;
   const statusExportEnabled = typeof body.statusExportEnabled === "boolean" ? body.statusExportEnabled : undefined;
+  const mailDoneLabelName =
+    typeof body.mailDoneLabelName === "string" ? body.mailDoneLabelName.trim().replace(/^\/+|\/+$/g, "").slice(0, 100) || null : undefined;
 
   const event = await prisma.event.update({
     where: { id: eventId },
     data: {
       ...(driveDocSyncEnabled !== undefined && { driveDocSyncEnabled }),
       ...(statusExportEnabled !== undefined && { statusExportEnabled }),
+      ...(mailDoneLabelName !== undefined && { mailDoneLabelName }),
     },
   });
 

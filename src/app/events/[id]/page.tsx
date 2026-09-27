@@ -24,6 +24,7 @@ type EventDetail = {
   driveParticipantsFolderId: string | null;
   driveDocSyncEnabled: boolean;
   statusExportEnabled: boolean;
+  mailDoneLabelName: string | null;
   statusExportSheetId: string | null;
   statusExportLastSyncedAt: string | null;
   memberPriceCzk: number | null;
@@ -663,6 +664,7 @@ export default function EventDetailPage({
                 purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
                 label={t("mailTab.bulkStatusTemplateLabel")}
               />
+              <MailDoneLabelSettings eventId={id} event={event} t={t} />
               <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />
               <div>
                 <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
@@ -692,6 +694,82 @@ export default function EventDetailPage({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// Gmail label that "done" e-mails are moved to (out of the inbox). Moving an
+// e-mail creates it if missing; the check/create buttons just make that visible.
+function MailDoneLabelSettings({
+  eventId,
+  event,
+  t,
+}: {
+  eventId: string;
+  event: EventDetail | null;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const [name, setName] = useState(event?.mailDoneLabelName ?? "");
+  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ text: string; ok: boolean } | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setStatus(null);
+    const res = await fetch(`/api/events/${eventId}/mail/sync-settings`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mailDoneLabelName: name }),
+    });
+    setSaving(false);
+    if (res.ok) await check(false);
+    else setStatus({ text: t("mailTab.syncSettingsErrorSaveFailed"), ok: false });
+  }
+
+  async function check(create: boolean) {
+    setBusy(true);
+    const res = await fetch(`/api/events/${eventId}/mail/done-label`, { method: create ? "POST" : "GET" });
+    const d = await res.json().catch(() => null);
+    setBusy(false);
+    if (!res.ok || !d) {
+      setStatus({ text: t(`mailTab.doneLabel.error.${d?.error ?? "gmail_failed"}`), ok: false });
+      return;
+    }
+    const key = d.created ? "created" : d.exists ? "exists" : "missing";
+    setStatus({ text: t(`mailTab.doneLabel.${key}`, { name: d.name, mailbox: d.mailbox }), ok: d.exists });
+  }
+
+  if (!event) return null;
+  return (
+    <div>
+      <h3 className="mb-1 text-[15px] font-semibold text-ink">{t("mailTab.doneLabel.title")}</h3>
+      <p className="mb-2 text-[12px] text-ink-secondary">{t("mailTab.doneLabel.hint")}</p>
+      <form onSubmit={save} className="flex max-w-xl flex-wrap items-center gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="MailHelperDone"
+          className="min-w-[220px] flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+        />
+        <button type="submit" disabled={saving} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
+          {saving ? t("common.loading") : t("common.save")}
+        </button>
+        <button type="button" onClick={() => check(false)} disabled={busy} className="rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink hover:bg-mist disabled:opacity-50">
+          {t("mailTab.doneLabel.check")}
+        </button>
+      </form>
+      {status && (
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px]">
+          <span className={status.ok ? "text-pine" : "text-amber-700"}>{status.text}</span>
+          {!status.ok && (
+            <button type="button" onClick={() => check(true)} disabled={busy} className="rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-mist disabled:opacity-50">
+              {t("mailTab.doneLabel.create")}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
