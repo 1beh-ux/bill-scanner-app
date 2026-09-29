@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
+import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 
 // Part 11-D of the participants/settings/Health/Mail prompt: what the inbox (or a manual
 // mark) saved for this participant, checkable without opening Drive. Excludes `generated`
@@ -29,6 +30,24 @@ export async function GET(
     orderBy: { receivedAt: "desc" },
     include: { eventListItem: true },
   });
+
+  // ?byType=1: one row per tracked document type, received or missing (participant detail page).
+  if (new URL(req.url).searchParams.get("byType") === "1") {
+    const types = await getActiveDocumentTypes(participant.eventId);
+    return NextResponse.json(
+      types.map((type) => {
+        const latest = docs.find((d) => d.eventListItemId === type.id);
+        return {
+          docTypeId: type.id,
+          name: documentDisplayName(type),
+          received: !!latest,
+          receivedAt: latest?.receivedAt ?? null,
+          receivedVia: latest?.receivedVia ?? null,
+          driveUrl: latest?.driveFileId ? `https://drive.google.com/file/d/${latest.driveFileId}/view` : null,
+        };
+      })
+    );
+  }
 
   return NextResponse.json(
     docs.map((d) => ({

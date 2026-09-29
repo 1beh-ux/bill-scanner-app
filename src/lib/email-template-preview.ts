@@ -2,6 +2,7 @@ import {
   PARENT_SUMMARY_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+  PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
@@ -14,6 +15,8 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
     "sender_name",
     "signature",
   ],
+  // Free e-mail to participants (compose page, "Napsat e-mail").
+  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_email", "sender_name", "signature"],
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature"],
 };
 

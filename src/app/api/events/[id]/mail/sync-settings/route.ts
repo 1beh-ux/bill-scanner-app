@@ -18,6 +18,9 @@ export async function PATCH(
   const body = await req.json().catch(() => ({}));
   const driveDocSyncEnabled = typeof body.driveDocSyncEnabled === "boolean" ? body.driveDocSyncEnabled : undefined;
   const statusExportEnabled = typeof body.statusExportEnabled === "boolean" ? body.statusExportEnabled : undefined;
+  const documentsListColumns = Array.isArray(body.documentsListColumns)
+    ? body.documentsListColumns.filter((k: unknown): k is string => typeof k === "string").slice(0, 100)
+    : undefined;
   const mailDoneLabelName =
     typeof body.mailDoneLabelName === "string" ? body.mailDoneLabelName.trim().replace(/^\/+|\/+$/g, "").slice(0, 100) || null : undefined;
 
@@ -27,6 +30,7 @@ export async function PATCH(
       ...(driveDocSyncEnabled !== undefined && { driveDocSyncEnabled }),
       ...(statusExportEnabled !== undefined && { statusExportEnabled }),
       ...(mailDoneLabelName !== undefined && { mailDoneLabelName }),
+      ...(documentsListColumns !== undefined && { documentsListColumns }),
     },
   });
 

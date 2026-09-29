@@ -1,11 +1,12 @@
 "use client";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { readComposeIds, type ComposeMode } from "@/lib/compose-handoff";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { templateVariablesFor } from "@/lib/email-template-preview";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -40,6 +41,34 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+
+  // Insertable {{variables}}: the purpose's own plus every field switched on for
+  // "E-maily a dokumenty" -- the same list the template editors offer.
+  const [fieldVars, setFieldVars] = useState<string[]>([]);
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/participant-fields?surface=documents`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { key: string }[]) => setFieldVars(rows.map((f) => f.key)))
+      .catch(() => {});
+  }, [eventId]);
+  const variables = [...new Set([...templateVariablesFor(purposeKey), ...fieldVars])];
+  const subjectRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const activeField = useRef<"subject" | "body">("body");
+  function insertVariable(name: string) {
+    const token = `{{${name}}}`;
+    const el = activeField.current === "subject" ? subjectRef.current : bodyRef.current;
+    const value = activeField.current === "subject" ? subject : body;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const next = value.slice(0, start) + token + value.slice(end);
+    if (activeField.current === "subject") setSubject(next);
+    else setBody(next);
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + token.length, start + token.length);
+    });
+  }
 
   const [view, setView] = useState<"filled" | "template">("filled");
   const [previewFor, setPreviewFor] = useState<string>("");
@@ -225,8 +254,37 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                       </Link>
                     </p>
                   )}
-                  <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder={t("composeEmailModal.subjectPlaceholder")} className={inputClass} />
-                  <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder={t("composeEmailModal.bodyPlaceholder")} className={inputClass + " font-mono text-[13px]"} rows={16} />
+                  <div className="flex flex-wrap gap-1.5">
+                    {variables.map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => insertVariable(v)}
+                        className="rounded-full border border-mist bg-paper-2 px-2.5 py-1 text-[12px] text-ink-secondary hover:bg-mist"
+                      >
+                        {`{{${v}}}`}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    ref={subjectRef}
+                    type="text"
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    onFocus={() => (activeField.current = "subject")}
+                    placeholder={t("composeEmailModal.subjectPlaceholder")}
+                    className={inputClass}
+                  />
+                  <textarea
+                    ref={bodyRef}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    onFocus={() => (activeField.current = "body")}
+                    placeholder={t("composeEmailModal.bodyPlaceholder")}
+                    className={inputClass + " font-mono text-[13px]"}
+                    rows={16}
+                  />
                   <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>
                 </section>
               )}

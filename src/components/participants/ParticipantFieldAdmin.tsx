@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { fieldCategory, surfacesForCategory, type ParticipantFieldCategory } from "@/lib/participant-fields";
+import { surfacesForCategory, type ParticipantFieldCategory } from "@/lib/participant-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
@@ -13,8 +13,6 @@ type FieldKind = "custom" | "builtin" | "guardian" | "computed";
 type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select"];
-// Part 4 replaced the per-surface pill grid with one "show in list" toggle -- only the
-// `list` surface is ever switched from the UI now (see categoryAndListCell below).
 const SURFACE_ON_CLASS = "bg-ink text-white";
 const SURFACE_OFF_CLASS = "bg-[#EFEDE8] text-ink-secondary";
 
@@ -206,12 +204,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setOptionsText((field.options ?? []).join(", "));
   }
 
-  // Flips one surface on one EXISTING field immediately -- the pill click.
+  // Switches surfaces on one EXISTING field immediately -- the pill click.
   // Updated optimistically in local state first (no refetch, no flicker);
   // only re-synced from the server if the request actually fails.
-  async function toggleFieldSurface(field: Field, s: Surface) {
+  async function setFieldSurfaces(field: Field, which: Surface[], on: boolean) {
     const current = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
-    const next = current.includes(s) ? current.filter((x) => x !== s) : [...current, s];
+    const next = on ? [...new Set([...current, ...which])] : current.filter((x) => !which.includes(x));
     setFields((prev) =>
       prev.map((f) =>
         fieldId(isEvent, f) === fieldId(isEvent, field)
@@ -340,30 +338,35 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setExpandedId(null);
   }
 
-  // Part 4: replaces the old per-surface checkbox grid (Sloupec — Zdraví, Sloupec —
-  // Pošta, Detail účastníka — Zdraví, Dokumenty a e-maily, Import účastníků) with one
-  // derived, read-only category badge plus a single clickable "show in the central
-  // roster" toggle -- documents/import/health_list/mail_list are all implied by the
-  // category now (see surfacesForCategory), not independently switchable.
-  function categoryAndListCell(field: Field) {
+  // Where the field shows up -- one pill per place, click to switch. "E-maily a
+  // dokumenty" is the `documents` surface: the {{variable}} is offered in every
+  // e-mail template editor and filled in e-mails and documents. Zdraví switches
+  // both health surfaces together. (Replaced the read-only category badge.)
+  function surfacePills(field: Field) {
     const surfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
-    const category = fieldCategory(field.kind, surfaces);
-    const showInList = surfaces.includes("list");
+    const pills: { label: string; surfaces: Surface[] }[] = [
+      { label: t("participantFieldAdmin.showInListLabel"), surfaces: ["list"] },
+      ...(!isEvent || enabledModules.has("mail") ? [{ label: t("participantFieldAdmin.surface.mailList"), surfaces: ["mail_list"] as Surface[] }] : []),
+      { label: t("participantFieldAdmin.surface.documents"), surfaces: ["documents"] },
+      ...(!isEvent || enabledModules.has("health")
+        ? [{ label: t("participantFieldAdmin.surface.health"), surfaces: ["health_list", "health_detail"] as Surface[] }]
+        : []),
+    ];
     return (
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className="rounded-full bg-[#EFEDE8] px-2.5 py-0.5 text-[11px] font-medium text-ink-secondary">
-          {t(`participantFieldAdmin.category.${category}`)}
-        </span>
-        <button
-          type="button"
-          onClick={() => toggleFieldSurface(field, "list")}
-          className={
-            "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors " +
-            (showInList ? SURFACE_ON_CLASS : SURFACE_OFF_CLASS)
-          }
-        >
-          {t("participantFieldAdmin.showInListLabel")}
-        </button>
+        {pills.map((pill) => {
+          const on = pill.surfaces.every((x) => surfaces.includes(x));
+          return (
+            <button
+              key={pill.label}
+              type="button"
+              onClick={() => setFieldSurfaces(field, pill.surfaces, !on)}
+              className={"rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-colors " + (on ? SURFACE_ON_CLASS : SURFACE_OFF_CLASS)}
+            >
+              {pill.label}
+            </button>
+          );
+        })}
       </div>
     );
   }
@@ -574,7 +577,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           </td>
           <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.kind.${field.kind}`)}</td>
           <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.type.${field.fieldType}`)}</td>
-          <td className="p-2">{categoryAndListCell(field)}</td>
+          <td className="p-2">{surfacePills(field)}</td>
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">

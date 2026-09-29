@@ -3,9 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
-import { resolveEmailTemplate, substituteVariables, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
-import { substituteDummyTemplateValues } from "@/lib/email-template-preview";
-import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
+import { resolveEmailTemplate, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -14,7 +12,7 @@ const EMAIL_RE = /^\S+@\S+\.\S+$/;
 // shown, flagged, and simply not preselected, rather than silently vanishing from
 // the list), per-document-type received/missing, defaultSend = not fully complete
 // AND has at least one receivesCommunications guardian with a syntactically valid
-// address, plus a dummy-value template preview.
+// address, plus the raw template (filled in per participant by the page).
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -50,35 +48,13 @@ export async function GET(
     })
   );
 
-  const { subject, body } = await resolveEmailTemplate(eventId, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
-  const previewVars = {
-    participant_name: "Jméno dítěte",
-    document_checklist: buildDocumentChecklistText(documentTypes, new Set()),
-  };
-  // No real participant for a bulk preview -- show each documents-flagged
-  // field's own label as a bracketed placeholder instead, same convention
-  // EmailTemplateAdmin uses while editing (src/lib/email-template-preview.ts).
-  const mergeFields = await prisma.eventParticipantField.findMany({
-    where: { eventId, active: true, surfaces: { has: "documents" } },
-    select: { key: true, label: true },
-  });
-  const extraDummyValues = Object.fromEntries(mergeFields.map((f) => [f.key, `[${f.label}]`]));
-  const templatePreview = {
-    subject: substituteDummyTemplateValues(
-      substituteVariables(subject, previewVars),
-      MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
-      extraDummyValues
-    ),
-    body: substituteDummyTemplateValues(
-      substituteVariables(body, previewVars),
-      MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
-      extraDummyValues
-    ),
-  };
+  // The raw template; the page fills it in per participant via
+  // /api/events/[id]/email-template/preview (same code as the send).
+  const template = await resolveEmailTemplate(eventId, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
 
   return NextResponse.json({
     documentTypes: documentTypes.map((d) => ({ id: d.id, name: d.data?.displayName || d.name })),
     rows,
-    templatePreview,
+    template: { subject: template.subject, body: template.body },
   });
 }

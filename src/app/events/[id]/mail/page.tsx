@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import MailInboxList from "@/components/mail/MailInboxList";
 import MailDetailPanel from "@/components/mail/MailDetailPanel";
-import BulkStatusModal from "@/components/mail/BulkStatusModal";
+import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import MailActionLogModal from "@/components/mail/MailActionLogModal";
 import type { DocumentType, MailMessage, Participant } from "@/components/mail/types";
 
@@ -35,7 +35,6 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  const [bulkModalOpen, setBulkModalOpen] = useState(false);
   const [logsModalOpen, setLogsModalOpen] = useState(false);
   // Part 8/11-B.3: after processing one message, don't auto-open the next one with its
   // action checkboxes pre-ticked (including "Smazat e-mail") -- show an empty state with
@@ -155,9 +154,7 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
           {eventName} — {t("mailPage.title")}
         </h1>
         <div className="flex gap-2">
-          <button onClick={() => setBulkModalOpen(true)} className={btnSecondary}>
-            {t("mailPage.bulkStatusButton")}
-          </button>
+          <StatusUpdateButton eventId={eventId} className={btnSecondary} />
           <button onClick={() => setLogsModalOpen(true)} className={btnSecondary}>
             {t("mailPage.logsButton")}
           </button>
@@ -228,10 +225,6 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
           )}
         </div>
       </div>
-
-      {bulkModalOpen && (
-        <BulkStatusModal eventId={eventId} eventName={eventName} onClose={() => setBulkModalOpen(false)} />
-      )}
       {logsModalOpen && <MailActionLogModal eventId={eventId} onClose={() => setLogsModalOpen(false)} />}
     </div>
   );

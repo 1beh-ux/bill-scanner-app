@@ -3,8 +3,11 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { participantListName } from "@/lib/participant-name";
+import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
+import ColumnPicker from "@/components/ColumnPicker";
+import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 
-type EventBasic = { id: string; name: string };
+type EventBasic = { id: string; name: string; documentsListColumns: string[] | null };
 
 type DocStatus = { eventListItemId: string; name: string; received: boolean };
 
@@ -15,6 +18,7 @@ type Participant = {
   lastName: string | null;
   registrationStatus: "pending" | "accepted";
   contactEmail: string;
+  customFieldValues: Record<string, string>;
   documents: DocStatus[];
 };
 
@@ -29,6 +33,8 @@ export default function MailParticipantsPage({
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
+  // Fields switched on for "Přehled dokumentů" (mail_list) -- the extra columns on offer.
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
   // Part 2: a brief undo toast after a manual received/missing toggle, instead of just
@@ -37,12 +43,14 @@ export default function MailParticipantsPage({
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes] = await Promise.all([
+    const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/mail/participants?withDocuments=1`),
+      fetch(`/api/events/${id}/participant-fields?surface=mail_list`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
+    if (fieldsRes.ok) setFields(await fieldsRes.json());
     setLoading(false);
   }
 
@@ -61,6 +69,14 @@ export default function MailParticipantsPage({
     if (!query) return participants;
     return participants.filter((p) => p.name.toLowerCase().includes(query));
   }, [participants, searchQuery]);
+
+  // Saved order, limited to fields still on offer; nothing saved = all of them.
+  const extraColumns = useMemo(() => {
+    const offered = fields.filter((f) => f.kind === "custom");
+    const saved = (event?.documentsListColumns ?? []).filter((k) => offered.some((f) => f.key === k));
+    return saved.length > 0 ? saved.map((k) => offered.find((f) => f.key === k)!) : offered;
+  }, [fields, event]);
+  const offeredColumns = fields.filter((f) => f.kind === "custom");
 
   const documentColumns = participants[0]?.documents.map((d) => ({ id: d.eventListItemId, name: d.name })) ?? [];
 
@@ -116,7 +132,8 @@ export default function MailParticipantsPage({
       </h1>
       <p className="mb-4 text-[13px] text-ink-secondary">{t("mailParticipantsPage.intro")}</p>
 
-      <div className="mb-4 relative max-w-sm">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="relative max-w-sm flex-1">
         <input
           type="text"
           value={searchQuery}
@@ -135,6 +152,28 @@ export default function MailParticipantsPage({
           </button>
         )}
       </div>
+      {offeredColumns.length > 0 && (
+        <ColumnPicker
+          options={offeredColumns.map((f) => ({ key: f.key, label: f.label }))}
+          shown={extraColumns.map((f) => f.key)}
+          labels={{
+            button: t("participantsPage.columnsButton"),
+            title: t("participantsPage.columnsPickerTitle"),
+            dragHint: t("participantsPage.columnsDragHint"),
+            notShown: t("participantsPage.columnsNotShown"),
+          }}
+          onSave={async (keys) => {
+            await fetch(`/api/events/${id}/mail/sync-settings`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ documentsListColumns: keys }),
+            });
+            await load();
+          }}
+        />
+      )}
+      <StatusUpdateButton eventId={id} />
+      </div>
 
       {filteredParticipants.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
@@ -152,6 +191,9 @@ export default function MailParticipantsPage({
                   <th key={d.id} className="p-2 text-[12px] font-medium text-ink-secondary">{d.name}</th>
                 ))}
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.contactEmailLabel")}</th>
+                {extraColumns.map((f) => (
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -175,6 +217,11 @@ export default function MailParticipantsPage({
                     </td>
                   ))}
                   <td className="p-2 text-[13px] text-ink-secondary">{p.contactEmail || "—"}</td>
+                  {extraColumns.map((f) => (
+                    <td key={f.id} className="p-2 text-[13px] text-ink-secondary">
+                      {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -196,6 +243,16 @@ export default function MailParticipantsPage({
                 </span>
               </div>
               {p.contactEmail && <div className="mb-1.5 break-all text-[12px] text-ink-secondary">{p.contactEmail}</div>}
+              {extraColumns.length > 0 && (
+                <dl className="mb-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px]">
+                  {extraColumns.map((f) => (
+                    <div key={f.id} className="contents">
+                      <dt className="text-ink-secondary">{f.label}</dt>
+                      <dd className="min-w-0 break-words text-ink">{formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               <dl className="grid grid-cols-[1fr_auto] items-center gap-x-2 gap-y-1 text-[12.5px]">
                 {p.documents.map((d) => (
                   <div key={d.eventListItemId} className="contents">

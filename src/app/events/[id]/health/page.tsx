@@ -5,7 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
 import { participantListName } from "@/lib/participant-name";
 import IncidentFormModal from "@/components/health/IncidentFormModal";
-import BulkStatusModal from "@/components/mail/BulkStatusModal";
+import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 
 type EventBasic = { id: string; name: string };
 
@@ -40,7 +40,6 @@ export default function EventHealthPage({
 
   const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -111,14 +110,7 @@ export default function EventHealthPage({
         >
           {t("bulkSendSummaries.entryPoint")}
         </a>
-        {moduleAccess.mail && (
-          <button
-            onClick={() => setStatusModalOpen(true)}
-            className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
-          >
-            {t("participantsPage.openBulkStatusButton")}
-          </button>
-        )}
+        {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
         <a href={`/events/${id}/participants`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
           {t("participantsPage.manageButton")}
         </a>
@@ -254,9 +246,6 @@ export default function EventHealthPage({
         />
       )}
 
-      {statusModalOpen && event && (
-        <BulkStatusModal eventId={id} eventName={event.name} onClose={() => setStatusModalOpen(false)} />
-      )}
     </div>
   );
 }

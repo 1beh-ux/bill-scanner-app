@@ -26,6 +26,17 @@ async function main() {
     { key: "participantSync.markDocumentNone", cs: "— nic —", en: "— none —" },
     { key: "participantSync.markDocumentHint", cs: "Každý nalezený nebo nově vytvořený účastník s řádkem v této tabulce dostane dokument jako doručený (např. Dotazník z tabulky odpovědí dotazníku).", en: "Every matched or newly created participant with a row in this sheet gets the document ticked as received (e.g. Questionnaire from the form's responses sheet)." },
     { key: "participantSync.count.documentsMarked", cs: "označeno dokumentů {count}", en: "{count} documents ticked" },
+    { key: "statusUpdate.button", cs: "Update stavu dokumentů", en: "Document status update" },
+    { key: "statusUpdate.title", cs: "Update stavu dokumentů", en: "Document status update" },
+    { key: "statusUpdate.intro", cs: "Vybraným rodičům odejde přehled, které dokumenty už máme a které chybí. Kliknutím na řádek zobrazíte náhled pro daného účastníka.", en: "Selected parents get an overview of which documents we have and which are missing. Click a row to preview it for that participant." },
+    { key: "statusUpdate.previewHint", cs: "Přesně takto e-mail odejde tomuto účastníkovi. Nic se neodesílá.", en: "Exactly what this participant gets. Nothing is sent." },
+    { key: "common.back", cs: "Zpět", en: "Back" },
+    { key: "participantsPage.writeEmailButton", cs: "Napsat e-mail", en: "Write an e-mail" },
+    { key: "participantsPage.writeEmailHint", cs: "Vybraným účastníkům, nebo všem zobrazeným, když nikdo vybraný není.", en: "To the selected participants, or everyone shown when nobody is selected." },
+    { key: "participantFieldAdmin.surfacesLabel", cs: "Kde se zobrazuje", en: "Where it shows" },
+    { key: "participantFieldAdmin.surface.mailList", cs: "Přehled dokumentů", en: "Documents overview" },
+    { key: "participantFieldAdmin.surface.documents", cs: "E-maily a dokumenty", en: "E-mails and documents" },
+    { key: "participantFieldAdmin.surface.health", cs: "Zdraví", en: "Health" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

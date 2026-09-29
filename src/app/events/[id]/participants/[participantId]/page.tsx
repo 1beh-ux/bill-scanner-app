@@ -7,11 +7,13 @@ import { useTranslations } from "@/lib/i18n";
 import { fieldCategory, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { composeHref } from "@/lib/compose-handoff";
 import { useConfirm } from "@/components/ConfirmDialog";
+import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 
 // Participant detail/edit (Seznam účastníků -> row). Was a modal on the list;
 // basics + guardians on the left, the event's own fields on the right.
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
 type EditGuardian = GuardianDraft & { id: string; receivesCommunications: boolean };
+type DocStatus = { docTypeId: string; name: string; received: boolean; receivedAt: string | null; receivedVia: string | null; driveUrl: string | null };
 type Core = {
   id: string;
   name: string;
@@ -52,6 +54,22 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [docs, setDocs] = useState<DocStatus[]>([]);
+  const [togglingDoc, setTogglingDoc] = useState<string | null>(null);
+
+  const loadDocs = () =>
+    fetch(`/api/participants/${participantId}/documents?byType=1`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setDocs)
+      .catch(() => {});
+
+  // Received <-> missing by hand (same toggle as the Documents overview).
+  async function toggleDoc(d: DocStatus) {
+    setTogglingDoc(d.docTypeId);
+    await fetch(`/api/events/${eventId}/participants/${participantId}/documents/${d.docTypeId}`, { method: d.received ? "DELETE" : "POST" });
+    setTogglingDoc(null);
+    loadDocs();
+  }
 
   useEffect(() => {
     fetch(`/api/participants/${participantId}/core`)
@@ -77,6 +95,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         );
       })
       .catch(() => setNotFound(true));
+    loadDocs();
     fetch(`/api/events/${eventId}/participant-fields`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setFields)
@@ -196,6 +215,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         <Link href={composeHref(eventId, { mode: "freeform", participantIds: [participantId] })} className={btnSecondary}>
           {t("participantsPage.bulkEmailButton")}
         </Link>
+        {moduleAccess.mail && <StatusUpdateButton eventId={eventId} participantId={participantId} className={btnSecondary} />}
         {moduleAccess.health && (
           <Link href={`/events/${eventId}/health/participants/${participantId}`} className="text-[13px] text-ember hover:underline">
             {t("participantsPage.editHealthDetailsLink")}
@@ -267,6 +287,43 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
           </div>
 
           <div className="flex flex-col gap-5">
+            {docs.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h2 className={sectionTitle}>{t("participantsPage.colDocuments")}</h2>
+                <ul className="flex flex-col gap-1.5">
+                  {docs.map((d) => (
+                    <li key={d.docTypeId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist px-3 py-2 text-[14px]">
+                      <span className="text-ink">{d.name}</span>
+                      <span className="flex items-center gap-2 text-[12px] text-ink-secondary">
+                        {d.received && d.receivedAt && (
+                          <span>
+                            {new Date(d.receivedAt).toLocaleDateString("cs-CZ")}
+                            {d.receivedVia && ` · ${t(`participantDetail.documentsVia.${d.receivedVia}`)}`}
+                          </span>
+                        )}
+                        {d.driveUrl && (
+                          <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                            Drive ↗
+                          </a>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggleDoc(d)}
+                          disabled={togglingDoc === d.docTypeId}
+                          title={t("participantsPage.toggleDocumentHint")}
+                          className={
+                            "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+                            (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+                          }
+                        >
+                          {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
             {otherFields.length > 0 && (
               <section className="flex flex-col gap-3">
                 <h2 className={sectionTitle}>{t("participantDetail.sectionCustomFields")}</h2>

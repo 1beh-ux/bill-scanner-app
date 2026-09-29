@@ -7,7 +7,7 @@ import { calculateAge } from "@/lib/age";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeHref, type ComposeRequest } from "@/lib/compose-handoff";
-import BulkStatusModal from "@/components/mail/BulkStatusModal";
+import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import ColumnPicker from "@/components/ColumnPicker";
 import { useConfirm } from "@/components/ConfirmDialog";
 
@@ -112,7 +112,6 @@ export default function EventParticipantsPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
-  const [statusModalOpen, setStatusModalOpen] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -336,14 +335,17 @@ export default function EventParticipantsPage({
             }}
           />
         )}
-        {moduleAccess.mail && (
-          <button
-            onClick={() => setStatusModalOpen(true)}
-            className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
-          >
-            {t("participantsPage.openBulkStatusButton")}
-          </button>
-        )}
+        <button
+          onClick={() =>
+            openCompose({ mode: "freeform", participantIds: selected.size > 0 ? Array.from(selected) : filteredParticipants.map((p) => p.id) })
+          }
+          disabled={filteredParticipants.length === 0}
+          title={t("participantsPage.writeEmailHint")}
+          className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50"
+        >
+          {t("participantsPage.writeEmailButton")}
+        </button>
+        {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
         <button onClick={openAdd} className={btnPrimary}>
           {t("participantsPage.addButton")}
         </button>
@@ -603,9 +605,6 @@ export default function EventParticipantsPage({
       )}
 
 
-      {statusModalOpen && event && (
-        <BulkStatusModal eventId={id} eventName={event.name} onClose={() => setStatusModalOpen(false)} />
-      )}
     </div>
   );
 }
