@@ -10,7 +10,9 @@ import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
+import HelpLink from "@/components/HelpLink";
 
 type EventDetail = {
   id: string;
@@ -316,27 +318,30 @@ export default function EventDetailPage({
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
 
-  const checklist: { labelKey: string; done: boolean; section: Tab }[] = [
-    { labelKey: "eventDetail.checklistDrive", done: !!(event.driveIngestFolderId || event.driveExportFolderId), section: "pripojeni" },
-    { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni" },
-    { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky" },
+  // help = Nápověda topic (src/content/help-topics.ts) linked from an unmet item.
+  const checklist: { labelKey: string; done: boolean; section: Tab; help: string }[] = [
+    { labelKey: "eventDetail.checklistDrive", done: !!(event.driveIngestFolderId || event.driveExportFolderId), section: "pripojeni", help: "pripojeni" },
+    { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni", help: "pripojeni" },
+    { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
     ...(moduleAccess.mail
-      ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "posta" as Tab }]
+      ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "posta" as Tab, help: "nastaveni-ucastnici-posta" }]
       : []),
-    { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce" },
+    { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce", help: "prijeti-registrace" },
   ];
   const checklistDone = checklist.filter((c) => c.done).length;
 
-  const visibleSections: { key: Tab; labelKey: string }[] = [
-    { key: "akce", labelKey: "eventSettings.tabAkce" },
-    ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess" }] : []),
-    { key: "pripojeni", labelKey: "eventSettings.tabPripojeni" },
-    { key: "uctenky", labelKey: "eventSettings.tabUctenky" },
-    ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants" }] : []),
-    ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth" }] : []),
-    ...(moduleAccess.mail ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail" }] : []),
+  // help = Nápověda topic for the tab (none for Plánování yet).
+  const visibleSections: { key: Tab; labelKey: string; help?: string }[] = [
+    { key: "akce", labelKey: "eventSettings.tabAkce", help: "uvod" },
+    ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
+    { key: "pripojeni", labelKey: "eventSettings.tabPripojeni", help: "pripojeni" },
+    { key: "uctenky", labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" },
+    ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth", help: "nastaveni-zdravi" }] : []),
+    ...(moduleAccess.mail ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
   ];
+  const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -381,17 +386,19 @@ export default function EventDetailPage({
         </p>
         <div className="flex flex-wrap gap-2">
           {checklist.map((item) => (
-            <button
+            <span
               key={item.labelKey}
-              onClick={() => setTab(item.section)}
               className={
-                "rounded-full px-2.5 py-0.5 text-[12px] " +
+                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] " +
                 (item.done ? "bg-pine/15 text-pine" : "bg-amber-100 text-amber-800 hover:bg-amber-200")
               }
             >
-              {item.done ? "✓ " : ""}
-              {t(item.labelKey)}
-            </button>
+              <button onClick={() => setTab(item.section)}>
+                {item.done ? "✓ " : ""}
+                {t(item.labelKey)}
+              </button>
+              {!item.done && <HelpLink slug={item.help} />}
+            </span>
           ))}
         </div>
       </div>
@@ -410,18 +417,25 @@ export default function EventDetailPage({
             </option>
           ))}
         </select>
+        {currentHelp && (
+          <Link href={`/napoveda#${currentHelp}`} className="-mt-4 self-end text-[12px] text-ember hover:underline md:hidden">
+            {t("help.link")}
+          </Link>
+        )}
         <nav className="hidden w-44 shrink-0 flex-col gap-0.5 self-start md:sticky md:top-4 md:flex">
           {visibleSections.map((s) => (
-            <button
+            <div
               key={s.key}
-              onClick={() => setTab(s.key)}
               className={
-                "rounded-lg px-3 py-2 text-left text-[13px] font-medium " +
+                "flex items-center rounded-lg pr-2 " +
                 (tab === s.key ? "bg-ember/15 text-ink" : "text-ink-secondary hover:bg-paper-2 hover:text-ink")
               }
             >
-              {t(s.labelKey)}
-            </button>
+              <button onClick={() => setTab(s.key)} className="flex-1 px-3 py-2 text-left text-[13px] font-medium">
+                {t(s.labelKey)}
+              </button>
+              {s.help && <HelpLink slug={s.help} />}
+            </div>
           ))}
         </nav>
 

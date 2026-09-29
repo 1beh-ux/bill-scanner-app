@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy } from "lucide-react";
 
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
@@ -28,6 +28,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
+      // For everyone (event organisers too), not just admins.
+      { path: "/napoveda", labelKey: "nav.help", icon: LifeBuoy },
     ],
   },
 };

@@ -24,6 +24,7 @@ import {
 import { useTranslations } from "@/lib/i18n";
 import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
 import { pickCurrentEvent, selectableEvents as pickSelectable } from "@/lib/current-event";
+import HelpLink from "@/components/HelpLink";
 
 type EventOption = { id: string; name: string; status: string };
 
@@ -216,8 +217,9 @@ export default function AppSidebar() {
         </>
       )}
 
-      <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+      <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
         {t("nav.sectionBills")}
+        <HelpLink slug="uctenky" className="hover:text-paper" />
       </div>
       <nav className="flex flex-col gap-0.5">
         {billsNavItems.map((item) => (
@@ -228,8 +230,9 @@ export default function AppSidebar() {
       {participantsNavItems.length > 0 && (
         <>
           <div className="my-3 h-px bg-night-border" />
-          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
             {t("nav.sectionParticipants")}
+            <HelpLink slug="ucastnici" className="hover:text-paper" />
           </div>
           <nav className="flex flex-col gap-0.5">
             {participantsNavItems.map((item) => (
@@ -242,8 +245,9 @@ export default function AppSidebar() {
       {healthNavItems.length > 0 && (
         <>
           <div className="my-3 h-px bg-night-border" />
-          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
             {t("nav.sectionHealth")}
+            <HelpLink slug="zdravi" className="hover:text-paper" />
           </div>
           <nav className="flex flex-col gap-0.5">
             {healthNavItems.map((item) => (
@@ -256,8 +260,9 @@ export default function AppSidebar() {
       {mailNavItems.length > 0 && (
         <>
           <div className="my-3 h-px bg-night-border" />
-          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
+          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
             {t("nav.sectionMail")}
+            <HelpLink slug="posta" className="hover:text-paper" />
           </div>
           <nav className="flex flex-col gap-0.5">
             {mailNavItems.map((item) => (
