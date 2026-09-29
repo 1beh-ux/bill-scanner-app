@@ -88,3 +88,15 @@ body {
     background: var(--ink-secondary);
   }
 }
+
+/* Nápověda (/napoveda): Markdown from content/help/*.md. */
+.help-md {
+  @apply flex flex-col gap-3 text-[14px] leading-relaxed text-ink;
+  & h2 { @apply text-[18px] font-semibold; }
+  & h3 { @apply mt-2 text-[15px] font-semibold; }
+  & ul { @apply list-disc space-y-1 pl-5; }
+  & ol { @apply list-decimal space-y-1 pl-5; }
+  & code { @apply rounded bg-paper-2 px-1 text-[13px]; }
+  & img { @apply my-1 h-auto max-w-full rounded-lg border border-mist; }
+  & a { @apply text-ember underline; }
+}
