@@ -37,7 +37,8 @@ export async function resolveEmailPreview(
   // fixed vars below take precedence on any collision.
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-    participant.event
+    participant.event,
+    "email"
   );
   const vars = {
     ...fieldVars,
@@ -106,7 +107,8 @@ export async function sendSummaryToGuardians(
   );
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-    participant.event
+    participant.event,
+    "email"
   );
   const vars = {
     ...fieldVars,

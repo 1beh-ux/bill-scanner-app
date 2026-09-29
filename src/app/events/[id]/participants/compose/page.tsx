@@ -43,10 +43,10 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   // Insertable {{variables}}: the purpose's own plus every field switched on for
-  // "E-maily a dokumenty" -- the same list the template editors offer.
+  // "E-maily" -- the same list the template editors offer.
   const [fieldVars, setFieldVars] = useState<string[]>([]);
   useEffect(() => {
-    fetch(`/api/events/${eventId}/participant-fields?surface=documents`)
+    fetch(`/api/events/${eventId}/participant-fields?surface=email`)
       .then((r) => (r.ok ? r.json() : []))
       .then((rows: { key: string }[]) => setFieldVars(rows.map((f) => f.key)))
       .catch(() => {});

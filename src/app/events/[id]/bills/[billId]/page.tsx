@@ -780,19 +780,21 @@ const statusLabel = t(
             ) : isAiLocked ? null : (
               <>
                 <button
-                  onClick={handleSaveAndNext}
+                  onClick={handleSaveOnly}
                   disabled={saving}
                   className="rounded-lg border border-ink px-4 py-2 text-[13px] text-ink hover:bg-paper"
                 >
-                  {adjacent.next ? t("billModal.saveAndNext") : t("common.save")}
+                  {t("common.save")}
                 </button>
-                <button
-                  onClick={handleSaveOnly}
-                  disabled={saving}
-                  className="rounded-lg border border-mist px-4 py-2 text-[13px] text-ink-secondary hover:bg-paper"
-                >
-                  {t("billModal.saveAndStay")}
-                </button>
+                {adjacent.next && (
+                  <button
+                    onClick={handleSaveAndNext}
+                    disabled={saving}
+                    className="rounded-lg border border-ink px-4 py-2 text-[13px] text-ink hover:bg-paper"
+                  >
+                    {t("billModal.saveAndNext")}
+                  </button>
+                )}
                 <button
                   onClick={handleApprove}
                   disabled={saving}

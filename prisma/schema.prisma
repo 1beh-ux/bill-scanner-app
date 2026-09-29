@@ -326,6 +326,9 @@ model EventCategory {
   description    String?
   budgetAmount   Decimal @map("budget_amount") @db.Decimal(12, 2)
   isFromTemplate Boolean @default(false) @map("is_from_template")
+  // The CategoryTemplate it was copied from -- sync matches by this, so a
+  // category renamed for this event isn't copied from the template again.
+  categoryTemplateId String? @map("category_template_id")
 
   event          Event          @relation(fields: [eventId], references: [id])
   billCategories BillCategory[]
@@ -579,7 +582,8 @@ enum ParticipantFieldSurface {
   health_list   // Zdraví page columns
   health_detail // Zdraví participant detail page fields
   mail_list     // Mail participants page columns
-  documents     // usable as {{key}} in document/mail merge
+  documents     // usable as {{key}} in document merge
+  email         // usable as {{key}} in e-mail templates (split from documents)
   import        // offered as a target column when importing participants
 }
 

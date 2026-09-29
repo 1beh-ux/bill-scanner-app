@@ -183,7 +183,8 @@ async function participantEmailVars(
 ): Promise<Record<string, string>> {
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-    event
+    event,
+    "email"
   );
   return {
     ...fieldVars,

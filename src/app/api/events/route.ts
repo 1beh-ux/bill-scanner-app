@@ -66,6 +66,7 @@ export async function POST(req: NextRequest) {
           description: t.description,
           budgetAmount: 0,
           isFromTemplate: true,
+          categoryTemplateId: t.id,
         })),
       });
     }

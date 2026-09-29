@@ -10,6 +10,7 @@ const ALLOWED_SURFACES: ParticipantFieldSurface[] = [
   "health_detail",
   "mail_list",
   "documents",
+  "email",
   "import",
 ];
 

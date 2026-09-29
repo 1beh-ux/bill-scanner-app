@@ -32,7 +32,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Jméno a příjmení dítěte",
     builtinProp: "name",
-    defaultSurfaces: ["list", "health_list", "health_detail", "mail_list", "documents", "import"],
+    defaultSurfaces: ["list", "health_list", "health_detail", "mail_list", "documents", "email", "import"],
   },
   {
     // New (Part 1 of the participants/settings prompt) -- name/surname split into
@@ -44,7 +44,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Jméno (křestní)",
     builtinProp: "firstName",
-    defaultSurfaces: ["documents", "import"],
+    defaultSurfaces: ["documents", "email", "import"],
   },
   {
     key: "participant_last_name",
@@ -52,7 +52,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Příjmení",
     builtinProp: "lastName",
-    defaultSurfaces: ["documents", "import"],
+    defaultSurfaces: ["documents", "email", "import"],
   },
   {
     key: "datum_narozeni",
@@ -60,7 +60,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "date",
     label: "Datum narození",
     builtinProp: "dateOfBirth",
-    defaultSurfaces: ["list", "documents", "import"],
+    defaultSurfaces: ["list", "documents", "email", "import"],
   },
   {
     key: "skupina",
@@ -84,7 +84,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Jméno zákonného zástupce",
     guardianProp: "name",
-    defaultSurfaces: ["documents", "import"],
+    defaultSurfaces: ["documents", "email", "import"],
   },
   {
     key: "zak_zast_jmeno",
@@ -92,7 +92,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Jméno zákonného zástupce (posudek)",
     guardianProp: "name",
-    defaultSurfaces: ["documents"],
+    defaultSurfaces: ["documents", "email"],
   },
   {
     key: "vztah",
@@ -100,7 +100,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Vztah k dítěti",
     guardianProp: "relationship",
-    defaultSurfaces: ["documents", "import"],
+    defaultSurfaces: ["documents", "email", "import"],
   },
   {
     key: "zast_telefon",
@@ -108,7 +108,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Telefon zákonného zástupce",
     guardianProp: "phone",
-    defaultSurfaces: ["documents", "import"],
+    defaultSurfaces: ["documents", "email", "import"],
   },
   {
     // Kind changed from "guardian" (plain guardians[0].email) to "computed"
@@ -125,7 +125,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     // page.tsx) still resolves to this field's key ("Email"); import always writes a real
     // ParticipantGuardian row, never this computed field.
     guardianProp: "email",
-    defaultSurfaces: ["list", "mail_list", "documents", "import"],
+    defaultSurfaces: ["list", "mail_list", "documents", "email", "import"],
   },
   {
     key: "price",
@@ -133,7 +133,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "number",
     label: "Cena (dle členství)",
     computedType: "effective_price",
-    defaultSurfaces: ["documents"],
+    defaultSurfaces: ["documents", "email"],
   },
   {
     key: "var_symb",
@@ -141,7 +141,7 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "text",
     label: "Variabilní symbol platby",
     computedType: "variable_symbol",
-    defaultSurfaces: ["documents"],
+    defaultSurfaces: ["documents", "email"],
   },
   {
     key: "picture",
@@ -149,6 +149,6 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     fieldType: "image",
     label: "QR kód pro platbu",
     computedType: "payment_qr_image",
-    defaultSurfaces: ["documents"],
+    defaultSurfaces: ["documents", "email"],
   },
 ];

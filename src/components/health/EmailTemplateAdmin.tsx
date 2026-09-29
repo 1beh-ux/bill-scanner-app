@@ -40,12 +40,12 @@ export default function EmailTemplateAdmin({
   useEffect(() => {
     const url =
       scope === "event"
-        ? `/api/events/${eventId}/participant-fields?surface=documents`
+        ? `/api/events/${eventId}/participant-fields?surface=email`
         : "/api/participant-field-templates";
     fetch(url)
       .then((r) => (r.ok ? r.json() : []))
       .then((data: { key: string; label: string; surfaces?: string[]; defaultSurfaces?: string[] }[]) => {
-        const rows = scope === "event" ? data : data.filter((f) => f.defaultSurfaces?.includes("documents"));
+        const rows = scope === "event" ? data : data.filter((f) => f.defaultSurfaces?.includes("email"));
         setExtraVariables(rows.map((f) => ({ key: f.key, label: f.label })));
       })
       .catch(() => setExtraVariables([]));

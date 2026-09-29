@@ -7,7 +7,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { surfacesForCategory, type ParticipantFieldCategory } from "@/lib/participant-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
-type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
+type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 type ModuleKey = "bills" | "health" | "mail" | "planning";
 type FieldKind = "custom" | "builtin" | "guardian" | "computed";
 type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
@@ -338,15 +338,16 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setExpandedId(null);
   }
 
-  // Where the field shows up -- one pill per place, click to switch. "E-maily a
-  // dokumenty" is the `documents` surface: the {{variable}} is offered in every
-  // e-mail template editor and filled in e-mails and documents. Zdraví switches
-  // both health surfaces together. (Replaced the read-only category badge.)
+  // Where the field shows up -- one pill per place, click to switch. "E-maily"
+  // (`email`): the {{variable}} is offered in every e-mail template editor and
+  // filled in e-mails; "Dokumenty" (`documents`): filled in generated documents.
+  // Zdraví switches both health surfaces together.
   function surfacePills(field: Field) {
     const surfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
     const pills: { label: string; surfaces: Surface[] }[] = [
       { label: t("participantFieldAdmin.showInListLabel"), surfaces: ["list"] },
       ...(!isEvent || enabledModules.has("mail") ? [{ label: t("participantFieldAdmin.surface.mailList"), surfaces: ["mail_list"] as Surface[] }] : []),
+      { label: t("participantFieldAdmin.surface.email"), surfaces: ["email"] },
       { label: t("participantFieldAdmin.surface.documents"), surfaces: ["documents"] },
       ...(!isEvent || enabledModules.has("health")
         ? [{ label: t("participantFieldAdmin.surface.health"), surfaces: ["health_list", "health_detail"] as Surface[] }]

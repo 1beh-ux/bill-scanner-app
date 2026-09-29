@@ -35,7 +35,13 @@ async function main() {
     { key: "participantsPage.writeEmailHint", cs: "Vybraným účastníkům, nebo všem zobrazeným, když nikdo vybraný není.", en: "To the selected participants, or everyone shown when nobody is selected." },
     { key: "participantFieldAdmin.surfacesLabel", cs: "Kde se zobrazuje", en: "Where it shows" },
     { key: "participantFieldAdmin.surface.mailList", cs: "Přehled dokumentů", en: "Documents overview" },
-    { key: "participantFieldAdmin.surface.documents", cs: "E-maily a dokumenty", en: "E-mails and documents" },
+    { key: "participantFieldAdmin.surface.documents", cs: "Dokumenty", en: "Documents" },
+    { key: "participantFieldAdmin.surface.email", cs: "E-maily", en: "E-mails" },
+    { key: "participantDetail.prev", cs: "Předchozí účastník", en: "Previous participant" },
+    { key: "participantDetail.next", cs: "Další účastník", en: "Next participant" },
+    { key: "participantDetail.saveAndNext", cs: "Uložit a další", en: "Save and next" },
+    { key: "participantDetail.saveAndClose", cs: "Uložit a zavřít", en: "Save and close" },
+    { key: "eventDetail.categoryDescriptionPlaceholder", cs: "Popis (pro tuto akci)", en: "Description (for this event)" },
     { key: "participantFieldAdmin.surface.health", cs: "Zdraví", en: "Health" },
   ];
   for (const row of rows) {

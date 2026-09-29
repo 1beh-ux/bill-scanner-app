@@ -28,7 +28,8 @@ async function bulkStatusVars(
   const receivedItemIds = await getReceivedItemIds(participant.id);
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-    event
+    event,
+    "email"
   );
   return {
     ...fieldVars,

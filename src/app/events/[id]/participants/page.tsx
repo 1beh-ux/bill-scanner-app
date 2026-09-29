@@ -67,7 +67,6 @@ export default function EventParticipantsPage({
   const confirm = useConfirm();
   const router = useRouter();
   const openCompose = (req: ComposeRequest) => router.push(composeHref(id, req));
-  const openDetail = (participantId: string) => router.push(`/events/${id}/participants/${participantId}`);
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -139,6 +138,14 @@ export default function EventParticipantsPage({
     if (!query) return participants;
     return participants.filter((p) => p.name.toLowerCase().includes(query));
   }, [participants, searchQuery]);
+
+  function openDetail(participantId: string) {
+    // The detail page's previous/next walk the list exactly as shown here (search included).
+    try {
+      sessionStorage.setItem(`participantOrder:${id}`, JSON.stringify(filteredParticipants.map((p) => p.id)));
+    } catch {}
+    router.push(`/events/${id}/participants/${participantId}`);
+  }
 
   function openAdd() {
     setError(null);

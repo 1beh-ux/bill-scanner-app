@@ -110,7 +110,7 @@ export async function allowedParticipantFieldKeys(
     // `documents`/`import` are orthogonal to which screen shows a field --
     // ignore them here so a field that's health_detail-only but also
     // document-mergeable doesn't leak just because it has a second surface.
-    const gateSurfaces = f.surfaces.filter((s) => s !== "documents" && s !== "import");
+    const gateSurfaces = f.surfaces.filter((s) => s !== "documents" && s !== "email" && s !== "import");
     const isHealthOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "health_list" || s === "health_detail");
     const isMailOnly = gateSurfaces.length > 0 && gateSurfaces.every((s) => s === "mail_list");
     if (isHealthOnly && !enabledModules.has("health")) continue;

@@ -22,12 +22,15 @@ export async function PATCH(
 
   const body = await req.json();
   const { name, description, budgetAmount } = body;
+  if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+    return NextResponse.json({ error: "name_required" }, { status: 400 });
+  }
 
   const category = await prisma.eventCategory.update({
     where: { id },
     data: {
-      ...(name !== undefined && { name }),
-      ...(description !== undefined && { description }),
+      ...(name !== undefined && { name: name.trim() }),
+      ...(description !== undefined && { description: typeof description === "string" && description.trim() ? description.trim() : null }),
       ...(budgetAmount !== undefined && { budgetAmount }),
     },
   });

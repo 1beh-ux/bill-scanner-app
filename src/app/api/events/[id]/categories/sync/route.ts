@@ -22,10 +22,12 @@ export async function POST(
 
   const [templates, existing] = await Promise.all([
     prisma.categoryTemplate.findMany(),
-    prisma.eventCategory.findMany({ where: { eventId }, select: { name: true } }),
+    prisma.eventCategory.findMany({ where: { eventId }, select: { name: true, categoryTemplateId: true } }),
   ]);
+  // Already here: linked to the template (possibly renamed for this event), or same name.
+  const linked = new Set(existing.map((e) => e.categoryTemplateId));
   const existingNames = new Set(existing.map((e) => e.name));
-  const toAdd = templates.filter((t) => !existingNames.has(t.name));
+  const toAdd = templates.filter((t) => !linked.has(t.id) && !existingNames.has(t.name));
 
   if (toAdd.length > 0) {
     await prisma.eventCategory.createMany({
@@ -35,6 +37,7 @@ export async function POST(
         description: t.description,
         budgetAmount: 0,
         isFromTemplate: true,
+        categoryTemplateId: t.id,
       })),
     });
   }

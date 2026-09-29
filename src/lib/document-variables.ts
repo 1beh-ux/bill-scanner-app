@@ -124,10 +124,12 @@ export const DEFAULT_QR_SIZE_MM = 35;
 
 export async function resolveVariables(
   participant: ParticipantForMerge,
-  event: EventForMerge
+  event: EventForMerge,
+  // Which fields are filled: generated documents ("documents") or e-mails ("email").
+  surface: "documents" | "email" = "documents"
 ): Promise<{ text: Record<string, string>; images: Record<string, Buffer>; imageSizesMm: Record<string, number> }> {
   const fields = await prisma.eventParticipantField.findMany({
-    where: { eventId: event.id, active: true, surfaces: { has: "documents" } },
+    where: { eventId: event.id, active: true, surfaces: { has: surface } },
   });
   // Event-level fields -- not participant-scoped, so not an
   // EventParticipantField row, always resolved regardless of surfaces.

@@ -1,5 +1,5 @@
 export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
-export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "import";
+export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 export type ParticipantFieldKind = "custom" | "builtin" | "guardian" | "computed";
 
 export type ParticipantFieldDef = {
@@ -39,7 +39,7 @@ export function fieldCategory(kind: ParticipantFieldKind, surfaces: ParticipantF
 
 /** The full surfaces set implied by a category -- documents/import always on, `list` only if asked. */
 export function surfacesForCategory(category: ParticipantFieldCategory, showInList: boolean): ParticipantFieldSurface[] {
-  const surfaces: ParticipantFieldSurface[] = ["documents", "import"];
+  const surfaces: ParticipantFieldSurface[] = ["documents", "email", "import"];
   if (showInList) surfaces.push("list");
   if (category === "health") surfaces.push("health_list", "health_detail");
   if (category === "mail") surfaces.push("mail_list");

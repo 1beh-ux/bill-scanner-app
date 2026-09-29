@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -55,6 +56,8 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docs, setDocs] = useState<DocStatus[]>([]);
+  const [adjacent, setAdjacent] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
+  const [baseline, setBaseline] = useState<string | null>(null);
   const [togglingDoc, setTogglingDoc] = useState<string | null>(null);
 
   const loadDocs = () =>
@@ -83,6 +86,16 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         setGroup(p.groupName ?? "");
         setDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
         setValues({ ...(p.customFieldValues ?? {}) });
+        setBaseline(
+          JSON.stringify({
+            firstName: p.firstName ?? "",
+            lastName: p.lastName ?? (p.firstName ? "" : p.name),
+            group: p.groupName ?? "",
+            dob: p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "",
+            values: { ...(p.customFieldValues ?? {}) },
+          })
+        );
+        setSaved(false);
         setGuardians(
           p.guardians.map((g) => ({
             id: g.id,
@@ -106,12 +119,52 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
       .catch(() => {});
   }, [eventId, participantId]);
 
+  // Previous/next = the participant list's order as last shown (see openDetail there),
+  // or the list's default order when this page was opened directly.
+  useEffect(() => {
+    const place = (ids: string[]) => {
+      const i = ids.indexOf(participantId);
+      setAdjacent({ prev: i > 0 ? ids[i - 1] : null, next: i >= 0 && i < ids.length - 1 ? ids[i + 1] : null });
+    };
+    let stored: string[] = [];
+    try {
+      stored = JSON.parse(sessionStorage.getItem(`participantOrder:${eventId}`) ?? "[]");
+    } catch {}
+    if (Array.isArray(stored) && stored.includes(participantId)) return place(stored);
+    fetch(`/api/events/${eventId}/participants`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string }[]) => place(rows.map((r) => r.id)))
+      .catch(() => {});
+  }, [eventId, participantId]);
+
+  const isDirty = baseline !== null && JSON.stringify({ firstName, lastName, group, dob, values }) !== baseline;
+
+  async function leave(href: string) {
+    if (isDirty && !(await confirm({ message: t("billModal.unsavedConfirm"), confirmLabel: t("billModal.leaveWithoutSaving"), danger: true }))) return;
+    router.push(href);
+  }
+  const detailHref = (pid: string) => `/events/${eventId}/participants/${pid}`;
+  const listHref = `/events/${eventId}/participants`;
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "ArrowLeft" && adjacent.prev) leave(detailHref(adjacent.prev));
+      if (e.key === "ArrowRight" && adjacent.next) leave(detailHref(adjacent.next));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adjacent, isDirty]);
+
   // "Údaje" vs "Zdravotní poznámky" (health-category custom fields).
   const otherFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) !== "health"), [fields]);
   const healthFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) === "health"), [fields]);
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  // then: where to go after a successful save (stay = undefined).
+  async function save(e: React.FormEvent | null, then?: "next" | "close") {
+    e?.preventDefault();
     if (!firstName.trim() && !lastName.trim()) return;
     setSaving(true);
     setSaved(false);
@@ -129,7 +182,10 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
     });
     setSaving(false);
     if (!res.ok) return setError(t("participantDetail.errorSaveFailed"));
+    setBaseline(JSON.stringify({ firstName, lastName, group, dob, values }));
     setSaved(true);
+    if (then === "close") router.push(listHref);
+    else if (then === "next" && adjacent.next) router.push(detailHref(adjacent.next));
   }
 
   async function remove() {
@@ -191,10 +247,11 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   }
 
   const back = (
-    <Link href={`/events/${eventId}/participants`} className="text-[13px] text-ink-secondary hover:text-ink">
+    <button type="button" onClick={() => leave(listHref)} className="text-[13px] text-ink-secondary hover:text-ink">
       ← {t("participantsPage.centralTitle")}
-    </Link>
+    </button>
   );
+  const arrow = "rounded-lg border border-mist p-1.5 text-ink-secondary hover:bg-paper-2 disabled:opacity-40 disabled:hover:bg-transparent";
   if (notFound) return <div className="mx-auto max-w-5xl p-4 md:p-8">{back}<p className="mt-4 text-[14px] text-ink-secondary">{t("participantDetail.notFound")}</p></div>;
   if (!core) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
@@ -202,7 +259,17 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      {back}
+      <div className="flex items-center justify-between gap-2">
+        {back}
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => adjacent.prev && leave(detailHref(adjacent.prev))} disabled={!adjacent.prev} title={t("participantDetail.prev")} aria-label={t("participantDetail.prev")} className={arrow}>
+            <ChevronLeft size={16} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={() => adjacent.next && leave(detailHref(adjacent.next))} disabled={!adjacent.next} title={t("participantDetail.next")} aria-label={t("participantDetail.next")} className={arrow}>
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
       <div className="mb-5 mt-2 flex flex-wrap items-center gap-3">
         <h1 className="text-[22px] font-semibold text-ink">{[firstName, lastName].filter(Boolean).join(" ") || core.name}</h1>
         <Link
@@ -348,11 +415,19 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
           <button type="button" onClick={remove} className="text-[13px] text-red-600 hover:underline">
             {t("common.delete")}
           </button>
-          <div className="flex items-center gap-3">
-            {saved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
-            <button type="submit" disabled={saving} className={btnPrimary}>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {saved && !isDirty && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
+            <button type="submit" disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
               {saving ? t("common.loading") : t("common.save")}
             </button>
+            <button type="button" onClick={() => save(null, "close")} disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
+              {t("participantDetail.saveAndClose")}
+            </button>
+            {adjacent.next && (
+              <button type="button" onClick={() => save(null, "next")} disabled={saving} className={btnPrimary}>
+                {t("participantDetail.saveAndNext")}
+              </button>
+            )}
           </div>
         </div>
       </form>

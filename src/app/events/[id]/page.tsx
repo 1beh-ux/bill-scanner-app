@@ -108,6 +108,8 @@ export default function EventDetailPage({
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
   const [newCategoryName, setNewCategoryName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [syncingCategories, setSyncingCategories] = useState(false);
@@ -228,6 +230,8 @@ export default function EventDetailPage({
   function startEdit(cat: Category) {
     setEditingId(cat.id);
     setEditValue(cat.budgetAmount);
+    setEditName(cat.name);
+    setEditDescription(cat.description ?? "");
   }
 
   async function saveBudget(catId: string) {
@@ -235,7 +239,8 @@ export default function EventDetailPage({
     const res = await fetch(`/api/event-categories/${catId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ budgetAmount: editValue }),
+      // Name/description are this event's own -- a template sync won't overwrite them.
+      body: JSON.stringify({ budgetAmount: editValue, name: editName, description: editDescription }),
     });
     if (!res.ok) {
       const data = await res.json();
@@ -556,8 +561,28 @@ export default function EventDetailPage({
                     {categories.map((cat) => (
                       <tr key={cat.id} className="border-b border-mist/60">
                         <td className="p-2 text-[14px] text-ink">
-                          <div>{cat.name}</div>
-                          {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
+                          {editingId === cat.id ? (
+                            <div className="flex flex-col gap-1">
+                              <input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                placeholder={t("common.name")}
+                                className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                              />
+                              <textarea
+                                value={editDescription}
+                                onChange={(e) => setEditDescription(e.target.value)}
+                                placeholder={t("eventDetail.categoryDescriptionPlaceholder")}
+                                rows={2}
+                                className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[12px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              <div>{cat.name}</div>
+                              {cat.description && <div className="text-[12px] text-ink-secondary">{cat.description}</div>}
+                            </>
+                          )}
                         </td>
                         <td className="p-2 text-[14px] text-ink">
                           {editingId === cat.id ? (
@@ -566,7 +591,6 @@ export default function EventDetailPage({
                               value={editValue}
                               onChange={(e) => setEditValue(e.target.value)}
                               className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
-                              autoFocus
                             />
                           ) : (
                             <span>{parseFloat(cat.budgetAmount).toLocaleString("cs-CZ")}</span>
@@ -575,7 +599,7 @@ export default function EventDetailPage({
                         <td className="whitespace-nowrap p-2">
                           {editingId === cat.id ? (
                             <>
-                              <button onClick={() => saveBudget(cat.id)} className="mr-3 text-[13px] text-pine hover:underline">
+                              <button onClick={() => saveBudget(cat.id)} disabled={!editName.trim()} className="mr-3 text-[13px] text-pine hover:underline disabled:opacity-50">
                                 {t("common.save")}
                               </button>
                               <button onClick={() => setEditingId(null)} className="text-[13px] text-ink-secondary hover:underline">
