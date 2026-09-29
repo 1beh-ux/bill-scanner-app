@@ -154,7 +154,7 @@ export default function EventHealthPage({
                         {participantListName(p)}
                       </a>
                       <a
-                        href={`/events/${id}/participants?edit=${p.id}`}
+                        href={`/events/${id}/participants/${p.id}`}
                         className="ml-2 text-[11.5px] text-ink-secondary hover:text-ink hover:underline"
                       >
                         {t("healthPage.openInRosterLink")}
@@ -230,7 +230,7 @@ export default function EventHealthPage({
                   {age !== null && <span>{t("participantsPage.colAge")}: {age}</span>}
                 </div>
                 <div className="mt-2 flex items-center justify-between">
-                  <a href={`/events/${id}/participants?edit=${p.id}`} className="text-[12px] text-ink-secondary hover:text-ink hover:underline">
+                  <a href={`/events/${id}/participants/${p.id}`} className="text-[12px] text-ink-secondary hover:text-ink hover:underline">
                     {t("healthPage.openInRosterLink")}
                   </a>
                   <button onClick={() => setIncidentParticipantId(p.id)} className="text-[13px] text-ember hover:underline">

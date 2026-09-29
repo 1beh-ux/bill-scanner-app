@@ -53,6 +53,22 @@ export default function EmailTemplateAdmin({
   const variables = [...purposeVariables, ...extraVariables.map((f) => f.key)];
   const extraDummyValues = Object.fromEntries(extraVariables.map((f) => [f.key, `[${f.label}]`]));
 
+  // Event scope previews with a real participant of the event (server-filled,
+  // same code as the send); org scope has no event, so it keeps sample values.
+  const [previewParticipants, setPreviewParticipants] = useState<{ id: string; name: string }[]>([]);
+  const [previewFor, setPreviewFor] = useState("");
+  const [realPreview, setRealPreview] = useState<{ subject: string; body: string } | null>(null);
+  useEffect(() => {
+    if (scope !== "event") return;
+    fetch(`/api/events/${eventId}/participants`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string; name: string }[]) => {
+        setPreviewParticipants(rows.map((r) => ({ id: r.id, name: r.name })));
+        setPreviewFor((cur) => cur || rows[0]?.id || "");
+      })
+      .catch(() => {});
+  }, [scope, eventId]);
+
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [hasOverride, setHasOverride] = useState(false);
@@ -63,6 +79,21 @@ export default function EmailTemplateAdmin({
   // override exists (otherwise the event IS the org default already).
   const [orgCompare, setOrgCompare] = useState<{ subject: string; body: string } | null>(null);
   const [comparing, setComparing] = useState(false);
+
+  useEffect(() => {
+    if (scope !== "event" || !previewFor) return;
+    const handle = setTimeout(() => {
+      fetch(`/api/events/${eventId}/email-template/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purposeKey, participantId: previewFor, subject, body }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then(setRealPreview)
+        .catch(() => setRealPreview(null));
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [scope, eventId, purposeKey, previewFor, subject, body]);
 
   const subjectRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -226,16 +257,37 @@ export default function EmailTemplateAdmin({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         onFocus={() => (activeFieldRef.current = "body")}
-        rows={6}
+        rows={10}
         className={inputClass + " mb-3"}
       />
 
       <div className="mb-4 rounded-lg border border-mist bg-paper-2 p-3">
-        <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">
-          {t("emailTemplateAdmin.previewTitle")}
-        </p>
-        <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey, extraDummyValues)}</p>
-        <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey, extraDummyValues)}</p>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] uppercase tracking-wide text-ink-secondary">{t("emailTemplateAdmin.previewTitle")}</p>
+          {scope === "event" && previewParticipants.length > 0 && (
+            <select value={previewFor} onChange={(e) => setPreviewFor(e.target.value)} className="rounded-lg border border-mist bg-paper px-2 py-0.5 text-[12px] text-ink">
+              {previewParticipants.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+        {scope === "event" && realPreview ? (
+          <>
+            <p className="mb-2 text-[14px] font-medium text-ink">{realPreview.subject}</p>
+            <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{realPreview.body}</p>
+          </>
+        ) : (
+          <>
+            {scope === "event" && previewParticipants.length === 0 && (
+              <p className="mb-1 text-[11.5px] text-amber-700">{t("emailTemplateAdmin.previewSampleNoParticipants")}</p>
+            )}
+            <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey, extraDummyValues)}</p>
+            <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey, extraDummyValues)}</p>
+          </>
+        )}
       </div>
 
       <div className="flex justify-end">

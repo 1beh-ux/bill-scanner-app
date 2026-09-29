@@ -395,7 +395,7 @@ export default function ParticipantDetailPage({
           <a href={`/api/participants/${participantId}/summary-pdf`} className={btnSecondary}>
             {t("participantDetail.downloadPdfButton")}
           </a>
-          <a href={`/events/${eventId}/participants?edit=${participantId}`} className={btnSecondary}>
+          <a href={`/events/${eventId}/participants/${participantId}`} className={btnSecondary}>
             {t("common.edit")}
           </a>
           <div className="relative">

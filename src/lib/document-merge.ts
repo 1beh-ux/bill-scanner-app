@@ -116,6 +116,20 @@ export async function mergeAndExportDocument(
   }
 }
 
+/** A Google Doc exported to PDF as it is (fixed attachments -- no variables, no copy). */
+export async function exportGoogleDocPdf(eventId: string, templateDocId: string): Promise<Buffer> {
+  try {
+    const drive = await getDriveClient(eventId);
+    const exported = await drive.files.export(
+      { fileId: extractGoogleDocId(templateDocId), mimeType: "application/pdf" },
+      { responseType: "arraybuffer" }
+    );
+    return Buffer.from(exported.data as ArrayBuffer);
+  } catch (err) {
+    throw await toDriveError(eventId, err, { purpose: "read" });
+  }
+}
+
 async function mergeAndExportDocumentRaw(
   eventId: string,
   templateDocId: string,

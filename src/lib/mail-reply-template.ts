@@ -15,6 +15,10 @@ export type DocumentTypeData = {
   // default (per-send opt-out happens in ComposeEmailModal, not here).
   templateGoogleDocId?: string;
   autoAttachOnAccept?: boolean;
+  // The same PDF for everyone (e.g. "Pokyny"): the Google Doc is exported as
+  // is -- no merge, no per-participant copy -- and it is not a tracked
+  // document (no received/missing status, not in checklists).
+  staticAttachment?: boolean;
 };
 
 export type DocumentListItem = {

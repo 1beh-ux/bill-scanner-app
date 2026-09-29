@@ -13,6 +13,52 @@ export interface BulkStatusSendResult {
   errorMessage?: string;
 }
 
+type EventRow = NonNullable<Awaited<ReturnType<typeof prisma.event.findUnique>>>;
+type ParticipantRow = NonNullable<Awaited<ReturnType<typeof prisma.participant.findUnique>>> & {
+  guardians: { email: string; receivesCommunications: boolean; name: string | null; relationship: string | null; phone: string | null }[];
+};
+
+/** {{variables}} of the bulk status e-mail -- shared by the send and the settings preview. */
+async function bulkStatusVars(
+  participant: ParticipantRow,
+  event: EventRow,
+  sender: { name: string; signature: string },
+  documentTypes: Awaited<ReturnType<typeof getActiveDocumentTypes>>
+): Promise<Record<string, string>> {
+  const receivedItemIds = await getReceivedItemIds(participant.id);
+  const { text: fieldVars } = await resolveVariables(
+    { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+    event
+  );
+  return {
+    ...fieldVars,
+    participant_name: participant.name,
+    camp_name: event.name,
+    document_checklist: buildDocumentChecklistText(documentTypes, receivedItemIds),
+    questionnaire_url: event.mailQuestionnaireUrl ?? "",
+    sender_name: sender.name,
+    signature: sender.signature,
+    contact_email: resolveContactEmail(participant),
+  };
+}
+
+/** The bulk status e-mail for one real participant, from a template being edited. */
+export async function previewBulkStatusEmail(
+  eventId: string,
+  participantId: string,
+  sentByUserId: string,
+  template: { subject: string; body: string }
+): Promise<{ subject: string; body: string } | null> {
+  const [event, participant, user] = await Promise.all([
+    prisma.event.findUnique({ where: { id: eventId } }),
+    prisma.participant.findUnique({ where: { id: participantId }, include: { guardians: { where: { receivesCommunications: true } } } }),
+    prisma.user.findUnique({ where: { id: sentByUserId } }),
+  ]);
+  if (!event || !participant || participant.eventId !== eventId) return null;
+  const vars = await bulkStatusVars(participant, event, senderIdentity(user, "Pošta tábora"), await getActiveDocumentTypes(eventId));
+  return { subject: substituteVariables(template.subject, vars), body: substituteVariables(template.body, vars) };
+}
+
 // Structured exactly like sendSummaryToGuardians (src/lib/parent-email-send.ts):
 // per-guardian try/catch, one ParentEmailLog row per attempt regardless of
 // outcome, so a bad address for one family never blocks the rest of the batch.
@@ -43,21 +89,7 @@ export async function sendBulkStatusUpdates(
     });
     if (!participant || participant.guardians.length === 0) continue;
 
-    const receivedItemIds = await getReceivedItemIds(participantId);
-    const { text: fieldVars } = await resolveVariables(
-      { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-      event
-    );
-    const vars = {
-      ...fieldVars,
-      participant_name: participant.name,
-      camp_name: event.name,
-      document_checklist: buildDocumentChecklistText(documentTypes, receivedItemIds),
-      questionnaire_url: event.mailQuestionnaireUrl ?? "",
-      sender_name: sender.name,
-      signature: sender.signature,
-      contact_email: resolveContactEmail(participant),
-    };
+    const vars = await bulkStatusVars(participant, event, sender, documentTypes);
     const subject = substituteVariables(templateSubject, vars);
     const body = substituteVariables(templateBody, vars);
 

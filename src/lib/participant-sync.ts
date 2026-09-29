@@ -57,6 +57,11 @@ export type ParticipantSync = SyncSettings & {
   // Match keys already created or matched: a key seen before that no longer
   // matches anybody (participant deleted in the app) is NOT created again.
   seenKeys: string[];
+  // Document type ticked as received for every participant with a row here
+  // (e.g. "Dotazník" from the questionnaire's sheet); recorded as the user
+  // who saved the connection (ownerUserId), auto syncs included.
+  markDocumentId?: string;
+  ownerUserId?: string;
   runningSince?: string;
   lastSync?: SyncRunSummary;
 };
@@ -430,6 +435,8 @@ export function readSyncs(value: unknown): ParticipantSync[] {
         autoSync: s.autoSync === true,
         everyHours: SYNC_INTERVALS.includes(s.everyHours as number) ? (s.everyHours as number) : 6,
         seenKeys: Array.isArray(s.seenKeys) ? s.seenKeys.filter((k) => typeof k === "string") : [],
+        markDocumentId: typeof s.markDocumentId === "string" && s.markDocumentId ? s.markDocumentId : undefined,
+        ownerUserId: typeof s.ownerUserId === "string" ? s.ownerUserId : undefined,
       },
     ];
   });

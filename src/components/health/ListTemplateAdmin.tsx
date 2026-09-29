@@ -25,6 +25,7 @@ type DocumentData = {
   filenameSuffix?: string;
   templateGoogleDocId?: string;
   autoAttachOnAccept?: boolean;
+  staticAttachment?: boolean;
 };
 
 type Item = {
@@ -76,6 +77,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [filenameSuffix, setFilenameSuffix] = useState("");
   const [templateGoogleDocId, setTemplateGoogleDocId] = useState("");
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
+  const [staticAttachment, setStaticAttachment] = useState(false);
   const [planData, setPlanData] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -129,6 +131,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setFilenameSuffix("");
     setTemplateGoogleDocId("");
     setAutoAttachOnAccept(true);
+    setStaticAttachment(false);
     setPlanData(categoryGroup ? { group: categoryGroup } : {});
     setEditingId(null);
   }
@@ -154,6 +157,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setFilenameSuffix((item.data as DocumentData | null)?.filenameSuffix ?? "");
     setTemplateGoogleDocId((item.data as DocumentData | null)?.templateGoogleDocId ?? "");
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
+    setStaticAttachment((item.data as DocumentData | null)?.staticAttachment ?? false);
     setPlanData((item.data as Record<string, unknown> | null) ?? {});
     setFormOpen(true);
   }
@@ -186,6 +190,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           filenameSuffix: filenameSuffix.trim() || undefined,
           templateGoogleDocId: scope === "event" ? templateGoogleDocId.trim() || undefined : undefined,
           autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
+          staticAttachment: scope === "event" && staticAttachment ? true : undefined,
         }
       : undefined;
 
@@ -410,6 +415,13 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                       onChange={(e) => setAutoAttachOnAccept(e.target.checked)}
                     />
                     {t("listTemplateAdmin.autoAttachOnAcceptLabel")}
+                  </label>
+                  <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
+                    <input type="checkbox" className="mt-0.5" checked={staticAttachment} onChange={(e) => setStaticAttachment(e.target.checked)} />
+                    <span>
+                      {t("listTemplateAdmin.staticAttachmentLabel")}
+                      <span className="block text-[11.5px]">{t("listTemplateAdmin.staticAttachmentHint")}</span>
+                    </span>
                   </label>
                 </>
               )}

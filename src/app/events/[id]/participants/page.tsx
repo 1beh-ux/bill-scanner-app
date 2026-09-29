@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState, use } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { calculateAge } from "@/lib/age";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
-import { fieldCategory } from "@/lib/participant-fields";
-import ComposeEmailModal from "@/components/health/ComposeEmailModal";
+import { composeHref, type ComposeRequest } from "@/lib/compose-handoff";
 import BulkStatusModal from "@/components/mail/BulkStatusModal";
 import ColumnPicker from "@/components/ColumnPicker";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -47,16 +47,11 @@ function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string
 }
 
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
-// A saved guardian row shown in the edit panel -- edited and saved in place (own PATCH
-// per row), not as part of the surrounding form submit.
-type EditGuardian = { id: string; name: string; email: string; relationship: string; phone: string; receivesCommunications: boolean };
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
-const btnSecondary =
-  "rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
 
 function emptyGuardian(): GuardianDraft {
   return { name: "", email: "", relationship: "", phone: "" };
@@ -70,6 +65,9 @@ export default function EventParticipantsPage({
   const { id } = use(params);
   const { t } = useTranslations();
   const confirm = useConfirm();
+  const router = useRouter();
+  const openCompose = (req: ComposeRequest) => router.push(composeHref(id, req));
+  const openDetail = (participantId: string) => router.push(`/events/${id}/participants/${participantId}`);
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -87,32 +85,8 @@ export default function EventParticipantsPage({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [editParticipant, setEditParticipant] = useState<Participant | null>(null);
-  const [editFirstName, setEditFirstName] = useState("");
-  const [editLastName, setEditLastName] = useState("");
-  const [editGroup, setEditGroup] = useState("");
-  const [editDob, setEditDob] = useState("");
-  const [editCustomFieldValues, setEditCustomFieldValues] = useState<Record<string, string>>({});
-  const [savingEdit, setSavingEdit] = useState(false);
-  // Guardians (Part 2): loaded fresh from /core when the edit panel opens, each row
-  // saved with its own PATCH -- separate from the surrounding form's single submit,
-  // same immediate-save pattern already used for surface pills elsewhere on this page.
-  const [editGuardians, setEditGuardians] = useState<EditGuardian[]>([]);
-  const [newGuardianDraft, setNewGuardianDraft] = useState<GuardianDraft>(emptyGuardian());
-  const [savingGuardianId, setSavingGuardianId] = useState<string | null>(null);
-
-  // All active event fields (any surface) -- what the edit modal offers,
-  // since editing a value shouldn't depend on where it happens to be
-  // displayed (custom fields only -- guardian/computed values aren't
-  // editable here, and builtin fields already have their own dedicated
-  // inputs above).
+  // Active event fields -- the roster's optional columns (editing lives on the detail page).
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  // Part 2: the edit panel splits custom fields into "Údaje" (everything else) and
-  // "Zdravotní poznámky" (Zdraví-category, only ever non-empty when Health is enabled
-  // for the event -- allowedParticipantFieldKeys already keeps them out of `fields`
-  // otherwise, see module-access.ts).
-  const editableFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) !== "health"), [fields]);
-  const editableHealthFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) === "health"), [fields]);
   // Every non-builtin field with the `list` surface -- candidates for the
   // roster's optional columns. builtin fields (Name/Group/DOB/status) and the
   // "Email" computed field are excluded: they're always shown via the dedicated
@@ -138,9 +112,6 @@ export default function EventParticipantsPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
   const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
-  const [composeModal, setComposeModal] = useState<{ mode: "acceptance" | "freeform"; participantIds: string[]; alreadyAccepted?: boolean } | null>(
-    null
-  );
   const [statusModalOpen, setStatusModalOpen] = useState(false);
 
   async function load() {
@@ -163,16 +134,6 @@ export default function EventParticipantsPage({
       .then(setModuleAccess)
       .catch(() => {});
   }, [id]);
-
-  // Deep link from a participant's Health detail page ("Upravit údaje")
-  // opens straight into that person's core-details edit modal here.
-  useEffect(() => {
-    if (loading) return;
-    const editId = new URLSearchParams(window.location.search).get("edit");
-    if (!editId) return;
-    const p = participants.find((x) => x.id === editId);
-    if (p) startEdit(p);
-  }, [loading, participants]);
 
   const filteredParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -238,133 +199,6 @@ export default function EventParticipantsPage({
     load();
   }
 
-  function startEdit(p: Participant) {
-    setError(null);
-    setEditParticipant(p);
-    // Not split yet (scripts/split-participant-names.ts hasn't run for this row, or left
-    // it ambiguous) -- put the whole stored name in Příjmení rather than losing it from
-    // the form; the admin can move the first name across by hand.
-    setEditFirstName(p.firstName ?? "");
-    setEditLastName(p.lastName ?? (p.firstName ? "" : p.name));
-    setEditGroup(p.groupName ?? "");
-    setEditDob(p.dateOfBirth ? p.dateOfBirth.slice(0, 10) : "");
-    setEditCustomFieldValues({ ...(p.customFieldValues ?? {}) });
-    setNewGuardianDraft(emptyGuardian());
-    setEditGuardians([]);
-    fetch(`/api/participants/${p.id}/core`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { guardians?: EditGuardian[] } | null) => {
-        if (data?.guardians) {
-          setEditGuardians(
-            data.guardians.map((g) => ({
-              id: g.id,
-              name: g.name ?? "",
-              email: g.email,
-              relationship: g.relationship ?? "",
-              phone: g.phone ?? "",
-              receivesCommunications: g.receivesCommunications,
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }
-
-  function setEditFieldValue(key: string, value: string) {
-    setEditCustomFieldValues((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function updateEditGuardianDraft(id: string, patch: Partial<EditGuardian>) {
-    setEditGuardians((prev) => prev.map((g) => (g.id === id ? { ...g, ...patch } : g)));
-  }
-
-  async function saveEditGuardian(guardianId: string) {
-    const g = editGuardians.find((x) => x.id === guardianId);
-    if (!g || !editParticipant) return;
-    setSavingGuardianId(guardianId);
-    await fetch(`/api/participants/${editParticipant.id}/guardians/${guardianId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: g.name.trim() || null,
-        email: g.email.trim(),
-        relationship: g.relationship.trim() || null,
-        phone: g.phone.trim() || null,
-        receivesCommunications: g.receivesCommunications,
-      }),
-    });
-    setSavingGuardianId(null);
-    load();
-  }
-
-  async function deleteEditGuardian(guardianId: string) {
-    if (!editParticipant) return;
-    if (!(await confirm({ message: t("participantDetail.confirmDeleteGuardian"), danger: true }))) return;
-    setSavingGuardianId(guardianId);
-    await fetch(`/api/participants/${editParticipant.id}/guardians/${guardianId}`, { method: "DELETE" });
-    setSavingGuardianId(null);
-    // No reorder -- just drop the deleted row, everything else keeps its position.
-    setEditGuardians((prev) => prev.filter((g) => g.id !== guardianId));
-    load();
-  }
-
-  async function addEditGuardian() {
-    if (!editParticipant || !newGuardianDraft.email.trim()) return;
-    setSavingGuardianId("new");
-    const res = await fetch(`/api/participants/${editParticipant.id}/guardians`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newGuardianDraft.name.trim() || undefined,
-        email: newGuardianDraft.email.trim(),
-        relationship: newGuardianDraft.relationship.trim() || undefined,
-        phone: newGuardianDraft.phone.trim() || undefined,
-      }),
-    });
-    setSavingGuardianId(null);
-    if (!res.ok) return;
-    const created = (await res.json()) as { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
-    // New row always goes at the end -- existing rows never move.
-    setEditGuardians((prev) => [
-      ...prev,
-      { id: created.id, name: created.name ?? "", email: created.email, relationship: created.relationship ?? "", phone: created.phone ?? "", receivesCommunications: created.receivesCommunications },
-    ]);
-    setNewGuardianDraft(emptyGuardian());
-    load();
-  }
-
-  async function saveEdit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editParticipant || (!editFirstName.trim() && !editLastName.trim())) return;
-    setSavingEdit(true);
-    setError(null);
-    const res = await fetch(`/api/participants/${editParticipant.id}/core`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        firstName: editFirstName.trim(),
-        lastName: editLastName.trim(),
-        groupName: editGroup.trim() || null,
-        dateOfBirth: editDob || null,
-        customFieldValues: editCustomFieldValues,
-      }),
-    });
-    setSavingEdit(false);
-    if (!res.ok) {
-      setError(t("participantDetail.errorSaveFailed"));
-      return;
-    }
-    setEditParticipant(null);
-    load();
-  }
-
-  async function handleDelete(p: Participant) {
-    if (!(await confirm({ message: t("participantDetail.confirmDeleteParticipant", { name: p.name }), danger: true }))) return;
-    await fetch(`/api/participants/${p.id}/core`, { method: "DELETE" });
-    setEditParticipant(null);
-    load();
-  }
-
   function toggleSelect(participantId: string) {
     const next = new Set(selected);
     if (next.has(participantId)) next.delete(participantId);
@@ -411,7 +245,10 @@ export default function EventParticipantsPage({
   const statusButton = (p: (typeof filteredParticipants)[number]) =>
     p.registrationStatus === "accepted" ? (
       <button
-        onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id], alreadyAccepted: true })}
+        onClick={(e) => {
+          e.stopPropagation();
+          openCompose({ mode: "acceptance", participantIds: [p.id], alreadyAccepted: true });
+        }}
         title={t("participantsPage.regenerateHint")}
         className="rounded-full bg-pine/15 px-2 py-0.5 text-pine hover:bg-pine/25"
       >
@@ -419,7 +256,10 @@ export default function EventParticipantsPage({
       </button>
     ) : (
       <button
-        onClick={() => setComposeModal({ mode: "acceptance", participantIds: [p.id] })}
+        onClick={(e) => {
+          e.stopPropagation();
+          openCompose({ mode: "acceptance", participantIds: [p.id] });
+        }}
         className="rounded-full bg-ember/15 px-2 py-0.5 text-ember hover:bg-ember/25"
       >
         {t("participantsPage.statusPendingAction")}
@@ -516,7 +356,7 @@ export default function EventParticipantsPage({
           </span>
           <button
             onClick={() =>
-              setComposeModal({
+              openCompose({
                 mode: "acceptance",
                 participantIds: Array.from(selected),
                 alreadyAccepted: participants.filter((p) => selected.has(p.id)).every((p) => p.registrationStatus === "accepted"),
@@ -527,7 +367,7 @@ export default function EventParticipantsPage({
             {t("participantsPage.bulkAcceptButton")}
           </button>
           <button
-            onClick={() => setComposeModal({ mode: "freeform", participantIds: Array.from(selected) })}
+            onClick={() => openCompose({ mode: "freeform", participantIds: Array.from(selected) })}
             className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2"
           >
             {t("participantsPage.bulkEmailButton")}
@@ -575,21 +415,14 @@ export default function EventParticipantsPage({
               {filteredParticipants.map((p) => {
                 const age = calculateAge(p.dateOfBirth);
                 return (
-                  <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
-                    <td className="p-2">
+                  // The whole row opens the participant; the checkbox and status chip don't.
+                  <tr key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer border-b border-mist/60 hover:bg-paper-2">
+                    <td className="p-2" onClick={(e) => e.stopPropagation()}>
                       <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} />
                     </td>
                     {/* Not split yet (firstName/lastName both null) -- fall back to the whole
                         stored name in the surname cell rather than showing nothing. */}
-                    <td className="p-2 text-[14px] text-ink">
-                      {moduleAccess.health ? (
-                        <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
-                          {p.lastName || (p.firstName ? "—" : p.name)}
-                        </a>
-                      ) : (
-                        p.lastName || (p.firstName ? "—" : p.name)
-                      )}
-                    </td>
+                    <td className="p-2 text-[14px] font-medium text-ink">{p.lastName || (p.firstName ? "—" : p.name)}</td>
                     <td className="p-2 text-[14px] text-ink">{p.firstName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
@@ -605,11 +438,7 @@ export default function EventParticipantsPage({
                         {resolveDynamicValue(f, p)}
                       </td>
                     ))}
-                    <td className="whitespace-nowrap p-2 text-right">
-                      <button onClick={() => startEdit(p)} className="text-[13px] text-ember hover:underline">
-                        {t("common.edit")}
-                      </button>
-                    </td>
+                    <td className="whitespace-nowrap p-2 text-right text-ink-secondary">›</td>
                   </tr>
                 );
               })}
@@ -627,17 +456,17 @@ export default function EventParticipantsPage({
             const age = calculateAge(p.dateOfBirth);
             const fullName = [p.lastName, p.firstName].filter(Boolean).join(" ") || p.name;
             return (
-              <div key={p.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+              <div key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer rounded-lg border border-mist bg-paper-2 p-3">
                 <div className="mb-1.5 flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-start gap-2">
-                    <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="mt-1 shrink-0" />
-                    {moduleAccess.health ? (
-                      <a href={`/events/${id}/health/participants/${p.id}`} className="text-[14px] font-medium text-ember hover:underline">
-                        {fullName}
-                      </a>
-                    ) : (
-                      <span className="text-[14px] font-medium text-ink">{fullName}</span>
-                    )}
+                    <input
+                      type="checkbox"
+                      checked={selected.has(p.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelect(p.id)}
+                      className="mt-1 shrink-0"
+                    />
+                    <span className="text-[14px] font-medium text-ink">{fullName}</span>
                   </div>
                   <span className="shrink-0 text-[12px]">{statusButton(p)}</span>
                 </div>
@@ -661,11 +490,6 @@ export default function EventParticipantsPage({
                     ))}
                   </dl>
                 )}
-                <div className="mt-2 text-right">
-                  <button onClick={() => startEdit(p)} className="text-[13px] text-ember hover:underline">
-                    {t("common.edit")}
-                  </button>
-                </div>
               </div>
             );
           })}
@@ -778,304 +602,10 @@ export default function EventParticipantsPage({
         </div>
       )}
 
-      {editParticipant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
-            <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("common.edit")}</h2>
-            <form onSubmit={saveEdit} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-3">
-                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
-                  {t("participantDetail.sectionBasics")}
-                </h3>
-                <div className="flex gap-2">
-                  <label className="flex-1 text-[13px] text-ink-secondary">
-                    {t("participantsPage.firstNameLabel")}
-                    <input
-                      type="text"
-                      value={editFirstName}
-                      onChange={(e) => setEditFirstName(e.target.value)}
-                      className={inputClass + " mt-1"}
-                      autoFocus
-                    />
-                  </label>
-                  <label className="flex-1 text-[13px] text-ink-secondary">
-                    {t("participantsPage.lastNameLabel")}
-                    <input
-                      type="text"
-                      value={editLastName}
-                      onChange={(e) => setEditLastName(e.target.value)}
-                      className={inputClass + " mt-1"}
-                    />
-                  </label>
-                </div>
-                <label className="text-[13px] text-ink-secondary">
-                  {t("participantsPage.colGroup")}
-                  <input
-                    type="text"
-                    value={editGroup}
-                    onChange={(e) => setEditGroup(e.target.value)}
-                    className={inputClass + " mt-1"}
-                  />
-                </label>
-                <label className="text-[13px] text-ink-secondary">
-                  {t("participantsPage.dobLabel")}
-                  <input
-                    type="date"
-                    value={editDob}
-                    onChange={(e) => setEditDob(e.target.value)}
-                    className={inputClass + " mt-1"}
-                  />
-                </label>
-              </div>
-
-              <div className="flex flex-col gap-2 border-t border-mist pt-4">
-                <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
-                  {t("participantDetail.guardiansTitle")}
-                </h3>
-                {editGuardians.map((g) => (
-                  <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder={t("common.name")}
-                        value={g.name}
-                        onChange={(e) => updateEditGuardianDraft(g.id, { name: e.target.value })}
-                        className={inputClass + " flex-1"}
-                      />
-                      <input
-                        type="email"
-                        placeholder={t("participantDetail.guardianEmailLabel")}
-                        value={g.email}
-                        onChange={(e) => updateEditGuardianDraft(g.id, { email: e.target.value })}
-                        className={inputClass + " flex-1"}
-                      />
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder={t("participantDetail.guardianRelationshipLabel")}
-                        value={g.relationship}
-                        onChange={(e) => updateEditGuardianDraft(g.id, { relationship: e.target.value })}
-                        className={inputClass + " flex-1"}
-                      />
-                      <input
-                        type="tel"
-                        placeholder={t("participantDetail.guardianPhoneLabel")}
-                        value={g.phone}
-                        onChange={(e) => updateEditGuardianDraft(g.id, { phone: e.target.value })}
-                        className={inputClass + " flex-1"}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <label className="flex items-center gap-2 text-[13px] text-ink">
-                        <input
-                          type="checkbox"
-                          checked={g.receivesCommunications}
-                          onChange={(e) => updateEditGuardianDraft(g.id, { receivesCommunications: e.target.checked })}
-                        />
-                        {t("participantDetail.guardianReceivesLabel")}
-                      </label>
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => saveEditGuardian(g.id)}
-                          disabled={savingGuardianId === g.id}
-                          className="text-[13px] text-ember hover:underline disabled:opacity-50"
-                        >
-                          {t("common.save")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => deleteEditGuardian(g.id)}
-                          disabled={savingGuardianId === g.id}
-                          className="text-[13px] text-red-600 hover:underline disabled:opacity-50"
-                        >
-                          {t("common.delete")}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-mist p-2">
-                  <input
-                    type="text"
-                    placeholder={t("common.name")}
-                    value={newGuardianDraft.name}
-                    onChange={(e) => setNewGuardianDraft((d) => ({ ...d, name: e.target.value }))}
-                    className={inputClass + " flex-1"}
-                  />
-                  <input
-                    type="email"
-                    placeholder={t("participantDetail.guardianEmailLabel")}
-                    value={newGuardianDraft.email}
-                    onChange={(e) => setNewGuardianDraft((d) => ({ ...d, email: e.target.value }))}
-                    className={inputClass + " flex-1"}
-                  />
-                  <button
-                    type="button"
-                    onClick={addEditGuardian}
-                    disabled={savingGuardianId === "new" || !newGuardianDraft.email.trim()}
-                    className={btnSecondary}
-                  >
-                    {t("participantDetail.addGuardianButton")}
-                  </button>
-                </div>
-              </div>
-
-              {editableFields.length > 0 && (
-                <div className="flex flex-col gap-3 border-t border-mist pt-4">
-                  <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
-                    {t("participantDetail.sectionCustomFields")}
-                  </h3>
-                  {editableFields.map((f) => (
-                    <FieldInput
-                      key={f.id}
-                      field={f}
-                      value={editCustomFieldValues[f.key] ?? ""}
-                      onChange={(v) => setEditFieldValue(f.key, v)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {editableHealthFields.length > 0 && (
-                <div className="flex flex-col gap-3 border-t border-mist pt-4">
-                  <h3 className="text-[13px] font-semibold uppercase tracking-wide text-ink-secondary">
-                    {t("participantDetail.sectionHealthNotes")}
-                  </h3>
-                  {editableHealthFields.map((f) => (
-                    <FieldInput
-                      key={f.id}
-                      field={f}
-                      value={editCustomFieldValues[f.key] ?? ""}
-                      onChange={(v) => setEditFieldValue(f.key, v)}
-                      multiline
-                    />
-                  ))}
-                </div>
-              )}
-
-              {moduleAccess.health && (
-                <a
-                  href={`/events/${id}/health/participants/${editParticipant.id}`}
-                  className="text-[13px] text-ember hover:underline"
-                >
-                  {t("participantsPage.editHealthDetailsLink")}
-                </a>
-              )}
-
-              {error && <p className="text-[13px] text-red-600">{error}</p>}
-
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDelete(editParticipant)}
-                  className="text-[13px] text-red-600 hover:underline"
-                >
-                  {t("common.delete")}
-                </button>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setEditParticipant(null)} className="text-[13px] text-ink-secondary hover:underline">
-                    {t("common.cancel")}
-                  </button>
-                  <button type="submit" disabled={savingEdit} className={btnPrimary}>
-                    {t("common.save")}
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {composeModal && (
-        <ComposeEmailModal
-          eventId={id}
-          participantIds={composeModal.participantIds}
-          mode={composeModal.mode}
-          alreadyAccepted={composeModal.alreadyAccepted}
-          onClose={() => setComposeModal(null)}
-          onSent={({ sentCount, failedCount, documentsGenerated, documentFailures, emailSkipped }) => {
-            setComposeModal(null);
-            setSelected(new Set());
-            setNotice({
-              warn: failedCount > 0 || documentFailures.length > 0,
-              text:
-                (emailSkipped
-                  ? t("composeEmailModal.docsRegenerated", { count: String(documentsGenerated) })
-                  : t("composeEmailModal.sendDone", { sent: String(sentCount), failed: String(failedCount) })) +
-                (documentFailures.length > 0
-                  ? " " + t("composeEmailModal.docsFailed", { docs: documentFailures.join(", ") })
-                  : ""),
-            });
-            load();
-          }}
-        />
-      )}
 
       {statusModalOpen && event && (
         <BulkStatusModal eventId={id} eventName={event.name} onClose={() => setStatusModalOpen(false)} />
       )}
     </div>
-  );
-}
-
-// Renders one admin-defined field by its type. Values are always stored as
-// plain strings in Participant.customFieldValues (see
-// src/lib/document-variables.ts's participant_custom_field resolver) --
-// boolean fields round-trip as the literal strings "true"/"false".
-function FieldInput({
-  field,
-  value,
-  onChange,
-  multiline,
-}: {
-  field: ParticipantFieldDef;
-  value: string;
-  onChange: (value: string) => void;
-  // Zdravotní poznámky tend to be longer free text (Part 7: this replaces the Health
-  // detail page's separate textarea-based notes editor -- same field, one editor now,
-  // so it keeps the textarea instead of regressing to a single-line input).
-  multiline?: boolean;
-}) {
-  if (field.fieldType === "boolean") {
-    return (
-      <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} />
-        {field.label}
-      </label>
-    );
-  }
-  if (field.fieldType === "select") {
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
-        <option value="">{field.label}</option>
-        {(field.options ?? []).map((opt) => (
-          <option key={opt} value={opt}>
-            {opt}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  if (multiline && field.fieldType === "text") {
-    return (
-      <textarea
-        placeholder={field.label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={3}
-        className={inputClass}
-      />
-    );
-  }
-  return (
-    <input
-      type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}
-      placeholder={field.label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={inputClass}
-    />
   );
 }

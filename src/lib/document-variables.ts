@@ -143,12 +143,11 @@ export async function resolveVariables(
     questionnaire_line: event.mailQuestionnaireUrl
       ? `Odkaz na vyplnění dotazníku: ${event.mailQuestionnaireUrl}.`
       : "",
-    // A full clause, not a bare date: with no real conditional-block templating
-    // ({{#if}}...{{/if}}), a bare date would leave a dangling "do ." sentence
-    // fragment when unset. This lets the default template just place
-    // {{registration_deadline}} as its own sentence and have it vanish cleanly
-    // when the event has no deadline set (Part 11-I: "sentence is omitted").
-    registration_deadline: event.registrationDeadline
+    // The bare date -- the template writes its own sentence around it.
+    registration_deadline: event.registrationDeadline ? formatDate(event.registrationDeadline) : "",
+    // The whole sentence, empty when the event has no deadline (no conditional
+    // blocks in templates, so this is how a line can vanish cleanly).
+    registration_deadline_line: event.registrationDeadline
       ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
       : "",
   };

@@ -116,7 +116,11 @@ export async function planFor(eventId: string, table: Table, settings: SyncSetti
 const nullIfEmpty = (s: string | undefined) => s?.trim() || null;
 
 /** Writes the plan's create/update rows. Returns counts and the keys now known to exist. */
-export async function applyPlan(eventId: string, plan: PlanRow[]): Promise<{ counts: Record<string, number>; seen: string[]; failedRows: number[] }> {
+export async function applyPlan(
+  eventId: string,
+  plan: PlanRow[],
+  markDocument?: { docTypeId: string; userId: string }
+): Promise<{ counts: Record<string, number>; seen: string[]; failedRows: number[] }> {
   const counts = countPlan(plan);
   const seen: string[] = [];
   const failedRows: number[] = [];
@@ -124,7 +128,7 @@ export async function applyPlan(eventId: string, plan: PlanRow[]): Promise<{ cou
     try {
       if (r.status === "create" && r.create) {
         const c = r.create;
-        await prisma.participant.create({
+        const created = await prisma.participant.create({
           data: {
             eventId,
             name: c.name,
@@ -138,6 +142,7 @@ export async function applyPlan(eventId: string, plan: PlanRow[]): Promise<{ cou
             },
           },
         });
+        if (markDocument && (await markReceived(created.id, markDocument))) counts.documentsMarked = (counts.documentsMarked ?? 0) + 1;
       } else if (r.status === "update" && r.patch && r.participant) {
         const { patch } = r;
         const id = r.participant.id;
@@ -165,6 +170,9 @@ export async function applyPlan(eventId: string, plan: PlanRow[]): Promise<{ cou
           }
         });
       }
+      if (markDocument && r.participant && ["update", "same", "skip"].includes(r.status) && (await markReceived(r.participant.id, markDocument))) {
+        counts.documentsMarked = (counts.documentsMarked ?? 0) + 1;
+      }
       if (r.matchKey && ["create", "update", "same", "skip"].includes(r.status)) seen.push(r.matchKey);
     } catch (err) {
       console.error(`participant sync row ${r.rowNumber} failed`, err);
@@ -174,6 +182,19 @@ export async function applyPlan(eventId: string, plan: PlanRow[]): Promise<{ cou
     }
   }
   return { counts, seen, failedRows };
+}
+
+/** Ticks the document as received (no file) unless it already is. True when newly ticked. */
+async function markReceived(participantId: string, m: { docTypeId: string; userId: string }): Promise<boolean> {
+  const existing = await prisma.participantDocument.findFirst({
+    where: { participantId, eventListItemId: m.docTypeId, receivedVia: { not: "generated" } },
+    select: { id: true },
+  });
+  if (existing) return false;
+  await prisma.participantDocument.create({
+    data: { participantId, eventListItemId: m.docTypeId, receivedVia: "sheet", receivedByUserId: m.userId },
+  });
+  return true;
 }
 
 const ISSUE_STATUSES = new Set(["unmatched", "seen_missing", "error"]);
@@ -204,7 +225,8 @@ export async function runSavedSync(eventId: string, syncId: string, auto: boolea
     if ("error" in sheet) summary.error = sheet.error;
     else {
       const plan = await planFor(eventId, sheet, sync, await loadImportFields(eventId), sync.seenKeys);
-      const applied = await applyPlan(eventId, plan);
+      const markDocument = sync.markDocumentId && sync.ownerUserId ? { docTypeId: sync.markDocumentId, userId: sync.ownerUserId } : undefined;
+      const applied = await applyPlan(eventId, plan, markDocument);
       summary.counts = applied.counts;
       seen = applied.seen;
       const failed = new Set(applied.failedRows);

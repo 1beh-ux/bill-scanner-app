@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber } from "@/lib/document-variables";
-import { mergeAndExportDocument } from "@/lib/document-merge";
+import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
 import { getOrCreateSubfolder } from "@/lib/drive";
@@ -53,7 +53,9 @@ async function buildAutoAttachDocuments(
     driveExportFolderId: string | null;
   },
   allowedDocumentTypeIds: string[] | undefined,
-  generatedByUserId: string
+  generatedByUserId: string,
+  // Fixed attachments exported once per send, shared by every participant.
+  staticPdfs: Map<string, Promise<Buffer>>
 ): Promise<{
   attachments: { buffer: Buffer; filename: string; mimeType: string }[];
   failedDocuments: string[];
@@ -100,8 +102,20 @@ async function buildAutoAttachDocuments(
   for (const docType of documentTypes) {
     const data = docType.data as DocumentTypeData | null;
     if (!data?.templateGoogleDocId) continue;
-    if (!data.autoAttachOnAccept) continue;
-    if (allowedDocumentTypeIds && !allowedDocumentTypeIds.includes(docType.id)) continue;
+    if (!willGenerate(docType.id, data, allowedDocumentTypeIds)) continue;
+
+    if (data?.staticAttachment) {
+      try {
+        if (!staticPdfs.has(docType.id)) staticPdfs.set(docType.id, exportGoogleDocPdf(event.id, data.templateGoogleDocId!));
+        attachments.push({ buffer: await staticPdfs.get(docType.id)!, filename: `${docType.name}.pdf`, mimeType: "application/pdf" });
+        attachedDocumentNames.push(documentDisplayName({ ...docType, data }));
+      } catch (err) {
+        staticPdfs.delete(docType.id);
+        failedDocuments.push(docType.name);
+        console.log(`[participant-bulk-email] failed to export fixed attachment "${docType.name}":`, String(err));
+      }
+      continue;
+    }
 
     try {
       const buffer = await mergeAndExportDocument(
@@ -149,6 +163,82 @@ async function buildAutoAttachDocuments(
   return { attachments, failedDocuments, generatedCount, attachedDocumentNames };
 }
 
+// The send dialog's ticked documents decide; autoAttachOnAccept is only the
+// default when no explicit choice is sent. (Previously both had to hold, so
+// ticking a document not flagged autoAttachOnAccept silently did nothing.)
+function willGenerate(docTypeId: string, data: DocumentTypeData | null, allowed: string[] | undefined): boolean {
+  if (!data?.templateGoogleDocId) return false;
+  return allowed ? allowed.includes(docTypeId) : !!data.autoAttachOnAccept;
+}
+
+type EventRow = NonNullable<Awaited<ReturnType<typeof prisma.event.findUnique>>>;
+type ParticipantRow = NonNullable<Awaited<ReturnType<typeof loadParticipant>>>;
+
+/** {{variables}} of a participant e-mail -- shared by the send and the preview so they can't differ. */
+async function participantEmailVars(
+  participant: ParticipantRow,
+  event: EventRow,
+  sender: { name: string; signature: string },
+  attachedDocumentNames: string[]
+): Promise<Record<string, string>> {
+  const { text: fieldVars } = await resolveVariables(
+    { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
+    event
+  );
+  return {
+    ...fieldVars,
+    participant_name: participant.name,
+    camp_name: event.name,
+    sender_name: sender.name,
+    signature: sender.signature,
+    contact_email: resolveContactEmail(participant),
+    attachments_list: attachedDocumentNames.join(", "),
+    sender_email: event.senderEmail ?? "",
+  };
+}
+
+/**
+ * What sendBulkParticipantEmail would send to one participant, without
+ * sending or generating anything: same variables; documents listed by the
+ * ones that would be generated; a registration number not assigned yet shows
+ * the one the send would assign (max + 1).
+ */
+export async function previewParticipantEmail(opts: {
+  eventId: string;
+  participantId: string;
+  subject: string;
+  body: string;
+  sentByUserId: string;
+  markAccepted: boolean;
+  autoAttachDocumentTypeIds?: string[];
+}): Promise<{ subject: string; body: string; recipients: string[] } | null> {
+  const [event, participant, sentByUser] = await Promise.all([
+    prisma.event.findUnique({ where: { id: opts.eventId } }),
+    loadParticipant(opts.participantId),
+    prisma.user.findUnique({ where: { id: opts.sentByUserId } }),
+  ]);
+  if (!event || !participant || participant.eventId !== opts.eventId) return null;
+
+  let docNames: string[] = [];
+  let forVars = participant;
+  if (opts.markAccepted) {
+    const documentTypes = await prisma.eventListItem.findMany({ where: { eventId: event.id, kind: "document", active: true } });
+    docNames = documentTypes
+      .filter((d) => willGenerate(d.id, d.data as DocumentTypeData | null, opts.autoAttachDocumentTypeIds))
+      .map((d) => documentDisplayName({ ...d, data: d.data as DocumentTypeData | null }));
+    if (participant.registrationNumber == null) {
+      const max = await prisma.participant.aggregate({ where: { eventId: event.id }, _max: { registrationNumber: true } });
+      forVars = { ...participant, registrationNumber: (max._max.registrationNumber ?? 0) + 1 };
+    }
+  }
+  const vars = await participantEmailVars(forVars, event, senderIdentity(sentByUser, "Tábor"), docNames);
+  return {
+    subject: substituteVariables(opts.subject, vars),
+    body: substituteVariables(opts.body, vars),
+    recipients: participant.guardians.map((g) => g.email),
+  };
+}
+
 function loadParticipant(participantId: string) {
   return prisma.participant.findUnique({
     where: { id: participantId },
@@ -192,6 +282,7 @@ export async function sendBulkParticipantEmail(opts: {
   const sendEmail = opts.sendEmail !== false;
   let documentsGenerated = 0;
   const failedDocs = new Set<string>();
+  const staticPdfs = new Map<string, Promise<Buffer>>();
 
   for (const participantId of opts.participantIds) {
     const participant = await loadParticipant(participantId);
@@ -200,26 +291,15 @@ export async function sendBulkParticipantEmail(opts: {
     // Built before `vars` -- {{attachments_list}} depends on what actually got
     // attached (Part 11-I), not a static guess made before generation runs.
     const generated = opts.markAccepted
-      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId)
+      ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId, staticPdfs)
       : { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
     const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
     documentsGenerated += generated.generatedCount;
     generated.failedDocuments.forEach((d) => failedDocs.add(d));
 
-    const { text: fieldVars } = await resolveVariables(
-      { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
-      event
-    );
-    const vars = {
-      ...fieldVars,
-      participant_name: participant.name,
-      camp_name: event.name,
-      sender_name: sender.name,
-      signature: sender.signature,
-      contact_email: resolveContactEmail(participant),
-      attachments_list: generated.attachedDocumentNames.join(", "),
-      sender_email: senderEmail ?? "",
-    };
+    // Re-read: the acceptance send may just have assigned the registration number.
+    const fresh = (await loadParticipant(participantId)) ?? participant;
+    const vars = await participantEmailVars(fresh, event, sender, generated.attachedDocumentNames);
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 

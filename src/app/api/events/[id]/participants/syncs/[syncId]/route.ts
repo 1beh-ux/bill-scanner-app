@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { extractSpreadsheetId } from "@/lib/sheet-import";
 import { loadImportFields, publicSync, restrictSettings, runSavedSync, updateSyncs } from "@/lib/participant-sync-run";
 import { SYNC_INTERVALS, sanitizeSettings, type ParticipantSync } from "@/lib/participant-sync";
+
+async function validDocType(eventId: string, id: unknown): Promise<string | undefined> {
+  if (typeof id !== "string" || !id) return undefined;
+  const item = await prisma.eventListItem.findFirst({ where: { id, eventId, kind: "document" }, select: { id: true } });
+  return item?.id;
+}
 
 type Ctx = { params: Promise<{ id: string; syncId: string }> };
 
@@ -33,6 +40,8 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     tab: typeof body.tab === "string" ? body.tab : undefined,
     ...settings,
     autoSync: body.autoSync === true,
+    markDocumentId: await validDocType(g.eventId, body.markDocumentId),
+    ownerUserId: g.user.id,
     everyHours: SYNC_INTERVALS.includes(body.everyHours) ? body.everyHours : 6,
   };
   let saved: ParticipantSync | undefined;

@@ -48,10 +48,9 @@ Děkujeme,
 {{sender_name}}`,
   },
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: {
-    // Final wording (Part 5/11 of the participants/settings prompt) -- replaces the
-    // earlier "[PLACEHOLDER: ...]" text. No hard-coded deadline date: {{registration_
-    // deadline}} resolves to a whole sentence (empty when the event has none set --
-    // see resolveVariables in document-variables.ts), and {{attachments_list}} is
+    // {{registration_deadline_line}} is a whole sentence (empty when the event has
+    // no deadline -- see resolveVariables in document-variables.ts);
+    // {{registration_deadline}} alone is just the date. {{attachments_list}} is
     // built from whatever actually got attached to this specific send.
     subject: "Přijetí registrace: {{participant_name}} — {{camp_name}}",
     body: `Dobrý den,
@@ -60,7 +59,7 @@ s radostí potvrzujeme přijetí {{participant_name}} na akci {{camp_name}}.
 
 V příloze najdete: {{attachments_list}}.
 
-{{registration_deadline}}
+{{registration_deadline_line}}
 
 Kdyby cokoli nebylo jasné, ozvěte se na {{sender_email}}.
 

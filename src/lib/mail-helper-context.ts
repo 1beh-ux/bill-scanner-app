@@ -6,12 +6,15 @@ export async function getActiveDocumentTypes(eventId: string): Promise<DocumentL
     where: { eventId, kind: "document", active: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
-  return items.map((i) => ({
-    id: i.id,
-    key: i.key,
-    name: i.name,
-    data: (i.data as DocumentTypeData | null) ?? null,
-  }));
+  // Fixed attachments (staticAttachment) are never received back -- not tracked.
+  return items
+    .filter((i) => !(i.data as DocumentTypeData | null)?.staticAttachment)
+    .map((i) => ({
+      id: i.id,
+      key: i.key,
+      name: i.name,
+      data: (i.data as DocumentTypeData | null) ?? null,
+    }));
 }
 
 // "Received" means a guardian actually sent it back (receivedVia: email or

@@ -28,7 +28,7 @@ const STATUS_CLASS: Record<string, string> = {
   error: "text-red-600",
 };
 const PROBLEMS = new Set(["error", "unmatched", "seen_missing"]);
-const COUNT_ORDER = ["create", "update", "same", "skip", "unmatched", "seen_missing", "superseded", "excluded", "error", "failed"];
+const COUNT_ORDER = ["create", "update", "same", "skip", "documentsMarked", "unmatched", "seen_missing", "superseded", "excluded", "error", "failed"];
 
 export function CountsLine({ counts }: { counts: Record<string, number> }) {
   const { t } = useTranslations();
@@ -64,6 +64,17 @@ export default function SyncEditor({
   const [tabs, setTabs] = useState<string[]>([]);
   const [autoSync, setAutoSync] = useState(initial?.autoSync ?? false);
   const [everyHours, setEveryHours] = useState(initial?.everyHours ?? 6);
+  const [markDocumentId, setMarkDocumentId] = useState(initial?.markDocumentId ?? "");
+  const [docTypes, setDocTypes] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (mode !== "sheet") return;
+    fetch(`/api/events/${eventId}/list-items?kind=document&all=false`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: { id: string; name: string; data?: { staticAttachment?: boolean } | null }[]) =>
+        setDocTypes(items.filter((i) => !i.data?.staticAttachment).map((i) => ({ id: i.id, name: i.name })))
+      )
+      .catch(() => {});
+  }, [eventId, mode]);
   const [settings, setSettings] = useState<SyncSettings>(
     initial
       ? { mapping: initial.mapping, matchBy: initial.matchBy, onNew: initial.onNew, onMatch: initial.onMatch, overrides: initial.overrides, excluded: initial.excluded }
@@ -190,7 +201,7 @@ export default function SyncEditor({
     const res = await fetch(`/api/events/${eventId}/participants/syncs/${initial?.id ?? "new"}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, sheetId: sheetInput, tab, autoSync, everyHours, ...settings }),
+      body: JSON.stringify({ name, sheetId: sheetInput, tab, autoSync, everyHours, markDocumentId, ...settings }),
     });
     if (!res.ok) {
       setError(t("participantSync.saveFailed"));
@@ -371,6 +382,20 @@ export default function SyncEditor({
                 <option value="skip">{t("participantSync.onMatch.skip")}</option>
               </select>
             </label>
+            {mode === "sheet" && (
+              <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
+                {t("participantSync.markDocument")}
+                <select value={markDocumentId} onChange={(e) => setMarkDocumentId(e.target.value)} className={input}>
+                  <option value="">{t("participantSync.markDocumentNone")}</option>
+                  {docTypes.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <span>{t("participantSync.markDocumentHint")}</span>
+              </label>
+            )}
             {mode === "sheet" && (
               <div className="flex flex-col gap-1 text-[12px] text-ink-secondary">
                 {t("participantSync.auto")}

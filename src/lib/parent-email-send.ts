@@ -20,7 +20,9 @@ export function formatDateRange(startDate: Date, endDate: Date): string {
 /** Resolved subject + body with the same variable substitution the real send uses, for a pre-send preview. */
 export async function resolveEmailPreview(
   participantId: string,
-  sender: { name: string; signature: string }
+  sender: { name: string; signature: string },
+  // A template being edited (settings preview); default = the saved one.
+  template?: { subject: string; body: string }
 ): Promise<{ subject: string; body: string }> {
   const participant = await prisma.participant.findUnique({
     where: { id: participantId },
@@ -28,10 +30,8 @@ export async function resolveEmailPreview(
   });
   if (!participant) throw new Error("participant_not_found");
 
-  const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
-    participant.eventId,
-    PARENT_SUMMARY_PURPOSE_KEY
-  );
+  const { subject: templateSubject, body: templateBody } =
+    template ?? (await resolveEmailTemplate(participant.eventId, PARENT_SUMMARY_PURPOSE_KEY));
   // Every documents-flagged participant field (custom/builtin/guardian/
   // computed) is usable here too, same {{key}} as document merge -- the
   // fixed vars below take precedence on any collision.

@@ -53,7 +53,8 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
       });
     fetch(`/api/events/${eventId}/list-items?kind=document&all=false`)
       .then((r) => (r.ok ? r.json() : []))
-      .then(setDocumentTypes);
+      // Fixed attachments (same PDF for everyone) are never received back.
+      .then((items: (DocumentType & { data?: { staticAttachment?: boolean } | null })[]) => setDocumentTypes(items.filter((i) => !i.data?.staticAttachment)));
     fetch(`/api/events/${eventId}/mail/participants`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setParticipants);

@@ -107,6 +107,9 @@ enum MailDocReceivedVia {
   // see src/lib/document-merge.ts + src/lib/participant-document-store.ts)
   // rather than something a guardian sent in.
   generated
+  // Ticked by a participant table sync (a questionnaire sheet row exists for
+  // them -- ParticipantSync.markDocumentId, src/lib/participant-sync-run.ts).
+  sheet
 }
 
 enum MailActionType {

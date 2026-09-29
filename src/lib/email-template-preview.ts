@@ -14,7 +14,7 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
     "sender_name",
     "signature",
   ],
-  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_name", "signature"],
+  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature"],
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
