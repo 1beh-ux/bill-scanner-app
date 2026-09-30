@@ -273,7 +273,9 @@ export default function MailDetailPanel({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    // [&>*]:shrink-0 -- in this fixed-height scrolling column the children would
+    // otherwise shrink to fit, squashing the e-mail text and reply box to a row.
+    <div className="flex h-full flex-col overflow-y-auto [&>*]:shrink-0">
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
       <div className="mb-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
@@ -286,7 +288,7 @@ export default function MailDetailPanel({
       </div>
 
       <p className="mb-1 text-[11px] uppercase tracking-wide text-ink-secondary">{t("mailDetail.bodyExcerptLabel")}</p>
-      <pre className="mb-4 max-h-40 overflow-y-auto whitespace-pre-wrap rounded-lg border border-mist bg-paper-2 p-2 text-[12px] text-ink">
+      <pre className="mb-4 h-[40vh] min-h-32 resize-y overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-mist bg-paper-2 p-2 text-[12px] text-ink">
         {message.bodySnippet}
       </pre>
 
@@ -390,8 +392,8 @@ export default function MailDetailPanel({
       <textarea
         value={replyText}
         onChange={(e) => setReplyText(e.target.value)}
-        rows={8}
-        className={inputClass + " mb-1 font-mono text-[12px]"}
+        rows={14}
+        className={inputClass + " mb-1 min-h-32 resize-y font-mono text-[12px]"}
       />
       <p className="mb-4 text-[12px] text-ink-secondary">{replyHint}</p>
 

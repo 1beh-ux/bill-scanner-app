@@ -218,7 +218,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
       {backLink}
       <h1 className="mb-4 mt-2 text-[22px] font-semibold text-ink">{title}</h1>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* Left: what gets sent */}
         <div className="flex flex-col gap-4">
           <section className="rounded-lg border border-mist bg-paper-2 p-3 text-[13px]">
@@ -331,7 +331,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
 
         {/* Right: the e-mail as it will look */}
         {emailOn && !loading && (
-          <aside className="flex flex-col gap-3 self-start rounded-lg border border-mist bg-paper p-4 lg:sticky lg:top-4">
+          <aside className="flex min-w-0 flex-col gap-3 self-start rounded-lg border border-mist bg-paper p-4 lg:sticky lg:top-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex rounded-lg border border-mist p-0.5 text-[13px]">
                 {(["filled", "template"] as const).map((v) => (
@@ -360,7 +360,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
               </p>
             )}
             <div className="border-b border-mist pb-2 text-[15px] font-semibold text-ink">{shown.subject || "—"}</div>
-            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">{shown.body || "—"}</div>
+            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">{shown.body || "—"}</div>
             {view === "filled" && <p className="text-[11.5px] text-ink-secondary">{t("compose.previewHint")}</p>}
           </aside>
         )}

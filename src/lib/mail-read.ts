@@ -112,7 +112,7 @@ export async function listInboxMessagesWithDetails(
       subject: headerValue(headers, "subject"),
       date: dateHeader ? new Date(dateHeader).toISOString() : "",
       snippet: (msg.snippet || "").slice(0, 200),
-      bodySnippet: findPlainTextBody(payload).slice(0, 1200),
+      bodySnippet: findPlainTextBody(payload).slice(0, 20000),
       attachments,
     };
   });

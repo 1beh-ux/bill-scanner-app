@@ -107,7 +107,9 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[3fr_2fr]">
+        // Documents first: the table gets the room it needs and the preview a third;
+        // with many tracked documents the preview goes below the table instead.
+        <div className={"grid gap-6 " + (documentTypes.length > 4 ? "" : "lg:grid-cols-[minmax(0,1fr)_minmax(280px,34%)]")}>
           <div className="flex min-w-0 flex-col gap-3">
             <div className="flex flex-wrap items-center gap-2">
               <button onClick={() => setAll(true)} className={btnSecondary}>
@@ -177,7 +179,7 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
             </div>
           </div>
 
-          <aside className="flex flex-col gap-3 self-start rounded-lg border border-mist bg-paper p-4 lg:sticky lg:top-4">
+          <aside className={"flex min-w-0 flex-col gap-3 self-start rounded-lg border border-mist bg-paper p-4 " + (documentTypes.length > 4 ? "" : "lg:sticky lg:top-4")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex rounded-lg border border-mist p-0.5 text-[13px]">
                 {(["filled", "template"] as const).map((v) => (
@@ -201,7 +203,7 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
               )}
             </div>
             <div className="border-b border-mist pb-2 text-[15px] font-semibold text-ink">{shown?.subject || "—"}</div>
-            <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">{shown?.body || "—"}</div>
+            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">{shown?.body || "—"}</div>
             {view === "filled" && <p className="text-[11.5px] text-ink-secondary">{t("statusUpdate.previewHint")}</p>}
           </aside>
         </div>
