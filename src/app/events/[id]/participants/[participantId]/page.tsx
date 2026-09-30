@@ -193,7 +193,8 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   async function remove() {
     if (!core) return;
     if (!(await confirm({ message: t("participantDetail.confirmDeleteParticipant", { name: core.name }), danger: true }))) return;
-    await fetch(`/api/participants/${participantId}/core`, { method: "DELETE" });
+    const res = await fetch(`/api/participants/${participantId}/core`, { method: "DELETE" });
+    if (!res.ok) return setError(t("participantDetail.errorDeleteFailed"));
     router.push(`/events/${eventId}/participants`);
   }
 
