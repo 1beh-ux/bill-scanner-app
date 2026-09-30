@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
+import { composeValue, readComposite } from "@/lib/participant-fields";
 
 export type ParticipantForMerge = {
   name: string;
@@ -140,9 +141,9 @@ export async function resolveVariables(
   // Which fields are filled: generated documents ("documents") or e-mails ("email").
   surface: "documents" | "email" = "documents"
 ): Promise<{ text: Record<string, string>; images: Record<string, Buffer>; imageSizesMm: Record<string, number> }> {
-  const fields = await prisma.eventParticipantField.findMany({
-    where: { eventId: event.id, active: true, surfaces: { has: surface } },
-  });
+  // All active fields: a composite field may be built from fields that aren't
+  // themselves on this surface.
+  const allFields = await prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true } });
   // Event-level fields -- not participant-scoped, so not an
   // EventParticipantField row, always resolved regardless of surfaces.
   // Same keys as the fixed per-purpose email variables in
@@ -168,36 +169,17 @@ export async function resolveVariables(
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};
 
-  for (const f of fields) {
-    const fixedDef = FIXED_PARTICIPANT_FIELDS.find((d) => d.key === f.key);
-    if (f.kind === "builtin") {
-      const fn = fixedDef?.builtinProp ? BUILTIN_RESOLVERS[fixedDef.builtinProp] : undefined;
-      if (fn) text[f.key] = fn(participant);
-    } else if (f.kind === "guardian") {
-      const fn = fixedDef?.guardianProp ? GUARDIAN_RESOLVERS[fixedDef.guardianProp] : undefined;
-      if (fn) text[f.key] = fn(participant);
-    } else if (f.kind === "custom") {
-      // Values are stored as plain strings regardless of the field's
-      // declared type -- "true"/"false" for boolean fields is rendered
-      // Ano/Ne to match every other boolean-ish value in this file,
-      // everything else passes through.
-      const raw = participant.customFieldValues?.[f.key];
-      text[f.key] = raw === "true" ? "Ano" : raw === "false" ? "Ne" : raw ?? "";
-    } else if (f.kind === "computed") {
-      if (f.computedType === "payment_qr_image") {
-        const image = await resolvePaymentQrImage(participant, event);
-        if (image) {
-          images[f.key] = image;
-          imageSizesMm[f.key] = event.qrSizeMm ?? DEFAULT_QR_SIZE_MM;
-        }
-      } else if (f.computedType === "effective_price") {
-        const price = effectivePriceCzk(participant, event);
-        text[f.key] = price != null ? `${price} Kč` : "";
-      } else if (f.computedType === "variable_symbol") {
-        text[f.key] = buildVariableSymbol(participant, event);
-      } else if (f.computedType === "contact_email") {
-        text[f.key] = resolveContactEmail(participant);
+  const values = fieldTextValues(participant, event, allFields);
+  for (const f of allFields) {
+    if (!f.surfaces.includes(surface)) continue;
+    if (f.kind === "computed" && f.computedType === "payment_qr_image") {
+      const image = await resolvePaymentQrImage(participant, event);
+      if (image) {
+        images[f.key] = image;
+        imageSizesMm[f.key] = event.qrSizeMm ?? DEFAULT_QR_SIZE_MM;
       }
+    } else if (values[f.key] !== undefined) {
+      text[f.key] = values[f.key];
     }
   }
 
@@ -226,4 +208,42 @@ export async function ensureRegistrationNumber(participantId: string, eventId: s
     await tx.participant.update({ where: { id: participantId }, data: { registrationNumber: next } });
     return next;
   });
+}
+
+type FieldForValues = { key: string; kind: string; fieldType: string; computedType: string | null; options: unknown };
+
+/**
+ * Text value of every given field for one participant (no QR image, no DB):
+ * builtin/guardian/custom/computed text, then composite fields built from those.
+ * Shared by merge/e-mail variables and the roster/Documents columns.
+ */
+export function fieldTextValues(participant: ParticipantForMerge, event: EventForMerge, fields: FieldForValues[]): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const f of fields) {
+    const fixedDef = FIXED_PARTICIPANT_FIELDS.find((d) => d.key === f.key);
+    if (f.kind === "builtin") {
+      const fn = fixedDef?.builtinProp ? BUILTIN_RESOLVERS[fixedDef.builtinProp] : undefined;
+      if (fn) values[f.key] = fn(participant);
+    } else if (f.kind === "guardian") {
+      const fn = fixedDef?.guardianProp ? GUARDIAN_RESOLVERS[fixedDef.guardianProp] : undefined;
+      if (fn) values[f.key] = fn(participant);
+    } else if (f.kind === "custom" && f.fieldType !== "composite") {
+      // Stored as plain strings; "true"/"false" of boolean fields read Ano/Ne.
+      const raw = participant.customFieldValues?.[f.key];
+      values[f.key] = raw === "true" ? "Ano" : raw === "false" ? "Ne" : raw ?? "";
+    } else if (f.kind === "computed") {
+      if (f.computedType === "effective_price") {
+        const price = effectivePriceCzk(participant, event);
+        values[f.key] = price != null ? `${price} Kč` : "";
+      } else if (f.computedType === "variable_symbol") {
+        values[f.key] = buildVariableSymbol(participant, event);
+      } else if (f.computedType === "contact_email") {
+        values[f.key] = resolveContactEmail(participant);
+      }
+    }
+  }
+  for (const f of fields) {
+    if (f.fieldType === "composite") values[f.key] = composeValue(readComposite(f.options), (k) => values[k]);
+  }
+  return values;
 }

@@ -1,4 +1,31 @@
-export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
+export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
+
+// "Složené pole": other fields' values joined by a separator (empty ones skipped).
+export type CompositeConfig = { parts: string[]; separator: string };
+
+export function readComposite(options: unknown): CompositeConfig {
+  const o = options && typeof options === "object" && !Array.isArray(options) ? (options as { parts?: unknown; separator?: unknown }) : {};
+  return {
+    parts: Array.isArray(o.parts) ? o.parts.filter((k): k is string => typeof k === "string") : [],
+    separator: typeof o.separator === "string" ? o.separator : " ",
+  };
+}
+
+/** Untrusted composite options -> parts limited to `partKeys` (no self, no repeats), short separator. */
+export function sanitizeComposite(options: unknown, partKeys: Set<string>, selfKey: string): CompositeConfig {
+  const cfg = readComposite(options);
+  return {
+    parts: [...new Set(cfg.parts)].filter((k) => k !== selfKey && partKeys.has(k)).slice(0, 20),
+    separator: cfg.separator.slice(0, 20),
+  };
+}
+
+export function composeValue(cfg: CompositeConfig, valueOf: (key: string) => string | undefined): string {
+  return cfg.parts
+    .map((k) => (valueOf(k) ?? "").trim())
+    .filter(Boolean)
+    .join(cfg.separator);
+}
 export type ParticipantFieldSurface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 export type ParticipantFieldKind = "custom" | "builtin" | "guardian" | "computed";
 

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
-import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail } from "@/lib/document-variables";
+import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
 
 type GuardianInput = {
@@ -28,7 +28,7 @@ export async function GET(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
-  const [participants, allowedKeys, event] = await Promise.all([
+  const [participants, allowedKeys, event, activeFields] = await Promise.all([
     prisma.participant.findMany({
       where: { eventId },
       orderBy: { name: "asc" },
@@ -38,7 +38,10 @@ export async function GET(
     }),
     allowedParticipantFieldKeys(user, eventId),
     prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
   ]);
+  // Composite ("složené") fields aren't stored -- computed here so they work as columns.
+  const composites = activeFields.filter((f) => f.fieldType === "composite" && allowedKeys.has(f.key));
   // Computed columns (price/variable symbol) reuse the same formulas as
   // document merge -- resolved here, not lazily on the client, so the
   // roster's optional "computed" columns (see fixed-participant-fields.ts)
@@ -46,13 +49,15 @@ export async function GET(
   const scopedParticipants = participants.map((p) => {
     const { guardians, ...rest } = p;
     const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
+    const values = composites.length > 0 ? fieldTextValues(forMerge, event, activeFields) : {};
     return {
       ...rest,
-      customFieldValues: Object.fromEntries(
-        Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
-          allowedKeys.has(key)
-        )
-      ),
+      customFieldValues: {
+        ...Object.fromEntries(
+          Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) => allowedKeys.has(key))
+        ),
+        ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
+      },
       guardian: guardians.find((g) => g.receivesCommunications) ?? guardians[0] ?? null,
       computed: {
         price: effectivePriceCzk(forMerge, event),

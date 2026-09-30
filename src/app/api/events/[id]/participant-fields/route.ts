@@ -3,6 +3,7 @@ import type { ParticipantFieldSurface } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
+import { sanitizeComposite } from "@/lib/participant-fields";
 
 const ALLOWED_SURFACES: ParticipantFieldSurface[] = [
   "list",
@@ -80,13 +81,18 @@ export async function POST(
     return NextResponse.json({ error: "invalid_key" }, { status: 400 });
   }
 
+  // Composite parts: other active, non-composite fields of this event.
+  const partKeys =
+    fieldType === "composite"
+      ? new Set((await prisma.eventParticipantField.findMany({ where: { eventId, active: true, fieldType: { not: "composite" } }, select: { key: true } })).map((f) => f.key))
+      : null;
   const field = await prisma.eventParticipantField.create({
     data: {
       eventId,
       key,
       label,
       fieldType,
-      options: options ?? undefined,
+      options: partKeys ? sanitizeComposite(options, partKeys, key) : (options ?? undefined),
       surfaces: surfaces ?? [],
       sortOrder: sortOrder ?? null,
       isFromTemplate: false,

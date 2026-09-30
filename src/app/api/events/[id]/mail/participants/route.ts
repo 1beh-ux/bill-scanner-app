@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
-import { resolveContactEmail } from "@/lib/document-variables";
+import { resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
 
 // Lean, mail-scoped roster read -- deliberately NOT the full
 // /api/events/[id]/participants route, which carries health-only fields
@@ -30,11 +30,14 @@ export async function GET(
 
   const withDocs = new URL(req.url).searchParams.get("withDocuments") === "1";
 
-  const mailListFields = await prisma.eventParticipantField.findMany({
-    where: { eventId, active: true, surfaces: { has: "mail_list" } },
-    select: { key: true },
-  });
+  const [activeFields, event] = await Promise.all([
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+  ]);
+  const mailListFields = activeFields.filter((f) => f.surfaces.includes("mail_list"));
   const allowedKeys = new Set(mailListFields.map((f) => f.key));
+  // Composite fields are computed, not stored -- added so they work as columns.
+  const composites = mailListFields.filter((f) => f.fieldType === "composite");
 
   const participants = await prisma.participant.findMany({
     where: { eventId, active: true },
@@ -47,21 +50,26 @@ export async function GET(
       registrationStatus: true,
       customFieldValues: true,
       guardians: {
-        select: { id: true, name: true, email: true, receivesCommunications: true },
+        select: { id: true, name: true, email: true, relationship: true, phone: true, receivesCommunications: true },
       },
+      registrationNumber: true,
+      groupName: true,
     },
     orderBy: { name: "asc" },
   });
 
-  const scoped = participants.map((p) => ({
-    ...p,
-    contactEmail: resolveContactEmail(p),
-    customFieldValues: Object.fromEntries(
-      Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
-        allowedKeys.has(key)
-      )
-    ),
-  }));
+  const scoped = participants.map((p) => {
+    const custom = (p.customFieldValues as Record<string, string> | null) ?? {};
+    const values = composites.length > 0 ? fieldTextValues({ ...p, customFieldValues: custom }, event, activeFields) : {};
+    return {
+      ...p,
+      contactEmail: resolveContactEmail(p),
+      customFieldValues: {
+        ...Object.fromEntries(Object.entries(custom).filter(([key]) => allowedKeys.has(key))),
+        ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
+      },
+    };
+  });
 
   if (!withDocs) return NextResponse.json(scoped);
 

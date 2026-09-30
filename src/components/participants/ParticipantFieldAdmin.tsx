@@ -4,15 +4,16 @@ import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { surfacesForCategory, type ParticipantFieldCategory } from "@/lib/participant-fields";
+import { readComposite } from "@/lib/participant-fields";
 
-type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image";
+type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 type ModuleKey = "bills" | "health" | "mail" | "planning";
 type FieldKind = "custom" | "builtin" | "guardian" | "computed";
 type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
 
-const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select"];
+const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select", "composite"];
+const SEPARATORS = [" ", ", ", " – ", "\n"];
 const SURFACE_ON_CLASS = "bg-ink text-white";
 const SURFACE_OFF_CLASS = "bg-[#EFEDE8] text-ink-secondary";
 
@@ -86,8 +87,16 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
   const [optionsText, setOptionsText] = useState("");
-  const [newCategory, setNewCategory] = useState<ParticipantFieldCategory>("custom");
-  const [newShowInList, setNewShowInList] = useState(false);
+  // A new field's switches (same as the row pills); import too unless composite.
+  const [newSurfaces, setNewSurfaces] = useState<Surface[]>(["email", "documents"]);
+  // Composite ("Složené pole") being added/edited: part keys in order + separator.
+  const [compositeParts, setCompositeParts] = useState<string[]>([]);
+  const [compositeSep, setCompositeSep] = useState(" ");
+  // Table toolbar.
+  const [search, setSearch] = useState("");
+  const [kindFilter, setKindFilter] = useState<FieldKind | "">("");
+  const [surfaceFilter, setSurfaceFilter] = useState<Surface | "none" | "">("");
+  const [sortBy, setSortBy] = useState<"order" | "label" | "key">("order");
   const [saving, setSaving] = useState(false);
 
   const [eventStartDate, setEventStartDate] = useState<string | null>(null);
@@ -129,22 +138,23 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // config -- it only ever manages custom-field templates.
   const orgFields = isEvent ? fields : fields.filter((f) => f.kind === "custom");
   const customFields = fields.filter((f) => f.kind === "custom");
-  const computedFields = orgFields.filter((f) => f.kind === "computed");
-  const nonComputedFields = orgFields.filter((f) => f.kind !== "computed");
+  const q = search.trim().toLowerCase();
+  const visibleFields = orgFields
+    .filter((f) => !q || f.label.toLowerCase().includes(q) || f.key.toLowerCase().includes(q))
+    .filter((f) => !kindFilter || f.kind === kindFilter)
+    .filter((f) => {
+      if (!surfaceFilter) return true;
+      const surfaces = (isEvent ? f.surfaces : f.defaultSurfaces) ?? [];
+      return surfaceFilter === "none" ? surfaces.filter((x) => x !== "import").length === 0 : surfaces.includes(surfaceFilter);
+    });
+  if (sortBy !== "order") {
+    visibleFields.sort((a, b) => (sortBy === "label" ? a.label.localeCompare(b.label, "cs") : a.key.localeCompare(b.key)));
+  }
+  const computedFields = visibleFields.filter((f) => f.kind === "computed");
+  const nonComputedFields = visibleFields.filter((f) => f.kind !== "computed");
   // Any custom field can say membership -- a checkbox, a select, or text like Ano/Ne.
   const membershipFieldOptions = customFields.filter((f) => f.fieldType === "boolean" || f.fieldType === "select" || f.fieldType === "text");
 
-  // Which categories are worth offering for a NEW custom field: at event scope, only
-  // offer Zdraví/Dokumenty a pošta when that module is actually enabled for the event
-  // (a field could still exist with that category from before the module was turned
-  // off -- categoryAndListCell just shows whatever it derives, this only limits what a
-  // new field can be created as). Org-scope templates have no event, so no module to
-  // gate against -- offer every category there.
-  function availableCategories(): ParticipantFieldCategory[] {
-    const categories: ParticipantFieldCategory[] = ["custom", "health", "mail"];
-    if (!isEvent) return categories;
-    return categories.filter((c) => c !== "health" || enabledModules.has("health")).filter((c) => c !== "mail" || enabledModules.has("mail"));
-  }
 
   async function load() {
     setLoading(true);
@@ -203,13 +213,20 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     load();
   }
 
+  function optionsPayload(): unknown {
+    if (fieldType === "select") return optionsText.split(",").map((o) => o.trim()).filter(Boolean);
+    if (fieldType === "composite") return { parts: compositeParts, separator: compositeSep };
+    return undefined;
+  }
+
   function resetAddForm() {
     setKey("");
     setFieldLabel("");
     setFieldType("text");
     setOptionsText("");
-    setNewCategory("custom");
-    setNewShowInList(false);
+    setNewSurfaces(["email", "documents"]);
+    setCompositeParts([]);
+    setCompositeSep(" ");
   }
 
   function openAdd() {
@@ -231,7 +248,10 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setKey(field.key);
     setFieldLabel(field.label);
     setFieldType(field.fieldType);
-    setOptionsText((field.options ?? []).join(", "));
+    setOptionsText(Array.isArray(field.options) ? field.options.join(", ") : "");
+    const cfg = readComposite(field.options);
+    setCompositeParts(field.fieldType === "composite" ? cfg.parts : []);
+    setCompositeSep(field.fieldType === "composite" ? cfg.separator : " ");
   }
 
   // Switches surfaces on one EXISTING field immediately -- the pill click.
@@ -261,9 +281,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setSaving(true);
     setError(null);
 
-    const options = fieldType === "select" ? optionsText.split(",").map((o) => o.trim()).filter(Boolean) : undefined;
-    const body: Record<string, unknown> = { key: key.trim(), label: fieldLabel.trim(), fieldType, options };
-    const surfaces = surfacesForCategory(newCategory, newShowInList);
+    const body: Record<string, unknown> = { key: key.trim(), label: fieldLabel.trim(), fieldType, options: optionsPayload() };
+    const surfaces: Surface[] = fieldType === "composite" ? newSurfaces : [...newSurfaces, "import"];
     if (isEvent) body.surfaces = surfaces;
     else body.defaultSurfaces = surfaces;
 
@@ -302,7 +321,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     }
     setSaving(true);
     setError(null);
-    const options = fieldType === "select" ? optionsText.split(",").map((o) => o.trim()).filter(Boolean) : undefined;
+    const options = optionsPayload();
     const res = await fetch(itemUrl(fieldId(isEvent, field)), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -373,9 +392,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // (`email`): the {{variable}} is offered in every e-mail template editor and
   // filled in e-mails; "Dokumenty" (`documents`): filled in generated documents.
   // Zdraví switches both health surfaces together.
-  function surfacePills(field: Field) {
-    const surfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
-    const pills: { label: string; surfaces: Surface[] }[] = [
+  function pillDefs(): { label: string; surfaces: Surface[] }[] {
+    return [
       { label: t("participantFieldAdmin.showInListLabel"), surfaces: ["list"] },
       ...(!isEvent || enabledModules.has("mail") ? [{ label: t("participantFieldAdmin.surface.mailList"), surfaces: ["mail_list"] as Surface[] }] : []),
       { label: t("participantFieldAdmin.surface.email"), surfaces: ["email"] },
@@ -384,9 +402,13 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         ? [{ label: t("participantFieldAdmin.surface.health"), surfaces: ["health_list", "health_detail"] as Surface[] }]
         : []),
     ];
+  }
+
+  function surfacePills(field: Field) {
+    const surfaces = (isEvent ? field.surfaces : field.defaultSurfaces) ?? [];
     return (
       <div className="flex flex-wrap items-center gap-1.5">
-        {pills.map((pill) => {
+        {pillDefs().map((pill) => {
           const on = pill.surfaces.every((x) => surfaces.includes(x));
           return (
             <button
@@ -399,6 +421,81 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             </button>
           );
         })}
+      </div>
+    );
+  }
+
+  // Parts of a composite field, in order, and what joins them.
+  function compositeEditor(selfKey: string) {
+    const candidates = fields.filter((f) => f.active && f.fieldType !== "composite" && f.fieldType !== "image" && f.key !== selfKey);
+    const labelOf = (k: string) => fields.find((f) => f.key === k)?.label ?? k;
+    const move = (i: number, d: number) =>
+      setCompositeParts((p) => {
+        const next = [...p];
+        [next[i], next[i + d]] = [next[i + d], next[i]];
+        return next;
+      });
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-mist bg-paper p-2 text-[12px] text-ink-secondary">
+        <p>{t("participantFieldAdmin.compositeHint")}</p>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {compositeParts.map((k, i) => (
+            <span key={k} className="inline-flex items-center gap-1 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink">
+              {i > 0 && (
+                <button type="button" onClick={() => move(i, -1)} className="text-ink-secondary hover:text-ink" aria-label="←">
+                  ‹
+                </button>
+              )}
+              {labelOf(k)}
+              {i < compositeParts.length - 1 && (
+                <button type="button" onClick={() => move(i, 1)} className="text-ink-secondary hover:text-ink" aria-label="→">
+                  ›
+                </button>
+              )}
+              <button type="button" onClick={() => setCompositeParts((p) => p.filter((x) => x !== k))} className="text-red-600" aria-label={t("common.delete")}>
+                ×
+              </button>
+            </span>
+          ))}
+          <select
+            value=""
+            onChange={(e) => e.target.value && setCompositeParts((p) => [...p, e.target.value])}
+            className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[12px] text-ink"
+          >
+            <option value="">+ {t("participantFieldAdmin.compositeAddPart")}</option>
+            {candidates
+              .filter((f) => !compositeParts.includes(f.key))
+              .map((f) => (
+                <option key={f.key} value={f.key}>
+                  {f.label}
+                </option>
+              ))}
+          </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span>{t("participantFieldAdmin.compositeSeparator")}</span>
+          {SEPARATORS.map((sep) => (
+            <button
+              key={JSON.stringify(sep)}
+              type="button"
+              onClick={() => setCompositeSep(sep)}
+              className={"rounded-full px-2 py-0.5 " + (compositeSep === sep ? SURFACE_ON_CLASS : SURFACE_OFF_CLASS)}
+            >
+              {sep === " " ? t("participantFieldAdmin.sepSpace") : sep === "\n" ? t("participantFieldAdmin.sepNewline") : `„${sep}“`}
+            </button>
+          ))}
+          <input
+            value={SEPARATORS.includes(compositeSep) ? "" : compositeSep}
+            onChange={(e) => setCompositeSep(e.target.value)}
+            placeholder={t("participantFieldAdmin.sepCustom")}
+            className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-0.5 text-[12px] text-ink"
+          />
+        </div>
+        {compositeParts.length > 0 && (
+          <p className="font-mono text-[11.5px]">
+            {compositeParts.map((k) => `{{${k}}}`).join(compositeSep === "\n" ? " ⏎ " : compositeSep === " " ? " ␣ " : compositeSep)}
+          </p>
+        )}
       </div>
     );
   }
@@ -475,7 +572,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                 </p>
               )}
               <select value={fieldType} onChange={(e) => setFieldType(e.target.value as FieldType)} className={inputClass}>
-                {FIELD_TYPES.map((ft) => (
+                {FIELD_TYPES.filter((ft) => isEvent || ft !== "composite").map((ft) => (
                   <option key={ft} value={ft}>
                     {t(`participantFieldAdmin.type.${ft}`)}
                   </option>
@@ -490,6 +587,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   className={inputClass}
                 />
               )}
+              {fieldType === "composite" && compositeEditor(field.key)}
               <div className="mt-1 flex justify-end gap-2">
                 <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">
                   {t("common.cancel")}
@@ -629,8 +727,17 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             </div>
             <div className="pl-3.5 font-mono text-[11.5px] text-ink-secondary">{`{{${field.key}}}`}</div>
           </td>
-          <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.kind.${field.kind}`)}</td>
-          <td className="p-2 text-[12.5px] text-ink-secondary">{t(`participantFieldAdmin.type.${field.fieldType}`)}</td>
+          <td className="p-2 text-[12.5px] text-ink-secondary">
+            <button type="button" onClick={() => setKindFilter(kindFilter === field.kind ? "" : field.kind)} title={t("participantFieldAdmin.filterByKind")} className="hover:text-ink hover:underline">
+              {t(`participantFieldAdmin.kind.${field.kind}`)}
+            </button>
+          </td>
+          <td className="p-2 text-[12.5px] text-ink-secondary">
+            {t(`participantFieldAdmin.type.${field.fieldType}`)}
+            {field.fieldType === "composite" && (
+              <div className="font-mono text-[11px]">{readComposite(field.options).parts.map((k) => `{{${k}}}`).join(" + ") || "—"}</div>
+            )}
+          </td>
           <td className="p-2">{surfacePills(field)}</td>
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
@@ -706,7 +813,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             className={inputClass}
           />
           <select value={fieldType} onChange={(e) => setFieldType(e.target.value as FieldType)} className={inputClass}>
-            {FIELD_TYPES.map((ft) => (
+            {FIELD_TYPES.filter((ft) => isEvent || ft !== "composite").map((ft) => (
               <option key={ft} value={ft}>
                 {t(`participantFieldAdmin.type.${ft}`)}
               </option>
@@ -721,24 +828,23 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               className={inputClass}
             />
           )}
-          <label className="text-[13px] text-ink-secondary">
-            {t("participantFieldAdmin.categoryLabel")}
-            <select
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value as ParticipantFieldCategory)}
-              className={inputClass + " mt-1"}
-            >
-              {availableCategories().map((c) => (
-                <option key={c} value={c}>
-                  {t(`participantFieldAdmin.category.${c}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" checked={newShowInList} onChange={(e) => setNewShowInList(e.target.checked)} />
-            {t("participantFieldAdmin.showInListLabel")}
-          </label>
+          {fieldType === "composite" && compositeEditor(key.trim())}
+          <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-ink-secondary">
+            <span>{t("participantFieldAdmin.surfacesLabel")}:</span>
+            {pillDefs().map((pill) => {
+              const on = pill.surfaces.every((x) => newSurfaces.includes(x));
+              return (
+                <button
+                  key={pill.label}
+                  type="button"
+                  onClick={() => setNewSurfaces((cur) => (on ? cur.filter((x) => !pill.surfaces.includes(x)) : [...new Set([...cur, ...pill.surfaces])]))}
+                  className={"rounded-full px-2.5 py-0.5 text-[11px] font-medium " + (on ? SURFACE_ON_CLASS : SURFACE_OFF_CLASS)}
+                >
+                  {pill.label}
+                </button>
+              );
+            })}
+          </div>
           <div className="mt-1 flex justify-end gap-2">
             <button type="button" onClick={() => setAdding(false)} className="text-[13px] text-ink-secondary hover:underline">
               {t("common.cancel")}
@@ -748,6 +854,40 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             </button>
           </div>
         </form>
+      )}
+
+      {!loading && orgFields.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[13px]">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("participantFieldAdmin.searchPlaceholder")}
+            className="min-w-[180px] flex-1 rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember"
+          />
+          <select value={kindFilter} onChange={(e) => setKindFilter(e.target.value as FieldKind | "")} className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-ink">
+            <option value="">{t("participantFieldAdmin.filterAllKinds")}</option>
+            {(["custom", "builtin", "guardian", "computed"] as FieldKind[]).map((k) => (
+              <option key={k} value={k}>
+                {t(`participantFieldAdmin.kind.${k}`)}
+              </option>
+            ))}
+          </select>
+          <select value={surfaceFilter} onChange={(e) => setSurfaceFilter(e.target.value as Surface | "none" | "")} className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-ink">
+            <option value="">{t("participantFieldAdmin.filterAnywhere")}</option>
+            {pillDefs().map((pill) => (
+              <option key={pill.label} value={pill.surfaces[0]}>
+                {pill.label}
+              </option>
+            ))}
+            <option value="none">{t("participantFieldAdmin.filterNowhere")}</option>
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "order" | "label" | "key")} className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-ink">
+            <option value="order">{t("participantFieldAdmin.sortOrder")}</option>
+            <option value="label">{t("participantFieldAdmin.sortLabel")}</option>
+            <option value="key">{t("participantFieldAdmin.sortKey")}</option>
+          </select>
+        </div>
       )}
 
       {loading ? (

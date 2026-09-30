@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
+import { readComposite, sanitizeComposite } from "@/lib/participant-fields";
 
 async function loadOwnedField(eventId: string, fieldId: string) {
   const field = await prisma.eventParticipantField.findUnique({ where: { id: fieldId } });
@@ -49,6 +50,15 @@ export async function PATCH(
     newKey = key;
   }
 
+  const finalType = fieldType ?? existing.fieldType;
+  let cleanOptions = options;
+  if (finalType === "composite" && options !== undefined) {
+    const partKeys = new Set(
+      (await prisma.eventParticipantField.findMany({ where: { eventId, active: true, fieldType: { not: "composite" } }, select: { key: true } })).map((f) => f.key)
+    );
+    cleanOptions = sanitizeComposite(options, partKeys, newKey ?? existing.key);
+  }
+
   // Renaming a custom field's key means the {{oldKey}} placeholder in any
   // document/email template someone already wrote stops resolving -- that
   // can't be rewritten for them (their templates live in Google Docs), so
@@ -63,13 +73,23 @@ export async function PATCH(
         ...(newKey !== undefined && { key: newKey }),
         ...(label !== undefined && { label: label.trim() }),
         ...(fieldType !== undefined && { fieldType }),
-        ...(options !== undefined && { options }),
+        ...(cleanOptions !== undefined && { options: cleanOptions }),
         ...(surfaces !== undefined && { surfaces }),
         ...(sortOrder !== undefined && { sortOrder }),
         ...(active !== undefined && { active }),
       },
     });
     if (newKey !== undefined) {
+      // Composite fields built from the renamed field follow the new key.
+      const composites = await tx.eventParticipantField.findMany({ where: { eventId, fieldType: "composite" } });
+      for (const c of composites) {
+        const cfg = readComposite(c.options);
+        if (!cfg.parts.includes(existing.key)) continue;
+        await tx.eventParticipantField.update({
+          where: { id: c.id },
+          data: { options: { ...cfg, parts: cfg.parts.map((k) => (k === existing.key ? newKey! : k)) } },
+        });
+      }
       const participants = await tx.participant.findMany({
         where: { eventId },
         select: { id: true, customFieldValues: true },

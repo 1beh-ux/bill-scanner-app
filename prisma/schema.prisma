@@ -568,6 +568,9 @@ enum ParticipantFieldType {
   boolean
   select
   image
+  // Computed from other fields joined by a separator (e.g. full address);
+  // options = { parts: fieldKey[], separator } -- never stored per participant.
+  composite
 }
 
 // Deliberately distinct from ModuleKey -- "list" (the central Seznam

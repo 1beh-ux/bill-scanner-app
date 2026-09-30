@@ -159,8 +159,10 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   }, [adjacent, isDirty]);
 
   // "Údaje" vs "Zdravotní poznámky" (health-category custom fields).
-  const otherFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) !== "health"), [fields]);
-  const healthFields = useMemo(() => fields.filter((f) => f.kind === "custom" && fieldCategory(f.kind, f.surfaces) === "health"), [fields]);
+  // Composite fields are computed from others -- nothing to type in.
+  const editable = useMemo(() => fields.filter((f) => f.kind === "custom" && f.fieldType !== "composite"), [fields]);
+  const otherFields = useMemo(() => editable.filter((f) => fieldCategory(f.kind, f.surfaces) !== "health"), [editable]);
+  const healthFields = useMemo(() => editable.filter((f) => fieldCategory(f.kind, f.surfaces) === "health"), [editable]);
 
   // then: where to go after a successful save (stay = undefined).
   async function save(e: React.FormEvent | null, then?: "next" | "close") {
