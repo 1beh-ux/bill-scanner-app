@@ -9,7 +9,7 @@ import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdm
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
-import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
@@ -701,6 +701,13 @@ export default function EventDetailPage({
                 eventId={id}
                 purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
                 label={t("mailTab.bulkStatusTemplateLabel")}
+              />
+              <EmailTemplateAdmin
+                scope="event"
+                eventId={id}
+                purposeKey={MAIL_HELPER_REPLY_PURPOSE_KEY}
+                label={t("mailTab.replyTemplateLabel")}
+                bodyOnly
               />
               <MailDoneLabelSettings eventId={id} event={event} t={t} />
               <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />

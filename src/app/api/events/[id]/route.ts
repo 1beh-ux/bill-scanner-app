@@ -54,6 +54,7 @@ export async function PATCH(
     vsEventType,
     vsOrderInYear,
     vsMembershipFieldKey,
+    vsMemberValues,
     participantsListColumns,
     mailQuestionnaireUrl,
     qrSizeMm,
@@ -121,6 +122,9 @@ export async function PATCH(
       ...(vsEventType !== undefined && { vsEventType }),
       ...(vsOrderInYear !== undefined && { vsOrderInYear }),
       ...(vsMembershipFieldKey !== undefined && { vsMembershipFieldKey }),
+      ...(Array.isArray(vsMemberValues) && {
+        vsMemberValues: vsMemberValues.filter((v: unknown): v is string => typeof v === "string").map((v: string) => v.trim().toLowerCase()).filter(Boolean).slice(0, 50),
+      }),
       ...(participantsListColumns !== undefined && { participantsListColumns }),
       // Bills list columns: per event, anyone with bills access may set them. Unknown keys are
       // dropped, required columns kept; null resets to the default set.

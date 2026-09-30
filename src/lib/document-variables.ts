@@ -32,6 +32,7 @@ export type EventForMerge = {
   vsEventType: number | null;
   vsOrderInYear: number | null;
   vsMembershipFieldKey: string | null;
+  vsMemberValues?: unknown;
   mailQuestionnaireUrl: string | null;
   qrSizeMm: number | null;
   registrationDeadline: Date | null;
@@ -61,9 +62,20 @@ export function resolveContactEmail(p: { guardians: { email: string; receivesCom
   return p.guardians.find((g) => g.receivesCommunications)?.email ?? p.guardians[0]?.email ?? "";
 }
 
+// A checkbox field stores "true"; typed/imported values are often Ano/Yes/1.
+export const DEFAULT_MEMBER_VALUES = ["true", "ano", "yes", "1"];
+export const normalizeMemberValue = (v: string) => v.trim().toLowerCase();
+
+/** The event's "member" values (Nastavení akce -> variabilní symbol), or the defaults. */
+export function memberValues(e: { vsMemberValues?: unknown }): string[] {
+  const v = e.vsMemberValues;
+  const list = Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map(normalizeMemberValue) : [];
+  return list.length > 0 ? list : DEFAULT_MEMBER_VALUES;
+}
+
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
-  return p.customFieldValues?.[key] === "true";
+  return memberValues(e).includes(normalizeMemberValue(p.customFieldValues?.[key] ?? ""));
 }
 
 export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): number | null {

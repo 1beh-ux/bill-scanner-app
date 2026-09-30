@@ -4,12 +4,14 @@ import { requireAnyModuleAccess } from "@/lib/module-access";
 import { modulesForEmailPurpose, senderIdentity } from "@/lib/email-template";
 import {
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_REPLY_PURPOSE_KEY,
   PARENT_SUMMARY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 import { previewParticipantEmail } from "@/lib/participant-bulk-email";
 import { previewBulkStatusEmail } from "@/lib/mail-bulk-status-send";
 import { resolveEmailPreview } from "@/lib/parent-email-send";
+import { buildReplyText } from "@/lib/mail-reply-build";
 
 // Nastavení akce template editors: the template being edited, filled in for
 // one real participant of this event by the same code its send uses.
@@ -26,7 +28,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const template = { subject: typeof body.subject === "string" ? body.subject : "", body: typeof body.body === "string" ? body.body : "" };
 
   let preview: { subject: string; body: string } | null = null;
-  if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) {
+  if (purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) {
+    const body = await buildReplyText({ eventId, participantId, userId: user.id, template });
+    preview = body === null ? null : { subject: "Re: …", body };
+  } else if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) {
     preview = await previewBulkStatusEmail(eventId, participantId, user.id, template);
   } else if (purposeKey === PARENT_SUMMARY_PURPOSE_KEY) {
     preview = await resolveEmailPreview(participantId, senderIdentity(user, "Zdravotník"), template).catch(() => null);

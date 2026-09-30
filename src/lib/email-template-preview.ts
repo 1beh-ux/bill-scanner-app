@@ -1,6 +1,7 @@
 import {
   PARENT_SUMMARY_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
@@ -15,12 +16,23 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
     "sender_name",
     "signature",
   ],
+  [MAIL_HELPER_REPLY_PURPOSE_KEY]: ["participant_name", "camp_name", "document_checklist", "questionnaire_line", "questionnaire_url", "note", "sender_name", "signature"],
   // Free e-mail to participants (compose page, "Napsat e-mail").
   [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_email", "sender_name", "signature"],
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature"],
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
+  [MAIL_HELPER_REPLY_PURPOSE_KEY]: {
+    participant_name: "Anna Nováková",
+    camp_name: "Letní tábor 2026",
+    document_checklist: "- ✔ Přihláška — doručeno\n- ✖ Potvrzení od lékaře — chybí",
+    questionnaire_line: "Odkaz na vyplnění dotazníku: https://forms.example.com/dotaznik.",
+    questionnaire_url: "https://forms.example.com/dotaznik",
+    note: "(poznámka z Pošty)",
+    sender_name: "Pošta táboru",
+    signature: "S pozdravem\nPošta táboru",
+  },
   [PARENT_SUMMARY_PURPOSE_KEY]: {
     child_name: "Anna Nováková",
     camp_name: "Letní tábor 2026",

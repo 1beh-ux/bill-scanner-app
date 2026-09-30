@@ -23,6 +23,24 @@ export {
 // Exported for scripts/fix-registration-acceptance-template.ts, which needs to know
 // the real default text without duplicating it.
 export const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
+  // Pošta reply (the subject is always "Re: <their subject>", so only the body
+  // is edited). Empty {{questionnaire_line}}/{{note}} lines collapse on send.
+  [MAIL_HELPER_REPLY_PURPOSE_KEY]: {
+    subject: "Re: …",
+    body: `Dobrý den,
+
+Děkujeme za zaslání a posíláme potvrzení o aktuálním stavu dokumentů:
+
+{{document_checklist}}
+
+{{questionnaire_line}}
+
+{{note}}
+
+Děkujeme za důvěru,
+
+{{signature}}`,
+  },
   [PARENT_SUMMARY_PURPOSE_KEY]: {
     subject: "Souhrn zdravotních záznamů – {{child_name}} – {{camp_name}}",
     body: `Dobrý den,
@@ -95,7 +113,7 @@ export function senderIdentity(
 // Acceptance / open e-mails belong to the central participant roster, which
 // health or mail access reaches (same as the bulk-email send route).
 export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
-  if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) return ["mail"];
+  if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY || purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) return ["mail"];
   if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY) return ["health", "mail"];
   return ["health"];
 }

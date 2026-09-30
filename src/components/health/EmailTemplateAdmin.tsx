@@ -17,6 +17,8 @@ interface EmailTemplateAdminProps {
   eventId?: string;
   label: string;
   purposeKey?: string;
+  // The Pošta reply keeps "Re: <their subject>" -- only the body is a template.
+  bodyOnly?: boolean;
 }
 
 export default function EmailTemplateAdmin({
@@ -24,6 +26,7 @@ export default function EmailTemplateAdmin({
   eventId,
   label,
   purposeKey = PARENT_SUMMARY_PURPOSE_KEY,
+  bodyOnly = false,
 }: EmailTemplateAdminProps) {
   const { t } = useTranslations();
   const baseUrl = scope === "org" ? "/api/email-templates" : `/api/events/${eventId}/email-template`;
@@ -241,15 +244,19 @@ export default function EmailTemplateAdmin({
         ))}
       </div>
 
-      <label className="mb-1 block text-[12px] text-ink-secondary">{t("emailTemplateAdmin.subjectLabel")}</label>
-      <input
-        ref={subjectRef}
-        type="text"
-        value={subject}
-        onChange={(e) => setSubject(e.target.value)}
-        onFocus={() => (activeFieldRef.current = "subject")}
-        className={inputClass + " mb-3"}
-      />
+      {!bodyOnly && (
+        <>
+          <label className="mb-1 block text-[12px] text-ink-secondary">{t("emailTemplateAdmin.subjectLabel")}</label>
+          <input
+            ref={subjectRef}
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            onFocus={() => (activeFieldRef.current = "subject")}
+            className={inputClass + " mb-3"}
+          />
+        </>
+      )}
 
       <label className="mb-1 block text-[12px] text-ink-secondary">{t("emailTemplateAdmin.bodyLabel")}</label>
       <textarea
@@ -276,7 +283,7 @@ export default function EmailTemplateAdmin({
         </div>
         {scope === "event" && realPreview ? (
           <>
-            <p className="mb-2 text-[14px] font-medium text-ink">{realPreview.subject}</p>
+            {!bodyOnly && <p className="mb-2 text-[14px] font-medium text-ink">{realPreview.subject}</p>}
             <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{realPreview.body}</p>
           </>
         ) : (

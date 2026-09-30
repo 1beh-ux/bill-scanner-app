@@ -94,6 +94,33 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [vsEventType, setVsEventType] = useState("0");
   const [vsOrderInYear, setVsOrderInYear] = useState("0");
   const [vsMembershipFieldKey, setVsMembershipFieldKey] = useState("");
+  // Lower-cased values meaning "member"; null = not set yet (the defaults apply).
+  const [vsMemberValues, setVsMemberValues] = useState<string[] | null>(null);
+  // Every distinct value the chosen field has among this event's participants.
+  const [membershipValuesFound, setMembershipValuesFound] = useState<string[]>([]);
+  useEffect(() => {
+    if (!isEvent || !vsMembershipFieldKey) return;
+    fetch(`/api/events/${eventId}/participants`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { customFieldValues: Record<string, string> | null }[]) => {
+        const found = new Map<string, string>();
+        for (const r of rows) {
+          const raw = (r.customFieldValues?.[vsMembershipFieldKey] ?? "").trim();
+          if (raw && !found.has(raw.toLowerCase())) found.set(raw.toLowerCase(), raw);
+        }
+        setMembershipValuesFound([...found.values()].sort((a, b) => a.localeCompare(b, "cs")));
+      })
+      .catch(() => setMembershipValuesFound([]));
+  }, [isEvent, eventId, vsMembershipFieldKey]);
+  const DEFAULT_MEMBER_VALUES = ["true", "ano", "yes", "1"];
+  const effectiveMemberValues = vsMemberValues ?? DEFAULT_MEMBER_VALUES;
+  function toggleMemberValue(raw: string, on: boolean) {
+    const v = raw.trim().toLowerCase();
+    const next = new Set(effectiveMemberValues);
+    if (on) next.add(v);
+    else next.delete(v);
+    setVsMemberValues([...next]);
+  }
   const [vsSaving, setVsSaving] = useState(false);
   const [qrSizeMm, setQrSizeMm] = useState("35");
   const [qrSaving, setQrSaving] = useState(false);
@@ -104,7 +131,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const customFields = fields.filter((f) => f.kind === "custom");
   const computedFields = orgFields.filter((f) => f.kind === "computed");
   const nonComputedFields = orgFields.filter((f) => f.kind !== "computed");
-  const booleanFieldOptions = customFields.filter((f) => f.fieldType === "boolean");
+  // Any custom field can say membership -- a checkbox, a select, or text like Ano/Ne.
+  const membershipFieldOptions = customFields.filter((f) => f.fieldType === "boolean" || f.fieldType === "select" || f.fieldType === "text");
 
   // Which categories are worth offering for a NEW custom field: at event scope, only
   // offer Zdraví/Dokumenty a pošta when that module is actually enabled for the event
@@ -143,6 +171,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         vsEventType: number | null;
         vsOrderInYear: number | null;
         vsMembershipFieldKey: string | null;
+        vsMemberValues: string[] | null;
         qrSizeMm: number | null;
       } | null;
       if (ev) {
@@ -150,6 +179,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         setVsEventType(String(ev.vsEventType ?? 0));
         setVsOrderInYear(String(ev.vsOrderInYear ?? 0));
         setVsMembershipFieldKey(ev.vsMembershipFieldKey ?? "");
+        setVsMemberValues(Array.isArray(ev.vsMemberValues) && ev.vsMemberValues.length > 0 ? ev.vsMemberValues : null);
         setQrSizeMm(String(ev.qrSizeMm ?? 35));
       }
     }
@@ -321,6 +351,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         vsEventType: Number(vsEventType) || 0,
         vsOrderInYear: Number(vsOrderInYear) || 0,
         vsMembershipFieldKey: vsMembershipFieldKey || null,
+        ...(vsMemberValues && { vsMemberValues }),
       }),
     });
     setVsSaving(false);
@@ -538,13 +569,35 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   className={inputClass + " mt-1"}
                 >
                   <option value="">{t("common.none")}</option>
-                  {booleanFieldOptions.map((f) => (
+                  {membershipFieldOptions.map((f) => (
                     <option key={f.key} value={f.key}>
                       {f.label}
                     </option>
                   ))}
                 </select>
               </label>
+              {vsMembershipFieldKey && (
+                <div className="rounded-lg border border-mist bg-paper p-3 text-[12px] text-ink-secondary">
+                  <p className="mb-1.5">{t("participantFieldAdmin.vsMemberValuesLabel")}</p>
+                  {membershipValuesFound.length === 0 ? (
+                    <p>{t("participantFieldAdmin.vsMemberValuesNone", { values: effectiveMemberValues.join(", ") })}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {membershipValuesFound.map((raw) => (
+                        <label key={raw} className="flex items-center gap-1.5 text-[13px] text-ink">
+                          <input
+                            type="checkbox"
+                            checked={effectiveMemberValues.includes(raw.trim().toLowerCase())}
+                            onChange={(e) => toggleMemberValue(raw, e.target.checked)}
+                          />
+                          {raw === "true" ? "Ano (zaškrtnuto)" : raw === "false" ? "Ne (nezaškrtnuto)" : raw}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-1.5">{t("participantFieldAdmin.vsMemberValuesHint")}</p>
+                </div>
+              )}
               {vsPreview()}
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">

@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { senderIdentity } from "@/lib/email-template";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
-import { buildSingleReplyText } from "@/lib/mail-reply-template";
+import { buildReplyText } from "@/lib/mail-reply-build";
 
 type AttachmentAction = { attachmentId: string; eventListItemId: string | null; participantId: string };
 
@@ -37,45 +35,12 @@ export async function POST(
     return NextResponse.json({ error: "participant_not_found" }, { status: 404 });
   }
 
-  const event = await prisma.event.findUnique({
-    where: { id: eventId },
-    select: { mailQuestionnaireUrl: true },
-  });
-
-  const documentTypes = await getActiveDocumentTypes(eventId);
-  const existingReceived = await getReceivedItemIds(participantId);
-  const receivedItemIds = new Set(existingReceived);
-
-  for (const action of attachmentActions) {
-    if (action.participantId === participantId && action.eventListItemId) {
-      receivedItemIds.add(action.eventListItemId);
-    }
-  }
-  for (const id of flagOnlyEventListItemIds) {
-    receivedItemIds.add(id);
-  }
-
-  const applicationDocType = documentTypes.find((d) => d.key === "APPLICATION");
-  const isFirstTimeApplication = Boolean(
-    applicationDocType &&
-      receivedItemIds.has(applicationDocType.id) &&
-      !existingReceived.has(applicationDocType.id)
-  );
-
-  const questionnaireDocType = documentTypes.find((d) => d.key === "QUESTIONNAIRE");
-  const questionnaireNeeded = Boolean(questionnaireDocType && !receivedItemIds.has(questionnaireDocType.id));
-
-  const { signature } = senderIdentity(user, "Pošta tábora");
-
-  const replyText = buildSingleReplyText({
-    documentTypes,
-    receivedItemIds,
-    isFirstTimeApplication,
-    questionnaireNeeded,
-    questionnaireUrl: event?.mailQuestionnaireUrl,
-    note,
-    signature,
-  });
+  const extraReceivedIds = [
+    ...attachmentActions.filter((a) => a.participantId === participantId && a.eventListItemId).map((a) => a.eventListItemId!),
+    ...flagOnlyEventListItemIds,
+  ];
+  const replyText = await buildReplyText({ eventId, participantId, userId: user.id, extraReceivedIds, note });
+  if (replyText === null) return NextResponse.json({ error: "participant_not_found" }, { status: 404 });
 
   return NextResponse.json({ replyText });
 }

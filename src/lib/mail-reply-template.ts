@@ -1,10 +1,7 @@
-// Port of the old app's buildSingleReplyTextCz_ (docs/mail helper original
-// app script.txt lines 1156-1203). "Received" in the new relational schema
-// is row-existence on ParticipantDocument, not a spreadsheet column value --
-// callers pass in the set of EventListItem ids to treat as received
-// (existing rows plus whatever the current attachment-mapping/flag
-// selections would add if executed), so the same function renders both the
-// live-regenerating preview and the actually-sent text.
+// Document checklist lines shared by the Pošta reply (src/lib/mail-reply-build.ts,
+// the editable "Odpověď na e-mail" template -- originally the old app's
+// buildSingleReplyTextCz_) and the bulk status e-mail. "Received" is
+// row-existence on ParticipantDocument; callers pass the ids to treat as received.
 
 export type DocumentTypeData = {
   displayName?: string;
@@ -55,43 +52,4 @@ export function buildDocumentChecklistLines(
     }
     return `- ${icon} ${displayName} — ${word}`;
   });
-}
-
-export function buildSingleReplyText(opts: {
-  documentTypes: DocumentListItem[];
-  receivedItemIds: Set<string>;
-  isFirstTimeApplication: boolean;
-  questionnaireNeeded: boolean;
-  questionnaireUrl?: string | null;
-  note?: string;
-  signature: string;
-}): string {
-  const docLines = buildDocumentChecklistLines(opts.documentTypes, opts.receivedItemIds, {
-    isFirstTimeApplication: opts.isFirstTimeApplication,
-  });
-
-  // Leading blank line dropped here -- the unconditional one right after docLines below
-  // now covers it, whether or not there's a questionnaire link or note.
-  const url = (opts.questionnaireUrl || "").trim();
-  const questionnaireLines = opts.questionnaireNeeded && url ? [`Odkaz na vyplnění dotazníku: ${url}.`, ""] : [];
-
-  const note = (opts.note || "").trim();
-  const noteLines = note ? [note, ""] : [];
-
-  return [
-    "Dobrý den,",
-    "",
-    "Děkujeme za zaslání a posíláme potvrzení o aktuálním stavu dokumentů:",
-    "",
-    ...docLines,
-    // Part 11-B.6: unconditional, not just when a questionnaire link or note happens to
-    // supply one -- without a note/questionnaire the closing used to run on immediately
-    // after the last checklist line.
-    "",
-    ...questionnaireLines,
-    ...noteLines,
-    "Děkujeme za důvěru,",
-    "",
-    opts.signature,
-  ].join("\n");
 }

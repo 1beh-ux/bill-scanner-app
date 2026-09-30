@@ -42,6 +42,10 @@ async function main() {
     { key: "participantDetail.saveAndNext", cs: "Uložit a další", en: "Save and next" },
     { key: "participantDetail.saveAndClose", cs: "Uložit a zavřít", en: "Save and close" },
     { key: "eventDetail.categoryDescriptionPlaceholder", cs: "Popis (pro tuto akci)", en: "Description (for this event)" },
+    { key: "mailTab.replyTemplateLabel", cs: "Odpověď na e-mail (Pošta)", en: "E-mail reply (Mail)" },
+    { key: "participantFieldAdmin.vsMemberValuesLabel", cs: "Které hodnoty tohoto pole znamenají člena?", en: "Which values of this field mean a member?" },
+    { key: "participantFieldAdmin.vsMemberValuesNone", cs: "Pole zatím nemá u účastníků žádné hodnoty. Za člena se počítá: {values}.", en: "No participant has a value in this field yet. Counted as member: {values}." },
+    { key: "participantFieldAdmin.vsMemberValuesHint", cs: "Ostatní hodnoty (i prázdné) = nečlen. Velikost písmen nevadí. Určuje cenu i číslici členství ve variabilním symbolu.", en: "Any other value (or empty) = non-member. Case doesn't matter. Decides the price and the membership digit in the variable symbol." },
     { key: "participantFieldAdmin.surface.health", cs: "Zdraví", en: "Health" },
   ];
   for (const row of rows) {

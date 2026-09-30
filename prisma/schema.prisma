@@ -271,6 +271,9 @@ model Event {
   // no membership digit is configured -- always 0.
   vsEventType          Int?     @map("vs_event_type")
   vsOrderInYear        Int?     @map("vs_order_in_year")
+  // Values of the membership field that mean "member" (lower-cased); null =
+  // DEFAULT_MEMBER_VALUES in src/lib/document-variables.ts.
+  vsMemberValues           Json?     @map("vs_member_values")
   vsMembershipFieldKey String?  @map("vs_membership_field_key")
   // Side length (mm) of the payment QR image inserted into documents. Null
   // means the default (DEFAULT_QR_SIZE_MM in src/lib/document-variables.ts).
