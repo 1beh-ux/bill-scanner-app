@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
-import { readComposite, sanitizeComposite } from "@/lib/participant-fields";
+import { readBooleanMapping, readComposite, sanitizeComposite, toBoolean } from "@/lib/participant-fields";
 
 async function loadOwnedField(eventId: string, fieldId: string) {
   const field = await prisma.eventParticipantField.findUnique({ where: { id: fieldId } });
@@ -58,6 +58,13 @@ export async function PATCH(
     );
     cleanOptions = sanitizeComposite(options, partKeys, newKey ?? existing.key);
   }
+  // Ano/Ne field: which values mean Ano / Ne (lower-cased, short lists).
+  if (finalType === "boolean" && options !== undefined) {
+    const m = readBooleanMapping(options);
+    cleanOptions = { trueValues: m.trueValues.slice(0, 50), falseValues: m.falseValues.filter((v) => !m.trueValues.includes(v)).slice(0, 50) };
+  }
+  // With applyBooleanMapping, stored values are rewritten to "true"/"false" too.
+  const applyBoolean = finalType === "boolean" && body.applyBooleanMapping === true;
 
   // Renaming a custom field's key means the {{oldKey}} placeholder in any
   // document/email template someone already wrote stops resolving -- that
@@ -79,6 +86,16 @@ export async function PATCH(
         ...(active !== undefined && { active }),
       },
     });
+    if (applyBoolean) {
+      const k = newKey ?? existing.key;
+      const rows = await tx.participant.findMany({ where: { eventId }, select: { id: true, customFieldValues: true } });
+      for (const p of rows) {
+        const values = (p.customFieldValues as Record<string, string> | null) ?? {};
+        const b = values[k] !== undefined ? toBoolean(values[k], cleanOptions ?? existing.options) : null;
+        if (b === null || b === values[k]) continue;
+        await tx.participant.update({ where: { id: p.id }, data: { customFieldValues: { ...values, [k]: b } } });
+      }
+    }
     if (newKey !== undefined) {
       // Composite fields built from the renamed field follow the new key.
       const composites = await tx.eventParticipantField.findMany({ where: { eventId, fieldType: "composite" } });
@@ -105,7 +122,7 @@ export async function PATCH(
       }
     }
     return result;
-  });
+  }, { timeout: 30_000 }); // value rewrites touch every participant of the event
 
   return NextResponse.json(updated);
 }

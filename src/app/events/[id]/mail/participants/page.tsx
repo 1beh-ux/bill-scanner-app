@@ -219,7 +219,7 @@ export default function MailParticipantsPage({
                   <td className="p-2 text-[13px] text-ink-secondary">{p.contactEmail || "—"}</td>
                   {extraColumns.map((f) => (
                     <td key={f.id} className="p-2 text-[13px] text-ink-secondary">
-                      {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}
+                      {formatFieldValue(p.customFieldValues?.[f.key], f.fieldType, f.options)}
                     </td>
                   ))}
                 </tr>
@@ -248,7 +248,7 @@ export default function MailParticipantsPage({
                   {extraColumns.map((f) => (
                     <div key={f.id} className="contents">
                       <dt className="text-ink-secondary">{f.label}</dt>
-                      <dd className="min-w-0 break-words text-ink">{formatFieldValue(p.customFieldValues?.[f.key], f.fieldType)}</dd>
+                      <dd className="min-w-0 break-words text-ink">{formatFieldValue(p.customFieldValues?.[f.key], f.fieldType, f.options)}</dd>
                     </div>
                   ))}
                 </dl>

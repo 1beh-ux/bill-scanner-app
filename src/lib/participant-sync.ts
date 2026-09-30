@@ -10,8 +10,9 @@
 
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { splitFullName, fullNameFrom } from "@/lib/participant-name";
+import { toBoolean } from "@/lib/participant-fields";
 
-export type FieldInfo = { key: string; label: string; kind: "custom" | "builtin" | "guardian" | "computed" };
+export type FieldInfo = { key: string; label: string; kind: "custom" | "builtin" | "guardian" | "computed"; fieldType?: string; options?: unknown };
 
 function fixedKey(match: (f: (typeof FIXED_PARTICIPANT_FIELDS)[number]) => boolean): string {
   return FIXED_PARTICIPANT_FIELDS.find(match)?.key ?? "";
@@ -231,7 +232,8 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
   for (const f of fields) {
     if (f.kind !== "custom") continue;
     const v = resolveField(cells, headers, targets, f.key, true);
-    if (v) customFieldValues[f.key] = v;
+    // Ano/Ne fields store "true"/"false" (the field's own value setting decides).
+    if (v) customFieldValues[f.key] = f.fieldType === "boolean" ? (toBoolean(v, f.options) ?? v) : v;
   }
   const dateOfBirthRaw = resolve(DOB_FIELD);
   return {

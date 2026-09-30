@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
-import { composeValue, readComposite } from "@/lib/participant-fields";
+import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
 
 export type ParticipantForMerge = {
   name: string;
@@ -74,9 +74,12 @@ export function memberValues(e: { vsMemberValues?: unknown }): string[] {
   return list.length > 0 ? list : DEFAULT_MEMBER_VALUES;
 }
 
+// Stored "true" (a field's Ano/Ne values are normalised on save/import) or a
+// default Ano value is a member; vsMemberValues is the older per-event list.
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
-  return memberValues(e).includes(normalizeMemberValue(p.customFieldValues?.[key] ?? ""));
+  const raw = p.customFieldValues?.[key] ?? "";
+  return toBoolean(raw) === "true" || memberValues(e).includes(normalizeMemberValue(raw));
 }
 
 export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): number | null {
@@ -230,7 +233,8 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
     } else if (f.kind === "custom" && f.fieldType !== "composite") {
       // Stored as plain strings; "true"/"false" of boolean fields read Ano/Ne.
       const raw = participant.customFieldValues?.[f.key];
-      values[f.key] = raw === "true" ? "Ano" : raw === "false" ? "Ne" : raw ?? "";
+      const b = f.fieldType === "boolean" ? toBoolean(raw, f.options) : null;
+      values[f.key] = b === "true" ? "Ano" : b === "false" ? "Ne" : raw ?? "";
     } else if (f.kind === "computed") {
       if (f.computedType === "effective_price") {
         const price = effectivePriceCzk(participant, event);

@@ -41,10 +41,39 @@ export type ParticipantFieldDef = {
 
 // "Ano"/"Ne" hardcoded rather than translated -- matches the existing
 // convention for boolean display elsewhere in this app (src/lib/drive-export.ts).
-export function formatFieldValue(value: string | undefined, fieldType: ParticipantFieldType): string {
+export function formatFieldValue(value: string | undefined, fieldType: ParticipantFieldType, options?: unknown): string {
   if (value === undefined || value === "") return "—";
-  if (fieldType === "boolean") return value === "true" ? "Ano" : "Ne";
+  if (fieldType === "boolean") {
+    const b = toBoolean(value, options);
+    return b === "true" ? "Ano" : b === "false" ? "Ne" : `${value} (?)`;
+  }
   return value;
+}
+
+// Ano/Ne fields: which stored/imported values mean Ano and which Ne. Per field
+// (options of a boolean field = { trueValues, falseValues }, lower-cased) on
+// top of these defaults; the field's own lists win over the defaults.
+export type BooleanMapping = { trueValues: string[]; falseValues: string[] };
+export const DEFAULT_TRUE_VALUES = ["true", "ano", "a", "yes", "y", "1", "x"];
+export const DEFAULT_FALSE_VALUES = ["false", "ne", "n", "no", "0"];
+export const normalizeBooleanValue = (v: string) => v.trim().toLowerCase();
+
+export function readBooleanMapping(options: unknown): BooleanMapping {
+  const o = options && typeof options === "object" && !Array.isArray(options) ? (options as { trueValues?: unknown; falseValues?: unknown }) : {};
+  const list = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string").map(normalizeBooleanValue) : []);
+  return { trueValues: list(o.trueValues), falseValues: list(o.falseValues) };
+}
+
+/** "true" / "false" as the app stores it, or null when the value means neither. */
+export function toBoolean(raw: string | undefined | null, options?: unknown): "true" | "false" | null {
+  const v = normalizeBooleanValue(raw ?? "");
+  if (!v) return null;
+  const m = readBooleanMapping(options);
+  if (m.trueValues.includes(v)) return "true";
+  if (m.falseValues.includes(v)) return "false";
+  if (DEFAULT_TRUE_VALUES.includes(v)) return "true";
+  if (DEFAULT_FALSE_VALUES.includes(v)) return "false";
+  return null;
 }
 
 // Participants/settings/Health/Mail prompt, Part 4: the field-admin screen no longer

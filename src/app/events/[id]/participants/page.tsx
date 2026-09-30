@@ -43,7 +43,7 @@ function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string
     if (field.key === "Email") return p.computed.contact_email || "—";
     return "—";
   }
-  return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType as "text" | "number" | "date" | "boolean" | "select");
+  return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType, field.options);
 }
 
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };

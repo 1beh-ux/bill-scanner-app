@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { readComposite } from "@/lib/participant-fields";
+import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
@@ -92,6 +92,10 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // Composite ("Složené pole") being added/edited: part keys in order + separator.
   const [compositeParts, setCompositeParts] = useState<string[]>([]);
   const [compositeSep, setCompositeSep] = useState(" ");
+  // Ano/Ne field being edited: every value found in the data -> Ano / Ne / unknown.
+  const [boolValues, setBoolValues] = useState<{ raw: string; choice: "true" | "false" | "" }[]>([]);
+  const [boolSaving, setBoolSaving] = useState(false);
+  const [boolSaved, setBoolSaved] = useState<string | null>(null);
   // Table toolbar.
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<FieldKind | "">("");
@@ -103,33 +107,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [vsEventType, setVsEventType] = useState("0");
   const [vsOrderInYear, setVsOrderInYear] = useState("0");
   const [vsMembershipFieldKey, setVsMembershipFieldKey] = useState("");
-  // Lower-cased values meaning "member"; null = not set yet (the defaults apply).
-  const [vsMemberValues, setVsMemberValues] = useState<string[] | null>(null);
-  // Every distinct value the chosen field has among this event's participants.
-  const [membershipValuesFound, setMembershipValuesFound] = useState<string[]>([]);
-  useEffect(() => {
-    if (!isEvent || !vsMembershipFieldKey) return;
-    fetch(`/api/events/${eventId}/participants`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: { customFieldValues: Record<string, string> | null }[]) => {
-        const found = new Map<string, string>();
-        for (const r of rows) {
-          const raw = (r.customFieldValues?.[vsMembershipFieldKey] ?? "").trim();
-          if (raw && !found.has(raw.toLowerCase())) found.set(raw.toLowerCase(), raw);
-        }
-        setMembershipValuesFound([...found.values()].sort((a, b) => a.localeCompare(b, "cs")));
-      })
-      .catch(() => setMembershipValuesFound([]));
-  }, [isEvent, eventId, vsMembershipFieldKey]);
-  const DEFAULT_MEMBER_VALUES = ["true", "ano", "yes", "1"];
-  const effectiveMemberValues = vsMemberValues ?? DEFAULT_MEMBER_VALUES;
-  function toggleMemberValue(raw: string, on: boolean) {
-    const v = raw.trim().toLowerCase();
-    const next = new Set(effectiveMemberValues);
-    if (on) next.add(v);
-    else next.delete(v);
-    setVsMemberValues([...next]);
-  }
   const [vsSaving, setVsSaving] = useState(false);
   const [qrSizeMm, setQrSizeMm] = useState("35");
   const [qrSaving, setQrSaving] = useState(false);
@@ -152,8 +129,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
   const computedFields = visibleFields.filter((f) => f.kind === "computed");
   const nonComputedFields = visibleFields.filter((f) => f.kind !== "computed");
-  // Any custom field can say membership -- a checkbox, a select, or text like Ano/Ne.
-  const membershipFieldOptions = customFields.filter((f) => f.fieldType === "boolean" || f.fieldType === "select" || f.fieldType === "text");
+  // Membership = an Ano/Ne field; which values mean Ano is set on that field.
+  const booleanFieldOptions = customFields.filter((f) => f.fieldType === "boolean");
 
 
   async function load() {
@@ -189,7 +166,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         setVsEventType(String(ev.vsEventType ?? 0));
         setVsOrderInYear(String(ev.vsOrderInYear ?? 0));
         setVsMembershipFieldKey(ev.vsMembershipFieldKey ?? "");
-        setVsMemberValues(Array.isArray(ev.vsMemberValues) && ev.vsMemberValues.length > 0 ? ev.vsMemberValues : null);
         setQrSizeMm(String(ev.qrSizeMm ?? 35));
       }
     }
@@ -249,6 +225,21 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setFieldLabel(field.label);
     setFieldType(field.fieldType);
     setOptionsText(Array.isArray(field.options) ? field.options.join(", ") : "");
+    setBoolValues([]);
+    setBoolSaved(null);
+    if (isEvent && field.kind === "custom" && field.fieldType === "boolean") {
+      fetch(`/api/events/${eventId}/participants`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((rows: { customFieldValues: Record<string, string> | null }[]) => {
+          const found = new Map<string, string>();
+          for (const r of rows) {
+            const raw = (r.customFieldValues?.[field.key] ?? "").trim();
+            if (raw && !found.has(raw.toLowerCase())) found.set(raw.toLowerCase(), raw);
+          }
+          setBoolValues([...found.values()].sort((a, b) => a.localeCompare(b, "cs")).map((raw) => ({ raw, choice: toBoolean(raw, field.options) ?? "" })));
+        })
+        .catch(() => {});
+    }
     const cfg = readComposite(field.options);
     setCompositeParts(field.fieldType === "composite" ? cfg.parts : []);
     setCompositeSep(field.fieldType === "composite" ? cfg.separator : " ");
@@ -370,7 +361,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         vsEventType: Number(vsEventType) || 0,
         vsOrderInYear: Number(vsOrderInYear) || 0,
         vsMembershipFieldKey: vsMembershipFieldKey || null,
-        ...(vsMemberValues && { vsMemberValues }),
       }),
     });
     setVsSaving(false);
@@ -421,6 +411,63 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             </button>
           );
         })}
+      </div>
+    );
+  }
+
+  // Saves which values mean Ano / Ne and rewrites the stored values accordingly.
+  async function saveBoolValues(field: Field) {
+    const current = readBooleanMapping(field.options);
+    const decided = new Set(boolValues.map((v) => v.raw.toLowerCase()));
+    const keep = (list: string[]) => list.filter((v) => !decided.has(v));
+    const options = {
+      trueValues: [...keep(current.trueValues), ...boolValues.filter((v) => v.choice === "true").map((v) => v.raw.toLowerCase())],
+      falseValues: [...keep(current.falseValues), ...boolValues.filter((v) => v.choice === "false").map((v) => v.raw.toLowerCase())],
+    };
+    setBoolSaving(true);
+    const res = await fetch(itemUrl(fieldId(isEvent, field)), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ options, applyBooleanMapping: true }),
+    });
+    setBoolSaving(false);
+    setBoolSaved(res.ok ? t("participantFieldAdmin.boolValuesSaved") : t("listTemplateAdmin.errorSaveFailed"));
+    if (res.ok) load();
+  }
+
+  function boolValuesEditor(field: Field) {
+    const recognized = new Set(["true", "false"]);
+    const shown = boolValues.filter((v) => !recognized.has(v.raw.toLowerCase()));
+    return (
+      <div className="flex flex-col gap-2 rounded-lg border border-mist bg-paper p-2 text-[12px] text-ink-secondary">
+        <p className="font-medium text-ink">{t("participantFieldAdmin.boolValuesTitle")}</p>
+        {shown.length === 0 ? (
+          <p>{t("participantFieldAdmin.boolValuesNone")}</p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            {shown.map((v) => (
+              <label key={v.raw} className="flex items-center gap-2">
+                <span className="min-w-[120px] font-mono text-ink">{v.raw}</span>
+                <select
+                  value={v.choice}
+                  onChange={(e) => setBoolValues((all) => all.map((x) => (x.raw === v.raw ? { ...x, choice: e.target.value as "true" | "false" | "" } : x)))}
+                  className="rounded-lg border border-mist bg-paper-2 px-2 py-0.5 text-[12px] text-ink"
+                >
+                  <option value="true">{t("participantFieldAdmin.boolYes")}</option>
+                  <option value="false">{t("participantFieldAdmin.boolNo")}</option>
+                  <option value="">{t("participantFieldAdmin.boolUnknown")}</option>
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
+        <p>{t("participantFieldAdmin.boolValuesHint")}</p>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => saveBoolValues(field)} disabled={boolSaving || shown.length === 0} className={btnPrimary + " px-3 py-1 text-[12px]"}>
+            {boolSaving ? t("common.loading") : t("participantFieldAdmin.boolValuesSave")}
+          </button>
+          {boolSaved && <span>{boolSaved}</span>}
+        </div>
       </div>
     );
   }
@@ -587,6 +634,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   className={inputClass}
                 />
               )}
+              {isEvent && field.fieldType === "boolean" && fieldType === "boolean" && boolValuesEditor(field)}
               {fieldType === "composite" && compositeEditor(field.key)}
               <div className="mt-1 flex justify-end gap-2">
                 <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">
@@ -667,35 +715,14 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   className={inputClass + " mt-1"}
                 >
                   <option value="">{t("common.none")}</option>
-                  {membershipFieldOptions.map((f) => (
+                  {booleanFieldOptions.map((f) => (
                     <option key={f.key} value={f.key}>
                       {f.label}
                     </option>
                   ))}
                 </select>
               </label>
-              {vsMembershipFieldKey && (
-                <div className="rounded-lg border border-mist bg-paper p-3 text-[12px] text-ink-secondary">
-                  <p className="mb-1.5">{t("participantFieldAdmin.vsMemberValuesLabel")}</p>
-                  {membershipValuesFound.length === 0 ? (
-                    <p>{t("participantFieldAdmin.vsMemberValuesNone", { values: effectiveMemberValues.join(", ") })}</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                      {membershipValuesFound.map((raw) => (
-                        <label key={raw} className="flex items-center gap-1.5 text-[13px] text-ink">
-                          <input
-                            type="checkbox"
-                            checked={effectiveMemberValues.includes(raw.trim().toLowerCase())}
-                            onChange={(e) => toggleMemberValue(raw, e.target.checked)}
-                          />
-                          {raw === "true" ? "Ano (zaškrtnuto)" : raw === "false" ? "Ne (nezaškrtnuto)" : raw}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <p className="mt-1.5">{t("participantFieldAdmin.vsMemberValuesHint")}</p>
-                </div>
-              )}
+              <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.vsMembershipValuesHint")}</p>
               {vsPreview()}
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">

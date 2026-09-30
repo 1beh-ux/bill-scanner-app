@@ -64,7 +64,7 @@ export async function loadSyncs(eventId: string): Promise<ParticipantSync[]> {
 export async function loadImportFields(eventId: string, allowed?: Set<string>): Promise<FieldInfo[]> {
   const fields = await prisma.eventParticipantField.findMany({
     where: { eventId, active: true, surfaces: { has: "import" } },
-    select: { key: true, label: true, kind: true },
+    select: { key: true, label: true, kind: true, fieldType: true, options: true },
     orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
   });
   return fields.filter((f) => !allowed || allowed.has(f.key));

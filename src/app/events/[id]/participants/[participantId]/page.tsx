@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
-import { fieldCategory, type ParticipantFieldDef } from "@/lib/participant-fields";
+import { fieldCategory, toBoolean, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { composeHref } from "@/lib/compose-handoff";
 import { useConfirm } from "@/components/ConfirmDialog";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
@@ -440,10 +440,14 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
 // One admin-defined field by its type; values are plain strings ("true"/"false" for booleans).
 function FieldInput({ field, value, onChange, multiline }: { field: ParticipantFieldDef; value: string; onChange: (v: string) => void; multiline?: boolean }) {
   if (field.fieldType === "boolean") {
+    // Imported values like "Ano"/"x" count via the field's Ano/Ne setting; a value
+    // meaning neither is shown so it isn't silently read as unticked.
+    const b = toBoolean(value, field.options);
     return (
       <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
-        <input type="checkbox" checked={value === "true"} onChange={(e) => onChange(String(e.target.checked))} />
+        <input type="checkbox" checked={b === "true"} onChange={(e) => onChange(String(e.target.checked))} />
         {field.label}
+        {value && b === null && <span className="text-amber-700">({value} ?)</span>}
       </label>
     );
   }
