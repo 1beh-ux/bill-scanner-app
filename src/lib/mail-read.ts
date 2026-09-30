@@ -54,16 +54,47 @@ function headerValue(headers: GmailHeader[] | undefined, name: string): string {
   return h?.value || "";
 }
 
-function findPlainTextBody(part: GmailPart | undefined): string {
+function findBodyPart(part: GmailPart | undefined, mimeType: string): string {
   if (!part) return "";
-  if (part.mimeType === "text/plain" && part.body?.data) {
+  if (part.mimeType === mimeType && part.body?.data && !part.filename) {
     return Buffer.from(part.body.data, "base64url").toString("utf-8");
   }
   for (const child of part.parts || []) {
-    const found = findPlainTextBody(child);
+    const found = findBodyPart(child, mimeType);
     if (found) return found;
   }
   return "";
+}
+
+const ENTITIES: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", ndash: "–", mdash: "—", hellip: "…" };
+// &aacute; &scaron; &uring; &ouml; ... = letter + combining mark (covers Czech accents).
+const MARKS: Record<string, string> = { acute: "\u0301", caron: "\u030C", ring: "\u030A", uml: "\u0308" };
+
+function namedEntity(name: string): string | undefined {
+  if (ENTITIES[name.toLowerCase()]) return ENTITIES[name.toLowerCase()];
+  const m = /^([a-zA-Z])(acute|caron|ring|uml)$/.exec(name);
+  return m ? (m[1] + MARKS[m[2]]).normalize("NFC") : undefined;
+}
+
+/** Readable text from an HTML e-mail body: block tags become line breaks, the rest is stripped. */
+export function htmlToText(html: string): string {
+  return html
+    .replace(/<(style|script|head)[\s\S]*?<\/\1>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|li|h[1-6]|blockquote)>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) =>
+      e[0] === "#" ? String.fromCodePoint(e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : (namedEntity(e) ?? m)
+    )
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Plain-text part first; HTML-only e-mails (phones, web forms) converted to text.
+function findPlainTextBody(part: GmailPart | undefined): string {
+  return findBodyPart(part, "text/plain") || htmlToText(findBodyPart(part, "text/html"));
 }
 
 function collectAttachments(part: GmailPart | undefined, out: GmailAttachmentMeta[]): void {
@@ -112,7 +143,7 @@ export async function listInboxMessagesWithDetails(
       subject: headerValue(headers, "subject"),
       date: dateHeader ? new Date(dateHeader).toISOString() : "",
       snippet: (msg.snippet || "").slice(0, 200),
-      bodySnippet: findPlainTextBody(payload).slice(0, 20000),
+      bodySnippet: (findPlainTextBody(payload) || msg.snippet || "").slice(0, 20000),
       attachments,
     };
   });
