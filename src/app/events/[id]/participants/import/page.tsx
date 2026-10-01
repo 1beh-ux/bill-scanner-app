@@ -34,7 +34,7 @@ export default function ParticipantImportPage({ params }: { params: Promise<{ id
 
   useEffect(() => {
     load();
-    fetch(`/api/events/${eventId}/participant-fields?surface=import`)
+    fetch(`/api/events/${eventId}/participant-fields`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setFields)
       .catch(() => {});

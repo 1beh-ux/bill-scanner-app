@@ -67,6 +67,8 @@ async function main() {
     { key: "participantFieldAdmin.boolNo", cs: "= Ne", en: "= No" },
     { key: "participantFieldAdmin.boolUnknown", cs: "nerozpoznáno", en: "not recognised" },
     { key: "participantDetail.errorDeleteFailed", cs: "Smazání se nepodařilo.", en: "Deleting failed." },
+    { key: "participantSync.matchOnly", cs: "jen k párování", en: "matching only" },
+    { key: "participantSync.regNumberNoCreate", cs: "Podle tohoto pole nelze účastníky zakládat (je vypočítané nebo ho přiděluje aplikace) — nové řádky se jen nahlásí.", en: "Participants can't be created by this field (it's computed or assigned by the app) — new rows are only reported." },
     { key: "participantFieldAdmin.vsMembershipValuesHint", cs: "Pole členství musí být typu Ano/Ne. Které hodnoty znamenají Ano (člen), nastavíte u samotného pole (Upravit → Hodnoty Ano / Ne).", en: "The membership field must be a Yes/No field. Which values mean Yes (member) is set on the field itself (Edit → Yes / No values)." },
     { key: "participantFieldAdmin.vsMemberValuesLabel", cs: "Které hodnoty tohoto pole znamenají člena?", en: "Which values of this field mean a member?" },
     { key: "participantFieldAdmin.vsMemberValuesNone", cs: "Pole zatím nemá u účastníků žádné hodnoty. Za člena se počítá: {values}.", en: "No participant has a value in this field yet. Counted as member: {values}." },

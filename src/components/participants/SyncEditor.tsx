@@ -10,6 +10,7 @@ import {
   SYNC_INTERVALS,
   canCreate,
   guessTarget,
+  isWritableField,
   type FieldInfo,
   type PlanRow,
   type SyncSettings,
@@ -247,7 +248,8 @@ export default function SyncEditor({
   const matchOptions = [
     { key: MATCH_BY_NAME, label: t("participantSync.matchByName") },
     { key: REGNUM_TARGET, label: t("participantSync.regNumber") },
-    ...fields.filter((f) => f.kind === "custom").map((f) => ({ key: f.key, label: f.label })),
+    // Any field, computed ones too (e.g. variable symbol from a payment sheet).
+    ...fields.map((f) => ({ key: f.key, label: isWritableField(f) ? f.label : `${f.label} (${t("participantSync.matchOnly")})` })),
   ];
   const matchColumnMapped =
     settings.matchBy === MATCH_BY_NAME
@@ -343,7 +345,7 @@ export default function SyncEditor({
                     <option value={REGNUM_TARGET}>{t("participantSync.regNumberTarget")}</option>
                     {fields.map((f) => (
                       <option key={f.key} value={f.key}>
-                        {f.label}
+                        {isWritableField(f) ? f.label : `${f.label} (${t("participantSync.matchOnly")})`}
                       </option>
                     ))}
                   </select>
@@ -355,7 +357,7 @@ export default function SyncEditor({
           <section className="grid gap-3 rounded-lg border border-mist p-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
               {t("participantSync.matchBy")}
-              <select value={settings.matchBy} onChange={(e) => patch({ matchBy: e.target.value, ...(canCreate(e.target.value) ? {} : { onNew: "report" }) })} className={input}>
+              <select value={settings.matchBy} onChange={(e) => patch({ matchBy: e.target.value, ...(canCreate(e.target.value, fields) ? {} : { onNew: "report" }) })} className={input}>
                 {matchOptions.map((o) => (
                   <option key={o.key} value={o.key}>
                     {o.label}
@@ -367,12 +369,12 @@ export default function SyncEditor({
             <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
               {t("participantSync.onNew")}
               <select value={settings.onNew} onChange={(e) => patch({ onNew: e.target.value as SyncSettings["onNew"] })} className={input}>
-                <option value="create" disabled={!canCreate(settings.matchBy)}>
+                <option value="create" disabled={!canCreate(settings.matchBy, fields)}>
                   {t("participantSync.onNew.create")}
                 </option>
                 <option value="report">{t("participantSync.onNew.report")}</option>
               </select>
-              {!canCreate(settings.matchBy) && <span>{t("participantSync.regNumberNoCreate")}</span>}
+              {!canCreate(settings.matchBy, fields) && <span>{t("participantSync.regNumberNoCreate")}</span>}
             </label>
             <label className="flex flex-col gap-1 text-[12px] text-ink-secondary">
               {t("participantSync.onMatch")}

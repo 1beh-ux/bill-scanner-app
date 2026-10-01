@@ -12,7 +12,14 @@ import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { splitFullName, fullNameFrom } from "@/lib/participant-name";
 import { toBoolean } from "@/lib/participant-fields";
 
-export type FieldInfo = { key: string; label: string; kind: "custom" | "builtin" | "guardian" | "computed"; fieldType?: string; options?: unknown };
+export type FieldInfo = {
+  key: string;
+  label: string;
+  kind: "custom" | "builtin" | "guardian" | "computed";
+  fieldType?: string;
+  options?: unknown;
+  computedType?: string | null;
+};
 
 function fixedKey(match: (f: (typeof FIXED_PARTICIPANT_FIELDS)[number]) => boolean): string {
   return FIXED_PARTICIPANT_FIELDS.find(match)?.key ?? "";
@@ -86,6 +93,8 @@ export type ExistingParticipant = {
   registrationNumber: number | null;
   customFieldValues: Record<string, string>;
   guardians: { id: string; email: string; name: string | null; phone: string | null; relationship: string | null }[];
+  // Every field's text value (incl. computed: variable symbol, price, composite) -- for matching.
+  values?: Record<string, string>;
 };
 
 export type GuardianRow = { name: string; email: string; relationship: string; phone: string };
@@ -99,6 +108,8 @@ export type ParsedRow = {
   guardians: GuardianRow[];
   customFieldValues: Record<string, string>;
   registrationNumber: string;
+  // Raw value per mapped target (any field, incl. match-only ones like the variable symbol).
+  targetValues: Record<string, string>;
 };
 
 export type RowStatus =
@@ -230,7 +241,7 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
   const rels = columnsFor(cells, targets, GUARDIAN_RELATIONSHIP_FIELD);
   const customFieldValues: Record<string, string> = {};
   for (const f of fields) {
-    if (f.kind !== "custom") continue;
+    if (f.kind !== "custom" || f.fieldType === "composite") continue;
     const v = resolveField(cells, headers, targets, f.key, true);
     // Ano/Ne fields store "true"/"false" (the field's own value setting decides).
     if (v) customFieldValues[f.key] = f.fieldType === "boolean" ? (toBoolean(v, f.options) ?? v) : v;
@@ -246,7 +257,14 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
     guardians: emails.map((email, i) => ({ email, name: gNames[i] ?? "", phone: phones[i] ?? "", relationship: rels[i] ?? "" })),
     customFieldValues,
     registrationNumber: resolve(REGNUM_TARGET),
+    targetValues: Object.fromEntries([...new Set(targets)].filter((x) => x !== IGNORE).map((x) => [x, resolve(x)])),
   };
+}
+
+/** Match comparison: case/accents/spaces folded; a number also ignores inner spaces and leading zeros. */
+export function normalizeMatch(v: string): string {
+  const k = normalizeKey(v);
+  return /^[\d\s]+$/.test(k) ? k.replace(/\s/g, "").replace(/^0+(?=\d)/, "") : k;
 }
 
 function matchKeyOf(row: ParsedRow, matchBy: string): string | null {
@@ -255,20 +273,30 @@ function matchKeyOf(row: ParsedRow, matchBy: string): string | null {
     const n = row.registrationNumber.replace(/\s/g, "");
     return /^\d+$/.test(n) ? String(Number(n)) : null;
   }
-  const v = row.customFieldValues[matchBy];
-  return v ? normalizeKey(v) : null;
+  const v = row.targetValues[matchBy] ?? row.customFieldValues[matchBy];
+  return v ? normalizeMatch(v) : null;
 }
 
 function participantKeys(p: ExistingParticipant, matchBy: string): string | null {
   if (matchBy === MATCH_BY_NAME) return normalizeKey(p.name);
   if (matchBy === REGNUM_TARGET) return p.registrationNumber === null ? null : String(p.registrationNumber);
-  const v = p.customFieldValues[matchBy];
-  return v ? normalizeKey(v) : null;
+  const v = p.values?.[matchBy] ?? p.customFieldValues[matchBy];
+  return v ? normalizeMatch(v) : null;
 }
 
-/** Only "create" needs something stored on the new participant to find it again next time. */
-export function canCreate(matchBy: string): boolean {
-  return matchBy !== REGNUM_TARGET;
+const WRITABLE_BUILTIN = [NAME_FIELD, FIRST_NAME_FIELD, LAST_NAME_FIELD, GROUP_FIELD, DOB_FIELD];
+/** Fields an import writes into; the rest (computed, composite, status) can only be matched on. */
+export function isWritableField(f: FieldInfo): boolean {
+  if (f.kind === "custom") return f.fieldType !== "composite";
+  if (f.kind === "guardian") return true;
+  return f.kind === "builtin" && WRITABLE_BUILTIN.includes(f.key);
+}
+
+/** "Create" needs the match value stored on the new participant, to find it again next time. */
+export function canCreate(matchBy: string, fields: FieldInfo[]): boolean {
+  if (matchBy === MATCH_BY_NAME) return true;
+  const f = fields.find((x) => x.key === matchBy);
+  return !!f && f.kind === "custom" && f.fieldType !== "composite";
 }
 
 function diff(row: ParsedRow, p: ExistingParticipant, mode: "fill" | "overwrite", matchBy: string): { patch: ParticipantPatch; changes: Change[] } {
@@ -392,7 +420,7 @@ export function planSync(input: {
       return;
     }
     if (seen.has(matchKey!)) return void (out.status = "seen_missing");
-    if (settings.onNew !== "create" || !canCreate(settings.matchBy)) return void (out.status = "unmatched");
+    if (settings.onNew !== "create" || !canCreate(settings.matchBy, fields)) return void (out.status = "unmatched");
     if (!row.name) {
       out.errors.push("missing_name");
       return;

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { toDriveError } from "@/lib/drive";
 import type { DriveErrorCode } from "@/lib/drive-errors";
 import { readSheetTable } from "@/lib/sheet-import";
+import { fieldTextValues } from "@/lib/document-variables";
 import {
   MATCH_BY_NAME,
   REGNUM_TARGET,
@@ -62,9 +63,10 @@ export async function loadSyncs(eventId: string): Promise<ParticipantSync[]> {
 
 /** Importable fields (the `import` surface); `allowed` limits them to what the user may see. */
 export async function loadImportFields(eventId: string, allowed?: Set<string>): Promise<FieldInfo[]> {
+  // Every active field: writable ones are import targets, computed/composite ones match-only.
   const fields = await prisma.eventParticipantField.findMany({
-    where: { eventId, active: true, surfaces: { has: "import" } },
-    select: { key: true, label: true, kind: true, fieldType: true, options: true },
+    where: { eventId, active: true },
+    select: { key: true, label: true, kind: true, fieldType: true, options: true, computedType: true },
     orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
   });
   return fields.filter((f) => !allowed || allowed.has(f.key));
@@ -73,17 +75,21 @@ export async function loadImportFields(eventId: string, allowed?: Set<string>): 
 /** Drops mapping targets / match key the fields list doesn't offer (untrusted input, or a field removed since). */
 export function restrictSettings(s: SyncSettings, fields: FieldInfo[]): SyncSettings {
   const keys = new Set([...fields.map((f) => f.key), REGNUM_TARGET]);
-  const custom = new Set(fields.filter((f) => f.kind === "custom").map((f) => f.key));
   return {
     ...s,
     mapping: Object.fromEntries(Object.entries(s.mapping).filter(([, v]) => keys.has(v))),
-    matchBy: s.matchBy === MATCH_BY_NAME || s.matchBy === REGNUM_TARGET || custom.has(s.matchBy) ? s.matchBy : MATCH_BY_NAME,
+    matchBy: s.matchBy === MATCH_BY_NAME || keys.has(s.matchBy) ? s.matchBy : MATCH_BY_NAME,
   };
 }
 
 async function loadExisting(eventId: string): Promise<ExistingParticipant[]> {
-  const ps = await prisma.participant.findMany({ where: { eventId }, include: { guardians: true } });
+  const [ps, event, fields] = await Promise.all([
+    prisma.participant.findMany({ where: { eventId }, include: { guardians: true } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
+  ]);
   return ps.map((p) => ({
+    values: fieldTextValues({ ...p, customFieldValues: p.customFieldValues as Record<string, string> | null }, event, fields),
     id: p.id,
     name: p.name,
     firstName: p.firstName,

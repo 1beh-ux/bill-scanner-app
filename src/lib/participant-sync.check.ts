@@ -1,6 +1,6 @@
 // Self-check for the pure participant sync planner: `npx tsx src/lib/participant-sync.check.ts`
 import assert from "node:assert/strict";
-import { planSync, readSyncs, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
+import { canCreate, planSync, readSyncs, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
 
 const fields: FieldInfo[] = [
   { key: "Name", label: "Jméno a příjmení dítěte", kind: "builtin" },
@@ -74,6 +74,25 @@ const base: SyncSettings = { mapping: {}, matchBy: MATCH_BY_NAME, onNew: "create
   const p2 = planSync({ headers: ["ID", "Jméno"], rows, settings, fields, existing, seenKeys: ["f-3"] });
   assert.deepEqual(p2.map((r) => r.status), ["seen_missing", "superseded", "create", "excluded"]);
   assert.equal(p2[2].create?.name, "Bea Nová");
+}
+
+// Payment sheet matched by a computed field (variable symbol): match-only, numbers
+// compared without spaces/leading zeros, never creates participants.
+{
+  const withVs: FieldInfo[] = [...fields, { key: "var_symb", label: "Variabilní symbol", kind: "computed", computedType: "variable_symbol" }, { key: "zaplaceno", label: "Zaplaceno", kind: "custom", fieldType: "boolean" }];
+  const people = [{ ...existing[0], values: { var_symb: "261100007" } }];
+  const plan = planSync({
+    headers: ["VS", "Zaplaceno"],
+    rows: [["0261 100 007", "ano"], ["261100099", "ano"]],
+    settings: { ...base, mapping: { VS: "var_symb", Zaplaceno: "zaplaceno" }, matchBy: "var_symb", onNew: "create", onMatch: "overwrite" },
+    fields: withVs,
+    existing: people,
+    seenKeys: [],
+  });
+  assert.deepEqual(plan.map((r) => r.status), ["update", "unmatched"]);
+  assert.deepEqual(plan[0].patch?.customFieldValues, { zaplaceno: "true" }); // "ano" stored as true
+  assert.equal(canCreate("var_symb", withVs), false);
+  assert.equal(canCreate("formId", withVs), true);
 }
 
 assert.deepEqual(readSyncs([{ id: "a", onMatch: "bogus", everyHours: 5 }, { nope: 1 }]).map((s) => [s.onMatch, s.everyHours, s.matchBy]), [["fill", 6, MATCH_BY_NAME]]);
