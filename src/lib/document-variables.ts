@@ -3,6 +3,7 @@ import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
+import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 
 export type ParticipantForMerge = {
   name: string;
@@ -37,6 +38,7 @@ export type EventForMerge = {
   mailQuestionnaireUrl: string | null;
   qrSizeMm: number | null;
   registrationDeadline: Date | null;
+  healthNotes?: unknown;
 };
 
 function formatDate(d: Date | null): string {
@@ -173,6 +175,9 @@ export async function resolveVariables(
   const imageSizesMm: Record<string, number> = {};
 
   const values = fieldTextValues(participant, event, allFields);
+  // {{health_notes}}: the Zdravotní poznámky (Nastavení akce -> Zdraví), all of them, in order.
+  const healthConfig = event.healthNotes == null ? defaultHealthNotes(allFields) : sanitizeHealthNotes(event.healthNotes, new Set(allFields.map((f) => f.key)));
+  text.health_notes = healthNotesText(notesFor(healthConfig, "all", values, Object.fromEntries(allFields.map((f) => [f.key, f.label]))));
   for (const f of allFields) {
     if (!f.surfaces.includes(surface)) continue;
     if (f.kind === "computed" && f.computedType === "payment_qr_image") {

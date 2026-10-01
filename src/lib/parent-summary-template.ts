@@ -152,22 +152,18 @@ export function buildParentSummaryHtml(opts: {
   generatedAt: Date;
   participantName: string;
   groupName: string | null;
-  allergies: string | null;
-  medsNotes: string | null;
-  chronicIssues: string | null;
-  otherNotes: string | null;
+  // Place "pdf" of Nastavení akce -> Zdraví -> Zdravotní poznámky, in order.
+  notes: { label: string; value: string; highlight: boolean }[];
   incidents: SummaryIncident[];
   medConfirmation: { days: string[]; rows: MedConfirmationRow[] };
 }): string {
-  const { campName, generatedAt, participantName, groupName, allergies, medsNotes, chronicIssues, otherNotes, incidents, medConfirmation } = opts;
+  const { campName, generatedAt, participantName, groupName, notes, incidents, medConfirmation } = opts;
 
-  const hasNotes = allergies || medsNotes || chronicIssues || otherNotes;
-  const notesHtml = hasNotes
+  const notesHtml = notes.length
     ? `<div class="notes">
-        ${allergies ? `<p><strong>Alergie:</strong> ${escapeHtml(allergies)}</p>` : ""}
-        ${medsNotes ? `<p><strong>Léky:</strong> ${escapeHtml(medsNotes)}</p>` : ""}
-        ${chronicIssues ? `<p><strong>Chronické potíže:</strong> ${escapeHtml(chronicIssues)}</p>` : ""}
-        ${otherNotes ? `<p><strong>Ostatní poznámky:</strong> ${escapeHtml(otherNotes)}</p>` : ""}
+        ${notes
+          .map((n) => `<p${n.highlight ? ' style="color:#991b1b"' : ""}><strong>${n.highlight ? "⚠ " : ""}${escapeHtml(n.label)}:</strong> ${escapeHtml(n.value)}</p>`)
+          .join("")}
       </div>`
     : `<p class="notes">Bez zdravotních poznámek.</p>`;
 

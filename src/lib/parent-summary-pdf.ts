@@ -4,6 +4,7 @@ import { billsBucket } from "@/lib/gcs";
 import { uploadFileToFolder } from "@/lib/drive";
 import { resolveIncidentState, type EffectiveIncident } from "@/lib/incident-state";
 import { buildParentSummaryHtml, type SummaryIncident, type MedConfirmationRow } from "@/lib/parent-summary-template";
+import { healthNotesByParticipant } from "@/lib/health-notes-server";
 import { fetchMedChecklistGrid } from "@/lib/med-checklist-grid";
 
 export async function loadParticipantSummaryIncidents(participantId: string): Promise<SummaryIncident[]> {
@@ -73,20 +74,13 @@ export async function generateParticipantSummaryPdf(
     }
   }
 
-  // These four are now admin-defined custom fields (see
-  // src/lib/document-variables.ts's participant_custom_field resolver),
-  // not typed columns -- keyed by the same field keys the migration
-  // preserved (scripts/seed-participant-fields-notes.ts).
-  const customFieldValues = (participant.customFieldValues as Record<string, string> | null) ?? {};
+  const notes = (await healthNotesByParticipant(participant.eventId, "pdf", [participant.id]))[participant.id] ?? [];
   const html = buildParentSummaryHtml({
     campName: participant.event.name,
     generatedAt: new Date(),
     participantName: participant.name,
     groupName: participant.groupName,
-    allergies: customFieldValues.allergies ?? null,
-    medsNotes: customFieldValues.medsNotes ?? null,
-    chronicIssues: customFieldValues.chronicIssues ?? null,
-    otherNotes: customFieldValues.otherNotes ?? null,
+    notes,
     incidents,
     medConfirmation: { days: grid.days, rows: medRows },
   });

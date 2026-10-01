@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import PdfExportControls from "@/components/health/PdfExportControls";
-import { type ParticipantFieldDef } from "@/lib/participant-fields";
+import HealthNotesBox from "@/components/health/HealthNotesBox";
+import type { HealthNote } from "@/lib/health-notes";
 
 type EventBasic = { id: string; name: string; startDate: string; endDate: string };
 type Slot = { id: string; name: string };
@@ -19,10 +20,6 @@ type GridRow = {
   days: Record<string, Record<string, CellStatus>>;
 };
 type GridResponse = { slots: Slot[]; days: string[]; rows: GridRow[] };
-
-type ParticipantNotes = {
-  customFieldValues: Record<string, string> | null;
-};
 
 type Preset = "today" | "week" | "event" | "custom";
 
@@ -83,17 +80,13 @@ export default function MedChecklistPage({
   const [visibleSlotIds, setVisibleSlotIds] = useState<Set<string> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
-  const [notesCache, setNotesCache] = useState<Record<string, ParticipantNotes>>({});
-  const [notesFields, setNotesFields] = useState<ParticipantFieldDef[]>([]);
+  // Health notes per opened participant (place "meds" of Nastavení akce -> Zdraví).
+  const [notesCache, setNotesCache] = useState<Record<string, HealthNote[]>>({});
 
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setEvent);
-    fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setNotesFields)
-      .catch(() => {});
   }, [eventId]);
 
   function applyPreset(p: Preset, ev: EventBasic) {
@@ -210,10 +203,10 @@ export default function MedChecklistPage({
     }
     setExpandedParticipantId(participantId);
     if (!notesCache[participantId]) {
-      const res = await fetch(`/api/participants/${participantId}`);
+      const res = await fetch(`/api/events/${eventId}/health-notes/values?place=meds&participantId=${participantId}`);
       if (res.ok) {
-        const notes = await res.json();
-        setNotesCache((prev) => ({ ...prev, [participantId]: notes }));
+        const d: { notes: Record<string, HealthNote[]> } = await res.json();
+        setNotesCache((prev) => ({ ...prev, [participantId]: d.notes[participantId] ?? [] }));
       }
     }
   }
@@ -252,27 +245,9 @@ export default function MedChecklistPage({
   }
 
   function NotesPanel({ participantId }: { participantId: string }) {
-    const notes = notesCache[participantId];
-    const hasNotes = notesFields.some((f) => notes?.customFieldValues?.[f.key]);
-    return (
-      <div className="rounded-lg bg-paper-2 p-2 text-[12px] text-ink">
-        {hasNotes ? (
-          <>
-            {notesFields.map(
-              (f) =>
-                notes?.customFieldValues?.[f.key] && (
-                  <p key={f.id}>
-                    <strong>{f.label}:</strong> {notes.customFieldValues[f.key]}
-                  </p>
-                )
-            )}
-          </>
-        ) : (
-          <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
-        )}
-      </div>
-    );
+    return <HealthNotesBox notes={notesCache[participantId] ?? null} className="rounded-lg bg-paper-2 p-2 text-[12px] text-ink" />;
   }
+
 
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 

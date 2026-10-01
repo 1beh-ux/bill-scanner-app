@@ -293,6 +293,9 @@ model Event {
   // Planning Helper settings (src/lib/planning.ts PlanningSettings): saved
   // import sheet connections per import target, and the Drive export sheet id.
   planningSettings Json? @map("planning_settings")
+  // Zdravotní poznámky config (src/lib/health-notes.ts HealthNoteConfig[]):
+  // which fields, in what order, where shown, highlighted. null = default.
+  healthNotes Json? @map("health_notes")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 

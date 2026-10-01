@@ -381,16 +381,13 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // Where the field shows up -- one pill per place, click to switch. "E-maily"
   // (`email`): the {{variable}} is offered in every e-mail template editor and
   // filled in e-mails; "Dokumenty" (`documents`): filled in generated documents.
-  // Zdraví switches both health surfaces together.
+  // Health notes are chosen in Nastavení akce -> Zdraví -> Zdravotní poznámky.
   function pillDefs(): { label: string; surfaces: Surface[] }[] {
     return [
       { label: t("participantFieldAdmin.showInListLabel"), surfaces: ["list"] },
       ...(!isEvent || enabledModules.has("mail") ? [{ label: t("participantFieldAdmin.surface.mailList"), surfaces: ["mail_list"] as Surface[] }] : []),
       { label: t("participantFieldAdmin.surface.email"), surfaces: ["email"] },
       { label: t("participantFieldAdmin.surface.documents"), surfaces: ["documents"] },
-      ...(!isEvent || enabledModules.has("health")
-        ? [{ label: t("participantFieldAdmin.surface.health"), surfaces: ["health_list", "health_detail"] as Surface[] }]
-        : []),
     ];
   }
 

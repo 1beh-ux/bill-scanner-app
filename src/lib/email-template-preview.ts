@@ -7,7 +7,7 @@ import {
 } from "@/lib/email-template-purpose-keys";
 
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
-  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "sender_name", "signature"],
+  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "health_notes", "sender_name", "signature"],
   [MAIL_HELPER_BULK_STATUS_PURPOSE_KEY]: [
     "participant_name",
     "camp_name",
@@ -18,7 +18,7 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   ],
   [MAIL_HELPER_REPLY_PURPOSE_KEY]: ["participant_name", "camp_name", "document_checklist", "questionnaire_line", "questionnaire_url", "note", "sender_name", "signature"],
   // Free e-mail to participants (compose page, "Napsat e-mail").
-  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "sender_email", "sender_name", "signature"],
+  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "health_notes", "sender_email", "sender_name", "signature"],
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature"],
 };
 
@@ -37,6 +37,7 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     child_name: "Anna Nováková",
     camp_name: "Letní tábor 2026",
     date_range: "1.–7. 8. 2026",
+    health_notes: "Alergie: pyl\nLéky: Zyrtec 1× denně",
     sender_name: "Zdravotník",
     signature: "S pozdravem\nZdravotník tábora",
   },

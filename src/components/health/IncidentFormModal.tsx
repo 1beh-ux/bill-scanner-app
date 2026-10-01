@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import BodyMapPicker, { type BodyMapValue } from "./BodyMapPicker";
-import { type ParticipantFieldDef } from "@/lib/participant-fields";
+import HealthNotesBox, { useHealthNotes } from "@/components/health/HealthNotesBox";
 
 type IncidentCategory = "illness" | "injury" | "parasite" | "medication" | "other";
 
@@ -134,7 +134,9 @@ export default function IncidentFormModal({
 
   const [participantSummary, setParticipantSummary] = useState<ParticipantSummary | null>(null);
   const [showParticipantSummary, setShowParticipantSummary] = useState(false);
-  const [summaryFields, setSummaryFields] = useState<ParticipantFieldDef[]>([]);
+  // Place "incident" of Nastavení akce -> Zdraví -> Zdravotní poznámky.
+  const incidentNotes = useHealthNotes(eventId, participantId, "incident");
+  const highlighted = (incidentNotes ?? []).filter((n) => n.highlight);
   const [eventDates, setEventDates] = useState<{ startDate: string; endDate: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -152,10 +154,6 @@ export default function IncidentFormModal({
     fetch(`/api/participants/${participantId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setParticipantSummary)
-      .catch(() => {});
-    fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setSummaryFields)
       .catch(() => {});
     fetch(`/api/events/${eventId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -260,6 +258,8 @@ export default function IncidentFormModal({
           {participantSummary && <span className="ml-1 font-normal text-ink-secondary"> — {participantSummary.name}</span>}
         </h2>
 
+        {/* Highlighted notes (e.g. allergies) are always visible, not behind the toggle. */}
+        {highlighted.length > 0 && <HealthNotesBox notes={highlighted} className="mb-2 text-[13px]" />}
         {participantSummary && (
           <div className="mb-4">
             <button
@@ -270,19 +270,7 @@ export default function IncidentFormModal({
               {showParticipantSummary ? t("incidentForm.hideParticipantSummary") : t("incidentForm.showParticipantSummary")}
             </button>
             {showParticipantSummary && (
-              <div className="mt-2 flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink">
-                {summaryFields.map(
-                  (f) =>
-                    participantSummary.customFieldValues?.[f.key] && (
-                      <p key={f.id}>
-                        <strong>{f.label}:</strong> {participantSummary.customFieldValues[f.key]}
-                      </p>
-                    )
-                )}
-                {!summaryFields.some((f) => participantSummary.customFieldValues?.[f.key]) && (
-                  <p className="text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
-                )}
-              </div>
+              <HealthNotesBox notes={incidentNotes} className="mt-2 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink" />
             )}
           </div>
         )}

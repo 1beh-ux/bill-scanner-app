@@ -8,7 +8,7 @@ import IncidentDetailModal from "@/components/health/IncidentDetailModal";
 import SendSummaryModal from "@/components/health/SendSummaryModal";
 import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import { calculateAge } from "@/lib/age";
-import { type ParticipantFieldDef } from "@/lib/participant-fields";
+import HealthNotesBox, { useHealthNotes } from "@/components/health/HealthNotesBox";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type Guardian = {
@@ -85,7 +85,6 @@ export default function ParticipantDetailPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
 
   const [addingGuardian, setAddingGuardian] = useState(false);
   const [gName, setGName] = useState("");
@@ -106,6 +105,7 @@ export default function ParticipantDetailPage({
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
+  const healthNotes = useHealthNotes(eventId, participantId, "detail");
   const [documents, setDocuments] = useState<ParticipantDocumentRow[]>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
@@ -194,10 +194,6 @@ export default function ParticipantDetailPage({
     setLoading(false);
   }
 
-  async function loadFields() {
-    const res = await fetch(`/api/events/${eventId}/participant-fields?surface=health_detail`);
-    if (res.ok) setFields(await res.json());
-  }
 
   async function loadIncidents() {
     const res = await fetch(`/api/participants/${participantId}/incidents`);
@@ -223,7 +219,6 @@ export default function ParticipantDetailPage({
 
   useEffect(() => {
     load();
-    loadFields();
     loadIncidents();
     loadMedPlans();
     loadEmailLogs();
@@ -355,8 +350,7 @@ export default function ParticipantDetailPage({
 
   // medsNotes gets its own dedicated block (with "Převést na plán") above the med plan
   // list -- excluded here so it isn't shown twice.
-  const generalNoteFields = fields.filter((f) => f.key !== "medsNotes");
-  const hasNotes = generalNoteFields.some((f) => participant.customFieldValues?.[f.key]);
+  const generalNotes = healthNotes && healthNotes.filter((n) => n.key !== "medsNotes");
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">
@@ -427,20 +421,8 @@ export default function ParticipantDetailPage({
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
-      {hasNotes ? (
-        <div className="mb-6 flex flex-col gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
-          {generalNoteFields.map(
-            (f) =>
-              participant.customFieldValues?.[f.key] && (
-                <p key={f.id}>
-                  <strong>{f.label}:</strong> {participant.customFieldValues[f.key]}
-                </p>
-              )
-          )}
-        </div>
-      ) : (
-        <p className="mb-6 text-[14px] text-ink-secondary">{t("participantDetail.notesEmpty")}</p>
-      )}
+      {/* Which notes, in what order: Nastavení akce -> Zdraví -> Zdravotní poznámky (place "detail"). */}
+      <HealthNotesBox notes={generalNotes} className="mb-6 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink" />
 
       {/* Part 11-D: what the inbox (or a manual mark) saved, checkable without opening
           Drive. Grouped by document type, "Typ — N souborů" (Part 11-C's own wording),
