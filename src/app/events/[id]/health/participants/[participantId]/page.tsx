@@ -10,6 +10,26 @@ import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/Paren
 import { calculateAge } from "@/lib/age";
 import HealthNotesBox, { useHealthNotes } from "@/components/health/HealthNotesBox";
 import { useConfirm } from "@/components/ConfirmDialog";
+import type { HealthNoteConfig } from "@/lib/health-notes";
+import { healthConfigForNotes, moveSection, readParticipantLayout, resolveHealthLayout, type HealthSectionKind, type PageLayout } from "@/lib/participant-layout";
+import { AddFieldSelect, DropZone, FieldRow, Inert, LayoutEditorBar, SectionCard, type LayoutDrag } from "@/components/participants/LayoutEditor";
+
+const HEALTH_SECTION_TITLES: Record<HealthSectionKind, string> = {
+  notes: "participantDetail.notesTitle",
+  documents: "participantDetail.documentsTitle",
+  guardians: "participantDetail.guardiansTitle",
+  medsReported: "medPlansSection.reportedLabel",
+  medPlans: "medPlansSection.title",
+  incidents: "incidentsPage.title",
+  emails: "sendLog.title",
+};
+// A field the notes section can show (as in Nastavení akce -> Zdraví -> Zdravotní poznámky).
+type NoteField = { id: string; key: string; label: string; kind: string; fieldType: string; computedType: string | null };
+const moveBefore = (list: string[], key: string, before: string) => {
+  const out = list.filter((k) => k !== key);
+  out.splice(out.indexOf(before) < 0 ? out.length : out.indexOf(before), 0, key);
+  return out;
+};
 
 type Guardian = {
   id: string;
@@ -105,7 +125,15 @@ export default function ParticipantDetailPage({
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
-  const healthNotes = useHealthNotes(eventId, participantId, "detail");
+  // Layout ("Upravit rozvržení"): section order/visibility + the notes list (= health notes with place "detail").
+  const [layoutData, setLayoutData] = useState<{ saved: PageLayout | null; healthConfig: HealthNoteConfig[]; fields: NoteField[] } | null>(null);
+  const [draft, setDraft] = useState<{ layout: PageLayout; notes: string[] } | null>(null);
+  const [drag, setDrag] = useState<LayoutDrag>(null);
+  const [layoutSaving, setLayoutSaving] = useState(false);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [layoutSaved, setLayoutSaved] = useState(false);
+  const [notesVersion, setNotesVersion] = useState(0);
+  const healthNotes = useHealthNotes(eventId, participantId, "detail", notesVersion);
   const [documents, setDocuments] = useState<ParticipantDocumentRow[]>([]);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
@@ -187,6 +215,48 @@ export default function ParticipantDetailPage({
     loadMedPlans();
   }
 
+  async function loadLayout() {
+    const res = await fetch(`/api/events/${eventId}/participant-layout`);
+    if (!res.ok) return;
+    const d: { layout: unknown; healthConfig: HealthNoteConfig[]; fields: NoteField[] } = await res.json();
+    setLayoutData({
+      saved: readParticipantLayout(d.layout).health ?? null,
+      healthConfig: d.healthConfig,
+      fields: d.fields.filter((f) => f.fieldType !== "image" && f.computedType !== "payment_qr_image"),
+    });
+  }
+
+  async function saveLayout() {
+    if (!draft || !layoutData) return;
+    const next = healthConfigForNotes(layoutData.healthConfig, draft.notes);
+    const changed = JSON.stringify(next) !== JSON.stringify(layoutData.healthConfig);
+    setLayoutSaving(true);
+    setLayoutError(null);
+    const res = await fetch(`/api/events/${eventId}/participant-layout`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: "health", layout: draft.layout, ...(changed ? { healthConfig: next } : {}) }),
+    });
+    setLayoutSaving(false);
+    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
+    setLayoutData({ ...layoutData, saved: draft.layout, healthConfig: next });
+    setDraft(null);
+    setLayoutSaved(true);
+    if (changed) setNotesVersion((v) => v + 1);
+    loadLayout();
+  }
+
+  // Bin on a custom note: deletes the field itself (Proměnné), right away.
+  async function deleteNoteField(key: string) {
+    const f = layoutData?.fields.find((x) => x.key === key);
+    if (!f || !(await confirm({ message: t("layoutEditor.deleteFieldConfirm", { name: f.label }), danger: true }))) return;
+    const res = await fetch(`/api/events/${eventId}/participant-fields/${f.id}`, { method: "DELETE" });
+    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
+    setLayoutData((d) => d && { ...d, fields: d.fields.filter((x) => x.key !== key), healthConfig: d.healthConfig.filter((c) => c.fieldKey !== key) });
+    setDraft((d) => d && { ...d, notes: d.notes.filter((k) => k !== key) });
+    setNotesVersion((v) => v + 1);
+  }
+
   async function load() {
     setLoading(true);
     const res = await fetch(`/api/participants/${participantId}`);
@@ -223,6 +293,7 @@ export default function ParticipantDetailPage({
     loadMedPlans();
     loadEmailLogs();
     loadDocuments();
+    loadLayout();
     // Part 7: "Otevřít složku na Disku" only shows when it would actually work --
     // folders are created lazily on first click, so the real prerequisite is
     // just whether the event has a participants-root (or export) folder set.
@@ -352,6 +423,397 @@ export default function ParticipantDetailPage({
   // list -- excluded here so it isn't shown twice.
   const generalNotes = healthNotes && healthNotes.filter((n) => n.key !== "medsNotes");
 
+  const layout = resolveHealthLayout(layoutData?.saved);
+  const view = draft?.layout ?? layout;
+  const noteFields = layoutData?.fields ?? [];
+  const noteLabel = (key: string) => noteFields.find((f) => f.key === key)?.label ?? key;
+  const editLayout = (fn: (l: PageLayout) => PageLayout) => setDraft((d) => d && { ...d, layout: fn(d.layout) });
+  const startEditing = () => {
+    if (!layoutData) return;
+    setLayoutSaved(false);
+    setLayoutError(null);
+    setDraft({ layout, notes: layoutData.healthConfig.filter((c) => c.places.includes("detail")).map((c) => c.fieldKey) });
+  };
+
+  // Sections in layout order (Upravit rozvržení); each body as the page always showed it.
+  const sectionBody: Record<HealthSectionKind, React.ReactNode> = {
+    notes: (
+      <>
+        <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
+        {/* Which notes, in what order: Nastavení akce -> Zdraví -> Zdravotní poznámky (place "detail"). */}
+        <HealthNotesBox notes={generalNotes} className="rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink" />
+      </>
+    ),
+    documents: (
+      <>
+        {/* Part 11-D: what the inbox (or a manual mark) saved, checkable without opening
+            Drive. Grouped by document type, "Typ — N souborů" (Part 11-C's own wording),
+            each file with its received date/source and a Drive link when synced. */}
+        <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.documentsTitle")}</h2>
+        {documents.length === 0 ? (
+          <p className="text-[14px] text-ink-secondary">{t("participantDetail.documentsEmpty")}</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {Object.entries(
+              documents.reduce<Record<string, ParticipantDocumentRow[]>>((acc, d) => {
+                (acc[d.docTypeName] ??= []).push(d);
+                return acc;
+              }, {})
+            ).map(([docTypeName, files]) => (
+              <div key={docTypeName} className="rounded-lg border border-mist/60 p-2">
+                <p className="mb-1 text-[13px] font-medium text-ink">
+                  {t("participantDetail.documentsFileCount", { name: docTypeName, count: String(files.length) })}
+                </p>
+                <ul className="flex flex-col gap-0.5">
+                  {files.map((f) => (
+                    <li key={f.id} className="flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary">
+                      <span>{f.filename || "—"}</span>
+                      <span>· {new Date(f.receivedAt).toLocaleDateString("cs-CZ")}</span>
+                      <span>· {t(`participantDetail.documentsVia.${f.receivedVia}`)}</span>
+                      {f.driveUrl && (
+                        <a href={f.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                          {t("participantDetail.documentsOpenInDrive")}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    ),
+    guardians: (
+      <>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-ink">{t("participantDetail.guardiansTitle")}</h2>
+          <button onClick={() => setAddingGuardian((v) => !v)} className="text-[13px] text-ember hover:underline">
+            {t("participantDetail.addGuardianButton")}
+          </button>
+        </div>
+
+        {addingGuardian && (
+          <form onSubmit={addGuardian} className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2">
+            <input
+              type="text"
+              placeholder={t("common.name")}
+              value={gName}
+              onChange={(e) => setGName(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <input
+              type="email"
+              placeholder={t("participantDetail.guardianEmailLabel")}
+              value={gEmail}
+              onChange={(e) => setGEmail(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <input
+              type="text"
+              placeholder={t("participantDetail.guardianRelationshipLabel")}
+              value={gRelationship}
+              onChange={(e) => setGRelationship(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <input
+              type="tel"
+              placeholder={t("participantDetail.guardianPhoneLabel")}
+              value={gPhone}
+              onChange={(e) => setGPhone(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <button type="submit" disabled={savingGuardian} className={btnPrimary}>
+              {t("common.save")}
+            </button>
+          </form>
+        )}
+
+        {participant.guardians.length === 0 ? (
+          <p className="text-[14px] text-ink-secondary">{t("participantDetail.guardiansEmpty")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {participant.guardians.map((g) =>
+              editGuardianId === g.id && editGuardianDraft ? (
+                <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={t("common.name")}
+                      value={editGuardianDraft.name ?? ""}
+                      onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, name: e.target.value })}
+                      className={inputClass + " flex-1"}
+                    />
+                    <input
+                      type="email"
+                      placeholder={t("participantDetail.guardianEmailLabel")}
+                      value={editGuardianDraft.email}
+                      onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, email: e.target.value })}
+                      className={inputClass + " flex-1"}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder={t("participantDetail.guardianRelationshipLabel")}
+                      value={editGuardianDraft.relationship ?? ""}
+                      onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, relationship: e.target.value })}
+                      className={inputClass + " flex-1"}
+                    />
+                    <input
+                      type="tel"
+                      placeholder={t("participantDetail.guardianPhoneLabel")}
+                      value={editGuardianDraft.phone ?? ""}
+                      onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, phone: e.target.value })}
+                      className={inputClass + " flex-1"}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3">
+                    <button onClick={() => setEditGuardianId(null)} className="text-[13px] text-ink-secondary hover:underline">
+                      {t("common.cancel")}
+                    </button>
+                    <button onClick={saveEditGuardian} disabled={savingGuardian} className="text-[13px] text-ember hover:underline">
+                      {t("common.save")}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div key={g.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2">
+                  <div className="text-[14px] text-ink">
+                    {g.name || g.email}
+                    {g.name && <span className="text-ink-secondary"> · {g.email}</span>}
+                    {g.relationship && <span className="text-ink-secondary"> · {g.relationship}</span>}
+                    {g.phone && <span className="text-ink-secondary"> · {g.phone}</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
+                      <input
+                        type="checkbox"
+                        checked={g.receivesCommunications}
+                        onChange={() => toggleReceives(g)}
+                      />
+                      {t("participantDetail.receivesCommunicationsLabel")}
+                    </label>
+                    <button onClick={() => startEditGuardian(g)} className="text-[13px] text-ember hover:underline">
+                      {t("common.edit")}
+                    </button>
+                    <button
+                      onClick={() => removeGuardian(g.id)}
+                      className="text-[13px] text-red-600 hover:underline"
+                    >
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </>
+    ),
+    medsReported: (
+      <>
+        {/* Part 3: the free-text "Léky uvedené v přihlášce" note (customFieldValues.medsNotes)
+            stays read-only "as reported by parents" -- "Převést na plán" opens the plan add
+            form prefilled with that text so the admin can turn it into a real plan row. */}
+        {participant.customFieldValues?.medsNotes && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
+            <p>
+              <strong>{t("medPlansSection.reportedLabel")}:</strong> {participant.customFieldValues.medsNotes}
+            </p>
+            <button
+              onClick={() => {
+                setPlanNotes(participant.customFieldValues!.medsNotes!);
+                setAddingMedPlan(true);
+              }}
+              className="text-[13px] text-ember hover:underline"
+            >
+              {t("medPlansSection.convertToPlanButton")}
+            </button>
+          </div>
+        )}
+      </>
+    ),
+    medPlans: (
+      <>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-ink">{t("medPlansSection.title")}</h2>
+          <button onClick={() => setAddingMedPlan((v) => !v)} className="text-[13px] text-ember hover:underline">
+            {t("medPlansSection.addButton")}
+          </button>
+        </div>
+
+        {addingMedPlan && (
+          <form
+            onSubmit={handleAddMedPlan}
+            className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2"
+          >
+            <input
+              type="text"
+              list="med-plan-catalog"
+              placeholder={t("medPlansSection.selectMed")}
+              value={planMedName}
+              onChange={(e) => setPlanMedName(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <datalist id="med-plan-catalog">
+              {eventMeds.map((m) => (
+                <option key={m.id} value={m.name} />
+              ))}
+            </datalist>
+            <select value={planSlotId} onChange={(e) => setPlanSlotId(e.target.value)} className={inputClass + " flex-1"}>
+              <option value="">{t("medPlansSection.selectSlot")}</option>
+              {eventSlots.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder={t("medPlansSection.doseLabel")}
+              value={planDose}
+              onChange={(e) => setPlanDose(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <input
+              type="text"
+              placeholder={t("participantDetail.otherNotesLabel")}
+              value={planNotes}
+              onChange={(e) => setPlanNotes(e.target.value)}
+              className={inputClass + " flex-1"}
+            />
+            <button type="submit" disabled={savingMedPlan} className={btnPrimary}>
+              {t("common.save")}
+            </button>
+          </form>
+        )}
+
+        {medPlans.length === 0 ? (
+          <p className="text-[14px] text-ink-secondary">{t("medPlansSection.empty")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {medPlans.map((plan) => (
+              <div
+                key={plan.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2"
+              >
+                <div className={"text-[14px] " + (plan.active ? "text-ink" : "text-ink-secondary line-through")}>
+                  {plan.eventMed.name} · {plan.eventSlot.name}
+                  {plan.dose && <span className="text-ink-secondary"> · {plan.dose}</span>}
+                  {plan.notes && <span className="text-ink-secondary"> · {plan.notes}</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => toggleMedPlanActive(plan)} className="text-[12px] text-ink-secondary hover:text-ink">
+                    {plan.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
+                  </button>
+                  <button onClick={() => removeMedPlan(plan.id)} className="text-[13px] text-red-600 hover:underline">
+                    {t("common.delete")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    ),
+    incidents: (
+      <>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-[16px] font-semibold text-ink">{t("incidentsPage.title")}</h2>
+          <button onClick={() => setAddingIncident(true)} className="text-[13px] text-ember hover:underline">
+            {t("incidentsPage.addButton")}
+          </button>
+        </div>
+
+        {incidents.length === 0 ? (
+          <p className="text-[14px] text-ink-secondary">{t("incidentsPage.empty")}</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {incidents.map((inc) => (
+              <div key={inc.id} className="rounded-lg border border-mist/60 p-2">
+                <div
+                  onClick={() => setDetailIncident(inc)}
+                  className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg hover:bg-paper-2"
+                >
+                  <div className="text-[14px] text-ink">
+                    <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
+                      {t(`incidentForm.category.${inc.category}`)}
+                    </span>
+                    {inc.bodyView && (
+                      <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
+                        {t(inc.bodyView === "front" ? "bodyMap.front" : "bodyMap.back")}
+                      </span>
+                    )}
+                    {inc.photoGcsPath && (
+                      <span className="mr-2 text-[12px] text-ink-secondary" title={t("incidentForm.photoLabel")}>
+                        📷
+                      </span>
+                    )}
+                    {inc.actionSummary}
+                    <div className="text-[12px] text-ink-secondary">{incidentMeta(inc)}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {inc.followUps.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleCollapsed(inc.id);
+                        }}
+                        className="text-[12px] text-ink-secondary hover:text-ink"
+                      >
+                        {collapsedIds.has(inc.id)
+                          ? t("incidentsPage.showFollowUps", { count: String(inc.followUps.length) })
+                          : t("incidentsPage.hideFollowUps")}
+                      </button>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFollowUpParent(inc);
+                      }}
+                      className="text-[13px] text-ember hover:underline"
+                    >
+                      {t("incidentsPage.followUpButton")}
+                    </button>
+                  </div>
+                </div>
+
+                {inc.followUps.length > 0 && !collapsedIds.has(inc.id) && (
+                  <div className="ml-4 mt-2 flex flex-col gap-1.5 border-l border-mist pl-3">
+                    {inc.followUps.map((fu) => (
+                      <div
+                        key={fu.id}
+                        onClick={() => setDetailIncident(fu)}
+                        className="cursor-pointer rounded-lg p-1 hover:bg-paper-2"
+                      >
+                        <div className="text-[13px] text-ink-secondary">
+                          {fu.photoGcsPath && (
+                            <span className="mr-1" title={t("incidentForm.photoLabel")}>
+                              📷
+                            </span>
+                          )}
+                          {fu.actionSummary}
+                        </div>
+                        <div className="text-[12px] text-ink-secondary">{incidentMeta(fu)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    ),
+    emails: (
+      <>
+        <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("sendLog.title")}</h2>
+        <ParentEmailLogTable logs={emailLogs} onResend={handleResend} resendingId={resendingId} />
+      </>
+    ),
+  };
+
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">
       <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
@@ -371,11 +833,19 @@ export default function ParticipantDetailPage({
               .filter(Boolean)
               .join(" · ")}
           </p>
-          {hasDriveFolder && (
-            <button onClick={openDriveFolder} className="mt-1 text-[13px] text-ember hover:underline">
-              {t("participantDetail.openDriveFolder")}
-            </button>
-          )}
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            {hasDriveFolder && (
+              <button onClick={openDriveFolder} className="text-[13px] text-ember hover:underline">
+                {t("participantDetail.openDriveFolder")}
+              </button>
+            )}
+            {!draft && layoutData && (
+              <button onClick={startEditing} className="text-[13px] text-ember hover:underline">
+                {t("layoutEditor.edit")}
+              </button>
+            )}
+            {layoutSaved && <span className="text-[13px] text-pine">{t("layoutEditor.saved")}</span>}
+          </div>
           {driveFolderError && <p className="mt-1 text-[12px] text-red-600">{driveFolderError}</p>}
         </div>
         {/* Part 7: primary actions as buttons; "Upravit" now opens the central roster's
@@ -420,359 +890,69 @@ export default function ParticipantDetailPage({
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
-      <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
-      {/* Which notes, in what order: Nastavení akce -> Zdraví -> Zdravotní poznámky (place "detail"). */}
-      <HealthNotesBox notes={generalNotes} className="mb-6 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink" />
-
-      {/* Part 11-D: what the inbox (or a manual mark) saved, checkable without opening
-          Drive. Grouped by document type, "Typ — N souborů" (Part 11-C's own wording),
-          each file with its received date/source and a Drive link when synced. */}
-      <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.documentsTitle")}</h2>
-      {documents.length === 0 ? (
-        <p className="mb-6 text-[14px] text-ink-secondary">{t("participantDetail.documentsEmpty")}</p>
-      ) : (
-        <div className="mb-6 flex flex-col gap-3">
-          {Object.entries(
-            documents.reduce<Record<string, ParticipantDocumentRow[]>>((acc, d) => {
-              (acc[d.docTypeName] ??= []).push(d);
-              return acc;
-            }, {})
-          ).map(([docTypeName, files]) => (
-            <div key={docTypeName} className="rounded-lg border border-mist/60 p-2">
-              <p className="mb-1 text-[13px] font-medium text-ink">
-                {t("participantDetail.documentsFileCount", { name: docTypeName, count: String(files.length) })}
-              </p>
-              <ul className="flex flex-col gap-0.5">
-                {files.map((f) => (
-                  <li key={f.id} className="flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary">
-                    <span>{f.filename || "—"}</span>
-                    <span>· {new Date(f.receivedAt).toLocaleDateString("cs-CZ")}</span>
-                    <span>· {t(`participantDetail.documentsVia.${f.receivedVia}`)}</span>
-                    {f.driveUrl && (
-                      <a href={f.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
-                        {t("participantDetail.documentsOpenInDrive")}
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-[16px] font-semibold text-ink">{t("participantDetail.guardiansTitle")}</h2>
-        <button onClick={() => setAddingGuardian((v) => !v)} className="text-[13px] text-ember hover:underline">
-          {t("participantDetail.addGuardianButton")}
-        </button>
-      </div>
-
-      {addingGuardian && (
-        <form onSubmit={addGuardian} className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2">
-          <input
-            type="text"
-            placeholder={t("common.name")}
-            value={gName}
-            onChange={(e) => setGName(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <input
-            type="email"
-            placeholder={t("participantDetail.guardianEmailLabel")}
-            value={gEmail}
-            onChange={(e) => setGEmail(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <input
-            type="text"
-            placeholder={t("participantDetail.guardianRelationshipLabel")}
-            value={gRelationship}
-            onChange={(e) => setGRelationship(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <input
-            type="tel"
-            placeholder={t("participantDetail.guardianPhoneLabel")}
-            value={gPhone}
-            onChange={(e) => setGPhone(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <button type="submit" disabled={savingGuardian} className={btnPrimary}>
-            {t("common.save")}
-          </button>
-        </form>
-      )}
-
-      {participant.guardians.length === 0 ? (
-        <p className="text-[14px] text-ink-secondary">{t("participantDetail.guardiansEmpty")}</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {participant.guardians.map((g) =>
-            editGuardianId === g.id && editGuardianDraft ? (
-              <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder={t("common.name")}
-                    value={editGuardianDraft.name ?? ""}
-                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, name: e.target.value })}
-                    className={inputClass + " flex-1"}
-                  />
-                  <input
-                    type="email"
-                    placeholder={t("participantDetail.guardianEmailLabel")}
-                    value={editGuardianDraft.email}
-                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, email: e.target.value })}
-                    className={inputClass + " flex-1"}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder={t("participantDetail.guardianRelationshipLabel")}
-                    value={editGuardianDraft.relationship ?? ""}
-                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, relationship: e.target.value })}
-                    className={inputClass + " flex-1"}
-                  />
-                  <input
-                    type="tel"
-                    placeholder={t("participantDetail.guardianPhoneLabel")}
-                    value={editGuardianDraft.phone ?? ""}
-                    onChange={(e) => setEditGuardianDraft({ ...editGuardianDraft, phone: e.target.value })}
-                    className={inputClass + " flex-1"}
-                  />
-                </div>
-                <div className="flex justify-end gap-3">
-                  <button onClick={() => setEditGuardianId(null)} className="text-[13px] text-ink-secondary hover:underline">
-                    {t("common.cancel")}
-                  </button>
-                  <button onClick={saveEditGuardian} disabled={savingGuardian} className="text-[13px] text-ember hover:underline">
-                    {t("common.save")}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div key={g.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2">
-                <div className="text-[14px] text-ink">
-                  {g.name || g.email}
-                  {g.name && <span className="text-ink-secondary"> · {g.email}</span>}
-                  {g.relationship && <span className="text-ink-secondary"> · {g.relationship}</span>}
-                  {g.phone && <span className="text-ink-secondary"> · {g.phone}</span>}
-                </div>
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
-                    <input
-                      type="checkbox"
-                      checked={g.receivesCommunications}
-                      onChange={() => toggleReceives(g)}
-                    />
-                    {t("participantDetail.receivesCommunicationsLabel")}
-                  </label>
-                  <button onClick={() => startEditGuardian(g)} className="text-[13px] text-ember hover:underline">
-                    {t("common.edit")}
-                  </button>
-                  <button
-                    onClick={() => removeGuardian(g.id)}
-                    className="text-[13px] text-red-600 hover:underline"
-                  >
-                    {t("common.delete")}
-                  </button>
-                </div>
-              </div>
-            )
-          )}
-        </div>
-      )}
-
-      {/* Part 3: the free-text "Léky uvedené v přihlášce" note (customFieldValues.medsNotes)
-          stays read-only "as reported by parents" -- "Převést na plán" opens the plan add
-          form prefilled with that text so the admin can turn it into a real plan row. */}
-      {participant.customFieldValues?.medsNotes && (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
-          <p>
-            <strong>{t("medPlansSection.reportedLabel")}:</strong> {participant.customFieldValues.medsNotes}
-          </p>
-          <button
-            onClick={() => {
-              setPlanNotes(participant.customFieldValues!.medsNotes!);
-              setAddingMedPlan(true);
-            }}
-            className="text-[13px] text-ember hover:underline"
-          >
-            {t("medPlansSection.convertToPlanButton")}
-          </button>
-        </div>
-      )}
-
-      <div className="mb-3 mt-6 flex items-center justify-between">
-        <h2 className="text-[16px] font-semibold text-ink">{t("medPlansSection.title")}</h2>
-        <button onClick={() => setAddingMedPlan((v) => !v)} className="text-[13px] text-ember hover:underline">
-          {t("medPlansSection.addButton")}
-        </button>
-      </div>
-
-      {addingMedPlan && (
-        <form
-          onSubmit={handleAddMedPlan}
-          className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2"
-        >
-          <input
-            type="text"
-            list="med-plan-catalog"
-            placeholder={t("medPlansSection.selectMed")}
-            value={planMedName}
-            onChange={(e) => setPlanMedName(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <datalist id="med-plan-catalog">
-            {eventMeds.map((m) => (
-              <option key={m.id} value={m.name} />
-            ))}
-          </datalist>
-          <select value={planSlotId} onChange={(e) => setPlanSlotId(e.target.value)} className={inputClass + " flex-1"}>
-            <option value="">{t("medPlansSection.selectSlot")}</option>
-            {eventSlots.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-          <input
-            type="text"
-            placeholder={t("medPlansSection.doseLabel")}
-            value={planDose}
-            onChange={(e) => setPlanDose(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <input
-            type="text"
-            placeholder={t("participantDetail.otherNotesLabel")}
-            value={planNotes}
-            onChange={(e) => setPlanNotes(e.target.value)}
-            className={inputClass + " flex-1"}
-          />
-          <button type="submit" disabled={savingMedPlan} className={btnPrimary}>
-            {t("common.save")}
-          </button>
-        </form>
-      )}
-
-      {medPlans.length === 0 ? (
-        <p className="mb-6 text-[14px] text-ink-secondary">{t("medPlansSection.empty")}</p>
-      ) : (
-        <div className="mb-6 flex flex-col gap-2">
-          {medPlans.map((plan) => (
-            <div
-              key={plan.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2"
+      {view.sections.map((s) => {
+        const kind = s.kind as HealthSectionKind;
+        if (!draft) {
+          if (s.hidden || (kind === "medsReported" && !participant.customFieldValues?.medsNotes)) return null;
+          return (
+            <section key={s.id} className="mb-6">
+              {sectionBody[kind]}
+            </section>
+          );
+        }
+        return (
+          <div key={s.id} className="mb-3">
+            <SectionCard
+              title={t(HEALTH_SECTION_TITLES[kind])}
+              hidden={s.hidden}
+              onToggleHidden={() => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, hidden: !x.hidden } : x)) }))}
+              onDragStart={() => setDrag({ type: "section", id: s.id })}
+              onDrop={() => {
+                if (drag?.type === "section") editLayout((l) => moveSection(l, drag.id, s.id, "left"));
+                setDrag(null);
+              }}
+              dragging={drag?.type === "section" && drag.id === s.id}
             >
-              <div className={"text-[14px] " + (plan.active ? "text-ink" : "text-ink-secondary line-through")}>
-                {plan.eventMed.name} · {plan.eventSlot.name}
-                {plan.dose && <span className="text-ink-secondary"> · {plan.dose}</span>}
-                {plan.notes && <span className="text-ink-secondary"> · {plan.notes}</span>}
-              </div>
-              <div className="flex items-center gap-3">
-                <button onClick={() => toggleMedPlanActive(plan)} className="text-[12px] text-ink-secondary hover:text-ink">
-                  {plan.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
-                </button>
-                <button onClick={() => removeMedPlan(plan.id)} className="text-[13px] text-red-600 hover:underline">
-                  {t("common.delete")}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-3 mt-6 flex items-center justify-between">
-        <h2 className="text-[16px] font-semibold text-ink">{t("incidentsPage.title")}</h2>
-        <button onClick={() => setAddingIncident(true)} className="text-[13px] text-ember hover:underline">
-          {t("incidentsPage.addButton")}
-        </button>
-      </div>
-
-      {incidents.length === 0 ? (
-        <p className="text-[14px] text-ink-secondary">{t("incidentsPage.empty")}</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {incidents.map((inc) => (
-            <div key={inc.id} className="rounded-lg border border-mist/60 p-2">
-              <div
-                onClick={() => setDetailIncident(inc)}
-                className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg hover:bg-paper-2"
-              >
-                <div className="text-[14px] text-ink">
-                  <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
-                    {t(`incidentForm.category.${inc.category}`)}
-                  </span>
-                  {inc.bodyView && (
-                    <span className="mr-2 rounded-full bg-paper-2 px-2 py-0.5 text-[12px] text-ink-secondary">
-                      {t(inc.bodyView === "front" ? "bodyMap.front" : "bodyMap.back")}
-                    </span>
-                  )}
-                  {inc.photoGcsPath && (
-                    <span className="mr-2 text-[12px] text-ink-secondary" title={t("incidentForm.photoLabel")}>
-                      📷
-                    </span>
-                  )}
-                  {inc.actionSummary}
-                  <div className="text-[12px] text-ink-secondary">{incidentMeta(inc)}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {inc.followUps.length > 0 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCollapsed(inc.id);
+              {kind === "notes" ? (
+                <>
+                  {draft.notes.map((k) => (
+                    <FieldRow
+                      key={k}
+                      label={noteLabel(k)}
+                      onHide={() => setDraft((d) => d && { ...d, notes: d.notes.filter((x) => x !== k) })}
+                      onDelete={noteFields.find((f) => f.key === k)?.kind === "custom" ? () => deleteNoteField(k) : undefined}
+                      onDragStart={() => setDrag({ type: "field", key: k })}
+                      onDrop={() => {
+                        if (drag?.type === "field") setDraft((d) => d && { ...d, notes: moveBefore(d.notes, drag.key, k) });
+                        setDrag(null);
                       }}
-                      className="text-[12px] text-ink-secondary hover:text-ink"
-                    >
-                      {collapsedIds.has(inc.id)
-                        ? t("incidentsPage.showFollowUps", { count: String(inc.followUps.length) })
-                        : t("incidentsPage.hideFollowUps")}
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setFollowUpParent(inc);
-                    }}
-                    className="text-[13px] text-ember hover:underline"
-                  >
-                    {t("incidentsPage.followUpButton")}
-                  </button>
-                </div>
-              </div>
-
-              {inc.followUps.length > 0 && !collapsedIds.has(inc.id) && (
-                <div className="ml-4 mt-2 flex flex-col gap-1.5 border-l border-mist pl-3">
-                  {inc.followUps.map((fu) => (
-                    <div
-                      key={fu.id}
-                      onClick={() => setDetailIncident(fu)}
-                      className="cursor-pointer rounded-lg p-1 hover:bg-paper-2"
-                    >
-                      <div className="text-[13px] text-ink-secondary">
-                        {fu.photoGcsPath && (
-                          <span className="mr-1" title={t("incidentForm.photoLabel")}>
-                            📷
-                          </span>
-                        )}
-                        {fu.actionSummary}
-                      </div>
-                      <div className="text-[12px] text-ink-secondary">{incidentMeta(fu)}</div>
-                    </div>
+                      dragging={drag?.type === "field" && drag.key === k}
+                    />
                   ))}
-                </div>
+                  {!draft.notes.length && <p className="text-[12px] text-ink-secondary">{t("layoutEditor.emptySection")}</p>}
+                  <AddFieldSelect
+                    options={noteFields.filter((f) => !draft.notes.includes(f.key)).map((f) => ({ key: f.key, label: f.label }))}
+                    onAdd={(k) => setDraft((d) => d && { ...d, notes: [...d.notes, k] })}
+                  />
+                </>
+              ) : (
+                <Inert>{sectionBody[kind]}</Inert>
               )}
-            </div>
-          ))}
-        </div>
+            </SectionCard>
+          </div>
+        );
+      })}
+      {draft && (
+        <>
+          <DropZone
+            onDrop={() => {
+              if (drag?.type === "section") editLayout((l) => moveSection(l, drag.id, null, "left"));
+              setDrag(null);
+            }}
+          />
+          <LayoutEditorBar saving={layoutSaving} error={layoutError} onCancel={() => setDraft(null)} onSave={saveLayout} />
+        </>
       )}
-
-      <h2 className="mb-3 mt-6 text-[16px] font-semibold text-ink">{t("sendLog.title")}</h2>
-      <ParentEmailLogTable logs={emailLogs} onResend={handleResend} resendingId={resendingId} />
 
       {sendModalOpen && (
         <SendSummaryModal

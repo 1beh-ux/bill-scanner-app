@@ -5,10 +5,24 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
-import { fieldCategory, toBoolean, type ParticipantFieldDef } from "@/lib/participant-fields";
+import { toBoolean, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { composeHref } from "@/lib/compose-handoff";
 import { useConfirm } from "@/components/ConfirmDialog";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import type { HealthNoteConfig } from "@/lib/health-notes";
+import {
+  FIXED_KINDS,
+  detailFieldOrder,
+  healthConfigForDetail,
+  moveField,
+  moveSection,
+  readParticipantLayout,
+  resolveDetailLayout,
+  type Column,
+  type PageLayout,
+  type Section,
+} from "@/lib/participant-layout";
+import { AddFieldSelect, DropZone, FieldRow, Inert, LayoutEditorBar, SectionCard, type LayoutDrag } from "@/components/participants/LayoutEditor";
 
 // Participant detail/edit (Seznam účastníků -> row). Was a modal on the list;
 // basics + guardians on the left, the event's own fields on the right.
@@ -59,6 +73,25 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   const [adjacent, setAdjacent] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
   const [baseline, setBaseline] = useState<string | null>(null);
   const [togglingDoc, setTogglingDoc] = useState<string | null>(null);
+  // Layout ("Upravit rozvržení"): saved = Event.participantLayout.detail; draft != null = editing.
+  const [savedLayout, setSavedLayout] = useState<PageLayout | null>(null);
+  const [healthConfig, setHealthConfig] = useState<HealthNoteConfig[]>([]);
+  const [draft, setDraft] = useState<PageLayout | null>(null);
+  const [drag, setDrag] = useState<LayoutDrag>(null);
+  const [layoutSaving, setLayoutSaving] = useState(false);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [layoutSaved, setLayoutSaved] = useState(false);
+
+  const loadLayout = () =>
+    fetch(`/api/events/${eventId}/participant-layout`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { layout: unknown; fields: ParticipantFieldDef[]; healthConfig: HealthNoteConfig[] } | null) => {
+        if (!d) return;
+        setFields(d.fields);
+        setSavedLayout(readParticipantLayout(d.layout).detail ?? null);
+        setHealthConfig(d.healthConfig);
+      })
+      .catch(() => {});
 
   const loadDocs = () =>
     fetch(`/api/participants/${participantId}/documents?byType=1`)
@@ -109,10 +142,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
       })
       .catch(() => setNotFound(true));
     loadDocs();
-    fetch(`/api/events/${eventId}/participant-fields`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setFields)
-      .catch(() => {});
+    loadLayout();
     fetch(`/api/events/${eventId}/modules/mine`)
       .then((r) => (r.ok ? r.json() : {}))
       .then(setModuleAccess)
@@ -149,25 +179,86 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || draft) return;
       if (e.key === "ArrowLeft" && adjacent.prev) leave(detailHref(adjacent.prev));
       if (e.key === "ArrowRight" && adjacent.next) leave(detailHref(adjacent.next));
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjacent, isDirty]);
+  }, [adjacent, isDirty, draft]);
 
-  // "Údaje" vs "Zdravotní poznámky" (health-category custom fields).
-  // Composite fields are computed from others -- nothing to type in.
-  const editable = useMemo(() => fields.filter((f) => f.kind === "custom" && f.fieldType !== "composite"), [fields]);
-  const otherFields = useMemo(() => editable.filter((f) => fieldCategory(f.kind, f.surfaces) !== "health"), [editable]);
-  const healthFields = useMemo(() => editable.filter((f) => fieldCategory(f.kind, f.surfaces) === "health"), [editable]);
+  // Sections and the custom fields in them ("Údaje", own sections, "Zdravotní
+  // poznámky" = the health-notes fields); the built-in layout when never saved.
+  const layout = useMemo(() => resolveDetailLayout(savedLayout, fields, healthConfig), [savedLayout, fields, healthConfig]);
+  const fieldByKey = useMemo(() => new Map(fields.map((f) => [f.key, f])), [fields]);
+  const view = draft ?? layout;
+  const edit = (fn: (l: PageLayout) => PageLayout) => setDraft((d) => d && fn(d));
+  const labelOf = (key: string) => fieldByKey.get(key)?.label ?? key;
+
+  async function saveLayout() {
+    if (!draft) return;
+    const members = (l: PageLayout) => l.sections.find((s) => s.kind === "health")?.fields ?? [];
+    const nextHealth = healthConfigForDetail(healthConfig, members(layout), members(draft));
+    setLayoutSaving(true);
+    setLayoutError(null);
+    const res = await fetch(`/api/events/${eventId}/participant-layout`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: "detail", layout: draft, fieldOrder: detailFieldOrder(draft), ...(nextHealth ? { healthConfig: nextHealth } : {}) }),
+    });
+    setLayoutSaving(false);
+    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
+    setSavedLayout(draft);
+    setDraft(null);
+    setLayoutSaved(true);
+    loadLayout();
+  }
+
+  // Bin on a field row: deletes the field itself (Proměnné), right away.
+  async function deleteField(key: string) {
+    const f = fieldByKey.get(key);
+    if (!f || !(await confirm({ message: t("layoutEditor.deleteFieldConfirm", { name: f.label }), danger: true }))) return;
+    const res = await fetch(`/api/events/${eventId}/participant-fields/${f.id}`, { method: "DELETE" });
+    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
+    setFields((prev) => prev.filter((x) => x.key !== key));
+    edit((l) => ({
+      ...l,
+      sections: l.sections.map((s) => (s.fields ? { ...s, fields: s.fields.filter((k) => k !== key) } : s)),
+      hiddenFields: (l.hiddenFields ?? []).filter((k) => k !== key),
+    }));
+  }
+
+  function dropOnSection(target: Section) {
+    if (drag?.type === "section") edit((l) => moveSection(l, drag.id, target.id, target.column));
+    if (drag?.type === "field" && target.fields) edit((l) => moveField(l, drag.key, target.id));
+    setDrag(null);
+  }
+  function dropOnField(target: Section, beforeKey: string) {
+    if (drag?.type === "field") {
+      edit((l) => moveField(l, drag.key, target.id, beforeKey));
+      setDrag(null);
+    } else dropOnSection(target);
+  }
+  function dropOnColumn(column: Column) {
+    if (drag?.type === "section") edit((l) => moveSection(l, drag.id, null, column));
+    setDrag(null);
+  }
+  const addSection = (column: Column) =>
+    edit((l) => ({ ...l, sections: [...l.sections, { id: `s${Date.now().toString(36)}`, kind: "fields", column, title: t("layoutEditor.newSectionTitle"), fields: [] }] }));
+  // A removed section's fields become hidden (addable again).
+  const removeSection = (id: string) =>
+    edit((l) => ({
+      ...l,
+      sections: l.sections.filter((s) => s.id !== id),
+      hiddenFields: [...(l.hiddenFields ?? []), ...(l.sections.find((s) => s.id === id)?.fields ?? [])],
+    }));
+  const patchSection = (id: string, patch: Partial<Section>) => edit((l) => ({ ...l, sections: l.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
 
   // then: where to go after a successful save (stay = undefined).
   async function save(e: React.FormEvent | null, then?: "next" | "close") {
     e?.preventDefault();
-    if (!firstName.trim() && !lastName.trim()) return;
+    if (draft || (!firstName.trim() && !lastName.trim())) return;
     setSaving(true);
     setSaved(false);
     setError(null);
@@ -260,6 +351,168 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
 
   const accepted = core.registrationStatus === "accepted";
 
+  // Section contents (shared by the page and, inert, by the layout editor).
+  const basicsBody = (
+    <>
+      <div className="flex gap-2">
+        <label className="flex-1 text-[13px] text-ink-secondary">
+          {t("participantsPage.firstNameLabel")}
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass + " mt-1"} />
+        </label>
+        <label className="flex-1 text-[13px] text-ink-secondary">
+          {t("participantsPage.lastNameLabel")}
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass + " mt-1"} />
+        </label>
+      </div>
+      <div className="flex gap-2">
+        <label className="flex-1 text-[13px] text-ink-secondary">
+          {t("participantsPage.colGroup")}
+          <input value={group} onChange={(e) => setGroup(e.target.value)} className={inputClass + " mt-1"} />
+        </label>
+        <label className="flex-1 text-[13px] text-ink-secondary">
+          {t("participantsPage.dobLabel")}
+          <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className={inputClass + " mt-1"} />
+        </label>
+      </div>
+    </>
+  );
+  const guardiansBody = (
+    <>
+      {guardians.map((g) => (
+        <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input placeholder={t("common.name")} value={g.name} onChange={(e) => patchGuardian(g.id, { name: e.target.value })} className={inputClass} />
+            <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patchGuardian(g.id, { email: e.target.value })} className={inputClass} />
+            <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patchGuardian(g.id, { relationship: e.target.value })} className={inputClass} />
+            <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patchGuardian(g.id, { phone: e.target.value })} className={inputClass} />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-[13px] text-ink">
+              <input type="checkbox" checked={g.receivesCommunications} onChange={(e) => patchGuardian(g.id, { receivesCommunications: e.target.checked })} />
+              {t("participantDetail.guardianReceivesLabel")}
+            </label>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => saveGuardian(g.id)} disabled={savingGuardianId === g.id} className="text-[13px] text-ember hover:underline disabled:opacity-50">
+                {t("common.save")}
+              </button>
+              <button type="button" onClick={() => deleteGuardian(g.id)} disabled={savingGuardianId === g.id} className="text-[13px] text-red-600 hover:underline disabled:opacity-50">
+                {t("common.delete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+      <div className="grid gap-2 rounded-lg border border-dashed border-mist p-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input placeholder={t("common.name")} value={newGuardian.name} onChange={(e) => setNewGuardian((d) => ({ ...d, name: e.target.value }))} className={inputClass} />
+        <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={newGuardian.email} onChange={(e) => setNewGuardian((d) => ({ ...d, email: e.target.value }))} className={inputClass} />
+        <button type="button" onClick={addGuardian} disabled={savingGuardianId === "new" || !newGuardian.email.trim()} className={btnSecondary}>
+          {t("participantDetail.addGuardianButton")}
+        </button>
+      </div>
+    </>
+  );
+  const documentsBody = (
+    <ul className="flex flex-col gap-1.5">
+      {docs.map((d) => (
+        <li key={d.docTypeId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist px-3 py-2 text-[14px]">
+          <span className="text-ink">{d.name}</span>
+          <span className="flex items-center gap-2 text-[12px] text-ink-secondary">
+            {d.received && d.receivedAt && (
+              <span>
+                {new Date(d.receivedAt).toLocaleDateString("cs-CZ")}
+                {d.receivedVia && ` · ${t(`participantDetail.documentsVia.${d.receivedVia}`)}`}
+              </span>
+            )}
+            {d.driveUrl && (
+              <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                Drive ↗
+              </a>
+            )}
+            <button
+              type="button"
+              onClick={() => toggleDoc(d)}
+              disabled={togglingDoc === d.docTypeId}
+              title={t("participantsPage.toggleDocumentHint")}
+              className={
+                "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+                (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+              }
+            >
+              {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+            </button>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+  const titleOf = (s: Section) =>
+    s.kind === "basics"
+      ? t("participantDetail.sectionBasics")
+      : s.kind === "guardians"
+        ? t("participantDetail.guardiansTitle")
+        : s.kind === "documents"
+          ? t("participantsPage.colDocuments")
+          : s.kind === "health"
+            ? t("participantDetail.sectionHealthNotes")
+            : s.title || t("participantDetail.sectionCustomFields");
+  const bodyOf = (s: Section) =>
+    s.kind === "basics" ? basicsBody : s.kind === "guardians" ? guardiansBody : s.kind === "documents" ? (docs.length ? documentsBody : <p className="text-[13px] text-ink-secondary">{t("participantDetail.documentsEmpty")}</p>) : null;
+
+  function renderSection(s: Section) {
+    if (s.hidden || (s.kind === "documents" && !docs.length)) return null;
+    const keys = (s.fields ?? []).filter((k) => fieldByKey.has(k));
+    if ((s.kind === "fields" || s.kind === "health") && !keys.length) return null;
+    return (
+      <section key={s.id} className={"flex flex-col " + (s.kind === "guardians" || s.kind === "documents" ? "gap-2" : "gap-3")}>
+        <h2 className={sectionTitle}>{titleOf(s)}</h2>
+        {bodyOf(s)}
+        {keys.map((k) => {
+          const f = fieldByKey.get(k)!;
+          return <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} multiline={s.kind === "health"} />;
+        })}
+      </section>
+    );
+  }
+
+  function renderEditCard(s: Section) {
+    const other: Column = s.column === "left" ? "right" : "left";
+    return (
+      <SectionCard
+        key={s.id}
+        title={s.kind === "fields" ? (s.title ?? "") : titleOf(s)}
+        onTitleChange={s.kind === "fields" ? (v) => patchSection(s.id, { title: v }) : undefined}
+        titlePlaceholder={t("participantDetail.sectionCustomFields")}
+        hidden={s.hidden}
+        onToggleHidden={FIXED_KINDS.includes(s.kind) ? undefined : () => patchSection(s.id, { hidden: !s.hidden })}
+        onMove={{ dir: other, run: () => edit((l) => moveSection(l, s.id, null, other)) }}
+        onRemove={s.kind === "fields" ? () => removeSection(s.id) : undefined}
+        onDragStart={() => setDrag({ type: "section", id: s.id })}
+        onDrop={() => dropOnSection(s)}
+        dragging={drag?.type === "section" && drag.id === s.id}
+      >
+        {s.fields ? (
+          <>
+            {s.fields.map((k) => (
+              <FieldRow
+                key={k}
+                label={labelOf(k)}
+                onHide={() => edit((l) => moveField(l, k, null))}
+                onDelete={() => deleteField(k)}
+                onDragStart={() => setDrag({ type: "field", key: k })}
+                onDrop={() => dropOnField(s, k)}
+                dragging={drag?.type === "field" && drag.key === k}
+              />
+            ))}
+            {!s.fields.length && <p className="text-[12px] text-ink-secondary">{t("layoutEditor.emptySection")}</p>}
+            <AddFieldSelect options={(view.hiddenFields ?? []).map((k) => ({ key: k, label: labelOf(k) }))} onAdd={(k) => edit((l) => moveField(l, k, s.id))} />
+          </>
+        ) : (
+          <Inert>{bodyOf(s)}</Inert>
+        )}
+      </SectionCard>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <div className="flex items-center justify-between gap-2">
@@ -291,148 +544,64 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
             {t("participantsPage.editHealthDetailsLink")}
           </Link>
         )}
+        {!draft && (
+          <span className="ml-auto flex items-center gap-2">
+            {layoutSaved && <span className="text-[13px] text-pine">{t("layoutEditor.saved")}</span>}
+            <button
+              type="button"
+              onClick={() => {
+                setLayoutSaved(false);
+                setLayoutError(null);
+                setDraft(layout);
+              }}
+              className={btnSecondary}
+            >
+              {t("layoutEditor.edit")}
+            </button>
+          </span>
+        )}
       </div>
 
       <form onSubmit={save} className="flex flex-col gap-6">
         <div className="grid gap-6 lg:grid-cols-2">
-          <div className="flex flex-col gap-5">
-            <section className="flex flex-col gap-3">
-              <h2 className={sectionTitle}>{t("participantDetail.sectionBasics")}</h2>
-              <div className="flex gap-2">
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.firstNameLabel")}
-                  <input value={firstName} onChange={(e) => setFirstName(e.target.value)} className={inputClass + " mt-1"} />
-                </label>
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.lastNameLabel")}
-                  <input value={lastName} onChange={(e) => setLastName(e.target.value)} className={inputClass + " mt-1"} />
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.colGroup")}
-                  <input value={group} onChange={(e) => setGroup(e.target.value)} className={inputClass + " mt-1"} />
-                </label>
-                <label className="flex-1 text-[13px] text-ink-secondary">
-                  {t("participantsPage.dobLabel")}
-                  <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className={inputClass + " mt-1"} />
-                </label>
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-2">
-              <h2 className={sectionTitle}>{t("participantDetail.guardiansTitle")}</h2>
-              {guardians.map((g) => (
-                <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <input placeholder={t("common.name")} value={g.name} onChange={(e) => patchGuardian(g.id, { name: e.target.value })} className={inputClass} />
-                    <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patchGuardian(g.id, { email: e.target.value })} className={inputClass} />
-                    <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patchGuardian(g.id, { relationship: e.target.value })} className={inputClass} />
-                    <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patchGuardian(g.id, { phone: e.target.value })} className={inputClass} />
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-[13px] text-ink">
-                      <input type="checkbox" checked={g.receivesCommunications} onChange={(e) => patchGuardian(g.id, { receivesCommunications: e.target.checked })} />
-                      {t("participantDetail.guardianReceivesLabel")}
-                    </label>
-                    <div className="flex gap-3">
-                      <button type="button" onClick={() => saveGuardian(g.id)} disabled={savingGuardianId === g.id} className="text-[13px] text-ember hover:underline disabled:opacity-50">
-                        {t("common.save")}
-                      </button>
-                      <button type="button" onClick={() => deleteGuardian(g.id)} disabled={savingGuardianId === g.id} className="text-[13px] text-red-600 hover:underline disabled:opacity-50">
-                        {t("common.delete")}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div className="grid gap-2 rounded-lg border border-dashed border-mist p-2 sm:grid-cols-[1fr_1fr_auto]">
-                <input placeholder={t("common.name")} value={newGuardian.name} onChange={(e) => setNewGuardian((d) => ({ ...d, name: e.target.value }))} className={inputClass} />
-                <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={newGuardian.email} onChange={(e) => setNewGuardian((d) => ({ ...d, email: e.target.value }))} className={inputClass} />
-                <button type="button" onClick={addGuardian} disabled={savingGuardianId === "new" || !newGuardian.email.trim()} className={btnSecondary}>
-                  {t("participantDetail.addGuardianButton")}
-                </button>
-              </div>
-            </section>
-          </div>
-
-          <div className="flex flex-col gap-5">
-            {docs.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <h2 className={sectionTitle}>{t("participantsPage.colDocuments")}</h2>
-                <ul className="flex flex-col gap-1.5">
-                  {docs.map((d) => (
-                    <li key={d.docTypeId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist px-3 py-2 text-[14px]">
-                      <span className="text-ink">{d.name}</span>
-                      <span className="flex items-center gap-2 text-[12px] text-ink-secondary">
-                        {d.received && d.receivedAt && (
-                          <span>
-                            {new Date(d.receivedAt).toLocaleDateString("cs-CZ")}
-                            {d.receivedVia && ` · ${t(`participantDetail.documentsVia.${d.receivedVia}`)}`}
-                          </span>
-                        )}
-                        {d.driveUrl && (
-                          <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
-                            Drive ↗
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => toggleDoc(d)}
-                          disabled={togglingDoc === d.docTypeId}
-                          title={t("participantsPage.toggleDocumentHint")}
-                          className={
-                            "rounded-full px-2 py-0.5 disabled:opacity-50 " +
-                            (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
-                          }
-                        >
-                          {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
-                        </button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {otherFields.length > 0 && (
-              <section className="flex flex-col gap-3">
-                <h2 className={sectionTitle}>{t("participantDetail.sectionCustomFields")}</h2>
-                {otherFields.map((f) => (
-                  <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} />
-                ))}
-              </section>
-            )}
-            {healthFields.length > 0 && (
-              <section className="flex flex-col gap-3">
-                <h2 className={sectionTitle}>{t("participantDetail.sectionHealthNotes")}</h2>
-                {healthFields.map((f) => (
-                  <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} multiline />
-                ))}
-              </section>
-            )}
-          </div>
+          {(["left", "right"] as const).map((column) => (
+            <div key={column} className="flex flex-col gap-5">
+              {view.sections.filter((s) => s.column === column).map((s) => (draft ? renderEditCard(s) : renderSection(s)))}
+              {draft && (
+                <DropZone onDrop={() => dropOnColumn(column)}>
+                  <button type="button" onClick={() => addSection(column)} className="text-[13px] text-ember hover:underline">
+                    + {t("layoutEditor.newSection")}
+                  </button>
+                </DropZone>
+              )}
+            </div>
+          ))}
         </div>
 
         {error && <p className="text-[13px] text-red-600">{error}</p>}
-        <div className="sticky bottom-0 -mx-4 flex items-center justify-between gap-2 border-t border-mist bg-paper px-4 py-3 md:mx-0 md:px-0">
-          <button type="button" onClick={remove} className="text-[13px] text-red-600 hover:underline">
-            {t("common.delete")}
-          </button>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {saved && !isDirty && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
-            <button type="submit" disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
-              {saving ? t("common.loading") : t("common.save")}
+        {draft ? (
+          <LayoutEditorBar saving={layoutSaving} error={layoutError} onCancel={() => setDraft(null)} onSave={saveLayout} />
+        ) : (
+          <div className="sticky bottom-0 -mx-4 flex items-center justify-between gap-2 border-t border-mist bg-paper px-4 py-3 md:mx-0 md:px-0">
+            <button type="button" onClick={remove} className="text-[13px] text-red-600 hover:underline">
+              {t("common.delete")}
             </button>
-            <button type="button" onClick={() => save(null, "close")} disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
-              {t("participantDetail.saveAndClose")}
-            </button>
-            {adjacent.next && (
-              <button type="button" onClick={() => save(null, "next")} disabled={saving} className={btnPrimary}>
-                {t("participantDetail.saveAndNext")}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {saved && !isDirty && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
+              <button type="submit" disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
+                {saving ? t("common.loading") : t("common.save")}
               </button>
-            )}
+              <button type="button" onClick={() => save(null, "close")} disabled={saving} className={btnSecondary + " px-4 py-2 text-[14px]"}>
+                {t("participantDetail.saveAndClose")}
+              </button>
+              {adjacent.next && (
+                <button type="button" onClick={() => save(null, "next")} disabled={saving} className={btnPrimary}>
+                  {t("participantDetail.saveAndNext")}
+                </button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </form>
     </div>
   );

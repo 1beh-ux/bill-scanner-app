@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import type { HealthNote, HealthNotePlace } from "@/lib/health-notes";
 
-/** Loads one participant's health notes for a place (Nastavení akce -> Zdraví decides which). */
-export function useHealthNotes(eventId: string, participantId: string | null, place: HealthNotePlace): HealthNote[] | null {
+/** Loads one participant's health notes for a place (Nastavení akce -> Zdraví decides which); bump reloadKey to refetch. */
+export function useHealthNotes(eventId: string, participantId: string | null, place: HealthNotePlace, reloadKey = 0): HealthNote[] | null {
   const [notes, setNotes] = useState<HealthNote[] | null>(null);
   useEffect(() => {
     if (!participantId) return;
@@ -13,7 +13,7 @@ export function useHealthNotes(eventId: string, participantId: string | null, pl
       .then((r) => (r.ok ? r.json() : { notes: {} }))
       .then((d: { notes: Record<string, HealthNote[]> }) => setNotes(d.notes[participantId] ?? []))
       .catch(() => setNotes([]));
-  }, [eventId, participantId, place]);
+  }, [eventId, participantId, place, reloadKey]);
   return notes;
 }
 
