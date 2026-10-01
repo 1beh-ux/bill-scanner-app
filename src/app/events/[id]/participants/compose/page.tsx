@@ -249,7 +249,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                   {templateSource && (
                     <p className="text-[12px] text-ink-secondary">
                       {t(templateSource === "event" ? "compose.templateEvent" : "compose.templateOrg")}{" "}
-                      <Link href={`/events/${eventId}?tab=ucastnici`} className="text-ember hover:underline">
+                      <Link href={`/events/${eventId}?tab=posta`} className="text-ember hover:underline">
                         {t("compose.editTemplate")}
                       </Link>
                     </p>

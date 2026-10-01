@@ -71,8 +71,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "planovani";
-const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "planovani"];
+type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
+const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -124,8 +124,6 @@ export default function EventDetailPage({
   const [feeSaving, setFeeSaving] = useState(false);
 
   const [mailQuestionnaireUrl, setMailQuestionnaireUrl] = useState("");
-  const [questionnaireSaving, setQuestionnaireSaving] = useState(false);
-  const [questionnaireSaved, setQuestionnaireSaved] = useState(false);
 
 
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
@@ -175,7 +173,8 @@ export default function EventDetailPage({
 
   useEffect(() => {
     if (tab === "zdravi" && !moduleAccess.health) setTab("akce");
-    if (tab === "posta" && !moduleAccess.mail) setTab("akce");
+    if (tab === "posta" && !moduleAccess.mail && !moduleAccess.health) setTab("akce");
+    if (tab === "dokumenty" && !moduleAccess.mail) setTab("akce");
     if (tab === "planovani" && !moduleAccess.planning) setTab("akce");
     if (tab === "ucastnici" && !moduleAccess.health && !moduleAccess.mail) setTab("akce");
   }, [tab, moduleAccess]);
@@ -191,18 +190,6 @@ export default function EventDetailPage({
     }
   }, [event?.id]);
 
-  async function handleSaveQuestionnaireUrl(e: React.FormEvent) {
-    e.preventDefault();
-    setQuestionnaireSaving(true);
-    setQuestionnaireSaved(false);
-    await fetch(`/api/events/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mailQuestionnaireUrl: mailQuestionnaireUrl.trim() || null }),
-    });
-    setQuestionnaireSaving(false);
-    setQuestionnaireSaved(true);
-  }
 
   async function handleSaveFeeSettings(e: React.FormEvent) {
     e.preventDefault();
@@ -217,6 +204,7 @@ export default function EventDetailPage({
         registrationBankAccountNumber: registrationBankAccountNumber.trim() || null,
         registrationBankCode: registrationBankCode.trim() || null,
         registrationDeadline: registrationDeadline || null,
+        mailQuestionnaireUrl: mailQuestionnaireUrl.trim() || null,
       }),
     });
     setFeeSaving(false);
@@ -329,7 +317,7 @@ export default function EventDetailPage({
     { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni", help: "pripojeni" },
     { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
     ...(moduleAccess.mail
-      ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "posta" as Tab, help: "nastaveni-ucastnici-posta" }]
+      ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "dokumenty" as Tab, help: "nastaveni-ucastnici-posta" }]
       : []),
     { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce", help: "prijeti-registrace" },
   ];
@@ -343,7 +331,8 @@ export default function EventDetailPage({
     { key: "uctenky", labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" },
     ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth", help: "nastaveni-zdravi" }] : []),
-    ...(moduleAccess.mail ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(moduleAccess.mail || moduleAccess.health ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(moduleAccess.mail ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
   ];
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
@@ -488,6 +477,17 @@ export default function EventDetailPage({
                       onChange={(e) => setRegistrationDeadline(e.target.value)}
                       className={inputClass + " mt-1"}
                     />
+                  </label>
+                  <label className="text-[13px] text-ink-secondary">
+                    {t("mailTab.questionnaireTitle")}
+                    <input
+                      type="url"
+                      placeholder={t("mailTab.questionnaireUrlLabel")}
+                      value={mailQuestionnaireUrl}
+                      onChange={(e) => setMailQuestionnaireUrl(e.target.value)}
+                      className={inputClass + " mt-1"}
+                    />
+                    <span className="mt-1 block text-[11.5px]">{t("mailTab.questionnaireHint")}</span>
                   </label>
                   <div className="mt-1 flex justify-end">
                     <button type="submit" disabled={feeSaving} className={btnPrimary}>
@@ -646,37 +646,7 @@ export default function EventDetailPage({
           )}
 
           {tab === "ucastnici" && (moduleAccess.health || moduleAccess.mail) && (
-            <div className="flex flex-col gap-6">
-              <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
-              <EmailTemplateAdmin
-                scope="event"
-                eventId={id}
-                purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
-                label={t("healthTemplatesPage.tabRegistrationEmail")}
-              />
-              <div>
-                <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("mailTab.questionnaireTitle")}</h3>
-                <p className="mb-2 text-[12px] text-ink-secondary">{t("mailTab.questionnaireHint")}</p>
-                <form onSubmit={handleSaveQuestionnaireUrl} className="flex max-w-md flex-col gap-2">
-                  <input
-                    type="url"
-                    placeholder={t("mailTab.questionnaireUrlLabel")}
-                    value={mailQuestionnaireUrl}
-                    onChange={(e) => {
-                      setMailQuestionnaireUrl(e.target.value);
-                      setQuestionnaireSaved(false);
-                    }}
-                    className={inputClass}
-                  />
-                  <div className="mt-1 flex items-center gap-3">
-                    <button type="submit" disabled={questionnaireSaving} className={btnPrimary}>
-                      {questionnaireSaving ? t("common.loading") : t("common.save")}
-                    </button>
-                    {questionnaireSaved && <span className="text-[13px] text-pine">{t("settingsPage.saved")}</span>}
-                  </div>
-                </form>
-              </div>
-            </div>
+            <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
           )}
 
           {tab === "zdravi" && moduleAccess.health && (
@@ -684,7 +654,12 @@ export default function EventDetailPage({
               <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
               <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
               <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />
-              <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />
+              <p className="text-[13px] text-ink-secondary">
+                {t("eventSettings.healthTemplateMoved")}{" "}
+                <button onClick={() => setTab("posta")} className="text-ember hover:underline">
+                  {t("eventSettings.tabMail")}
+                </button>
+              </p>
               <div>
                 <a href={`/events/${id}/health/send-summaries`} className="text-[13px] text-ember hover:underline">
                   {t("bulkSendSummaries.entryPoint")}
@@ -693,30 +668,32 @@ export default function EventDetailPage({
             </div>
           )}
 
-          {tab === "posta" && moduleAccess.mail && (
+          {/* Mail: every e-mail template of the event in one place (each still needs its module). */}
+          {tab === "posta" && (moduleAccess.mail || moduleAccess.health) && (
             <div className="flex flex-col gap-6">
-              <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("templatesPage.tabMail")} />
-              <EmailTemplateAdmin
-                scope="event"
-                eventId={id}
-                purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY}
-                label={t("mailTab.bulkStatusTemplateLabel")}
-              />
-              <EmailTemplateAdmin
-                scope="event"
-                eventId={id}
-                purposeKey={MAIL_HELPER_REPLY_PURPOSE_KEY}
-                label={t("mailTab.replyTemplateLabel")}
-                bodyOnly
-              />
-              <MailDoneLabelSettings eventId={id} event={event} t={t} />
-              <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />
-              <div>
-                <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
-                  {t("mailTab.openInboxLink")}
-                </a>
-              </div>
+              <EmailTemplateAdmin scope="event" eventId={id} purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY} label={t("healthTemplatesPage.tabRegistrationEmail")} />
+              {moduleAccess.mail && (
+                <EmailTemplateAdmin scope="event" eventId={id} purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY} label={t("mailTab.bulkStatusTemplateLabel")} />
+              )}
+              {moduleAccess.mail && (
+                <EmailTemplateAdmin scope="event" eventId={id} purposeKey={MAIL_HELPER_REPLY_PURPOSE_KEY} label={t("mailTab.replyTemplateLabel")} bodyOnly />
+              )}
+              {moduleAccess.health && <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />}
+              {moduleAccess.mail && <MailDoneLabelSettings eventId={id} event={event} t={t} />}
+              {moduleAccess.mail && <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />}
+              {moduleAccess.mail && (
+                <div>
+                  <a href={`/events/${id}/mail`} className="text-[13px] text-ember hover:underline">
+                    {t("mailTab.openInboxLink")}
+                  </a>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* Sledované dokumenty: the document types tracked per participant (+ their Google Doc templates). */}
+          {tab === "dokumenty" && moduleAccess.mail && (
+            <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("eventSettings.tabDocuments")} />
           )}
 
           {tab === "planovani" && moduleAccess.planning && (

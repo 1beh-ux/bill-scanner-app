@@ -4,29 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
-import {
-  FileText,
-  BarChart3,
-  QrCode,
-  Settings,
-  Users,
-  Menu,
-  X,
-  Sun,
-  Moon,
-  Tent,
-  HeartPulse,
-  Pill,
-  Mail,
-  CalendarClock,
-  Library,
-} from "lucide-react";
+import { Settings, Menu, X, Sun, Moon, Tent, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
-import { NAV_SECTIONS, visibleNavSections } from "@/lib/nav-sections";
+import { MENU_ITEMS, MENU_SECTIONS, type MenuSection } from "@/lib/menu-items";
+import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { pickCurrentEvent, selectableEvents as pickSelectable } from "@/lib/current-event";
 import HelpLink from "@/components/HelpLink";
 
 type EventOption = { id: string; name: string; status: string };
+
+// Nápověda topic per section header ("?" link).
+const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", participants: "ucastnici", health: "zdravi", mail: "posta" };
 
 export default function AppSidebar() {
   const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, hiddenModules } =
@@ -36,6 +24,16 @@ export default function AppSidebar() {
   const [events, setEvents] = useState<EventOption[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
+  const { prefs } = useUiPrefs();
+  // Folded sections (click a section name) -- a per-browser convenience.
+  const [collapsed, setCollapsed] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("menuCollapsed") ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (Array.isArray(stored)) setCollapsed(stored.filter((x) => typeof x === "string"));
+    } catch {}
+  }, []);
 
   useEffect(() => {
     fetch("/api/events")
@@ -88,83 +86,26 @@ export default function AppSidebar() {
     // context so event-scoped links pick up the new id, stay put otherwise.
   }
 
-  // Part 10: Import is no longer a permanent menu item -- it's a one-off action, now a
-  // button on the bills page itself.
-  const billsNavItems = [
-    { href: eventId ? `/events/${eventId}/bills` : "/events", label: t("nav.bills"), icon: FileText },
-    { href: eventId ? `/events/${eventId}/budget` : "/events", label: t("nav.budget"), icon: BarChart3 },
-    { href: eventId ? `/events/${eventId}/payments` : "/events", label: t("nav.payments"), icon: QrCode },
-    { href: eventId ? `/events/${eventId}/payers` : "/events", label: t("nav.payers"), icon: Users },
-    ...NAV_SECTIONS.bills.items
-      .filter((item) => !item.adminOnly || role === "admin")
-      .map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })),
-  ];
-
   // Own-view layer on top of the admin-granted access (see User.hiddenModules).
   const showHealth = moduleAccess.health && !hiddenModules.includes("health");
   const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
   const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
+  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showHealth || showMail };
 
-  const participantsNavItems = [
-    ...(showHealth || showMail
-      ? [
-          {
-            href: eventId ? `/events/${eventId}/participants` : "/events",
-            label: t("participantsPage.centralTitle"),
-            icon: Users,
-          },
-        ]
-      : []),
-  ];
+  const visibleItems = MENU_ITEMS.filter((i) => (!i.adminOnly || role === "admin") && (!i.module || moduleShown[i.module])).map((i) => ({
+    ...i,
+    href: i.href(eventId),
+    label: t(i.labelKey),
+  }));
+  const favorites = prefs.menuFavorites.map((id) => visibleItems.find((i) => i.id === id)).filter((i) => i !== undefined);
 
-  const healthNavItems = [
-    ...(showHealth
-      ? [
-          { href: eventId ? `/events/${eventId}/health` : "/events", label: t("nav.health"), icon: HeartPulse },
-          {
-            href: eventId ? `/events/${eventId}/health/meds` : "/events",
-            label: t("medChecklistPage.title"),
-            icon: Pill,
-          },
-        ]
-      : []),
-  ];
-
-  const mailNavItems = [
-    ...(showMail
-      ? [
-          { href: eventId ? `/events/${eventId}/mail` : "/events", label: t("nav.mail"), icon: Mail },
-          {
-            href: eventId ? `/events/${eventId}/mail/participants` : "/events",
-            label: t("participantsPage.mailListTitle"),
-            icon: Users,
-          },
-        ]
-      : []),
-  ];
-
-  const planningNavItems = [
-    ...(showPlanning
-      ? [
-          { href: eventId ? `/events/${eventId}/planning` : "/events", label: t("nav.planning"), icon: CalendarClock },
-          {
-            href: eventId ? `/events/${eventId}/planning/activities` : "/events",
-            label: t("planActivities.title"),
-            icon: Library,
-          },
-        ]
-      : []),
-  ];
-
-  const eventSettingsItem = {
-    href: eventId ? `/events/${eventId}` : "/events",
-    label: t("nav.eventSetup"),
-    icon: Settings,
-  };
-
-  const orgNavItems = visibleNavSections(role)
-    .find((s) => s.sectionLabelKey === NAV_SECTIONS.organization.sectionLabelKey)
-    ?.items.map((item) => ({ href: item.path, label: t(item.labelKey), icon: item.icon })) ?? [];
+  function toggleSection(id: string) {
+    const next = collapsed.includes(id) ? collapsed.filter((x) => x !== id) : [...collapsed, id];
+    setCollapsed(next);
+    try {
+      localStorage.setItem("menuCollapsed", JSON.stringify(next));
+    } catch {}
+  }
 
   function isActive(href: string) {
     return pathname === href;
@@ -176,21 +117,21 @@ export default function AppSidebar() {
       <Link
         href={href}
         className={
-          "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors " +
+          "flex items-center gap-2 rounded-md px-2 py-1 text-[13px] transition-colors " +
           (active
             ? "bg-ember/15 font-medium text-paper"
             : "text-night-fg hover:bg-night-2 hover:text-paper")
         }
       >
-        <Icon size={16} className={active ? "text-ember" : "text-night-muted"} aria-hidden="true" />
+        <Icon size={15} className={active ? "text-ember" : "text-night-muted"} aria-hidden="true" />
         {label}
       </Link>
     );
   }
 
   const sidebarContent = (
-    <div className="flex min-h-full flex-col gap-1 px-3 py-4 [&>*]:shrink-0">
-      <div className="flex items-center gap-2 px-1 pb-4">
+    <div className="flex min-h-full flex-col gap-0.5 px-2.5 py-3 [&>*]:shrink-0">
+      <div className="flex items-center gap-2 px-1 pb-3">
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ember">
           <Tent size={16} className="text-night" aria-hidden="true" />
         </div>
@@ -205,7 +146,7 @@ export default function AppSidebar() {
           <select
             value={eventId || ""}
             onChange={(e) => onEventChange(e.target.value)}
-            className="mb-4 w-full rounded-lg border-0 bg-night-2 px-2.5 py-2 text-[13px] text-paper focus:outline-none focus:ring-1 focus:ring-ember"
+            className="mb-2 w-full rounded-lg border-0 bg-night-2 px-2.5 py-1.5 text-[13px] text-paper focus:outline-none focus:ring-1 focus:ring-ember"
           >
             {selectableEvents.map((ev) => (
               <option key={ev.id} value={ev.id}>
@@ -217,95 +158,48 @@ export default function AppSidebar() {
         </>
       )}
 
-      <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-        {t("nav.sectionBills")}
-        <HelpLink slug="uctenky" className="hover:text-paper" />
-      </div>
-      <nav className="flex flex-col gap-0.5">
-        {billsNavItems.map((item) => (
-          <NavLink key={item.label} {...item} />
-        ))}
-      </nav>
-
-      {participantsNavItems.length > 0 && (
+      {favorites.length > 0 && (
         <>
-          <div className="my-3 h-px bg-night-border" />
-          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-            {t("nav.sectionParticipants")}
-            <HelpLink slug="ucastnici" className="hover:text-paper" />
-          </div>
-          <nav className="flex flex-col gap-0.5">
-            {participantsNavItems.map((item) => (
-              <NavLink key={item.label} {...item} />
+          <div className="px-1 pb-0.5 text-[11px] uppercase tracking-wide text-night-muted">{t("nav.favorites")}</div>
+          <nav className="flex flex-col">
+            {favorites.map((item) => (
+              <NavLink key={`fav-${item.id}`} {...item} />
             ))}
           </nav>
+          <div className="my-1.5 h-px bg-night-border" />
         </>
       )}
 
-      {healthNavItems.length > 0 && (
-        <>
-          <div className="my-3 h-px bg-night-border" />
-          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-            {t("nav.sectionHealth")}
-            <HelpLink slug="zdravi" className="hover:text-paper" />
+      {MENU_SECTIONS.map((section) => {
+        const items = visibleItems.filter((i) => i.section === section.id);
+        if (items.length === 0) return null;
+        const isCollapsed = section.labelKey !== null && collapsed.includes(section.id);
+        return (
+          <div key={section.id} className={section.id === "bills" ? "" : "mt-1.5 border-t border-night-border pt-1.5"}>
+            {section.labelKey && (
+              <div className="flex items-center gap-1.5 px-1 pb-0.5 text-[11px] uppercase tracking-wide text-night-muted">
+                <button
+                  type="button"
+                  onClick={() => toggleSection(section.id)}
+                  aria-expanded={!isCollapsed}
+                  className="flex flex-1 items-center gap-1 text-left uppercase hover:text-paper"
+                >
+                  <ChevronRight size={12} className={"transition-transform " + (isCollapsed ? "" : "rotate-90")} aria-hidden="true" />
+                  {t(section.labelKey)}
+                </button>
+                {SECTION_HELP[section.id] && <HelpLink slug={SECTION_HELP[section.id]!} className="hover:text-paper" />}
+              </div>
+            )}
+            {!isCollapsed && (
+              <nav className="flex flex-col">
+                {items.map((item) => (
+                  <NavLink key={item.id} {...item} />
+                ))}
+              </nav>
+            )}
           </div>
-          <nav className="flex flex-col gap-0.5">
-            {healthNavItems.map((item) => (
-              <NavLink key={item.label} {...item} />
-            ))}
-          </nav>
-        </>
-      )}
-
-      {mailNavItems.length > 0 && (
-        <>
-          <div className="my-3 h-px bg-night-border" />
-          <div className="flex items-center gap-1.5 px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-            {t("nav.sectionMail")}
-            <HelpLink slug="posta" className="hover:text-paper" />
-          </div>
-          <nav className="flex flex-col gap-0.5">
-            {mailNavItems.map((item) => (
-              <NavLink key={item.label} {...item} />
-            ))}
-          </nav>
-        </>
-      )}
-
-      {planningNavItems.length > 0 && (
-        <>
-          <div className="my-3 h-px bg-night-border" />
-          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-            {t("nav.sectionPlanning")}
-          </div>
-          <nav className="flex flex-col gap-0.5">
-            {planningNavItems.map((item) => (
-              <NavLink key={item.label} {...item} />
-            ))}
-          </nav>
-        </>
-      )}
-
-      <div className="my-3 h-px bg-night-border" />
-
-      <nav className="flex flex-col gap-0.5">
-        <NavLink {...eventSettingsItem} />
-      </nav>
-
-      {orgNavItems.length > 0 && (
-        <>
-          <div className="my-3 h-px bg-night-border" />
-
-          <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">
-            {t("nav.organization")}
-          </div>
-          <nav className="flex flex-col gap-0.5">
-            {orgNavItems.map((item) => (
-              <NavLink key={item.label} {...item} />
-            ))}
-          </nav>
-        </>
-      )}
+        );
+      })}
 
       <div className="flex-1" />
 

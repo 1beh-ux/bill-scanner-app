@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { visibleNavSections } from "@/lib/nav-sections";
+import { MENU_ITEMS, MENU_SECTIONS } from "@/lib/menu-items";
+import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 const btnPrimary =
@@ -70,6 +72,13 @@ export default function SettingsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Menu favourites (User.uiPrefs.menuFavorites): pinned to the top of the sidebar.
+  const { prefs, save: savePrefs } = useUiPrefs();
+  function toggleFavorite(id: string, on: boolean) {
+    const next = on ? [...prefs.menuFavorites, id] : prefs.menuFavorites.filter((x) => x !== id);
+    savePrefs({ menuFavorites: next });
+  }
+
   function toggleModule(key: string, shown: boolean) {
     const next = shown ? hiddenModules.filter((m) => m !== key) : [...hiddenModules, key];
     setHiddenModules(next);
@@ -133,10 +142,32 @@ export default function SettingsPage() {
                 checked={!hiddenModules.includes(key)}
                 onChange={(e) => toggleModule(key, e.target.checked)}
               />
-              {t(`nav.${key}`)}
+              {t({ health: "nav.sectionHealth", mail: "nav.sectionMail", planning: "nav.sectionPlanning" }[key])}
             </label>
           ))}
           <span className="mt-1 block text-[11.5px]">{t("settingsPage.modulesHint")}</span>
+        </div>
+
+        <div className="text-[13px] text-ink-secondary">
+          <p className="mb-1">{t("settingsPage.favoritesLabel")}</p>
+          <div className="flex flex-col gap-1.5">
+            {MENU_SECTIONS.map((section) => {
+              const items = MENU_ITEMS.filter((i) => i.section === section.id && (!i.adminOnly || role === "admin"));
+              if (items.length === 0) return null;
+              return (
+                <div key={section.id} className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="w-28 shrink-0 text-[12px] uppercase tracking-wide">{section.labelKey ? t(section.labelKey) : t("nav.eventSetup")}</span>
+                  {items.map((item) => (
+                    <label key={item.id} className="inline-flex items-center gap-1.5 text-ink">
+                      <input type="checkbox" checked={prefs.menuFavorites.includes(item.id)} onChange={(e) => toggleFavorite(item.id, e.target.checked)} />
+                      {t(item.labelKey)}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          <span className="mt-1 block text-[11.5px]">{t("settingsPage.favoritesHint")}</span>
         </div>
 
       </div>

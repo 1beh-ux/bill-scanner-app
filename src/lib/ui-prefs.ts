@@ -5,9 +5,10 @@
 export type UiPrefs = {
   planningLibraryWidth?: number; // px, the planning board's library panel
   planningLibraryHidden?: boolean; // library collapsed to a narrow strip
+  menuFavorites?: string[]; // MENU_ITEMS ids pinned to the top of the sidebar
 };
 
-export const UI_PREF_DEFAULTS: Required<UiPrefs> = { planningLibraryWidth: 240, planningLibraryHidden: false };
+export const UI_PREF_DEFAULTS: Required<UiPrefs> = { planningLibraryWidth: 240, planningLibraryHidden: false, menuFavorites: [] };
 const NUMBER_LIMITS: Partial<Record<keyof UiPrefs, [number, number]>> = { planningLibraryWidth: [180, 640] };
 
 /** Keeps only known keys with in-range numbers -- the PATCH body is untrusted. */
@@ -20,5 +21,8 @@ export function sanitizeUiPrefs(input: unknown): UiPrefs {
     if (typeof v === "number" && Number.isFinite(v)) out[key] = Math.round(Math.min(max, Math.max(min, v)));
   }
   if (typeof src.planningLibraryHidden === "boolean") out.planningLibraryHidden = src.planningLibraryHidden;
+  if (Array.isArray(src.menuFavorites)) {
+    out.menuFavorites = src.menuFavorites.filter((x): x is string => typeof x === "string" && x.length <= 60).slice(0, 40);
+  }
   return out;
 }
