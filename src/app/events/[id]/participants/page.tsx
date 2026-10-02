@@ -9,6 +9,7 @@ import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeHref, type ComposeRequest } from "@/lib/compose-handoff";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import ColumnPicker from "@/components/ColumnPicker";
+import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null };
@@ -28,23 +29,7 @@ type Participant = {
   computed: { price: number | null; var_symb: string; contact_email: string };
 };
 
-// Resolves a guardian/computed field's display value for the roster --
-// custom fields already go through customFieldValues, builtin fields never
-// reach here (excluded from the column picker, see dynamicListFields below).
-function resolveDynamicValue(field: ParticipantFieldDef, p: Participant): string {
-  if (field.kind === "guardian") {
-    const prop = FIXED_PARTICIPANT_FIELDS.find((f) => f.key === field.key)?.guardianProp;
-    const raw = prop ? p.guardian?.[prop] : undefined;
-    return raw || "—";
-  }
-  if (field.kind === "computed") {
-    if (field.key === "price") return p.computed.price != null ? `${p.computed.price} Kč` : "—";
-    if (field.key === "var_symb") return p.computed.var_symb || "—";
-    if (field.key === "Email") return p.computed.contact_email || "—";
-    return "—";
-  }
-  return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType, field.options);
-}
+const resolveDynamicValue = columnValue;
 
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
 

@@ -290,6 +290,8 @@ model Event {
   // Ordered participant-field keys shown as columns in the Documents overview
   // (mail_list fields); null = all of them. Saved via /mail/sync-settings.
   documentsListColumns Json? @map("documents_list_columns")
+  // Optional field columns of the Zdraví list (ordered keys); null = none.
+  healthListColumns Json? @map("health_list_columns")
   // Planning Helper settings (src/lib/planning.ts PlanningSettings): saved
   // import sheet connections per import target, and the Drive export sheet id.
   planningSettings Json? @map("planning_settings")

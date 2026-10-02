@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import BodyMapPicker from "./BodyMapPicker";
-import IncidentFormModal, { type IncidentClientData } from "./IncidentFormModal";
+import { useRouter } from "next/navigation";
+import { type IncidentClientData } from "./IncidentFormModal";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 const btnPrimary =
@@ -32,8 +33,9 @@ export default function IncidentDetailModal({
 }: IncidentDetailModalProps) {
   const { t } = useTranslations();
   const confirm = useConfirm();
-  const [editing, setEditing] = useState(false);
-  const [followingUp, setFollowingUp] = useState(false);
+  // Correcting / following up opens the incident page (two-column form).
+  const router = useRouter();
+  const incidentPage = (param: "edit" | "followUp") => router.push(`/events/${eventId}/health/participants/${participantId}/incident?${param}=${incident.id}`);
   const [deleting, setDeleting] = useState(false);
 
   async function handleDelete() {
@@ -51,32 +53,6 @@ export default function IncidentDetailModal({
     setDeleting(false);
     onChanged();
     onClose();
-  }
-
-  if (editing) {
-    return (
-      <IncidentFormModal
-        eventId={eventId}
-        participantId={participantId}
-        mode="edit"
-        incident={incident}
-        onClose={() => setEditing(false)}
-        onSaved={onChanged}
-      />
-    );
-  }
-
-  if (followingUp) {
-    return (
-      <IncidentFormModal
-        eventId={eventId}
-        participantId={participantId}
-        mode="follow-up"
-        incident={incident}
-        onClose={() => setFollowingUp(false)}
-        onSaved={onChanged}
-      />
-    );
   }
 
   const previewUrl = photoUrl(eventId, incident.photoGcsPath);
@@ -139,11 +115,11 @@ export default function IncidentDetailModal({
         )}
 
         <div className="mt-4 flex flex-wrap gap-2">
-          <button onClick={() => setEditing(true)} className={btnPrimary}>
+          <button onClick={() => incidentPage("edit")} className={btnPrimary}>
             {t("incidentDetail.editButton")}
           </button>
           <button
-            onClick={() => setFollowingUp(true)}
+            onClick={() => incidentPage("followUp")}
             className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
           >
             {t("incidentDetail.followUpButton")}

@@ -24,8 +24,8 @@ const config = [{ fieldKey: "allergies", places: ["detail", "meds"] as ("detail"
 // Default = today's page.
 const def = defaultDetailLayout(fields, config);
 assert.deepEqual(def.sections.map((s) => [s.kind, s.column, s.fields]), [
-  ["basics", "left", undefined],
-  ["guardians", "left", undefined],
+  ["basics", "left", []],
+  ["guardians", "left", []],
   ["documents", "right", undefined],
   ["fields", "right", ["tricko", "plavec"]],
   ["health", "right", ["allergies"]],
@@ -45,11 +45,16 @@ const r = resolveDetailLayout(saved, fields, config);
 assert.deepEqual(r.sections.map((s) => [s.id, s.kind, s.column, s.hidden, s.fields]), [
   ["s1", "fields", "left", undefined, ["tricko"]],
   ["h", "health", "left", true, ["allergies"]],
-  ["b", "basics", "right", undefined, undefined],
-  ["guardians", "guardians", "left", undefined, undefined],
+  ["b", "basics", "right", undefined, []],
+  ["guardians", "guardians", "left", undefined, []],
   ["documents", "documents", "right", undefined, undefined],
 ]);
 assert.deepEqual(r.hiddenFields, ["plavec"]);
+// Extra fields under the fixed sections (name / guardians) are kept.
+assert.deepEqual(
+  resolveDetailLayout({ sections: [{ id: "b", kind: "basics" as const, column: "left" as const, fields: ["tricko"] }] }, fields, config).sections.find((x) => x.kind === "basics")?.fields,
+  ["tricko"]
+);
 // Not hidden and not placed -> first fields section.
 assert.deepEqual(resolveDetailLayout({ ...saved, hiddenFields: [] }, fields, config).sections[0].fields, ["tricko", "plavec"]);
 
@@ -83,9 +88,18 @@ assert.deepEqual(healthConfigForNotes(hc, ["x", "b"]), [
 const s = sanitizePageLayout({ sections: [{ id: "x", kind: "nope" }, { id: "f", kind: "fields", column: "left", fields: ["tricko", "evil"], title: 5 }], hiddenFields: "x" }, "detail", new Set(["tricko"]));
 assert.deepEqual(s, { sections: [{ id: "f", kind: "fields", column: "left", fields: ["tricko"] }], hiddenFields: [] });
 assert.equal(sanitizePageLayout("junk", "health", new Set()), null);
-assert.deepEqual(
-  resolveHealthLayout({ sections: [{ id: "emails", kind: "emails", column: "left", hidden: true }] }).sections.map((x) => x.kind + (x.hidden ? "-" : "")),
-  ["emails-", "notes", "documents", "guardians", "medsReported", "medPlans", "incidents"]
+// Old documents/e-mails sections are gone; own "fields" sections keep title + known fields.
+const hl = resolveHealthLayout(
+  {
+    sections: [
+      { id: "emails", kind: "emails" as never, column: "left", hidden: true },
+      { id: "q", kind: "fields", column: "left", title: "Dotazník", fields: ["plavec", "gone"] },
+      { id: "incidents", kind: "incidents", column: "left", hidden: true },
+    ],
+  },
+  new Set(["plavec"])
 );
+assert.deepEqual(hl.sections.map((x) => x.id + (x.hidden ? "-" : "")), ["q", "incidents-", "notes", "guardians", "medsReported", "medPlans"]);
+assert.deepEqual(hl.sections[0], { id: "q", kind: "fields", column: "left", title: "Dotazník", fields: ["plavec"] });
 
 console.log("participant-layout ok");

@@ -92,6 +92,8 @@ interface IncidentFormModalProps {
   incident?: IncidentClientData;
   onClose: () => void;
   onSaved: () => void;
+  // "page": the full-page two-column form (/events/.../incident); default = the old modal.
+  variant?: "modal" | "page";
 }
 
 export default function IncidentFormModal({
@@ -101,6 +103,7 @@ export default function IncidentFormModal({
   incident,
   onClose,
   onSaved,
+  variant = "modal",
 }: IncidentFormModalProps) {
   const { t } = useTranslations();
   const isFollowUp = mode === "follow-up";
@@ -249,33 +252,10 @@ export default function IncidentFormModal({
 
   const previewUrl = photoUrl(eventId, photoGcsPath);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-paper">
-      <div className="overflow-y-auto p-5">
-        <h2 className="mb-2 text-[16px] font-semibold text-ink">
-          {isFollowUp ? t("incidentForm.titleFollowUp") : isEdit ? t("incidentForm.titleEdit") : t("incidentForm.titleNew")}
-          {participantSummary && <span className="ml-1 font-normal text-ink-secondary"> — {participantSummary.name}</span>}
-        </h2>
-
-        {/* Highlighted notes (e.g. allergies) are always visible, not behind the toggle. */}
-        {highlighted.length > 0 && <HealthNotesBox notes={highlighted} className="mb-2 text-[13px]" />}
-        {participantSummary && (
-          <div className="mb-4">
-            <button
-              type="button"
-              onClick={() => setShowParticipantSummary((v) => !v)}
-              className="text-[13px] text-ember hover:underline"
-            >
-              {showParticipantSummary ? t("incidentForm.hideParticipantSummary") : t("incidentForm.showParticipantSummary")}
-            </button>
-            {showParticipantSummary && (
-              <HealthNotesBox notes={incidentNotes} className="mt-2 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink" />
-            )}
-          </div>
-        )}
-
-        <form id="incident-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
+  // The form in two parts: the record itself, and photo + body map (the page
+  // variant puts them side by side; the modal stacks them).
+  const mainFields = (
+    <>
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -404,6 +384,10 @@ export default function IncidentFormModal({
             rows={3}
           />
 
+    </>
+  );
+  const mediaFields = (
+    <>
           <div>
             <div className="mb-1 text-[13px] text-ink-secondary">{t("incidentForm.photoLabel")}</div>
             {(previewUrl || uploadingPhoto) && (
@@ -457,6 +441,78 @@ export default function IncidentFormModal({
             />
           </div>
 
+    </>
+  );
+  const title = isFollowUp ? t("incidentForm.titleFollowUp") : isEdit ? t("incidentForm.titleEdit") : t("incidentForm.titleNew");
+  const saveButton = (
+    <button type="submit" form="incident-form" disabled={saving} className={btnPrimary}>
+      {isFollowUp ? t("incidentForm.saveFollowUp") : t("common.save")}
+    </button>
+  );
+
+  if (variant === "page") {
+    return (
+      <div className="mx-auto max-w-6xl p-4 md:p-8">
+        <button type="button" onClick={onClose} className="text-[13px] text-ink-secondary hover:text-ink">
+          ← {t("common.back")}
+        </button>
+        <h1 className="mb-4 mt-2 text-[22px] font-semibold text-ink">
+          {title}
+          {participantSummary && <span className="font-normal text-ink-secondary"> — {participantSummary.name}</span>}
+        </h1>
+        <form id="incident-form" onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-2">
+          <div className="flex flex-col gap-3">
+            {mainFields}
+            {error && <p className="text-[13px] text-red-600">{error}</p>}
+          </div>
+          <div className="flex flex-col gap-4">
+            {/* All the incident-place health notes, highlighted ones in red. */}
+            <div>
+              <div className="mb-1 text-[13px] text-ink-secondary">{t("participantDetail.notesTitle")}</div>
+              <HealthNotesBox notes={incidentNotes} className="rounded-lg border border-mist bg-paper-2 p-3 text-[13px] text-ink" />
+            </div>
+            {mediaFields}
+          </div>
+        </form>
+        <div className="sticky bottom-0 -mx-4 mt-6 flex justify-end gap-2 border-t border-mist bg-paper px-4 py-3 md:mx-0 md:px-0">
+          <button type="button" onClick={onClose} className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2">
+            {t("common.cancel")}
+          </button>
+          {saveButton}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-paper">
+      <div className="overflow-y-auto p-5">
+        <h2 className="mb-2 text-[16px] font-semibold text-ink">
+          {isFollowUp ? t("incidentForm.titleFollowUp") : isEdit ? t("incidentForm.titleEdit") : t("incidentForm.titleNew")}
+          {participantSummary && <span className="ml-1 font-normal text-ink-secondary"> — {participantSummary.name}</span>}
+        </h2>
+
+        {/* Highlighted notes (e.g. allergies) are always visible, not behind the toggle. */}
+        {highlighted.length > 0 && <HealthNotesBox notes={highlighted} className="mb-2 text-[13px]" />}
+        {participantSummary && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setShowParticipantSummary((v) => !v)}
+              className="text-[13px] text-ember hover:underline"
+            >
+              {showParticipantSummary ? t("incidentForm.hideParticipantSummary") : t("incidentForm.showParticipantSummary")}
+            </button>
+            {showParticipantSummary && (
+              <HealthNotesBox notes={incidentNotes} className="mt-2 rounded-lg border border-mist bg-paper-2 p-2 text-[13px] text-ink" />
+            )}
+          </div>
+        )}
+
+        <form id="incident-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
+          {mainFields}
+          {mediaFields}
           {error && <p className="text-[13px] text-red-600">{error}</p>}
         </form>
       </div>

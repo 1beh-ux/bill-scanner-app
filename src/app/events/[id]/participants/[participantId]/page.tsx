@@ -9,6 +9,8 @@ import { toBoolean, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { composeHref } from "@/lib/compose-handoff";
 import { useConfirm } from "@/components/ConfirmDialog";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import AutoTextarea from "@/components/participants/AutoTextarea";
+import { useCollapsed } from "@/lib/use-collapsed";
 import type { HealthNoteConfig } from "@/lib/health-notes";
 import {
   FIXED_KINDS,
@@ -81,6 +83,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   const [layoutSaving, setLayoutSaving] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [layoutSaved, setLayoutSaved] = useState(false);
+  const [collapsed, toggleCollapsed] = useCollapsed(`layoutCollapsed:${eventId}:detail`);
 
   const loadLayout = () =>
     fetch(`/api/events/${eventId}/participant-layout`)
@@ -215,19 +218,6 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
     loadLayout();
   }
 
-  // Bin on a field row: deletes the field itself (Proměnné), right away.
-  async function deleteField(key: string) {
-    const f = fieldByKey.get(key);
-    if (!f || !(await confirm({ message: t("layoutEditor.deleteFieldConfirm", { name: f.label }), danger: true }))) return;
-    const res = await fetch(`/api/events/${eventId}/participant-fields/${f.id}`, { method: "DELETE" });
-    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
-    setFields((prev) => prev.filter((x) => x.key !== key));
-    edit((l) => ({
-      ...l,
-      sections: l.sections.map((s) => (s.fields ? { ...s, fields: s.fields.filter((k) => k !== key) } : s)),
-      hiddenFields: (l.hiddenFields ?? []).filter((k) => k !== key),
-    }));
-  }
 
   function dropOnSection(target: Section) {
     if (drag?.type === "section") edit((l) => moveSection(l, drag.id, target.id, target.column));
@@ -462,14 +452,25 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
     if (s.hidden || (s.kind === "documents" && !docs.length)) return null;
     const keys = (s.fields ?? []).filter((k) => fieldByKey.has(k));
     if ((s.kind === "fields" || s.kind === "health") && !keys.length) return null;
+    // Variable sections fold (remembered per browser); basics/guardians/documents don't.
+    const foldable = s.kind === "fields" || s.kind === "health";
+    const folded = foldable && collapsed.has(s.id);
     return (
       <section key={s.id} className={"flex flex-col " + (s.kind === "guardians" || s.kind === "documents" ? "gap-2" : "gap-3")}>
-        <h2 className={sectionTitle}>{titleOf(s)}</h2>
-        {bodyOf(s)}
-        {keys.map((k) => {
-          const f = fieldByKey.get(k)!;
-          return <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} multiline={s.kind === "health"} />;
-        })}
+        {foldable ? (
+          <button type="button" onClick={() => toggleCollapsed(s.id)} aria-expanded={!folded} className={sectionTitle + " flex items-center gap-1 text-left hover:text-ink"}>
+            <ChevronRight size={14} className={"transition-transform " + (folded ? "" : "rotate-90")} aria-hidden="true" />
+            {titleOf(s)}
+          </button>
+        ) : (
+          <h2 className={sectionTitle}>{titleOf(s)}</h2>
+        )}
+        {folded ? null : bodyOf(s)}
+        {!folded &&
+          keys.map((k) => {
+            const f = fieldByKey.get(k)!;
+            return <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} />;
+          })}
       </section>
     );
   }
@@ -492,12 +493,12 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
       >
         {s.fields ? (
           <>
+            {bodyOf(s) && <Inert>{bodyOf(s)}</Inert>}
             {s.fields.map((k) => (
               <FieldRow
                 key={k}
                 label={labelOf(k)}
                 onHide={() => edit((l) => moveField(l, k, null))}
-                onDelete={() => deleteField(k)}
                 onDragStart={() => setDrag({ type: "field", key: k })}
                 onDrop={() => dropOnField(s, k)}
                 dragging={drag?.type === "field" && drag.key === k}
@@ -608,7 +609,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
 }
 
 // One admin-defined field by its type; values are plain strings ("true"/"false" for booleans).
-function FieldInput({ field, value, onChange, multiline }: { field: ParticipantFieldDef; value: string; onChange: (v: string) => void; multiline?: boolean }) {
+function FieldInput({ field, value, onChange }: { field: ParticipantFieldDef; value: string; onChange: (v: string) => void }) {
   if (field.fieldType === "boolean") {
     // Imported values like "Ano"/"x" count via the field's Ano/Ne setting; a value
     // meaning neither is shown so it isn't silently read as unticked.
@@ -639,9 +640,8 @@ function FieldInput({ field, value, onChange, multiline }: { field: ParticipantF
       </select>
     );
   }
-  if (multiline && field.fieldType === "text") {
-    return label(<textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} className={inputClass} />);
-  }
+  // Text grows to fit its value (long health/questionnaire answers stay readable).
+  if (field.fieldType === "text") return label(<AutoTextarea value={value} onChange={onChange} className={inputClass} />);
   return label(
     <input
       type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}

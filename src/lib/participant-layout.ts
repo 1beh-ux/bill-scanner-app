@@ -6,7 +6,8 @@
 import type { HealthNoteConfig, HealthNotePlace } from "@/lib/health-notes";
 
 export type DetailSectionKind = "basics" | "guardians" | "documents" | "fields" | "health";
-export type HealthSectionKind = "notes" | "medsReported" | "medPlans" | "incidents" | "documents" | "guardians" | "emails";
+// "fields" on the Zdraví page = own read-only sections of chosen variables (e.g. less important questionnaire data).
+export type HealthSectionKind = "notes" | "medsReported" | "medPlans" | "incidents" | "guardians" | "fields";
 export type SectionKind = DetailSectionKind | HealthSectionKind;
 export type Column = "left" | "right";
 export type Section = { id: string; kind: SectionKind; title?: string; column: Column; hidden?: boolean; fields?: string[] };
@@ -17,7 +18,9 @@ export type LayoutPage = "detail" | "health";
 export type LayoutField = { key: string; kind: string; fieldType: string; surfaces: string[] };
 
 const DETAIL_KINDS: DetailSectionKind[] = ["basics", "guardians", "documents", "fields", "health"];
-export const HEALTH_KINDS: HealthSectionKind[] = ["notes", "documents", "guardians", "medsReported", "medPlans", "incidents", "emails"];
+// Documents and sent e-mails are no longer on the Zdraví page (they live in Mail / the participant detail).
+export const HEALTH_KINDS: HealthSectionKind[] = ["notes", "guardians", "medsReported", "medPlans", "incidents", "fields"];
+const HEALTH_FIXED_ORDER: HealthSectionKind[] = ["notes", "guardians", "medsReported", "medPlans", "incidents"];
 /** Always on the detail page, never hidden. */
 export const FIXED_KINDS: SectionKind[] = ["basics", "guardians"];
 export const NEW_NOTE_PLACES: HealthNotePlace[] = ["detail", "meds", "incident", "pdf"];
@@ -41,8 +44,8 @@ export function defaultDetailLayout(fields: LayoutField[], healthConfig: HealthN
   const editable = fields.filter(isEditableField).map((f) => f.key);
   return {
     sections: [
-      { id: "basics", kind: "basics", column: "left" },
-      { id: "guardians", kind: "guardians", column: "left" },
+      { id: "basics", kind: "basics", column: "left", fields: [] },
+      { id: "guardians", kind: "guardians", column: "left", fields: [] },
       { id: "documents", kind: "documents", column: "right" },
       { id: "fields", kind: "fields", column: "right", fields: editable.filter((k) => !members.has(k)) },
       { id: "health", kind: "health", column: "right", fields: editable.filter((k) => members.has(k)) },
@@ -51,7 +54,7 @@ export function defaultDetailLayout(fields: LayoutField[], healthConfig: HealthN
   };
 }
 
-export const defaultHealthLayout = (): PageLayout => ({ sections: HEALTH_KINDS.map((k) => ({ id: k, kind: k, column: "left" })) });
+export const defaultHealthLayout = (): PageLayout => ({ sections: HEALTH_FIXED_ORDER.map((k) => ({ id: k, kind: k, column: "left" })) });
 
 /** The saved detail layout made consistent with today's fields and health config (or the default). */
 export function resolveDetailLayout(saved: PageLayout | null | undefined, fields: LayoutField[], healthConfig: HealthNoteConfig[]): PageLayout {
@@ -70,8 +73,9 @@ export function resolveDetailLayout(saved: PageLayout | null | undefined, fields
     ids.add(s.id);
     const out: Section = { id: s.id, kind: s.kind, column: s.column === "left" ? "left" : "right" };
     if (s.hidden && !FIXED_KINDS.includes(s.kind)) out.hidden = true;
-    if (s.kind === "fields") {
-      if (s.title) out.title = s.title;
+    // Own sections and the two fixed ones (extra fields under name / guardians) hold fields.
+    if (s.kind === "fields" || s.kind === "basics" || s.kind === "guardians") {
+      if (s.kind === "fields" && s.title) out.title = s.title;
       out.fields = (s.fields ?? []).filter((k) => editableSet.has(k) && !members.has(k) && !placed.has(k));
       out.fields.forEach((k) => placed.add(k));
     }
@@ -84,7 +88,7 @@ export function resolveDetailLayout(saved: PageLayout | null | undefined, fields
   }
   // Fixed sections back where the default has them.
   for (const d of def.sections) {
-    if (d.kind !== "fields" && !sections.some((s) => s.kind === d.kind)) sections.push({ ...d, fields: d.kind === "health" ? [] : undefined });
+    if (d.kind !== "fields" && !sections.some((s) => s.kind === d.kind)) sections.push({ ...d, fields: d.kind === "documents" ? undefined : [] });
   }
   const health = sections.find((s) => s.kind === "health")!;
   health.fields = [...health.fields!, ...memberList.filter((k) => !placed.has(k))];
@@ -103,10 +107,18 @@ export function resolveDetailLayout(saved: PageLayout | null | undefined, fields
   return { sections, hiddenFields };
 }
 
-export function resolveHealthLayout(saved: PageLayout | null | undefined): PageLayout {
+/** `fieldKeys`: active fields (own "fields" sections may show any of them, read-only). */
+export function resolveHealthLayout(saved: PageLayout | null | undefined, fieldKeys?: Set<string>): PageLayout {
   const sections: Section[] = [];
   for (const s of saved?.sections ?? []) {
-    if (!HEALTH_KINDS.includes(s.kind as HealthSectionKind) || sections.some((x) => x.kind === s.kind)) continue;
+    if (!HEALTH_KINDS.includes(s.kind as HealthSectionKind)) continue;
+    if (s.kind === "fields") {
+      if (sections.some((x) => x.id === s.id)) continue;
+      const fields = (s.fields ?? []).filter((k) => !fieldKeys || fieldKeys.has(k));
+      sections.push({ id: s.id, kind: "fields", column: "left", ...(s.title ? { title: s.title } : {}), ...(s.hidden ? { hidden: true } : {}), fields });
+      continue;
+    }
+    if (sections.some((x) => x.kind === s.kind)) continue;
     sections.push({ id: s.kind, kind: s.kind, column: "left", ...(s.hidden ? { hidden: true } : {}) });
   }
   for (const d of defaultHealthLayout().sections) if (!sections.some((s) => s.kind === d.kind)) sections.push(d);
@@ -129,7 +141,7 @@ export function sanitizePageLayout(input: unknown, page: LayoutPage, fieldKeys: 
     if (page === "health") out.column = "left";
     if (s.hidden === true) out.hidden = true;
     if (typeof s.title === "string" && s.title.trim() && s.kind === "fields") out.title = s.title.trim().slice(0, 100);
-    if (s.kind === "fields" || s.kind === "health") out.fields = keys(s.fields);
+    if (s.kind === "fields" || s.kind === "health" || s.kind === "basics" || s.kind === "guardians") out.fields = keys(s.fields);
     sections.push(out);
   }
   return page === "detail" ? { sections, hiddenFields: keys(raw.hiddenFields) } : { sections };

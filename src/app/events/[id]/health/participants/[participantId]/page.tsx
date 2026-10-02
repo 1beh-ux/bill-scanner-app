@@ -3,25 +3,25 @@
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
-import IncidentFormModal, { type IncidentClientData } from "@/components/health/IncidentFormModal";
+import { type IncidentClientData } from "@/components/health/IncidentFormModal";
 import IncidentDetailModal from "@/components/health/IncidentDetailModal";
 import SendSummaryModal from "@/components/health/SendSummaryModal";
-import ParentEmailLogTable, { type EmailLogRow } from "@/components/health/ParentEmailLogTable";
 import { calculateAge } from "@/lib/age";
 import HealthNotesBox, { useHealthNotes } from "@/components/health/HealthNotesBox";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { useCollapsed } from "@/lib/use-collapsed";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { HealthNoteConfig } from "@/lib/health-notes";
-import { healthConfigForNotes, moveSection, readParticipantLayout, resolveHealthLayout, type HealthSectionKind, type PageLayout } from "@/lib/participant-layout";
+import { healthConfigForNotes, moveField, moveSection, readParticipantLayout, resolveHealthLayout, type HealthSectionKind, type PageLayout } from "@/lib/participant-layout";
 import { AddFieldSelect, DropZone, FieldRow, Inert, LayoutEditorBar, SectionCard, type LayoutDrag } from "@/components/participants/LayoutEditor";
 
 const HEALTH_SECTION_TITLES: Record<HealthSectionKind, string> = {
   notes: "participantDetail.notesTitle",
-  documents: "participantDetail.documentsTitle",
   guardians: "participantDetail.guardiansTitle",
   medsReported: "medPlansSection.reportedLabel",
   medPlans: "medPlansSection.title",
   incidents: "incidentsPage.title",
-  emails: "sendLog.title",
+  fields: "participantDetail.sectionCustomFields",
 };
 // A field the notes section can show (as in Nastavení akce -> Zdraví -> Zdravotní poznámky).
 type NoteField = { id: string; key: string; label: string; kind: string; fieldType: string; computedType: string | null };
@@ -119,12 +119,9 @@ export default function ParticipantDetailPage({
 
   const [incidents, setIncidents] = useState<IncidentWithFollowUps[]>([]);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-  const [addingIncident, setAddingIncident] = useState(false);
   const [detailIncident, setDetailIncident] = useState<IncidentClientData | null>(null);
-  const [followUpParent, setFollowUpParent] = useState<IncidentClientData | null>(null);
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
-  const [emailLogs, setEmailLogs] = useState<EmailLogRow[]>([]);
   // Layout ("Upravit rozvržení"): section order/visibility + the notes list (= health notes with place "detail").
   const [layoutData, setLayoutData] = useState<{ saved: PageLayout | null; healthConfig: HealthNoteConfig[]; fields: NoteField[] } | null>(null);
   const [draft, setDraft] = useState<{ layout: PageLayout; notes: string[] } | null>(null);
@@ -133,9 +130,11 @@ export default function ParticipantDetailPage({
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [layoutSaved, setLayoutSaved] = useState(false);
   const [notesVersion, setNotesVersion] = useState(0);
+  // Display values for the own read-only sections ("fields").
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
+  const [collapsedSections, toggleSection] = useCollapsed(`layoutCollapsed:${eventId}:health`);
+  const [adjacent, setAdjacent] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
   const healthNotes = useHealthNotes(eventId, participantId, "detail", notesVersion);
-  const [documents, setDocuments] = useState<ParticipantDocumentRow[]>([]);
-  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const [medPlans, setMedPlans] = useState<MedPlan[]>([]);
   const [eventMeds, setEventMeds] = useState<NamedListItem[]>([]);
@@ -246,16 +245,6 @@ export default function ParticipantDetailPage({
     loadLayout();
   }
 
-  // Bin on a custom note: deletes the field itself (Proměnné), right away.
-  async function deleteNoteField(key: string) {
-    const f = layoutData?.fields.find((x) => x.key === key);
-    if (!f || !(await confirm({ message: t("layoutEditor.deleteFieldConfirm", { name: f.label }), danger: true }))) return;
-    const res = await fetch(`/api/events/${eventId}/participant-fields/${f.id}`, { method: "DELETE" });
-    if (!res.ok) return setLayoutError(t("layoutEditor.saveFailed"));
-    setLayoutData((d) => d && { ...d, fields: d.fields.filter((x) => x.key !== key), healthConfig: d.healthConfig.filter((c) => c.fieldKey !== key) });
-    setDraft((d) => d && { ...d, notes: d.notes.filter((k) => k !== key) });
-    setNotesVersion((v) => v + 1);
-  }
 
   async function load() {
     setLoading(true);
@@ -270,30 +259,16 @@ export default function ParticipantDetailPage({
     if (res.ok) setIncidents(await res.json());
   }
 
-  async function loadEmailLogs() {
-    const res = await fetch(`/api/participants/${participantId}/emails`);
-    if (res.ok) setEmailLogs(await res.json());
-  }
-
-  async function loadDocuments() {
-    const res = await fetch(`/api/participants/${participantId}/documents`);
-    if (res.ok) setDocuments(await res.json());
-  }
-
-  async function handleResend(log: EmailLogRow) {
-    setResendingId(log.id);
-    await fetch(`/api/participants/${participantId}/emails/${log.id}/resend`, { method: "POST" });
-    setResendingId(null);
-    loadEmailLogs();
-  }
 
   useEffect(() => {
     load();
     loadIncidents();
     loadMedPlans();
-    loadEmailLogs();
-    loadDocuments();
     loadLayout();
+    fetch(`/api/participants/${participantId}/field-values`)
+      .then((r) => (r.ok ? r.json() : { values: {} }))
+      .then((d: { values: Record<string, string> }) => setFieldValues(d.values))
+      .catch(() => {});
     // Part 7: "Otevřít složku na Disku" only shows when it would actually work --
     // folders are created lazily on first click, so the real prerequisite is
     // just whether the event has a participants-root (or export) folder set.
@@ -304,6 +279,22 @@ export default function ParticipantDetailPage({
       )
       .catch(() => {});
   }, [participantId, eventId]);
+
+  useEffect(() => {
+    const place = (ids: string[]) => {
+      const i = ids.indexOf(participantId);
+      setAdjacent({ prev: i > 0 ? ids[i - 1] : null, next: i >= 0 && i < ids.length - 1 ? ids[i + 1] : null });
+    };
+    let stored: unknown = [];
+    try {
+      stored = JSON.parse(sessionStorage.getItem(`healthOrder:${eventId}`) ?? "[]");
+    } catch {}
+    if (Array.isArray(stored) && stored.includes(participantId)) return place(stored as string[]);
+    fetch(`/api/events/${eventId}/participants`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: { id: string }[]) => place(rows.map((r) => r.id)))
+      .catch(() => {});
+  }, [eventId, participantId]);
 
   function handleIncidentChanged() {
     loadIncidents();
@@ -423,9 +414,9 @@ export default function ParticipantDetailPage({
   // list -- excluded here so it isn't shown twice.
   const generalNotes = healthNotes && healthNotes.filter((n) => n.key !== "medsNotes");
 
-  const layout = resolveHealthLayout(layoutData?.saved);
-  const view = draft?.layout ?? layout;
   const noteFields = layoutData?.fields ?? [];
+  const layout = resolveHealthLayout(layoutData?.saved, new Set(noteFields.map((f) => f.key)));
+  const view = draft?.layout ?? layout;
   const noteLabel = (key: string) => noteFields.find((f) => f.key === key)?.label ?? key;
   const editLayout = (fn: (l: PageLayout) => PageLayout) => setDraft((d) => d && { ...d, layout: fn(d.layout) });
   const startEditing = () => {
@@ -436,52 +427,12 @@ export default function ParticipantDetailPage({
   };
 
   // Sections in layout order (Upravit rozvržení); each body as the page always showed it.
-  const sectionBody: Record<HealthSectionKind, React.ReactNode> = {
+  const sectionBody: Record<Exclude<HealthSectionKind, "fields">, React.ReactNode> = {
     notes: (
       <>
         <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.notesTitle")}</h2>
         {/* Which notes, in what order: Nastavení akce -> Zdraví -> Zdravotní poznámky (place "detail"). */}
         <HealthNotesBox notes={generalNotes} className="rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink" />
-      </>
-    ),
-    documents: (
-      <>
-        {/* Part 11-D: what the inbox (or a manual mark) saved, checkable without opening
-            Drive. Grouped by document type, "Typ — N souborů" (Part 11-C's own wording),
-            each file with its received date/source and a Drive link when synced. */}
-        <h2 className="mb-2 text-[16px] font-semibold text-ink">{t("participantDetail.documentsTitle")}</h2>
-        {documents.length === 0 ? (
-          <p className="text-[14px] text-ink-secondary">{t("participantDetail.documentsEmpty")}</p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {Object.entries(
-              documents.reduce<Record<string, ParticipantDocumentRow[]>>((acc, d) => {
-                (acc[d.docTypeName] ??= []).push(d);
-                return acc;
-              }, {})
-            ).map(([docTypeName, files]) => (
-              <div key={docTypeName} className="rounded-lg border border-mist/60 p-2">
-                <p className="mb-1 text-[13px] font-medium text-ink">
-                  {t("participantDetail.documentsFileCount", { name: docTypeName, count: String(files.length) })}
-                </p>
-                <ul className="flex flex-col gap-0.5">
-                  {files.map((f) => (
-                    <li key={f.id} className="flex flex-wrap items-center gap-2 text-[12px] text-ink-secondary">
-                      <span>{f.filename || "—"}</span>
-                      <span>· {new Date(f.receivedAt).toLocaleDateString("cs-CZ")}</span>
-                      <span>· {t(`participantDetail.documentsVia.${f.receivedVia}`)}</span>
-                      {f.driveUrl && (
-                        <a href={f.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
-                          {t("participantDetail.documentsOpenInDrive")}
-                        </a>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
       </>
     ),
     guardians: (
@@ -721,7 +672,7 @@ export default function ParticipantDetailPage({
       <>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-[16px] font-semibold text-ink">{t("incidentsPage.title")}</h2>
-          <button onClick={() => setAddingIncident(true)} className="text-[13px] text-ember hover:underline">
+          <button onClick={() => router.push(`/events/${eventId}/health/participants/${participantId}/incident`)} className="text-[13px] text-ember hover:underline">
             {t("incidentsPage.addButton")}
           </button>
         </div>
@@ -770,7 +721,7 @@ export default function ParticipantDetailPage({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setFollowUpParent(inc);
+                        router.push(`/events/${eventId}/health/participants/${participantId}/incident?followUp=${inc.id}`);
                       }}
                       className="text-[13px] text-ember hover:underline"
                     >
@@ -806,19 +757,30 @@ export default function ParticipantDetailPage({
         )}
       </>
     ),
-    emails: (
-      <>
-        <h2 className="mb-3 text-[16px] font-semibold text-ink">{t("sendLog.title")}</h2>
-        <ParentEmailLogTable logs={emailLogs} onResend={handleResend} resendingId={resendingId} />
-      </>
-    ),
   };
 
   return (
     <div className="mx-auto max-w-3xl p-4 md:p-8">
-      <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
-        ← {t("participantsPage.title")}
-      </a>
+      <div className="flex items-center justify-between gap-2">
+        <a href={`/events/${eventId}/health`} className="text-[13px] text-ink-secondary hover:text-ink">
+          ← {t("participantsPage.title")}
+        </a>
+        <div className="flex items-center gap-1">
+          {(["prev", "next"] as const).map((dir) => (
+            <button
+              key={dir}
+              type="button"
+              onClick={() => adjacent[dir] && router.push(`/events/${eventId}/health/participants/${adjacent[dir]}`)}
+              disabled={!adjacent[dir] || !!draft}
+              title={t(`participantDetail.${dir}`)}
+              aria-label={t(`participantDetail.${dir}`)}
+              className="rounded-lg border border-mist p-1.5 text-ink-secondary hover:bg-paper-2 disabled:opacity-40 disabled:hover:bg-transparent"
+            >
+              {dir === "prev" ? <ChevronLeft size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="mb-4 mt-2 flex items-start justify-between gap-3">
         <div>
@@ -833,14 +795,14 @@ export default function ParticipantDetailPage({
               .filter(Boolean)
               .join(" · ")}
           </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             {hasDriveFolder && (
-              <button onClick={openDriveFolder} className="text-[13px] text-ember hover:underline">
+              <button onClick={openDriveFolder} className={btnSecondary}>
                 {t("participantDetail.openDriveFolder")}
               </button>
             )}
             {!draft && layoutData && (
-              <button onClick={startEditing} className="text-[13px] text-ember hover:underline">
+              <button onClick={startEditing} className={btnSecondary}>
                 {t("layoutEditor.edit")}
               </button>
             )}
@@ -894,10 +856,76 @@ export default function ParticipantDetailPage({
         const kind = s.kind as HealthSectionKind;
         if (!draft) {
           if (s.hidden || (kind === "medsReported" && !participant.customFieldValues?.medsNotes)) return null;
+          if (kind === "fields") {
+            // Own read-only section of chosen variables (folds; remembered per browser).
+            const shown = (s.fields ?? []).filter((k) => fieldValues[k]?.trim());
+            if (!shown.length) return null;
+            const folded = collapsedSections.has(s.id);
+            return (
+              <section key={s.id} className="mb-6">
+                <button type="button" onClick={() => toggleSection(s.id)} aria-expanded={!folded} className="mb-2 flex items-center gap-1 text-left text-[16px] font-semibold text-ink hover:text-ember">
+                  <ChevronRight size={16} className={"transition-transform " + (folded ? "" : "rotate-90")} aria-hidden="true" />
+                  {s.title || t(HEALTH_SECTION_TITLES.fields)}
+                </button>
+                {!folded && (
+                  <div className="flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-3 text-[14px] text-ink">
+                    {shown.map((k) => (
+                      <p key={k}>
+                        <strong>{noteLabel(k)}:</strong> <span className="whitespace-pre-wrap">{fieldValues[k]}</span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          }
           return (
             <section key={s.id} className="mb-6">
               {sectionBody[kind]}
             </section>
+          );
+        }
+        const toggleHidden = () => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, hidden: !x.hidden } : x)) }));
+        const dropSection = () => {
+          if (drag?.type === "section") editLayout((l) => moveSection(l, drag.id, s.id, "left"));
+          if (drag?.type === "field" && kind === "fields" && !draft.notes.includes(drag.key)) editLayout((l) => moveField(l, drag.key, s.id));
+          setDrag(null);
+        };
+        if (kind === "fields") {
+          const keys = s.fields ?? [];
+          return (
+            <div key={s.id} className="mb-3">
+              <SectionCard
+                title={s.title ?? ""}
+                onTitleChange={(v) => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, title: v } : x)) }))}
+                titlePlaceholder={t(HEALTH_SECTION_TITLES.fields)}
+                hidden={s.hidden}
+                onToggleHidden={toggleHidden}
+                onRemove={() => editLayout((l) => ({ ...l, sections: l.sections.filter((x) => x.id !== s.id) }))}
+                onDragStart={() => setDrag({ type: "section", id: s.id })}
+                onDrop={dropSection}
+                dragging={drag?.type === "section" && drag.id === s.id}
+              >
+                {keys.map((k) => (
+                  <FieldRow
+                    key={k}
+                    label={noteLabel(k)}
+                    onHide={() => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, fields: keys.filter((y) => y !== k) } : x)) }))}
+                    onDragStart={() => setDrag({ type: "field", key: k })}
+                    onDrop={() => {
+                      if (drag?.type === "field" && !draft.notes.includes(drag.key)) editLayout((l) => moveField(l, drag.key, s.id, k));
+                      setDrag(null);
+                    }}
+                    dragging={drag?.type === "field" && drag.key === k}
+                  />
+                ))}
+                {!keys.length && <p className="text-[12px] text-ink-secondary">{t("layoutEditor.emptySection")}</p>}
+                <AddFieldSelect
+                  options={noteFields.filter((f) => !keys.includes(f.key)).map((f) => ({ key: f.key, label: f.label }))}
+                  onAdd={(k) => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, fields: [...keys, k] } : x)) }))}
+                />
+              </SectionCard>
+            </div>
           );
         }
         return (
@@ -905,12 +933,9 @@ export default function ParticipantDetailPage({
             <SectionCard
               title={t(HEALTH_SECTION_TITLES[kind])}
               hidden={s.hidden}
-              onToggleHidden={() => editLayout((l) => ({ ...l, sections: l.sections.map((x) => (x.id === s.id ? { ...x, hidden: !x.hidden } : x)) }))}
+              onToggleHidden={toggleHidden}
               onDragStart={() => setDrag({ type: "section", id: s.id })}
-              onDrop={() => {
-                if (drag?.type === "section") editLayout((l) => moveSection(l, drag.id, s.id, "left"));
-                setDrag(null);
-              }}
+              onDrop={dropSection}
               dragging={drag?.type === "section" && drag.id === s.id}
             >
               {kind === "notes" ? (
@@ -920,7 +945,6 @@ export default function ParticipantDetailPage({
                       key={k}
                       label={noteLabel(k)}
                       onHide={() => setDraft((d) => d && { ...d, notes: d.notes.filter((x) => x !== k) })}
-                      onDelete={noteFields.find((f) => f.key === k)?.kind === "custom" ? () => deleteNoteField(k) : undefined}
                       onDragStart={() => setDrag({ type: "field", key: k })}
                       onDrop={() => {
                         if (drag?.type === "field") setDraft((d) => d && { ...d, notes: moveBefore(d.notes, drag.key, k) });
@@ -949,7 +973,17 @@ export default function ParticipantDetailPage({
               if (drag?.type === "section") editLayout((l) => moveSection(l, drag.id, null, "left"));
               setDrag(null);
             }}
-          />
+          >
+            <button
+              type="button"
+              onClick={() =>
+                editLayout((l) => ({ ...l, sections: [...l.sections, { id: `s${Date.now().toString(36)}`, kind: "fields", column: "left", title: t("layoutEditor.newSectionTitle"), fields: [] }] }))
+              }
+              className="text-[13px] text-ember hover:underline"
+            >
+              + {t("layoutEditor.newSection")}
+            </button>
+          </DropZone>
           <LayoutEditorBar saving={layoutSaving} error={layoutError} onCancel={() => setDraft(null)} onSave={saveLayout} />
         </>
       )}
@@ -958,30 +992,11 @@ export default function ParticipantDetailPage({
         <SendSummaryModal
           participantId={participantId}
           onClose={() => setSendModalOpen(false)}
-          onSent={loadEmailLogs}
+          onSent={() => {}}
         />
       )}
 
-      {addingIncident && (
-        <IncidentFormModal
-          eventId={eventId}
-          participantId={participantId}
-          mode="new"
-          onClose={() => setAddingIncident(false)}
-          onSaved={loadIncidents}
-        />
-      )}
 
-      {followUpParent && (
-        <IncidentFormModal
-          eventId={eventId}
-          participantId={participantId}
-          mode="follow-up"
-          incident={followUpParent}
-          onClose={() => setFollowUpParent(null)}
-          onSaved={loadIncidents}
-        />
-      )}
 
       {detailIncident && (
         <IncidentDetailModal

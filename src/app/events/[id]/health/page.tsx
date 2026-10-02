@@ -5,12 +5,15 @@ import { useTranslations } from "@/lib/i18n";
 import type { HealthNote } from "@/lib/health-notes";
 import { calculateAge } from "@/lib/age";
 import { participantListName } from "@/lib/participant-name";
-import IncidentFormModal from "@/components/health/IncidentFormModal";
+import { useRouter } from "next/navigation";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import ColumnPicker from "@/components/ColumnPicker";
+import { columnValue, type ColumnParticipant } from "@/lib/participant-columns";
+import type { ParticipantFieldDef } from "@/lib/participant-fields";
 
-type EventBasic = { id: string; name: string };
+type EventBasic = { id: string; name: string; healthListColumns: string[] | null };
 
-type Participant = {
+type Participant = ColumnParticipant & {
   id: string;
   name: string;
   firstName: string | null;
@@ -39,7 +42,9 @@ export default function EventHealthPage({
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [incidentParticipantId, setIncidentParticipantId] = useState<string | null>(null);
+  const router = useRouter();
+  // Optional field columns ("Sloupce", Event.healthListColumns): any field except built-in/image.
+  const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
   // Every configured health note (with its places): the "Seznam Zdraví" column + highlight badges.
   const [notes, setNotes] = useState<Record<string, HealthNote[]>>({});
@@ -56,12 +61,14 @@ export default function EventHealthPage({
 
   async function load() {
     setLoading(true);
-    const [evRes, partRes, signalsRes, notesRes] = await Promise.all([
+    const [evRes, partRes, signalsRes, notesRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/participants`),
       fetch(`/api/events/${id}/participants/health-signals`),
       fetch(`/api/events/${id}/health-notes/values?place=all`),
+      fetch(`/api/events/${id}/participant-fields`),
     ]);
+    if (fieldsRes.ok) setFields(await fieldsRes.json());
     if (notesRes.ok) setNotes((await notesRes.json()).notes);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
@@ -84,6 +91,23 @@ export default function EventHealthPage({
   }, [participants, searchQuery]);
 
   const medSet = useMemo(() => new Set(signals.medPlanParticipantIds), [signals]);
+  const columnOptions = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.fieldType !== "image"), [fields]);
+  const activeColumns = useMemo(
+    () => (event?.healthListColumns ?? []).map((k) => columnOptions.find((f) => f.key === k)).filter((f): f is ParticipantFieldDef => !!f),
+    [event, columnOptions]
+  );
+
+  // The whole row opens the Zdraví detail; its previous/next follow this list as shown.
+  function openDetail(pid: string) {
+    try {
+      sessionStorage.setItem(`healthOrder:${id}`, JSON.stringify(filteredParticipants.map((p) => p.id)));
+    } catch {}
+    router.push(`/events/${id}/health/participants/${pid}`);
+  }
+  const newIncident = (e: React.MouseEvent, pid: string) => {
+    e.stopPropagation();
+    router.push(`/events/${id}/health/participants/${pid}/incident?from=list`);
+  };
 
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
@@ -125,6 +149,26 @@ export default function EventHealthPage({
         >
           {t("bulkSendSummaries.entryPoint")}
         </a>
+        {columnOptions.length > 0 && (
+          <ColumnPicker
+            options={columnOptions.map((f) => ({ key: f.key, label: f.label }))}
+            shown={activeColumns.map((f) => f.key)}
+            labels={{
+              button: t("participantsPage.columnsButton"),
+              title: t("participantsPage.columnsPickerTitle"),
+              dragHint: t("participantsPage.columnsDragHint"),
+              notShown: t("participantsPage.columnsNotShown"),
+            }}
+            onSave={async (keys) => {
+              await fetch(`/api/events/${id}/health-list-columns`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ keys }),
+              });
+              await load();
+            }}
+          />
+        )}
         {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
         <a href={`/events/${id}/participants`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
           {t("participantsPage.manageButton")}
@@ -147,6 +191,9 @@ export default function EventHealthPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colIncidents")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colMeds")}</th>
                 {anyListNotes && <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantDetail.notesTitle")}</th>}
+                {activeColumns.map((f) => (
+                  <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                ))}
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -156,18 +203,10 @@ export default function EventHealthPage({
                 const count = signals.incidentCount[p.id] ?? 0;
                 const lastAt = signals.lastIncidentAt[p.id];
                 return (
-                  <tr key={p.id} className="border-b border-mist/60 hover:bg-paper-2">
-                    <td className="p-2 text-[14px]">
-                      <a href={`/events/${id}/health/participants/${p.id}`} className="text-ember hover:underline">
-                        {participantListName(p)}
-                      </a>
+                  <tr key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer border-b border-mist/60 hover:bg-paper-2">
+                    <td className="p-2 text-[14px] font-medium text-ink">
+                      {participantListName(p)}
                       {warning(p.id)}
-                      <a
-                        href={`/events/${id}/participants/${p.id}`}
-                        className="ml-2 text-[11.5px] text-ink-secondary hover:text-ink hover:underline"
-                      >
-                        {t("healthPage.openInRosterLink")}
-                      </a>
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
@@ -202,11 +241,13 @@ export default function EventHealthPage({
                         ))}
                       </td>
                     )}
+                    {activeColumns.map((f) => (
+                      <td key={f.key} className="max-w-[220px] p-2 text-[13px] text-ink-secondary">
+                        {columnValue(f, p)}
+                      </td>
+                    ))}
                     <td className="whitespace-nowrap p-2 text-right">
-                      <button
-                        onClick={() => setIncidentParticipantId(p.id)}
-                        className="text-[13px] text-ember hover:underline"
-                      >
+                      <button onClick={(e) => newIncident(e, p.id)} className="text-[13px] text-ember hover:underline">
                         {t("participantsPage.addIncidentButton")}
                       </button>
                     </td>
@@ -223,12 +264,10 @@ export default function EventHealthPage({
             const age = calculateAge(p.dateOfBirth);
             const count = signals.incidentCount[p.id] ?? 0;
             return (
-              <div key={p.id} className="rounded-lg border border-mist bg-paper-2 p-3">
+              <div key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer rounded-lg border border-mist bg-paper-2 p-3">
                 <div className="mb-1 flex items-start justify-between gap-2">
-                  <span className="min-w-0">
-                    <a href={`/events/${id}/health/participants/${p.id}`} className="text-[14px] font-medium text-ember hover:underline">
-                      {participantListName(p)}
-                    </a>
+                  <span className="min-w-0 text-[14px] font-medium text-ink">
+                    {participantListName(p)}
                     {warning(p.id)}
                   </span>
                   <div className="flex shrink-0 items-center gap-1.5 text-[12px]">
@@ -255,11 +294,18 @@ export default function EventHealthPage({
                     <strong>{n.label}:</strong> {n.value}
                   </div>
                 ))}
-                <div className="mt-2 flex items-center justify-between">
-                  <a href={`/events/${id}/participants/${p.id}`} className="text-[12px] text-ink-secondary hover:text-ink hover:underline">
-                    {t("healthPage.openInRosterLink")}
-                  </a>
-                  <button onClick={() => setIncidentParticipantId(p.id)} className="text-[13px] text-ember hover:underline">
+                {activeColumns.length > 0 && (
+                  <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[12px]">
+                    {activeColumns.map((f) => (
+                      <div key={f.key} className="contents">
+                        <dt className="text-ink-secondary">{f.label}</dt>
+                        <dd className="min-w-0 break-words text-ink">{columnValue(f, p)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                <div className="mt-2 flex items-center justify-end">
+                  <button onClick={(e) => newIncident(e, p.id)} className="text-[13px] text-ember hover:underline">
                     {t("participantsPage.addIncidentButton")}
                   </button>
                 </div>
@@ -270,15 +316,6 @@ export default function EventHealthPage({
         </>
       )}
 
-      {incidentParticipantId && (
-        <IncidentFormModal
-          eventId={id}
-          participantId={incidentParticipantId}
-          mode="new"
-          onClose={() => setIncidentParticipantId(null)}
-          onSaved={() => setIncidentParticipantId(null)}
-        />
-      )}
 
     </div>
   );
