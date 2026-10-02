@@ -5,6 +5,18 @@ import { uploadFileToFolder } from "@/lib/drive";
 import { resolveIncidentState, type EffectiveIncident } from "@/lib/incident-state";
 import { buildParentSummaryHtml, type SummaryIncident, type MedConfirmationRow } from "@/lib/parent-summary-template";
 import { healthNotesByParticipant } from "@/lib/health-notes-server";
+import fs from "node:fs";
+import path from "node:path";
+
+// The body-map silhouettes (public/body-map) embedded in the PDF, read once.
+let bodyMapCache: { front: string; back: string } | null = null;
+function bodyMapDataUris() {
+  if (!bodyMapCache) {
+    const uri = (v: string) => `data:image/png;base64,${fs.readFileSync(path.join(process.cwd(), "public", "body-map", `${v}.png`)).toString("base64")}`;
+    bodyMapCache = { front: uri("front"), back: uri("back") };
+  }
+  return bodyMapCache;
+}
 import { fetchMedChecklistGrid } from "@/lib/med-checklist-grid";
 
 export async function loadParticipantSummaryIncidents(participantId: string): Promise<SummaryIncident[]> {
@@ -81,6 +93,7 @@ export async function generateParticipantSummaryPdf(
     participantName: participant.name,
     groupName: participant.groupName,
     notes,
+    bodyMapImages: bodyMapDataUris(),
     incidents,
     medConfirmation: { days: grid.days, rows: medRows },
   });

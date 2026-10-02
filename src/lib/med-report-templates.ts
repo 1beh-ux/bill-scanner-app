@@ -5,13 +5,10 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 }
 
-function checkbox(checked: boolean): string {
-  return `<span class="box">${checked ? "&#9745;" : "&#9744;"}</span>`;
-}
-
+// "po 5. 10." -- weekday with the date (same as the app).
 function formatDay(iso: string): string {
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+  return d.toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" });
 }
 
 /** Runs of consecutive columns sharing the same day, for building colspan'd day headers. */
@@ -58,13 +55,14 @@ function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: num
       margin: 0 auto;
       font-weight: 500;
     }
-    .box { font-size: ${fontSizePt + 1}px; line-height: 1; }
     tr.shade-b td { background: #f3f3f3; }
     tr.group-first td { border-top: 2px solid #333; }
     tr.group-last td { border-bottom: 2px solid #333; }
     td.group-edge-left { border-left: 2px solid #333; }
     td.group-edge-right { border-right: 2px solid #333; }
     th.day-start, td.day-start { border-left: 2px solid #333; }
+    td.chk { padding: 0; }
+    td.chk.given { background: #C2652E; color: #fff; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     p.gluehint { font-size: 10px; color: #777; margin: 4px 0 0; }
   `;
 }
@@ -133,7 +131,9 @@ function renderBandTable(opts: {
             .join(" ");
           if (!row.slotIds.includes(col.slotId)) return `<td class="${cellClass}"></td>`;
           const status = row.days[col.day]?.[col.slotId];
-          return `<td class="${cellClass}">${checkbox(mode === "hybrid" && !!status?.given)}</td>`;
+          // The cell is the box: given = filled orange with a tick, else empty for a hand tick.
+          const given = mode === "hybrid" && !!status?.given;
+          return `<td class="${cellClass} chk${given ? " given" : ""}">${given ? "&#10003;" : ""}</td>`;
         })
         .join("");
       return `

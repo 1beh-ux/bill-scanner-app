@@ -43,8 +43,9 @@ function clamp(iso: string, min: string, max: string): string {
   if (iso > max) return max;
   return iso;
 }
+// "po 5. 10." -- weekday with the date (same in the PDF export).
 function formatDayShort(iso: string): string {
-  return new Date(iso).toLocaleDateString("cs-CZ", { day: "numeric", month: "numeric" });
+  return new Date(iso.slice(0, 10) + "T00:00:00").toLocaleDateString("cs-CZ", { weekday: "short", day: "numeric", month: "numeric" });
 }
 
 /** Row index -> group metadata, assuming rows are already grouped/sorted by participant (server-side orderBy). */
@@ -384,8 +385,8 @@ export default function MedChecklistPage({
                         }
                         const status = row.days[day]?.[slot.id];
                         return (
-                          <td key={`${day}:${slot.id}`} className={`p-0.5 text-center ${cellClasses(i, position, isDayStart)}`}>
-                            <input type="checkbox" checked={!!status?.given} onChange={() => toggleCell(row, day, slot.id)} />
+                          <td key={`${day}:${slot.id}`} className={`p-0 text-center ${cellClasses(i, position, isDayStart)}`}>
+                            <GivenToggle given={!!status?.given} onToggle={() => toggleCell(row, day, slot.id)} />
                           </td>
                         );
                       })
@@ -437,10 +438,12 @@ export default function MedChecklistPage({
                                 {slotsForRow.map((slot) => {
                                   const status = row.days[day]?.[slot.id];
                                   return (
-                                    <label key={slot.id} className="flex items-center gap-1">
-                                      <input type="checkbox" checked={!!status?.given} onChange={() => toggleCell(row, day, slot.id)} />
+                                    <span key={slot.id} className="flex items-center gap-1">
+                                      <span className="inline-block h-6 w-7 overflow-hidden rounded border border-mist">
+                                        <GivenToggle given={!!status?.given} onToggle={() => toggleCell(row, day, slot.id)} />
+                                      </span>
                                       {slot.name}
-                                    </label>
+                                    </span>
                                   );
                                 })}
                               </div>
@@ -457,5 +460,22 @@ export default function MedChecklistPage({
         </>
       )}
     </div>
+  );
+}
+
+/** A dose cell's tick: fills the whole cell; given = orange with a white tick. */
+function GivenToggle({ given, onToggle }: { given: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={given}
+      className={
+        "flex h-full min-h-6 w-full items-center justify-center text-[13px] font-bold leading-none transition-colors " +
+        (given ? "bg-ember text-white hover:bg-ember-hover" : "text-transparent hover:bg-ember/15")
+      }
+    >
+      ✓
+    </button>
   );
 }

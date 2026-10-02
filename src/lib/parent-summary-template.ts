@@ -1,3 +1,4 @@
+import { BODY_MAP_DOT_R, BODY_MAP_H, BODY_MAP_W } from "@/lib/body-map";
 import type { EffectiveIncident } from "@/lib/incident-state";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -8,26 +9,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: "Ostatní",
 };
 
-// Same schematic humanoid outline as src/components/health/BodyMapPicker.tsx
-// -- inline SVG there too, so this string is the literal print-time
-// counterpart rather than a new asset.
-const BODY_OUTLINE_PATHS = `
-  <g fill="#444" stroke="none">
-    <line x1="85" y1="188" x2="78" y2="288" stroke="#444" stroke-width="26" stroke-linecap="round" />
-    <line x1="78" y1="288" x2="72" y2="384" stroke="#444" stroke-width="20" stroke-linecap="round" />
-    <line x1="115" y1="188" x2="122" y2="288" stroke="#444" stroke-width="26" stroke-linecap="round" />
-    <line x1="122" y1="288" x2="128" y2="384" stroke="#444" stroke-width="20" stroke-linecap="round" />
-    <ellipse cx="70" cy="390" rx="11" ry="7" />
-    <ellipse cx="130" cy="390" rx="11" ry="7" />
-    <line x1="68" y1="72" x2="44" y2="140" stroke="#444" stroke-width="22" stroke-linecap="round" />
-    <line x1="44" y1="140" x2="37" y2="204" stroke="#444" stroke-width="18" stroke-linecap="round" />
-    <line x1="132" y1="72" x2="156" y2="140" stroke="#444" stroke-width="22" stroke-linecap="round" />
-    <line x1="156" y1="140" x2="163" y2="204" stroke="#444" stroke-width="18" stroke-linecap="round" />
-    <circle cx="37" cy="210" r="9" />
-    <circle cx="163" cy="210" r="9" />
-    <path d="M 66 62 L 134 62 L 128 190 Q 100 202 72 190 Z" />
-    <circle cx="100" cy="33" r="25" />
-  </g>`;
 
 const BASE_STYLE = `
   * { box-sizing: border-box; }
@@ -127,20 +108,22 @@ function renderIncidentBlock(inc: SummaryIncident): string {
     </div>`;
 }
 
-function renderBodyMap(view: "front" | "back", label: string, markers: { code: string; xPct: number; yPct: number }[]): string {
+function renderBodyMap(label: string, imageDataUri: string, markers: { code: string; xPct: number; yPct: number }[]): string {
+  // Same image, ratio and % positions as the app's body map (src/lib/body-map.ts).
   const dots = markers
-    .map(
-      (m) => `
-      <circle cx="${(m.xPct / 100) * 200}" cy="${(m.yPct / 100) * 400}" r="9" fill="#e05d38" stroke="white" stroke-width="1.5" />
-      <text x="${(m.xPct / 100) * 200}" y="${(m.yPct / 100) * 400 + 3.5}" font-size="9" fill="white" text-anchor="middle" font-weight="bold">${m.code}</text>`
-    )
+    .map((m) => {
+      const x = (m.xPct / 100) * BODY_MAP_W;
+      const y = (m.yPct / 100) * BODY_MAP_H;
+      return `
+      <circle cx="${x}" cy="${y}" r="${BODY_MAP_DOT_R}" fill="#e05d38" stroke="white" stroke-width="3" />
+      <text x="${x}" y="${y + 6}" font-size="16" fill="white" text-anchor="middle" font-weight="bold">${m.code}</text>`;
+    })
     .join("");
 
   return `
     <div class="bodymap-col">
-      <svg viewBox="0 0 200 400" width="180" height="360">
-        <rect width="200" height="400" fill="#f5f5f5" rx="8" />
-        ${BODY_OUTLINE_PATHS}
+      <svg viewBox="0 0 ${BODY_MAP_W} ${BODY_MAP_H}" width="164" height="${Math.round((164 * BODY_MAP_H) / BODY_MAP_W)}">
+        <image href="${imageDataUri}" x="0" y="0" width="${BODY_MAP_W}" height="${BODY_MAP_H}" />
         ${dots}
       </svg>
       <div><span>${label}</span></div>
@@ -156,6 +139,8 @@ export function buildParentSummaryHtml(opts: {
   notes: { label: string; value: string; highlight: boolean }[];
   incidents: SummaryIncident[];
   medConfirmation: { days: string[]; rows: MedConfirmationRow[] };
+  // public/body-map images as data URIs (the PDF renderer can't fetch app URLs).
+  bodyMapImages: { front: string; back: string };
 }): string {
   const { campName, generatedAt, participantName, groupName, notes, incidents, medConfirmation } = opts;
 
@@ -177,8 +162,8 @@ export function buildParentSummaryHtml(opts: {
   const bodyMapsHtml =
     frontMarkers.length + backMarkers.length > 0
       ? `<div class="bodymaps">
-          ${renderBodyMap("front", "Přední", frontMarkers)}
-          ${renderBodyMap("back", "Zadní", backMarkers)}
+          ${renderBodyMap("Přední", opts.bodyMapImages.front, frontMarkers)}
+          ${renderBodyMap("Zadní", opts.bodyMapImages.back, backMarkers)}
         </div>`
       : "";
 

@@ -256,7 +256,9 @@ export default function IncidentFormModal({
   // variant puts them side by side; the modal stacks them).
   const mainFields = (
     <>
-          <div className="flex flex-wrap items-center gap-1.5">
+          {/* Every field has a visible name (like Fotka / Umístění na těle), not just a placeholder. */}
+          <div className="mb-1 text-[13px] text-ink-secondary">{t("incidentForm.dateLabel")}</div>
+          <div className="-mt-2 flex flex-wrap items-center gap-1.5">
             <button
               type="button"
               onClick={() => setIncidentDate((d) => shiftDate(d, -1))}
@@ -294,6 +296,7 @@ export default function IncidentFormModal({
             </p>
           ) : (
             <>
+              {situations.length > 0 && <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.situationsLabel")}</div>}
               {situations.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {situations.map((s) => (
@@ -308,6 +311,7 @@ export default function IncidentFormModal({
                   ))}
                 </div>
               )}
+              <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.categoryLabel")}</div>
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value as IncidentCategory)}
@@ -322,6 +326,7 @@ export default function IncidentFormModal({
             </>
           )}
 
+          <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.summaryLabel")}</div>
           <input
             type="text"
             placeholder={t("incidentForm.summaryLabel")}
@@ -331,6 +336,7 @@ export default function IncidentFormModal({
             autoFocus
           />
 
+          {category !== "injury" && <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.tempLabel")}</div>}
           {category !== "injury" && (
             <input
               type="number"
@@ -342,6 +348,7 @@ export default function IncidentFormModal({
             />
           )}
 
+          <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.medLabel")}</div>
           {meds.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <select
@@ -376,6 +383,7 @@ export default function IncidentFormModal({
             />
           )}
 
+          <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.detailsLabel")}</div>
           <textarea
             placeholder={t("incidentForm.detailsLabel")}
             value={details}
