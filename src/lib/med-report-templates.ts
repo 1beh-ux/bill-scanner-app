@@ -62,6 +62,7 @@ function baseStyle(fontSizePt: number, colWidthMm: number, stickyColWidthMm: num
     td.group-edge-right { border-right: 2px solid #333; }
     th.day-start, td.day-start { border-left: 2px solid #333; }
     td.chk { padding: 0; }
+    td.chk .todo { display: block; min-height: ${fontSizePt + 4}px; margin: 1px; border: 1.5px solid #C2652E; border-radius: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     td.chk.given { background: #C2652E; color: #fff; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     p.gluehint { font-size: 10px; color: #777; margin: 4px 0 0; }
   `;
@@ -131,9 +132,10 @@ function renderBandTable(opts: {
             .join(" ");
           if (!row.slotIds.includes(col.slotId)) return `<td class="${cellClass}"></td>`;
           const status = row.days[col.day]?.[col.slotId];
-          // The cell is the box: given = filled orange with a tick, else empty for a hand tick.
+          // A planned dose: given = filled orange with a tick; still to give = an
+          // orange-outlined box for the hand tick (unplanned cells stay plain).
           const given = mode === "hybrid" && !!status?.given;
-          return `<td class="${cellClass} chk${given ? " given" : ""}">${given ? "&#10003;" : ""}</td>`;
+          return `<td class="${cellClass} chk${given ? " given" : ""}">${given ? "&#10003;" : '<span class="todo"></span>'}</td>`;
         })
         .join("");
       return `

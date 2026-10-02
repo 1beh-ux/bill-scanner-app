@@ -463,7 +463,11 @@ export default function MedChecklistPage({
   );
 }
 
-/** A dose cell's tick: fills the whole cell; given = orange with a white tick. */
+/**
+ * A planned dose's tick, filling the whole cell: given = solid orange with a
+ * white tick; still to give = orange outline (cells with no dose planned have
+ * no toggle at all, so the two are told apart at a glance).
+ */
 function GivenToggle({ given, onToggle }: { given: boolean; onToggle: () => void }) {
   return (
     <button
@@ -472,7 +476,7 @@ function GivenToggle({ given, onToggle }: { given: boolean; onToggle: () => void
       aria-pressed={given}
       className={
         "flex h-full min-h-6 w-full items-center justify-center text-[13px] font-bold leading-none transition-colors " +
-        (given ? "bg-ember text-white hover:bg-ember-hover" : "text-transparent hover:bg-ember/15")
+        (given ? "bg-ember text-white hover:bg-ember-hover" : "text-transparent ring-2 ring-inset ring-ember/60 hover:bg-ember/15")
       }
     >
       ✓
