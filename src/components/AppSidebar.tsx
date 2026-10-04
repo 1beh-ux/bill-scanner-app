@@ -73,7 +73,7 @@ export default function AppSidebar() {
   }, [eventId]);
 
   // The parent portal (/p/<token>) is public and has no app navigation.
-  if (pathname.startsWith("/login") || pathname.startsWith("/p/")) return null;
+  if (pathname.startsWith("/login") || pathname.startsWith("/p/") || pathname.startsWith("/r/")) return null;
 
   function onEventChange(id: string) {
     setCurrentEventId(id);

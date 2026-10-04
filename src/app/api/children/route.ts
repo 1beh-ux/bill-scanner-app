@@ -99,6 +99,9 @@ export async function POST(req: NextRequest) {
       await tx.childEmailLog.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
       await tx.participant.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
       await tx.child.deleteMany({ where: { id: { in: mergeIds } } });
+      // A family left without members (e.g. a public-form duplicate merged away) goes too.
+      const familyIds = others.map((o) => o.familyId).filter((x): x is string => !!x && x !== familyId);
+      if (familyIds.length) await tx.family.deleteMany({ where: { id: { in: familyIds }, members: { none: {} } } });
     });
     return NextResponse.json({ ok: true });
   }

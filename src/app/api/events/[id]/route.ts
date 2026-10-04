@@ -9,6 +9,7 @@ import { invalidateDriveIdentity } from "@/lib/drive";
 import { linkChildren } from "@/lib/children";
 import { readEligibility } from "@/lib/portal-rules";
 import { readPriceRules } from "@/lib/price-rules";
+import { SLUG_PATTERN } from "@/lib/public-registration";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -69,11 +70,26 @@ export async function PATCH(
     portalOpen,
     eligibility,
     priceRules,
+    publicRegistration,
+    publicSlug,
+    landingContent,
   } = body;
 
   // Registration & membership switches: admin only, validated.
   const touchesRegistration =
-    kind !== undefined || membershipYear !== undefined || registrationConnected !== undefined || portalOpen !== undefined || eligibility !== undefined;
+    kind !== undefined ||
+    membershipYear !== undefined ||
+    registrationConnected !== undefined ||
+    portalOpen !== undefined ||
+    eligibility !== undefined ||
+    publicRegistration !== undefined ||
+    publicSlug !== undefined ||
+    landingContent !== undefined;
+  // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
+  if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
+  if (landingContent !== undefined && landingContent !== null && !(typeof landingContent === "string" && landingContent.length <= 20000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if (publicSlug && (await prisma.event.findFirst({ where: { publicSlug, id: { not: id } }, select: { id: true } }))) return NextResponse.json({ error: "slug_taken" }, { status: 409 });
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (touchesRegistration && user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
@@ -162,6 +178,9 @@ export async function PATCH(
       ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),
       // Price rules (slice 3 C), stored cleaned; null (or nothing usable) = today's member/non-member pricing.
       ...(priceRules !== undefined && { priceRules: readPriceRules(priceRules) ?? Prisma.DbNull }),
+      ...(publicRegistration !== undefined && { publicRegistration }),
+      ...(publicSlug !== undefined && { publicSlug: publicSlug || null }),
+      ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.

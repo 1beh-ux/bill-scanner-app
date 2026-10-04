@@ -13,7 +13,12 @@ import { copyFamilyLink, familyTarget, portalComposeHref } from "@/components/ch
 type Member = { id: string; name: string; isAdult: boolean; dateOfBirth: string | null };
 type Contact = { name: string | null; email: string; phone: string | null; member: string | null };
 type Family = { id: string; name: string; hasPortalLink: boolean; members: Member[]; contacts: Contact[] };
-type Data = { families: Family[]; suggestions: { name: string; members: Member[] }[] };
+type Duplicate = Member & { sameName: boolean };
+type Data = {
+  families: Family[];
+  suggestions: { name: string; members: Member[] }[];
+  review: { id: string; name: string; members: (Member & { duplicates: Duplicate[] })[] }[];
+};
 export type FamilyPerson = { id: string; name: string; dateOfBirth: string | null; familyId: string | null };
 
 const inputClassSm = "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -53,6 +58,18 @@ export default function Families({ people, match, onChanged }: { people: FamilyP
     return res;
   }
 
+  // A public-form person is the same as an existing one: keep the existing
+  // profile, move the registration over (the usual merge).
+  async function mergeInto(member: Member, existing: Member) {
+    if (!(await confirm({ message: t("families.reviewMergeConfirm", { name: member.name, existing: existing.name }) }))) return;
+    setBusy(true);
+    const res = await fetch("/api/children", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "merge", keepId: existing.id, mergeIds: [member.id] }) }).catch(() => null);
+    setBusy(false);
+    setMessage(res?.ok ? null : t("children.errorFailed"));
+    await load();
+    onChanged();
+  }
+
   async function copy(f: Family) {
     const ok = await copyFamilyLink(f.id);
     setMessage(ok ? t("childProfile.linkCopied", { name: f.name }) : t("children.errorFailed"));
@@ -78,6 +95,44 @@ export default function Families({ people, match, onChanged }: { people: FamilyP
   return (
     <div className="flex flex-col gap-8">
       {message && <p className="text-[13px] text-ink">{message}</p>}
+      {data.review.length > 0 && (
+        <section>
+          <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("families.reviewTitle", { count: String(data.review.length) })}</h2>
+          <p className="mb-2 text-[12.5px] text-ink-secondary">{t("families.reviewHint")}</p>
+          <div className="flex flex-col gap-2">
+            {data.review.map((f) => (
+              <div key={f.id} className="flex flex-col gap-1.5 rounded-lg border border-amber-300 bg-amber-50/40 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[14px] font-medium text-ink">{f.name}</span>
+                  <button disabled={busy} onClick={() => post({ action: "reviewed", familyId: f.id })} className={btn}>
+                    {t("families.reviewed")}
+                  </button>
+                </div>
+                {f.members.map((m) => (
+                  <div key={m.id} className="text-[13px]">
+                    <a href={`/children/${m.id}`} className="text-ink underline hover:text-ember">
+                      {personLabel(m)}
+                    </a>
+                    {m.duplicates.map((d) => (
+                      <div key={d.id} className="ml-4 flex flex-wrap items-center gap-2 text-ink-secondary">
+                        <span>
+                          {t(d.sameName ? "families.dupSameName" : "families.dupSameEmail")}:{" "}
+                          <a href={`/children/${d.id}`} className="underline hover:text-ember">
+                            {personLabel(d)}
+                          </a>
+                        </span>
+                        <button disabled={busy} onClick={() => mergeInto(m, d)} className="text-ember hover:underline">
+                          {t("families.reviewMerge")}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       {suggestions.length > 0 && (
         <section>
           <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("families.suggestedTitle", { count: String(suggestions.length) })}</h2>

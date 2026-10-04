@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { familyContacts, suggestFamilies } from "@/lib/portal-rules";
+import { childKey } from "@/lib/children";
 
 // Families / households on the Lidé page (docs/registration-slice3-spec.md B),
 // admin only. Never created automatically: "Navržené rodiny" are proposals
@@ -33,7 +34,27 @@ export async function GET() {
     prisma.child.findMany({ where: { familyId: null }, select: memberSelect }),
   ]);
   const byId = new Map(loose.map((c) => [c.id, c]));
+
+  // "Ke kontrole" (slice 3 D): families from the public form, each person with
+  // possible duplicates elsewhere -- same name + birth date, or a guardian
+  // e-mail already known. Never merged automatically.
+  const review = families.filter((f) => f.needsReview);
+  const everyone = review.length ? [...families.flatMap((f) => f.members.map((m) => ({ ...m, familyId: f.id }))), ...loose.map((m) => ({ ...m, familyId: null }))] : [];
+  const emails = (m: { guardians: { email: string }[] }) => new Set(m.guardians.map((g) => g.email.trim().toLowerCase()));
+  const duplicatesOf = (m: (typeof everyone)[number], familyId: string) => {
+    const key = childKey(m.name, m.dateOfBirth);
+    const mine = emails(m);
+    return everyone
+      .filter((o) => o.familyId !== familyId && ((key && childKey(o.name, o.dateOfBirth) === key) || [...emails(o)].some((e) => mine.has(e))))
+      .map((o) => ({ ...person(o), sameName: !!key && childKey(o.name, o.dateOfBirth) === key }));
+  };
+
   return NextResponse.json({
+    review: review.map((f) => ({
+      id: f.id,
+      name: f.name,
+      members: f.members.map((m) => ({ ...person(m), duplicates: duplicatesOf({ ...m, familyId: f.id }, f.id) })),
+    })),
     families: families.map(({ portalToken, members, ...f }) => ({
       ...f,
       hasPortalLink: !!portalToken,
@@ -61,7 +82,8 @@ async function dropEmpty(familyIds: (string | null)[]) {
 
 // action: "create" { name, childIds } (people without a family), "rename" { familyId, name },
 // "add" { familyId, childId }, "remove" { childId }, "merge" { keepId, mergeIds },
-// "delete" { familyId } (members stay, just without a family), "token" { familyId, regenerate? }.
+// "delete" { familyId } (members stay, just without a family), "token" { familyId, regenerate? },
+// "reviewed" { familyId } (a public-form family checked: off the "Ke kontrole" list).
 export async function POST(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
@@ -106,6 +128,12 @@ export async function POST(req: NextRequest) {
       prisma.child.updateMany({ where: { familyId: { in: mergeIds } }, data: { familyId: body.keepId } }),
       prisma.family.deleteMany({ where: { id: { in: mergeIds } } }),
     ]);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.action === "reviewed") {
+    if (typeof body.familyId !== "string") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+    await prisma.family.updateMany({ where: { id: body.familyId }, data: { needsReview: false } });
     return NextResponse.json({ ok: true });
   }
 

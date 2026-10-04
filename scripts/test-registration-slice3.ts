@@ -107,7 +107,54 @@ async function prices() {
   assert.equal(effectivePriceCzk(p("mama", spring, "ostatni"), { ...event, priceRules: preset, priceContext: ctx({ anna: 2, mama: 2 }, ["mama"]) }), 400, "adult in the household");
 }
 
+// --- D. public form validation --------------------------------------------------
+async function publicForm() {
+  const { validateSubmission, isSpam, MAX_PERSONS } = await import("../src/lib/public-registration");
+  const { MEMBERSHIP_PRESET: preset } = await import("../src/lib/price-rules");
+  const fields = [
+    { key: "adresa", label: "Adresa", fieldType: "text", options: null, required: true },
+    { key: "pojistovna", label: "Pojišťovna", fieldType: "select", options: ["111", "201"], required: false },
+    { key: "plavec", label: "Plavec", fieldType: "boolean", options: null, required: false },
+  ];
+  const ctx = { fields, rules: preset, oddil: { key: "oddil", options: ["Vlčata", "Skauti"] }, today: new Date("2026-10-04") };
+  const adult = { firstName: "Jana", lastName: "Nováková", birthDate: "1985-01-31", isAdult: true, email: "jana@x.cz", phone: "777", guardianOfChildren: true, values: { adresa: "Praha" }, category: "ostatni" };
+  const child = { firstName: "Anna", lastName: "Nováková", birthDate: "2015-05-01", isAdult: false, values: { adresa: "Praha", pojistovna: "111", plavec: "true", neznamy: "x" }, category: "oddil", oddil: "Vlčata" };
+
+  const ok = validateSubmission({ persons: [adult, child], guardians: [{ email: "JANA@x.cz" }, { name: "Petr", email: "petr@x.cz" }, { email: "" }], note: " ahoj " }, ctx);
+  assert.ok(ok.ok, JSON.stringify(!ok.ok && ok.errors));
+  if (ok.ok) {
+    const [a, c] = ok.data.persons;
+    assert.deepEqual(a.guardians.map((g) => g.email), ["jana@x.cz"], "an adult's guardian row is their own contact");
+    assert.deepEqual(c.guardians.map((g) => g.email), ["jana@x.cz", "petr@x.cz"], "children: the ticked adult + extra guardians, each e-mail once, empty rows skipped");
+    assert.deepEqual(c.values, { adresa: "Praha", pojistovna: "111", plavec: "true", oddil: "Vlčata" }, "unknown keys dropped, Oddíl stored under its field key");
+    assert.equal(c.category, "oddil");
+    assert.equal(a.category, "ostatni");
+    assert.equal(ok.data.note, "ahoj");
+  }
+  const err = (body: unknown) => {
+    const r = validateSubmission(body, ctx);
+    return r.ok ? [] : r.errors;
+  };
+  assert.deepEqual(err({ persons: [] }), ["persons"]);
+  assert.deepEqual(err({ persons: Array(MAX_PERSONS + 1).fill(adult) }), ["persons"], "max 10 people per submit");
+  assert.deepEqual(err({ persons: [child] }), ["guardians"], "a child needs a guardian");
+  assert.deepEqual(err({ persons: [{ ...adult, guardianOfChildren: false }, child] }), ["guardians"], "an adult not ticked as guardian doesn't count");
+  assert.deepEqual(err({ persons: [{ ...adult, email: "nope" }] }), ["p0.email"]);
+  assert.deepEqual(err({ persons: [{ ...adult, values: {} }] }), ["p0.adresa"], "required field");
+  assert.deepEqual(err({ persons: [adult, { ...child, values: { ...child.values, pojistovna: "999" } }] }), ["p1.pojistovna"], "select value must be an option");
+  assert.deepEqual(err({ persons: [adult, { ...child, birthDate: "2027-01-01" }] }), ["p1.birthDate"], "no future birth date");
+  assert.deepEqual(err({ persons: [adult, { ...child, oddil: "" }] }), ["p1.oddil"], "oddíl category asks the Oddíl");
+  assert.deepEqual(err({ persons: [adult, { ...child, firstName: " " }], guardians: [{ email: "bad" }] }), ["p1.firstName", "g0.email"]);
+  assert.deepEqual(err({ persons: [{ ...adult, category: "oddil" }] }), [], "a category not allowed for adults falls back to the first allowed");
+  const noRules = validateSubmission({ persons: [{ ...adult, category: "whatever" }] }, { ...ctx, rules: null });
+  assert.ok(noRules.ok && noRules.data.persons[0].category === null, "no price rules = no category");
+  assert.equal(isSpam({ website: "http://spam" }), true);
+  assert.equal(isSpam({ website: "" }), false);
+  assert.equal(isSpam(null), false);
+}
+
 prices()
+  .then(publicForm)
   .then(() => console.log("ok"))
   .catch((err) => {
     console.error(err);

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
+import FieldInput from "@/components/registration/FieldInput";
 import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
 
 // The parent portal UI, mobile-first. Data from /api/portal/<token>
@@ -205,7 +206,7 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
                 {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
               </span>
               {editable ? (
-                <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} t={t} />
+                <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
               ) : (
                 <span className="text-[15px] text-ink">{show(f, f.value)}</span>
               )}
@@ -260,38 +261,6 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
         </div>
       </section>
     </div>
-  );
-}
-
-function FieldInput({ field, value, onChange, t }: { field: Field; value: string; onChange: (v: string) => void; t: T }) {
-  if (field.fieldType === "boolean") {
-    return (
-      <label className="flex items-center gap-2 text-[15px] text-ink">
-        <input type="checkbox" checked={toBoolean(value, field.options) === "true"} onChange={(e) => onChange(String(e.target.checked))} />
-        {t("portal.yes")}
-      </label>
-    );
-  }
-  if (field.fieldType === "select") {
-    const options = Array.isArray(field.options) ? field.options.filter((o): o is string => typeof o === "string") : [];
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
-        <option value="">—</option>
-        {[...new Set([...options, ...(value && !options.includes(value) ? [value] : [])])].map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  return (
-    <input
-      type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={inputClass}
-    />
   );
 }
 

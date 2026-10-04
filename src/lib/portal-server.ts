@@ -95,7 +95,7 @@ export async function saveGateThrottle(scope: PortalScope, failures: number, win
 }
 
 /** Org fields a parent may see, with their access level (hidden + inactive ones never leave the server). */
-async function visibleTemplates() {
+export async function visibleTemplates() {
   const templates = await prisma.participantFieldTemplate.findMany({ where: { active: true, portalAccess: { not: "hidden" } }, orderBy: { label: "asc" } });
   return templates;
 }
@@ -244,7 +244,7 @@ export async function portalData(scope: PortalScope) {
 }
 
 /** The event's "Oddíl" select (price rules oddilFieldKey), when the event has that field. */
-async function oddilField(eventId: string, rules: PriceRules | null) {
+export async function oddilField(eventId: string, rules: PriceRules | null) {
   if (!rules?.oddilFieldKey) return null;
   const f = await prisma.eventParticipantField.findFirst({ where: { eventId, key: rules.oddilFieldKey, active: true, fieldType: "select" } });
   const options = Array.isArray(f?.options) ? f.options.filter((o): o is string => typeof o === "string") : [];

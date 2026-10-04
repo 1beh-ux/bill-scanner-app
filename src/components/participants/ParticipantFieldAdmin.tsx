@@ -30,6 +30,7 @@ type Field = {
   computedType?: ComputedType | null;
   active: boolean;
   portalAccess?: PortalAccessLevel; // org scope only
+  requiredInRegistration?: boolean; // org scope only (public registration form, slice 3 D)
 };
 
 const inputClass =
@@ -270,12 +271,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
   // Org scope only: what parents may do with this field in the portal (child
   // profiles, docs/registration-portal-spec.md C). Optimistic like the pills.
-  async function setPortalAccess(field: Field, portalAccess: PortalAccessLevel) {
-    setFields((prev) => prev.map((f) => (f.key === field.key ? { ...f, portalAccess } : f)));
+  async function setPortalAccess(field: Field, patch: { portalAccess?: PortalAccessLevel; requiredInRegistration?: boolean }) {
+    setFields((prev) => prev.map((f) => (f.key === field.key ? { ...f, ...patch } : f)));
     const res = await fetch(itemUrl(field.key), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portalAccess }),
+      body: JSON.stringify(patch),
     });
     if (!res.ok) load();
   }
@@ -783,7 +784,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                 {t("portalAccess.label")}
                 <select
                   value={field.portalAccess ?? "hidden"}
-                  onChange={(e) => setPortalAccess(field, e.target.value as PortalAccessLevel)}
+                  onChange={(e) => setPortalAccess(field, { portalAccess: e.target.value as PortalAccessLevel })}
                   className="rounded border border-mist bg-paper-2 px-1.5 py-0.5 text-[11.5px] text-ink"
                 >
                   {PORTAL_ACCESS_LEVELS.map((a) => (
@@ -792,6 +793,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                     </option>
                   ))}
                 </select>
+              </label>
+            )}
+            {!isEvent && (field.portalAccess ?? "hidden") !== "hidden" && (
+              <label className="mt-1 flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
+                <input type="checkbox" checked={!!field.requiredInRegistration} onChange={(e) => setPortalAccess(field, { requiredInRegistration: e.target.checked })} />
+                {t("publicSettings.requiredInRegistration")}
               </label>
             )}
           </td>

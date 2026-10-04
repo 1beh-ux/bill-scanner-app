@@ -9,10 +9,13 @@ export function proxy(req: NextRequest) {
   // /p/<token> is the parent portal (docs/registration-portal-spec.md G): no
   // login, its own token + birth-date cookie check on every portal API request
   // (src/lib/portal-server.ts).
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/");
+  // /r/<slug> is the public registration page (docs/registration-slice3-spec.md
+  // D): no login, its API validates + rate-limits every submit itself.
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
     pathname.startsWith("/api/portal/") ||
+    pathname.startsWith("/api/public/") ||
     pathname.startsWith("/api/cron") ||
     // Cloud Tasks-driven bill AI processing (src/lib/cloud-tasks.ts) --
     // server-to-server, authenticated by its own x-tasks-secret header

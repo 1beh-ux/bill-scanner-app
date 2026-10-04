@@ -330,6 +330,12 @@ model Event {
   // PriceRules: categories, school-year date, household minimum). null =
   // today's pricing exactly (memberPriceCzk / nonMemberPriceCzk by isMember).
   priceRules            Json?     @map("price_rules")
+  // Public registration page /r/<publicSlug> (docs/registration-slice3-spec.md
+  // D): landing info (markdown) + the new-family form. Off by default; only
+  // used for a membership year or a connected event.
+  publicRegistration    Boolean   @default(false) @map("public_registration")
+  publicSlug            String?   @unique @map("public_slug")
+  landingContent        String?   @map("landing_content")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -635,6 +641,18 @@ model Child {
   @@map("children")
 }
 
+// Attempts counted for the public pages' rate limits (slice 3 D/F): key =
+// "submit:<hashed IP>" (public form), "resend:<participantId>" (portal
+// re-send), "upload:<participantId>" (portal upload). Old rows are pruned.
+model PortalRateHit {
+  id        String   @id @default(uuid())
+  key       String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([key, createdAt])
+  @@map("portal_rate_hits")
+}
+
 // A household (docs/registration-slice3-spec.md B), e.g. "Novákovi": one
 // portal link /p/<portalToken> for every member. Same token + birth-date gate
 // rules as a child's link (any member's birth date passes; the cookie is
@@ -645,6 +663,9 @@ model Family {
   portalToken           String?   @unique @map("portal_token")
   portalGateFailures    Int       @default(0) @map("portal_gate_failures")
   portalGateWindowStart DateTime? @map("portal_gate_window_start")
+  // Made by the public registration form: shown under "Ke kontrole" on the
+  // Lidé page (possible duplicates are never merged automatically).
+  needsReview           Boolean   @default(false) @map("needs_review")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
@@ -820,6 +841,9 @@ model ParticipantFieldTemplate {
   active          Boolean                   @default(true)
   // Parent portal rule for this field (child profiles, docs/registration-portal-spec.md C).
   portalAccess    PortalAccess              @default(hidden) @map("portal_access")
+  // Must be filled in the public registration form (slice 3 D); only for
+  // fields the form shows (portalAccess != hidden).
+  requiredInRegistration Boolean            @default(false) @map("required_in_registration")
 
   @@map("participant_field_templates")
 }
