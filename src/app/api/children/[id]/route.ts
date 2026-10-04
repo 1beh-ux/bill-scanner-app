@@ -22,6 +22,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { id },
     include: {
       guardians: true,
+      family: { select: { id: true, name: true } },
       participants: {
         select: {
           id: true,

@@ -9,10 +9,12 @@ type Access = "edit" | "approval" | "read" | "hidden";
 type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null };
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
 type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
-type Data = {
-  child: { name: string };
+// One person of the link (a child link has one, a family link every member).
+type Member = {
+  id: string;
+  name: string;
+  isAdult: boolean;
   profile: { fields: Field[]; guardians: Guardian[]; guardiansPending: Guardian[] | null };
-  available: (EventRef & { id: string; registrationDeadline: string | null })[];
   registrations: {
     participantId: string;
     event: EventRef;
@@ -22,6 +24,13 @@ type Data = {
     documents: { id: string; name: string; sentToParent: boolean; date: string }[];
   }[];
   history: (EventRef & { id: string; status: "pending" | "accepted" })[];
+};
+type Data = {
+  kind: "child" | "family";
+  name: string;
+  members: Member[];
+  contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
+  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[] })[];
 };
 type Tab = "profile" | "events" | "registrations" | "history";
 
@@ -46,6 +55,7 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
   const [phase, setPhase] = useState<"loading" | "gate" | "ready" | "unavailable">("loading");
   const [data, setData] = useState<Data | null>(null);
   const [tab, setTab] = useState<Tab>("profile");
+  const [memberId, setMemberId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(api, { cache: "no-store" }).catch(() => null);
@@ -66,9 +76,20 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
       {phase === "loading" && <p className="mt-6 text-[14px] text-ink-secondary">{t("portal.loading")}</p>}
       {phase === "unavailable" && <p className="mt-6 text-[15px] text-ink">{t("portal.unavailable")}</p>}
       {phase === "gate" && <Gate api={api} t={t} onPassed={load} />}
-      {phase === "ready" && data && (
+      {phase === "ready" && data && (() => {
+        const member = data.members.find((m) => m.id === memberId) ?? data.members[0];
+        return (
         <>
-          <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{data.child.name}</h1>
+          <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{data.name}</h1>
+          {data.members.length > 1 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {data.members.map((m) => (
+                <button key={m.id} onClick={() => setMemberId(m.id)} className={"rounded-full border px-3 py-1 text-[14px] " + (m.id === member.id ? "border-ember bg-ember/15 text-ink" : "border-mist text-ink-secondary")}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+          )}
           <nav className="scrollbar-app -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-mist px-4">
             {(["profile", "events", "registrations", "history"] as const).map((k) => (
               <button
@@ -81,13 +102,13 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
               </button>
             ))}
           </nav>
-          {tab === "profile" && <Profile api={api} data={data} t={t} onSaved={load} />}
+          {tab === "profile" && <Profile key={member.id} api={api} member={member} t={t} onSaved={load} />}
           {tab === "events" && <Available api={api} data={data} t={t} evName={evName} onRegistered={() => load().then(() => setTab("registrations"))} />}
-          {tab === "registrations" && <Registrations api={api} data={data} t={t} evName={evName} />}
+          {tab === "registrations" && <Registrations api={api} member={member} t={t} evName={evName} />}
           {tab === "history" && (
             <ul className="flex flex-col gap-2">
-              {data.history.length === 0 && <p className="text-[14px] text-ink-secondary">{t("portal.historyEmpty")}</p>}
-              {data.history.map((h) => (
+              {member.history.length === 0 && <p className="text-[14px] text-ink-secondary">{t("portal.historyEmpty")}</p>}
+              {member.history.map((h) => (
                 <li key={h.id} className={card + " flex flex-wrap items-center justify-between gap-2 text-[14px]"}>
                   <span className="text-ink">{evName(h)}</span>
                   <span className="text-ink-secondary">{range(h)}</span>
@@ -96,7 +117,8 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
             </ul>
           )}
         </>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -129,7 +151,8 @@ function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void })
   );
 }
 
-function Profile({ api, data, t, onSaved }: { api: string; data: Data; t: T; onSaved: () => void }) {
+function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: T; onSaved: () => void }) {
+  const data = member;
   const fields = data.profile.fields;
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, f.pending ?? f.value])));
   const [guardians, setGuardians] = useState<Guardian[]>(data.profile.guardiansPending ?? data.profile.guardians);
@@ -139,7 +162,7 @@ function Profile({ api, data, t, onSaved }: { api: string; data: Data; t: T; onS
   async function patch(body: object) {
     setBusy(true);
     setMessage(null);
-    const res = await fetch(`${api}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    const res = await fetch(`${api}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, memberId: member.id }) }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "portal.saved" : "portal.saveFailed"));
     if (res?.ok) onSaved();
@@ -261,15 +284,17 @@ function FieldInput({ field, value, onChange, t }: { field: Field; value: string
 
 function Available({ api, data, t, evName, onRegistered }: { api: string; data: Data; t: T; evName: (e: EventRef) => string; onRegistered: () => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const value = (key: string) => data.profile.fields.find((f) => f.key === key)?.value || "—";
+  const memberOf = (id: string) => data.members.find((m) => m.id === id)!;
+  const value = (m: Member, key: string) => m.profile.fields.find((f) => f.key === key)?.value || "";
 
   async function register(eventId: string) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, note }) }).catch(() => null);
+    const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, memberIds: picked, note }) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setError(t("portal.registerFailed"));
     setOpenId(null);
@@ -288,27 +313,37 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
           </div>
           {e.registrationDeadline && <span className="text-[13px] text-ink-secondary">{t("portal.deadline", { date: date(e.registrationDeadline) })}</span>}
           {openId !== e.id ? (
-            <button onClick={() => { setOpenId(e.id); setError(null); }} className={btnPrimary}>
+            <button onClick={() => { setOpenId(e.id); setPicked(e.memberIds); setError(null); }} className={btnPrimary}>
               {t("portal.register")}
             </button>
           ) : (
             <div className="flex flex-col gap-3 rounded-lg bg-paper-2 p-3">
               <p className="text-[13px] text-ink-secondary">{t("portal.reviewHint")}</p>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[14px]">
-                <dt className="text-ink-secondary">{t("portal.reviewName")}</dt>
-                <dd className="text-ink">{[value("participant_first_name"), value("participant_last_name")].join(" ")}</dd>
-                <dt className="text-ink-secondary">{t("portal.reviewBirth")}</dt>
-                <dd className="text-ink">{date(data.profile.fields.find((f) => f.key === "datum_narozeni")?.value || null)}</dd>
-                <dt className="text-ink-secondary">{t("portal.guardians")}</dt>
-                <dd className="text-ink [overflow-wrap:anywhere]">{data.profile.guardians.map((g) => g.email).join(", ") || "—"}</dd>
-              </dl>
+              {e.memberIds.map((id) => {
+                const m = memberOf(id);
+                return (
+                  <label key={id} className="flex items-start gap-2 rounded-lg border border-mist bg-paper p-2 text-[14px]">
+                    {e.memberIds.length > 1 && (
+                      <input type="checkbox" className="mt-1" checked={picked.includes(id)} onChange={() => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))} />
+                    )}
+                    <span className="flex flex-col">
+                      <span className="text-ink">
+                        {[value(m, "participant_first_name"), value(m, "participant_last_name")].join(" ").trim() || m.name} · {date(value(m, "datum_narozeni") || null)}
+                      </span>
+                      <span className="text-[13px] text-ink-secondary [overflow-wrap:anywhere]">
+                        {t("portal.guardians")}: {m.profile.guardians.map((g) => g.email).join(", ") || "—"}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
               <label className="text-[13px] text-ink-secondary">
                 {t("portal.note")}
                 <textarea value={note} onChange={(ev) => setNote(ev.target.value)} rows={3} maxLength={2000} className={inputClass + " mt-1"} />
               </label>
               {error && <p className="text-[14px] text-red-600">{error}</p>}
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => register(e.id)} disabled={busy} className={btnPrimary}>
+                <button onClick={() => register(e.id)} disabled={busy || picked.length === 0} className={btnPrimary}>
                   {t("portal.registerConfirm")}
                 </button>
                 <button onClick={() => setOpenId(null)} disabled={busy} className={btn}>
@@ -323,7 +358,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
   );
 }
 
-function Registrations({ api, data, t, evName }: { api: string; data: Data; t: T; evName: (e: EventRef) => string }) {
+function Registrations({ api, member: data, t, evName }: { api: string; member: Member; t: T; evName: (e: EventRef) => string }) {
   if (data.registrations.length === 0) return <p className="text-[14px] text-ink-secondary">{t("portal.noRegistrations")}</p>;
   return (
     <ul className="flex flex-col gap-3">

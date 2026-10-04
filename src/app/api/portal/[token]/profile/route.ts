@@ -1,17 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { portalAccessMap, portalChild } from "@/lib/portal-server";
+import { portalAccessMap, portalScope, scopeMember } from "@/lib/portal-server";
 import { guardiansJson, proposeChange, readGuardians, updateProfile } from "@/lib/child-profile";
 import { GUARDIANS_CHANGE_KEY, isIsoDate, profileValues } from "@/lib/portal-rules";
 
-// A parent's profile edit: { values?: Record<key, string>, guardians?: [...] }.
+// A parent's profile edit: { memberId?, values?: Record<key, string>, guardians?: [...] }
+// (memberId: which person of a family link; a child link needs none).
 // Per field rule: `edit` applies (and pushes) at once, `approval` becomes a
 // pending change, `read`/`hidden` are ignored. Guardians always need approval
 // (they decide who gets e-mails) -- one pending change for the whole list.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const { child, error } = await portalChild(token, true);
+  const { scope, error } = await portalScope(token, true);
   if (error) return error;
   const body = await req.json().catch(() => ({}));
+  const child = scopeMember(scope, body.memberId);
+  if (!child) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== "object") return NextResponse.json({ error: "bad_request" }, { status: 400 });

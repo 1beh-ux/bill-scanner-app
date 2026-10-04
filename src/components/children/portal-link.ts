@@ -1,21 +1,25 @@
-// Client helpers for the parent portal link (Děti list + child detail).
+// Client helpers for the parent portal link (Lidé list + child detail + families).
 
-/** Gets the child's link (created on first use, never replaced here) and copies it. False = failed. */
-export async function copyPortalLink(childId: string): Promise<boolean> {
-  const res = await fetch(`/api/children/${childId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "token" }),
-  });
+async function copyFrom(url: string, body: object): Promise<boolean> {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   if (!res.ok) return false;
-  const { url } = await res.json();
+  const { url: link } = await res.json();
   try {
-    await navigator.clipboard.writeText(url);
+    await navigator.clipboard.writeText(link);
     return true;
   } catch {
     return false;
   }
 }
+
+/** Gets the child's link (created on first use, never replaced here) and copies it. False = failed. */
+export const copyPortalLink = (childId: string) => copyFrom(`/api/children/${childId}`, { action: "token" });
+
+/** Same for a family's link (slice 3 B). */
+export const copyFamilyLink = (familyId: string) => copyFrom("/api/families", { action: "token", familyId });
+
+/** Compose target id of a family's link (src/lib/portal-email.ts FAMILY_TARGET_PREFIX). */
+export const familyTarget = (familyId: string) => `family:${familyId}`;
 
 // The "send link" compose page gets its children through sessionStorage, like
 // the participant compose page (src/lib/compose-handoff.ts): hundreds of ids

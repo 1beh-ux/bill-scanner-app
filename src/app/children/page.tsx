@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
+import Families from "@/components/children/Families";
 import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
 
 type EventRef = { id: string; name: string; startDate: string; kind: "event" | "membership"; membershipYear: number | null };
@@ -14,6 +15,8 @@ type ChildRow = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  familyId: string | null;
+  family: { name: string } | null;
   hasPortalLink: boolean;
   participants: { id: string; registrationStatus: "pending" | "accepted"; event: EventRef }[];
 };
@@ -239,6 +242,8 @@ export default function ChildrenPage() {
             </section>
           )}
 
+          <Families people={data.children} match={match} onChanged={load} />
+
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(listed.length) })}</h2>
@@ -284,6 +289,11 @@ export default function ChildrenPage() {
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
                           <td className="p-2">{c.participants.map(eventChip)}</td>
                           <td className="whitespace-nowrap p-2 text-[13px]">
+                            {/* In a family the link tools are the family's (Rodiny above). */}
+                            {c.family ? (
+                              <span className="text-ink-secondary">{t("families.memberOf", { name: c.family.name })}</span>
+                            ) : (
+                            <>
                             <button onClick={() => copyLink(c)} className="text-ember hover:underline">
                               {t("childProfile.copyLink")}
                             </button>
@@ -295,6 +305,8 @@ export default function ChildrenPage() {
                             <button onClick={() => router.push(portalComposeHref([c.id]))} className="ml-3 text-ink-secondary hover:text-ink">
                               {t("childProfile.sendLinkShort")}
                             </button>
+                            </>
+                            )}
                           </td>
                         </tr>
                       ))}

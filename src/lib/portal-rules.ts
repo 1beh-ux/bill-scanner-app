@@ -149,7 +149,61 @@ export function afterGateFailure(stored: GateThrottle, now: Date): GateThrottle 
   return { failures: cur.failures + 1, windowStart: cur.windowStart ?? now };
 }
 
+/** A portal link's gate: any member's birth date passes (a child link has one member). */
+export const gatePasses = (input: unknown, members: { dateOfBirth: Date | null }[]) => members.some((m) => birthDateMatches(input, m.dateOfBirth));
+
 /** Typed birth date (YYYY-MM-DD from <input type="date">) vs. the child's. No birth date on file = never passes. */
 export function birthDateMatches(input: unknown, dateOfBirth: Date | null): boolean {
   return typeof input === "string" && dateOfBirth != null && input.trim() === dateOfBirth.toISOString().slice(0, 10);
+}
+
+// --- Families (docs/registration-slice3-spec.md B) --------------------------
+
+type FamilyPerson = { id: string; isAdult: boolean; guardians: { email: string }[] };
+
+/**
+ * Proposed families ("Navržené rodiny"): people WITHOUT a family who share a
+ * guardian e-mail (an adult's own contact counts too) -- transitively, so two
+ * siblings + the parent who is also a member form one group. Only groups of 2+.
+ * Proposals only: a family is created when an admin confirms one.
+ */
+export function suggestFamilies(people: FamilyPerson[]): string[][] {
+  const parent = new Map(people.map((p) => [p.id, p.id]));
+  const find = (id: string): string => (parent.get(id) === id ? id : find(parent.get(id)!));
+  const byEmail = new Map<string, string>();
+  for (const p of people) {
+    for (const g of p.guardians) {
+      const email = g.email.trim().toLowerCase();
+      if (!email) continue;
+      const other = byEmail.get(email);
+      if (other) parent.set(find(p.id), find(other));
+      else byEmail.set(email, p.id);
+    }
+  }
+  const groups = new Map<string, string[]>();
+  for (const p of people) groups.set(find(p.id), [...(groups.get(find(p.id)) ?? []), p.id]);
+  return [...groups.values()].filter((g) => g.length > 1);
+}
+
+/** An adult member's own e-mail = their first guardian (contact) row. */
+export const ownEmail = (p: { isAdult: boolean; guardians: { email: string }[] }) => (p.isAdult ? p.guardians[0]?.email.trim().toLowerCase() || null : null);
+
+/**
+ * A family's contacts, each shown once: guardians of all members, unique by
+ * e-mail; a guardian whose e-mail is an adult member's own is that member
+ * (`member` = their name), not a separate person.
+ */
+export function familyContacts<G extends { email: string }>(members: { name: string; isAdult: boolean; guardians: G[] }[]): (G & { member: string | null })[] {
+  const adults = new Map(members.flatMap((m) => (ownEmail(m) ? [[ownEmail(m)!, m.name] as const] : [])));
+  const seen = new Set<string>();
+  const out: (G & { member: string | null })[] = [];
+  for (const m of members) {
+    for (const g of m.guardians) {
+      const email = g.email.trim().toLowerCase();
+      if (seen.has(email)) continue;
+      seen.add(email);
+      out.push({ ...g, member: adults.get(email) ?? null });
+    }
+  }
+  return out;
 }

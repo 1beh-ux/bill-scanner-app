@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getOrCreateOrgEmailTemplate } from "@/lib/email-template";
 import { PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
-import { orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
+import { loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
 
 // The "send portal link" compose page (/children/compose), admin only.
-// action "info" { childIds }: org template, sending mailbox, recipients per child;
+// childIds: child ids and/or "family:<id>" (a family's link, slice 3 B).
+// action "info" { childIds }: org template, sending mailbox, recipients per target;
 // "preview" { childId, subject, body }: one child's e-mail filled in, nothing sent/created;
 // "send" { childIds, subject, body }: the actual send -- only from the page's
 // explicit confirm, never automatic.
@@ -18,20 +18,16 @@ export async function POST(req: NextRequest) {
   const childIds: string[] = Array.isArray(body.childIds) ? body.childIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 2000) : [];
 
   if (body.action === "info") {
-    const [template, senderEmail, children] = await Promise.all([
+    const [template, senderEmail, targets] = await Promise.all([
       getOrCreateOrgEmailTemplate(PORTAL_LINK_PURPOSE_KEY),
       orgSenderEmail(user),
-      prisma.child.findMany({
-        where: { id: { in: childIds } },
-        select: { id: true, name: true, guardians: { where: { receivesCommunications: true }, select: { email: true } } },
-        orderBy: [{ lastName: "asc" }, { name: "asc" }],
-      }),
+      Promise.all(childIds.map(loadTarget)),
     ]);
     return NextResponse.json({
       subject: template.subject,
       body: template.body,
       senderEmail,
-      children: children.map((c) => ({ id: c.id, name: c.name, emails: c.guardians.map((g) => g.email) })),
+      children: targets.flatMap((c) => (c ? [{ id: c.id, name: c.name, emails: c.emails }] : [])),
     });
   }
 

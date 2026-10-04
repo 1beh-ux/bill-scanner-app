@@ -1,30 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { portalChild } from "@/lib/portal-server";
+import { portalScope, saveGateThrottle } from "@/lib/portal-server";
 import { GATE_COOKIE_MAX_AGE, gateCookieName, gateCookieValue, portalSecret } from "@/lib/portal-gate";
-import { afterGateFailure, birthDateMatches, gateThrottle } from "@/lib/portal-rules";
+import { afterGateFailure, gatePasses, gateThrottle } from "@/lib/portal-rules";
 
 // Birth-date gate, once per device: { birthDate: "YYYY-MM-DD" }. Right = an
-// httpOnly cookie (1 year) with the HMAC of child id + current token. Wrong
-// attempts are throttled per child in the DB (10 per hour).
+// httpOnly cookie (1 year) with the HMAC of the scope (child id, or the family)
+// + current token. A family link takes any member's birth date. Wrong attempts
+// are throttled per child / family in the DB (10 per hour).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
-  const { child, error } = await portalChild(token, false);
+  const { scope, error } = await portalScope(token, false);
   if (error) return error;
   const body = await req.json().catch(() => ({}));
   const now = new Date();
-  const throttle = gateThrottle({ failures: child.portalGateFailures, windowStart: child.portalGateWindowStart }, now);
+  const throttle = gateThrottle({ failures: scope.gateFailures, windowStart: scope.gateWindowStart }, now);
   if (throttle.blocked) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
-  if (!birthDateMatches(body.birthDate, child.dateOfBirth)) {
+  if (!gatePasses(body.birthDate, scope.members)) {
     const next = afterGateFailure(throttle, now);
-    await prisma.child.update({ where: { id: child.id }, data: { portalGateFailures: next.failures, portalGateWindowStart: next.windowStart } });
+    await saveGateThrottle(scope, next.failures, next.windowStart);
     return NextResponse.json({ error: "wrong" }, { status: 403 });
   }
 
-  if (child.portalGateFailures > 0) await prisma.child.update({ where: { id: child.id }, data: { portalGateFailures: 0, portalGateWindowStart: null } });
+  if (scope.gateFailures > 0) await saveGateThrottle(scope, 0, null);
   const res = NextResponse.json({ ok: true });
-  res.cookies.set(gateCookieName(child.id), gateCookieValue(child.id, token, portalSecret()!), {
+  res.cookies.set(gateCookieName(scope.subject), gateCookieValue(scope.subject, token, portalSecret()!), {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

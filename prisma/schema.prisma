@@ -610,14 +610,37 @@ model Child {
   // keeps its name, no destructive rename). An adult's own contact is their
   // first guardian row (same e-mail = same person in the family view).
   isAdult     Boolean   @default(false) @map("is_adult")
+  // The household this person belongs to (at most one); null = none. Families
+  // are only ever made by an admin's confirm (or the public form, flagged for review).
+  familyId    String?   @map("family_id")
   createdAt   DateTime  @default(now()) @map("created_at")
 
+  family       Family?  @relation(fields: [familyId], references: [id], onDelete: SetNull)
   participants Participant[]
   guardians    ChildGuardian[]
   changes      ChildChange[]
   emailLogs    ChildEmailLog[]
 
+  @@index([familyId])
   @@map("children")
+}
+
+// A household (docs/registration-slice3-spec.md B), e.g. "Novákovi": one
+// portal link /p/<portalToken> for every member. Same token + birth-date gate
+// rules as a child's link (any member's birth date passes; the cookie is
+// scoped to the family + current token, src/lib/portal-gate.ts).
+model Family {
+  id                    String    @id @default(uuid())
+  name                  String
+  portalToken           String?   @unique @map("portal_token")
+  portalGateFailures    Int       @default(0) @map("portal_gate_failures")
+  portalGateWindowStart DateTime? @map("portal_gate_window_start")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  members Child[]
+
+  @@map("families")
 }
 
 // Mirrors ParticipantGuardian, on the child profile.

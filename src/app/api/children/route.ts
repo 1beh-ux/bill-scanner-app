@@ -32,6 +32,8 @@ export async function GET(req: NextRequest) {
         name: true,
         dateOfBirth: true,
         isAdult: true,
+        familyId: true,
+        family: { select: { name: true } },
         portalToken: true,
         participants: { select: { id: true, registrationStatus: true, event: eventSelect } },
       },
@@ -90,7 +92,9 @@ export async function POST(req: NextRequest) {
       const fieldValues = Object.assign({}, ...others.map((o) => (o.fieldValues as object | null) ?? {}), (keep.fieldValues as object | null) ?? {});
       const emails = new Set(keep.guardians.map((g) => g.email.toLowerCase()));
       const moveGuardians = others.flatMap((o) => o.guardians).filter((g) => !emails.has(g.email.toLowerCase()) && emails.add(g.email.toLowerCase()));
-      await tx.child.update({ where: { id: keepId }, data: { fieldValues } });
+      // Family: the kept person's, else the first merged one's (a public-form duplicate brings its new family along).
+      const familyId = keep.familyId ?? others.find((o) => o.familyId)?.familyId ?? null;
+      await tx.child.update({ where: { id: keepId }, data: { fieldValues, familyId } });
       await tx.childGuardian.updateMany({ where: { id: { in: moveGuardians.map((g) => g.id) } }, data: { childId: keepId } });
       await tx.childEmailLog.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
       await tx.participant.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });

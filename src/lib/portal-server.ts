@@ -1,8 +1,9 @@
-// Parent portal, server side (docs/registration-portal-spec.md G): resolving
-// the token + birth-date cookie, what the portal shows, and the portal
-// registration. The portal only mirrors: it never sends e-mail, and shows
-// only what the e-mails/documents also carried (payment details appear once
-// the acceptance assigned a variable symbol).
+// Parent portal, server side (docs/registration-portal-spec.md G, slice 3 B):
+// resolving the token + birth-date cookie, what the portal shows, and the
+// portal registration. A token is either a child's (that child only) or a
+// family's (every member). The portal only mirrors: it shows only what the
+// e-mails/documents also carried (payment details appear once the acceptance
+// assigned a variable symbol).
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +13,7 @@ import {
   GUARDIANS_PORTAL_ACCESS,
   GUARDIANS_CHANGE_KEY,
   PROFILE_BUILTINS,
+  familyContacts,
   isEligible,
   profileValues,
   readEligibility,
@@ -26,21 +28,69 @@ import { fullNameFrom } from "@/lib/participant-name";
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
 
+/** Who a portal link shows: one child (child token) or every member of a family (family token). */
+export type PortalScope = {
+  kind: "child" | "family";
+  id: string;
+  // Cookie name + HMAC subject: the child id (as in slice 2), or "f_<familyId>".
+  subject: string;
+  name: string;
+  members: PortalChild[];
+  gateFailures: number;
+  gateWindowStart: Date | null;
+};
+
+/** Token -> scope, or null. Child tokens first (existing links keep working). */
+export async function loadScope(token: string): Promise<PortalScope | null> {
+  if (token.length < 32) return null;
+  const child = await loadChild(token);
+  if (child) {
+    return { kind: "child", id: child.id, subject: child.id, name: child.name, members: [child], gateFailures: child.portalGateFailures, gateWindowStart: child.portalGateWindowStart };
+  }
+  const family = await prisma.family.findUnique({
+    where: { portalToken: token },
+    include: { members: { include: { guardians: true }, orderBy: [{ isAdult: "desc" }, { dateOfBirth: "asc" }, { name: "asc" }] } },
+  });
+  if (!family || family.members.length === 0) return null;
+  return {
+    kind: "family",
+    id: family.id,
+    subject: `f_${family.id}`,
+    name: family.name,
+    members: family.members,
+    gateFailures: family.portalGateFailures,
+    gateWindowStart: family.portalGateWindowStart,
+  };
+}
+
 /**
- * Token -> child, or the error response. Unknown token = a bare 404 (no hint
+ * Token -> scope, or the error response. Unknown token = a bare 404 (no hint
  * whether it ever existed). `gated`: also require this device's birth-date
  * cookie for the CURRENT token (every data endpoint does).
  */
-export async function portalChild(token: string, gated: boolean): Promise<{ child: PortalChild; error?: undefined } | { child?: undefined; error: NextResponse }> {
+export async function portalScope(token: string, gated: boolean): Promise<{ scope: PortalScope; error?: undefined } | { scope?: undefined; error: NextResponse }> {
   const secret = portalSecret();
   if (!secret) return { error: NextResponse.json({ error: "portal_not_configured" }, { status: 503 }) };
-  const child = token.length >= 32 ? await loadChild(token) : null;
-  if (!child) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
+  const scope = await loadScope(token);
+  if (!scope) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   if (gated) {
-    const value = (await cookies()).get(gateCookieName(child.id))?.value;
-    if (!gateCookieValid(value, child.id, token, secret)) return { error: NextResponse.json({ error: "gate" }, { status: 401 }) };
+    const value = (await cookies()).get(gateCookieName(scope.subject))?.value;
+    if (!gateCookieValid(value, scope.subject, token, secret)) return { error: NextResponse.json({ error: "gate" }, { status: 401 }) };
   }
-  return { child };
+  return { scope };
+}
+
+/** The member a request is about: `memberId` must be in the scope; a one-person scope needs none. */
+export function scopeMember(scope: PortalScope, memberId: unknown): PortalChild | null {
+  if (typeof memberId === "string") return scope.members.find((m) => m.id === memberId) ?? null;
+  return scope.members.length === 1 ? scope.members[0] : null;
+}
+
+/** Stores the gate throttle counter on the child or the family. */
+export async function saveGateThrottle(scope: PortalScope, failures: number, windowStart: Date | null): Promise<void> {
+  const data = { portalGateFailures: failures, portalGateWindowStart: windowStart };
+  if (scope.kind === "child") await prisma.child.update({ where: { id: scope.id }, data });
+  else await prisma.family.update({ where: { id: scope.id }, data });
 }
 
 /** Org fields a parent may see, with their access level (hidden + inactive ones never leave the server). */
@@ -58,9 +108,13 @@ export async function portalAccessMap(): Promise<Map<string, PortalAccessLevel>>
 
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
 
-/** Events this child can register for right now: open in the portal, connected (or a membership year), before the deadline, eligible, not registered yet. */
-export async function availableEvents(childId: string) {
-  const [events, [facts], registered] = await Promise.all([
+/**
+ * Events open for registration right now -- open in the portal, connected (or
+ * a membership year), before the deadline -- each with the members who may
+ * still register (eligible, not registered yet). Events nobody can take are left out.
+ */
+export async function availableEvents(memberIds: string[]) {
+  const [events, facts, registered] = await Promise.all([
     prisma.event.findMany({
       where: {
         portalOpen: true,
@@ -69,112 +123,133 @@ export async function availableEvents(childId: string) {
         AND: [{ OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] }],
       },
       orderBy: { startDate: "asc" },
-      select: { id: true, name: true, startDate: true, endDate: true, registrationDeadline: true, kind: true, membershipYear: true, eligibility: true },
     }),
-    eligibilityFacts([childId]),
-    prisma.participant.findMany({ where: { childId }, select: { eventId: true } }),
+    eligibilityFacts(memberIds),
+    prisma.participant.findMany({ where: { childId: { in: memberIds } }, select: { eventId: true, childId: true } }),
   ]);
-  if (!facts) return [];
-  const taken = new Set(registered.map((r) => r.eventId));
+  const taken = new Set(registered.map((r) => `${r.eventId}:${r.childId}`));
   return events
-    .filter((e) => !taken.has(e.id) && isEligible(readEligibility(e.eligibility), facts))
-    .map((e) => ({ id: e.id, name: e.name, startDate: e.startDate, endDate: e.endDate, registrationDeadline: e.registrationDeadline, kind: e.kind, membershipYear: e.membershipYear }));
+    .map((e) => ({ event: e, memberIds: facts.filter((f) => !taken.has(`${e.id}:${f.childId}`) && isEligible(readEligibility(e.eligibility), f)).map((f) => f.childId) }))
+    .filter((a) => a.memberIds.length > 0);
 }
 
-/** Everything the portal shows for one child (after the gate). */
-export async function portalData(child: PortalChild) {
+/** Everything the portal shows for a scope (after the gate). */
+export async function portalData(scope: PortalScope) {
+  const memberIds = scope.members.map((m) => m.id);
   const [templates, labels, pending, available, participations] = await Promise.all([
     visibleTemplates(),
     profileFieldLabels(),
-    prisma.childChange.findMany({ where: { childId: child.id, status: "pending" } }),
-    availableEvents(child.id),
+    prisma.childChange.findMany({ where: { childId: { in: memberIds }, status: "pending" } }),
+    availableEvents(memberIds),
     prisma.participant.findMany({
-      where: { childId: child.id },
+      where: { childId: { in: memberIds } },
       include: { event: true, guardians: true, documents: { where: { gcsPath: { not: null } }, include: { eventListItem: true }, orderBy: { receivedAt: "desc" } } },
       orderBy: { event: { startDate: "desc" } },
     }),
   ]);
-  const values = profileValues(child);
-  const pendingBy = new Map(pending.map((c) => [c.fieldKey, c.newValue ?? ""]));
-  const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown) => ({
-    key,
-    label: labels[key] ?? key,
-    access,
-    fieldType,
-    options,
-    value: values[key] ?? "",
-    pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
-  });
 
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
-  const registrations = [];
-  for (const p of participations) {
-    const e = p.event;
-    // Upcoming/current registrations only of events using the module; the rest is history.
-    if (!isCurrent(e) || !(e.registrationConnected || e.kind === "membership")) continue;
-    let payment = null;
-    if (p.registrationStatus === "accepted" && p.registrationNumber != null) {
-      const event = await withMembers(e);
-      const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
-      const qr = await resolvePaymentQrImage(forMerge, event);
-      payment = {
-        priceCzk: effectivePriceCzk(forMerge, event),
-        account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
-        variableSymbol: buildVariableSymbol(forMerge, event),
-        qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
-      };
+
+  const members = [];
+  for (const child of scope.members) {
+    const values = profileValues(child);
+    const pendingBy = new Map(pending.filter((c) => c.childId === child.id).map((c) => [c.fieldKey, c.newValue ?? ""]));
+    const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown) => ({
+      key,
+      label: labels[key] ?? key,
+      access,
+      fieldType,
+      options,
+      value: values[key] ?? "",
+      pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
+    });
+    const own = participations.filter((p) => p.childId === child.id);
+
+    const registrations = [];
+    for (const p of own) {
+      const e = p.event;
+      // Upcoming/current registrations only of events using the module; the rest is history.
+      if (!isCurrent(e) || !(e.registrationConnected || e.kind === "membership")) continue;
+      let payment = null;
+      if (p.registrationStatus === "accepted" && p.registrationNumber != null) {
+        const event = await withMembers(e);
+        const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
+        const qr = await resolvePaymentQrImage(forMerge, event);
+        payment = {
+          priceCzk: effectivePriceCzk(forMerge, event),
+          account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
+          variableSymbol: buildVariableSymbol(forMerge, event),
+          qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
+        };
+      }
+      registrations.push({
+        participantId: p.id,
+        event: { name: e.name, startDate: e.startDate, endDate: e.endDate, kind: e.kind, membershipYear: e.membershipYear },
+        status: p.registrationStatus,
+        note: p.portalNote,
+        payment,
+        documents: p.documents.map((d) => ({
+          id: d.id,
+          name: documentDisplayName({ ...d.eventListItem, data: d.eventListItem.data as DocumentTypeData | null }),
+          // generated = we sent it to you; anything else = received from you
+          sentToParent: d.receivedVia === "generated",
+          date: d.receivedAt,
+        })),
+      });
     }
-    registrations.push({
-      participantId: p.id,
-      event: { name: e.name, startDate: e.startDate, endDate: e.endDate, kind: e.kind, membershipYear: e.membershipYear },
-      status: p.registrationStatus,
-      note: p.portalNote,
-      payment,
-      documents: p.documents.map((d) => ({
-        id: d.id,
-        name: documentDisplayName({ ...d.eventListItem, data: d.eventListItem.data as DocumentTypeData | null }),
-        // generated = we sent it to you; anything else = received from you
-        sentToParent: d.receivedVia === "generated",
-        date: d.receivedAt,
-      })),
+
+    members.push({
+      id: child.id,
+      name: child.name,
+      isAdult: child.isAdult,
+      profile: {
+        fields: [
+          ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null)),
+          ...templates.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options)),
+        ],
+        guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
+        // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
+        guardiansPending: pendingBy.has(GUARDIANS_CHANGE_KEY) ? JSON.parse(pendingBy.get(GUARDIANS_CHANGE_KEY)!) : null,
+        guardiansAccess: GUARDIANS_PORTAL_ACCESS,
+      },
+      registrations,
+      history: own
+        .filter((p) => !isCurrent(p.event))
+        .map((p) => ({ id: p.id, name: p.event.name, startDate: p.event.startDate, endDate: p.event.endDate, kind: p.event.kind, membershipYear: p.event.membershipYear, status: p.registrationStatus })),
     });
   }
 
   return {
-    child: { name: child.name },
-    profile: {
-      fields: [
-        ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null)),
-        ...templates.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options)),
-      ],
-      guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
-      // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
-      guardiansPending: pendingBy.has(GUARDIANS_CHANGE_KEY) ? JSON.parse(pendingBy.get(GUARDIANS_CHANGE_KEY)!) : null,
-      guardiansAccess: GUARDIANS_PORTAL_ACCESS,
-    },
-    available,
-    registrations,
-    history: participations
-      .filter((p) => !isCurrent(p.event))
-      .map((p) => ({ id: p.id, name: p.event.name, startDate: p.event.startDate, endDate: p.event.endDate, kind: p.event.kind, membershipYear: p.event.membershipYear, status: p.registrationStatus })),
+    kind: scope.kind,
+    name: scope.name,
+    members,
+    // A family's contacts, each once (an adult member's own e-mail = that member).
+    contacts: scope.kind === "family" ? familyContacts(scope.members).map((g) => ({ name: g.name, email: g.email, phone: g.phone, member: g.member })) : [],
+    available: available.map(({ event: e, memberIds }) => ({
+      id: e.id,
+      name: e.name,
+      startDate: e.startDate,
+      endDate: e.endDate,
+      registrationDeadline: e.registrationDeadline,
+      kind: e.kind,
+      membershipYear: e.membershipYear,
+      memberIds,
+    })),
   };
 }
 
 /**
- * Portal "Přihlásit": a PENDING participant in the event, filled from the
- * profile's live values (pending changes don't count yet) for the keys the
- * event has, plus guardians, childId and the parent's note. The admin accepts
- * exactly as for any other participant. Null = not available to this child
- * (closed, not eligible, past deadline or already registered).
+ * One PENDING participant of `child` in the event, filled from the profile's
+ * live values (pending changes don't count yet) for the keys the event has,
+ * plus guardians, childId and the parent's note. The admin accepts exactly as
+ * for any other participant (unless the event auto-accepts, slice 3 E).
+ * Shared by the portal and the public registration form.
  */
-export async function registerFromPortal(child: PortalChild, eventId: string, note: string): Promise<{ id: string } | null> {
-  if (!(await availableEvents(child.id)).some((e) => e.id === eventId)) return null;
+export async function createRegistration(child: PortalChild, eventId: string, opts: { note?: string }): Promise<{ id: string }> {
   const fields = await prisma.eventParticipantField.findMany({ where: { eventId, active: true, kind: "custom" }, select: { key: true } });
   const values = profileValues(child);
   const customFieldValues = Object.fromEntries(fields.filter((f) => values[f.key]).map((f) => [f.key, values[f.key]]));
-  // ponytail: availableEvents' duplicate check and this create aren't atomic --
-  // a double-click race could register twice; the admin sees and deletes the extra row.
   return prisma.participant.create({
     data: {
       eventId,
@@ -184,7 +259,7 @@ export async function registerFromPortal(child: PortalChild, eventId: string, no
       lastName: child.lastName,
       dateOfBirth: child.dateOfBirth,
       customFieldValues,
-      portalNote: note.trim().slice(0, 2000) || null,
+      portalNote: opts.note?.trim().slice(0, 2000) || null,
       guardians: {
         create: child.guardians.map((g) => ({
           name: g.name,
@@ -197,4 +272,21 @@ export async function registerFromPortal(child: PortalChild, eventId: string, no
     },
     select: { id: true },
   });
+}
+
+/**
+ * Portal "Přihlásit": the picked members of the scope -> pending
+ * participants. Only members the event is available to (open, eligible,
+ * before the deadline, not registered yet); null = none of the picks was.
+ */
+export async function registerFromPortal(scope: PortalScope, eventId: string, picks: { memberId: string }[], note: string): Promise<{ ids: string[] } | null> {
+  const open = (await availableEvents(scope.members.map((m) => m.id))).find((a) => a.event.id === eventId);
+  if (!open) return null;
+  const chosen = scope.members.filter((m) => open.memberIds.includes(m.id) && picks.some((p) => p.memberId === m.id));
+  if (chosen.length === 0) return null;
+  const ids: string[] = [];
+  // ponytail: availableEvents' duplicate check and these creates aren't atomic --
+  // a double-click race could register twice; the admin sees and deletes the extra row.
+  for (const child of chosen) ids.push((await createRegistration(child, eventId, { note })).id);
+  return { ids };
 }

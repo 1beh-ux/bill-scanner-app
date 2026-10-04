@@ -20,6 +20,7 @@ type Detail = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  family: { id: string; name: string } | null;
   values: Record<string, string>;
   fields: Field[];
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
@@ -151,12 +152,14 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
         <input type="checkbox" checked={data.isAdult} disabled={saving} onChange={(e) => setAdult(e.target.checked)} />
         {t("people.isAdult")}
       </label>
+      {data.family && <p className="-mt-3 mb-5 text-[13px] text-ink-secondary">{t("families.memberOf", { name: data.family.name })}</p>}
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
 
       <div className="flex flex-col gap-8">
         <section className="rounded-lg border border-mist bg-paper-2 p-3">
           <h2 className={sectionTitle}>{t("childProfile.portalTitle")}</h2>
           <p className="mb-2 text-[12.5px] text-ink-secondary">{data.portalUrl ? t("childProfile.portalHasLink") : t("childProfile.portalNoLink")}</p>
+          {data.family && <p className="mb-2 text-[12.5px] text-ink-secondary">{t("families.childLinkHint", { name: data.family.name })}</p>}
           <div className="flex flex-wrap gap-2">
             <button onClick={copyLink} disabled={saving} className={btn}>
               {t("childProfile.copyLink")}
