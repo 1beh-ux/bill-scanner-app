@@ -119,6 +119,15 @@ async function main() {
     { key: "public.err.email", cs: "e-mail", en: "e-mail" },
     { key: "public.err.category", cs: "kategorie", en: "category" },
     { key: "public.err.oddil", cs: "oddíl", en: "unit" },
+
+    // E. auto-accept
+    { key: "autoAccept.label", cs: "Přihlášky z portálu a veřejné stránky", en: "Registrations from the portal and the public page" },
+    { key: "autoAccept.manual", cs: "Čekají na přijetí (ručně, jako dosud)", en: "Wait for acceptance (by hand, as before)" },
+    { key: "autoAccept.accept", cs: "Přijmout automaticky, nic neposílat", en: "Accept automatically, send nothing" },
+    { key: "autoAccept.acceptSend", cs: "Přijmout a hned poslat přijímací e-mail s dokumenty", en: "Accept and send the acceptance e-mail with documents at once" },
+    { key: "autoAccept.hint", cs: "Platí jen pro přihlášky z portálu rodičů a z veřejné stránky — nikdy pro import nebo ruční přidání.", en: "Only for registrations from the parent portal and the public page — never for imports or manual adds." },
+    { key: "autoAccept.sendWarning", cs: "Pozor: rodičům pak automaticky odejde přijímací e-mail (šablona akce beze změn) i s vygenerovanými dokumenty a platebními údaji — bez náhledu a bez vašeho potvrzení. Zkontrolujte šablonu, dokumenty, ceny a odesílací účet akce.", en: "Careful: parents then automatically get the acceptance e-mail (the event's template unedited) with generated documents and payment details — without a preview or your confirmation. Check the template, documents, prices and the event's sending account." },
+    { key: "autoAccept.noSender", cs: "Akce nemá připojený odesílací účet — přihlášky se jen přijímají, e-mail neodchází. Připojte účet v Nastavení akce → Pošta.", en: "The event has no connected sending account — registrations are only accepted, no e-mail goes out. Connect one in Event settings → Mail." },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

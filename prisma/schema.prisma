@@ -31,6 +31,17 @@ enum EventKind {
 // decided to accept them and (normally) sent the acceptance email -- see
 // REGISTRATION_ACCEPTANCE_PURPOSE_KEY. No "rejected" state yet -- not asked
 // for, add one if that's ever a real need.
+// What happens to a registration made in the parent portal / on the public
+// page (docs/registration-slice3-spec.md E; imports and manual adds never):
+// manual = stays pending (default, as before); accept = accepted, nothing
+// sent; accept_send = accepted + documents + the acceptance e-mail with the
+// event's template unedited (same code path as "Přijmout a odeslat").
+enum AutoAccept {
+  manual
+  accept
+  accept_send
+}
+
 enum RegistrationStatus {
   pending
   accepted
@@ -336,6 +347,7 @@ model Event {
   publicRegistration    Boolean   @default(false) @map("public_registration")
   publicSlug            String?   @unique @map("public_slug")
   landingContent        String?   @map("landing_content")
+  autoAccept            AutoAccept @default(manual) @map("auto_accept")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 

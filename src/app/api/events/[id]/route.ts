@@ -10,6 +10,7 @@ import { linkChildren } from "@/lib/children";
 import { readEligibility } from "@/lib/portal-rules";
 import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
+import { eventSender } from "@/lib/auto-accept";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -31,7 +32,9 @@ export async function GET(
   if (!event) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  return NextResponse.json(event);
+  // Auto-send needs a connected sending account; without one it only accepts (settings warn).
+  const autoSendReady = event.autoAccept === "accept_send" ? !!(await eventSender(event)) : null;
+  return NextResponse.json({ ...event, autoSendReady });
 }
 
 export async function PATCH(
@@ -73,6 +76,7 @@ export async function PATCH(
     publicRegistration,
     publicSlug,
     landingContent,
+    autoAccept,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -84,7 +88,9 @@ export async function PATCH(
     eligibility !== undefined ||
     publicRegistration !== undefined ||
     publicSlug !== undefined ||
-    landingContent !== undefined;
+    landingContent !== undefined ||
+    autoAccept !== undefined;
+  if (autoAccept !== undefined && !["manual", "accept", "accept_send"].includes(autoAccept)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
   if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
@@ -181,6 +187,7 @@ export async function PATCH(
       ...(publicRegistration !== undefined && { publicRegistration }),
       ...(publicSlug !== undefined && { publicSlug: publicSlug || null }),
       ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
+      ...(autoAccept !== undefined && { autoAccept }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.

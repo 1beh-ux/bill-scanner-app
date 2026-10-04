@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { portalScope, registerFromPortal, type RegistrationPick } from "@/lib/portal-server";
+import { autoAcceptRegistrations } from "@/lib/auto-accept";
 
 // Portal "Přihlásit": { eventId, picks?: [{ memberId, priceCategory?, oddil? }], note? }
 // -> pending participants (src/lib/portal-server.ts). A child link without picks registers its child.
@@ -15,5 +16,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       ? [{ memberId: scope.members[0].id }]
       : [];
   const created = await registerFromPortal(scope, body.eventId, picks, typeof body.note === "string" ? body.note : "");
-  return created ? NextResponse.json({ ok: true }, { status: 201 }) : NextResponse.json({ error: "not_available" }, { status: 409 });
+  if (!created) return NextResponse.json({ error: "not_available" }, { status: 409 });
+  await autoAcceptRegistrations(body.eventId, created.ids, "portal");
+  return NextResponse.json({ ok: true }, { status: 201 });
 }

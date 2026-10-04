@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { Eligibility } from "@/lib/portal-rules";
 
+type AutoAcceptMode = "manual" | "accept" | "accept_send";
+
 // Event settings -> "Registrace a členství": "Otevřeno pro přihlášky v portálu"
 // and who may register (docs/registration-portal-spec.md H). Only shown for a
 // connected event or a membership year; off by default.
@@ -28,12 +30,14 @@ export default function PortalSettings({
   t,
 }: {
   eventId: string;
-  event: { portalOpen: boolean; eligibility: unknown; registrationDeadline: string | null };
+  event: { portalOpen: boolean; eligibility: unknown; registrationDeadline: string | null; autoAccept: AutoAcceptMode; autoSendReady?: boolean | null };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
   const initial = (event.eligibility ?? {}) as Eligibility;
   const [open, setOpen] = useState(event.portalOpen);
+  // Auto-accept of portal / public registrations (slice 3 E); manual = as before.
+  const [autoAccept, setAutoAccept] = useState<AutoAcceptMode>(event.autoAccept);
   const [everyone, setEveryone] = useState(!!initial.everyone);
   const [yearFrom, setYearFrom] = useState(initial.birthYearFrom != null ? String(initial.birthYearFrom) : "");
   const [yearTo, setYearTo] = useState(initial.birthYearTo != null ? String(initial.birthYearTo) : "");
@@ -81,7 +85,7 @@ export default function PortalSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portalOpen: open, eligibility: rule }),
+      body: JSON.stringify({ portalOpen: open, eligibility: rule, autoAccept }),
     });
     setSaving(false);
     setMessage(res.ok ? t("portalSettings.saved") : t("registrationSettings.saveFailed"));
@@ -106,6 +110,20 @@ export default function PortalSettings({
       </label>
       <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("portalSettings.openHint")}</span>
       {pastDeadline && <span className="text-[12px] text-amber-700">{t("portalSettings.pastDeadline")}</span>}
+
+      <label className="text-[13px] text-ink-secondary">
+        {t("autoAccept.label")}
+        <select value={autoAccept} onChange={(e) => setAutoAccept(e.target.value as AutoAcceptMode)} className={inputClass + " mt-1"}>
+          <option value="manual">{t("autoAccept.manual")}</option>
+          <option value="accept">{t("autoAccept.accept")}</option>
+          <option value="accept_send">{t("autoAccept.acceptSend")}</option>
+        </select>
+        <span className="mt-1 block text-[11.5px]">{t("autoAccept.hint")}</span>
+      </label>
+      {autoAccept === "accept_send" && <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">{t("autoAccept.sendWarning")}</p>}
+      {event.autoAccept === "accept_send" && event.autoSendReady === false && (
+        <p className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">{t("autoAccept.noSender")}</p>
+      )}
 
       <p className="text-[13px] font-medium text-ink">{t("portalSettings.whoTitle")}</p>
       <label className="flex items-center gap-2 text-[13px] text-ink">

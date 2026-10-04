@@ -49,6 +49,8 @@ type EventDetail = {
   publicRegistration: boolean;
   publicSlug: string | null;
   landingContent: string | null;
+  autoAccept: "manual" | "accept" | "accept_send";
+  autoSendReady?: boolean | null;
 };
 
 type Category = {

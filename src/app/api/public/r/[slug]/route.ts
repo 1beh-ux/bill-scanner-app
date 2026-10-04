@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createPublicRegistration, publicEvent, publicFormContext } from "@/lib/public-registration-server";
 import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission } from "@/lib/public-registration";
 import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
+import { autoAcceptRegistrations } from "@/lib/auto-accept";
 
 // Public new-family registration (docs/registration-slice3-spec.md D) --
 // outside the login gate (src/proxy.ts). Unknown/closed slug = bare 404.
@@ -20,6 +21,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   // Counted per valid submit (a parent fixing typos isn't locked out); invalid ones store nothing.
   if (!(await takeRateSlot(`submit:${hashedIp(req)}`, SUBMIT_LIMIT_PER_HOUR, 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
-  await createPublicRegistration(event, result.data);
+  const ids = await createPublicRegistration(event, result.data);
+  // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
+  await autoAcceptRegistrations(event.id, ids, "public");
   return NextResponse.json({ ok: true }, { status: 201 });
 }

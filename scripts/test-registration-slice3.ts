@@ -153,8 +153,24 @@ async function publicForm() {
   assert.equal(isSpam(null), false);
 }
 
+// --- E. auto-accept mode selection --------------------------------------------------
+async function autoAccept() {
+  const { autoAcceptPlan } = await import("../src/lib/auto-accept");
+  const none = { accept: false, send: false, fallback: false };
+  for (const source of ["portal", "public", "import", "manual"] as const) assert.deepEqual(autoAcceptPlan("manual", source, true), none, "manual (default) = as before");
+  for (const mode of ["accept", "accept_send"] as const) {
+    assert.deepEqual(autoAcceptPlan(mode, "import", true), none, "never for imports");
+    assert.deepEqual(autoAcceptPlan(mode, "manual", true), none, "never for manual adds");
+  }
+  assert.deepEqual(autoAcceptPlan("accept", "portal", true), { accept: true, send: false, fallback: false }, "accept: nothing sent");
+  assert.deepEqual(autoAcceptPlan("accept", "public", false), { accept: true, send: false, fallback: false });
+  assert.deepEqual(autoAcceptPlan("accept_send", "public", true), { accept: true, send: true, fallback: false });
+  assert.deepEqual(autoAcceptPlan("accept_send", "portal", false), { accept: true, send: false, fallback: true }, "no sending account: accept only, flagged");
+}
+
 prices()
   .then(publicForm)
+  .then(autoAccept)
   .then(() => console.log("ok"))
   .catch((err) => {
     console.error(err);
