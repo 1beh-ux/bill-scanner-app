@@ -43,6 +43,7 @@ type Core = {
   guardians: { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
   // Membership confirmed by the membership event (registration-connected events).
   confirmedMembership: { key: string; year: number } | null;
+  portalNote: string | null;
 };
 
 const inputClass =
@@ -575,6 +576,12 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
           </span>
         )}
       </div>
+
+      {core.portalNote && (
+        <p className="mb-5 whitespace-pre-wrap rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink">
+          <span className="font-medium">{t("childProfile.portalNote")}:</span> {core.portalNote}
+        </p>
+      )}
 
       <form onSubmit={save} className="flex flex-col gap-6">
         <div className="grid gap-6 lg:grid-cols-2">

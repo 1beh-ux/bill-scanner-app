@@ -6,9 +6,13 @@ export function proxy(req: NextRequest) {
 
   // /__/auth/* is Firebase's sign-in helper, proxied onto our own domain
   // (next.config.ts rewrites) -- it runs before any session exists.
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/");
+  // /p/<token> is the parent portal (docs/registration-portal-spec.md G): no
+  // login, its own token + birth-date cookie check on every portal API request
+  // (src/lib/portal-server.ts).
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
+    pathname.startsWith("/api/portal/") ||
     pathname.startsWith("/api/cron") ||
     // Cloud Tasks-driven bill AI processing (src/lib/cloud-tasks.ts) --
     // server-to-server, authenticated by its own x-tasks-secret header

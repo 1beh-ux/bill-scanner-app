@@ -43,6 +43,8 @@ export async function GET(
       // to insertion order than any derived key (id is a random UUID) would be.
       guardians: true,
       childId: true,
+      // Note typed by the parent when registering in the portal (null otherwise).
+      portalNote: true,
     },
   });
   if (!participant) {

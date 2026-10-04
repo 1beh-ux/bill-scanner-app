@@ -144,7 +144,7 @@ const GUARDIAN_RESOLVERS: Record<string, (p: ParticipantForMerge) => string> = {
  * QR image resolver is separate (async, needs a PNG render) -- resolved
  * inline in resolveVariables rather than through a sync map.
  */
-async function resolvePaymentQrImage(p: ParticipantForMerge, e: EventForMerge): Promise<Buffer | null> {
+export async function resolvePaymentQrImage(p: ParticipantForMerge, e: EventForMerge): Promise<Buffer | null> {
   const price = effectivePriceCzk(p, e);
   if (price == null || !e.registrationBankAccountNumber || !e.registrationBankCode) return null;
   const iban = czechAccountToIban(e.registrationBankAccountNumber, e.registrationBankCode);
