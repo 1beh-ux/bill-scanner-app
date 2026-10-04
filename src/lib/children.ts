@@ -2,6 +2,7 @@
 // A Child is one kid across all events; Participant.childId links an event's
 // row to it. Everything here is opt-in: nothing reads childId unless the event
 // has registrationConnected on, so unconnected events behave exactly as before.
+// Profile editing + push to events: src/lib/child-profile.ts.
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
@@ -50,6 +51,7 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise
   let created = 0;
   for (const [k, ps] of groups) {
     let childId = byKey.get(k);
+    const isNew = !childId;
     if (!childId) {
       // Prefer a row that has the first/last split for the profile's own name.
       const src = ps.find((p) => p.lastName) ?? ps[0];
@@ -61,8 +63,49 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise
     }
     const res = await prisma.participant.updateMany({ where: { id: { in: ps.map((p) => p.id) }, childId: null }, data: { childId } });
     linked += res.count;
+    // A new child's profile starts as a copy of its latest participation.
+    if (isNew) await copyProfileFromLatest(childId);
   }
   return { linked, created };
+}
+
+/**
+ * Fills an EMPTY profile (no field values, no guardians) once from the child's
+ * most recent participation (latest event start): its customFieldValues for the
+ * org-wide field keys + its guardians. Called when linking creates a Child and
+ * by the Děti page's "Doplnit profily z poslední akce". Returns whether it filled.
+ */
+export async function copyProfileFromLatest(childId: string): Promise<boolean> {
+  const [child, latest, templates] = await Promise.all([
+    prisma.child.findUnique({ where: { id: childId }, select: { fieldValues: true, _count: { select: { guardians: true } } } }),
+    prisma.participant.findFirst({
+      where: { childId },
+      orderBy: [{ event: { startDate: "desc" } }, { createdAt: "desc" }],
+      include: { guardians: true },
+    }),
+    prisma.participantFieldTemplate.findMany({ select: { key: true } }),
+  ]);
+  if (!child || !latest || child._count.guardians > 0) return false;
+  if (child.fieldValues && Object.keys(child.fieldValues as object).length > 0) return false;
+  const keys = new Set(templates.map((t) => t.key));
+  const values: Record<string, string> = {};
+  for (const [k, v] of Object.entries((latest.customFieldValues as Record<string, unknown> | null) ?? {})) {
+    if (keys.has(k) && typeof v === "string" && v !== "") values[k] = v;
+  }
+  await prisma.$transaction([
+    prisma.child.update({ where: { id: childId }, data: { fieldValues: values } }),
+    prisma.childGuardian.createMany({
+      data: latest.guardians.map((g) => ({
+        childId,
+        name: g.name,
+        email: g.email,
+        relationship: g.relationship,
+        phone: g.phone,
+        receivesCommunications: g.receivesCommunications,
+      })),
+    }),
+  ]);
+  return true;
 }
 
 /** Auto-link after participants were added -- in connected events and always in a membership year (it's the module's own event). */

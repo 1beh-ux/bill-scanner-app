@@ -5,6 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
+import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel } from "@/lib/portal-rules";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
@@ -28,6 +29,7 @@ type Field = {
   kind: FieldKind;
   computedType?: ComputedType | null;
   active: boolean;
+  portalAccess?: PortalAccessLevel; // org scope only
 };
 
 const inputClass =
@@ -264,6 +266,18 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       body: JSON.stringify(isEvent ? { surfaces: next } : { defaultSurfaces: next }),
     });
     if (!res.ok) load(); // roll back to server truth on failure
+  }
+
+  // Org scope only: what parents may do with this field in the portal (child
+  // profiles, docs/registration-portal-spec.md C). Optimistic like the pills.
+  async function setPortalAccess(field: Field, portalAccess: PortalAccessLevel) {
+    setFields((prev) => prev.map((f) => (f.key === field.key ? { ...f, portalAccess } : f)));
+    const res = await fetch(itemUrl(field.key), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portalAccess }),
+    });
+    if (!res.ok) load();
   }
 
   async function handleAddSubmit(e: React.FormEvent) {
@@ -762,7 +776,25 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               <div className="font-mono text-[11px]">{readComposite(field.options).parts.map((k) => `{{${k}}}`).join(" + ") || "—"}</div>
             )}
           </td>
-          <td className="p-2">{surfacePills(field)}</td>
+          <td className="p-2">
+            {surfacePills(field)}
+            {!isEvent && (
+              <label className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
+                {t("portalAccess.label")}
+                <select
+                  value={field.portalAccess ?? "hidden"}
+                  onChange={(e) => setPortalAccess(field, e.target.value as PortalAccessLevel)}
+                  className="rounded border border-mist bg-paper-2 px-1.5 py-0.5 text-[11.5px] text-ink"
+                >
+                  {PORTAL_ACCESS_LEVELS.map((a) => (
+                    <option key={a} value={a}>
+                      {t(`portalAccess.${a}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </td>
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">

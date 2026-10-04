@@ -190,6 +190,8 @@ model User {
   mailAccountsConnected MailSenderAccount[] @relation("MailAccountConnectedBy")
   documentsReceived    ParticipantDocument[] @relation("ParticipantDocumentReceivedBy")
   mailActionsPerformed MailActionLog[]       @relation("MailActionLogUser")
+  childChangesDecided  ChildChange[]         @relation("ChildChangeDecidedBy")
+  childEmailsSent      ChildEmailLog[]       @relation("ChildEmailSentBy")
 
   @@map("users")
 }
@@ -317,6 +319,13 @@ model Event {
   // On: participants get linked to Child profiles, and member pricing reads
   // the child's accepted membership for the event's start year.
   registrationConnected Boolean   @default(false) @map("registration_connected")
+  // Parent portal (docs/registration-portal-spec.md H): "Otevřeno pro přihlášky
+  // v portálu" -- only used when the event is connected (or a membership year),
+  // hidden after registrationDeadline. eligibility = src/lib/portal-rules.ts
+  // Eligibility ({ everyone?, birthYearFrom?, birthYearTo?, groups?,
+  // attendedEventIds?, childIds? }); null/empty = nobody.
+  portalOpen            Boolean   @default(false) @map("portal_open")
+  eligibility           Json?
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -558,6 +567,8 @@ model Participant {
   // The persistent child profile this event's row belongs to (null = not
   // linked; everything works as before). See src/lib/children.ts.
   childId       String?   @map("child_id")
+  // Optional note a parent typed when registering through the portal.
+  portalNote    String?   @map("portal_note")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])
@@ -575,19 +586,107 @@ model Participant {
   @@map("participants")
 }
 
-// One child across all events and years. Identity only for now (name +
-// birth date, what linking matches on); profile data comes later.
+// One child across all events and years: identity (name + birth date, what
+// linking matches on) plus the profile (src/lib/child-profile.ts) -- the
+// org-wide field values and guardians, copied once from the latest
+// participation and pushed to upcoming connected events on every change.
 model Child {
   id          String    @id @default(uuid())
   name        String
   firstName   String?   @map("first_name")
   lastName    String?   @map("last_name")
   dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  // Record<ParticipantFieldTemplate.key, string> -- same keys/values as
+  // Participant.customFieldValues.
+  fieldValues Json?     @map("field_values")
+  // Parent portal link (/p/<token>): random, generated on demand; replacing it
+  // kills the old link and every device's birth-date cookie (src/lib/portal-gate.ts).
+  portalToken String?   @unique @map("portal_token")
+  // Wrong birth-date attempts in the current one-hour window (throttle).
+  portalGateFailures    Int       @default(0) @map("portal_gate_failures")
+  portalGateWindowStart DateTime? @map("portal_gate_window_start")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   participants Participant[]
+  guardians    ChildGuardian[]
+  changes      ChildChange[]
+  emailLogs    ChildEmailLog[]
 
   @@map("children")
+}
+
+// Mirrors ParticipantGuardian, on the child profile.
+model ChildGuardian {
+  id                     String  @id @default(uuid())
+  childId                String  @map("child_id")
+  name                   String?
+  email                  String
+  relationship           String?
+  phone                  String?
+  receivesCommunications Boolean @default(true) @map("receives_communications")
+
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@index([childId])
+  @@map("child_guardians")
+}
+
+// Per org-wide field: what a parent may do with it in the portal. hidden (the
+// default) = not even sent to the portal.
+enum PortalAccess {
+  edit
+  approval
+  read
+  hidden
+}
+
+enum ChildChangeStatus {
+  pending
+  accepted
+  rejected
+}
+
+// A parent's portal edit of an `approval` field, waiting for an admin. While
+// pending the old value stays live everywhere. fieldKey = a
+// ParticipantFieldTemplate key or a built-in (participant_first_name,
+// participant_last_name, datum_narozeni). One pending row per child + field: a
+// newer edit replaces it.
+model ChildChange {
+  id          String            @id @default(uuid())
+  childId     String            @map("child_id")
+  fieldKey    String            @map("field_key")
+  oldValue    String?           @map("old_value")
+  newValue    String?           @map("new_value")
+  status      ChildChangeStatus @default(pending)
+  createdAt   DateTime          @default(now()) @map("created_at")
+  decidedById String?           @map("decided_by_id")
+  decidedAt   DateTime?         @map("decided_at")
+
+  child     Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+  decidedBy User? @relation("ChildChangeDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([childId, status])
+  @@map("child_changes")
+}
+
+// Child-level e-mails (the portal link) -- ParentEmailLog needs a participant,
+// these have none. One row per recipient attempt.
+model ChildEmailLog {
+  id           String            @id @default(uuid())
+  childId      String            @map("child_id")
+  email        String
+  purposeKey   String            @map("purpose_key")
+  sentAt       DateTime          @default(now()) @map("sent_at")
+  status       ParentEmailStatus
+  errorMessage String?           @map("error_message")
+  sentByUserId String            @map("sent_by_user_id")
+  subject      String?
+
+  child  Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+  sentBy User  @relation("ChildEmailSentBy", fields: [sentByUserId], references: [id])
+
+  @@index([childId])
+  @@map("child_email_log")
 }
 
 model ParticipantGuardian {
@@ -681,6 +780,8 @@ model ParticipantFieldTemplate {
   // modules PATCH route's enable hook).
   defaultSurfaces ParticipantFieldSurface[] @map("default_surfaces")
   active          Boolean                   @default(true)
+  // Parent portal rule for this field (child profiles, docs/registration-portal-spec.md C).
+  portalAccess    PortalAccess              @default(hidden) @map("portal_access")
 
   @@map("participant_field_templates")
 }

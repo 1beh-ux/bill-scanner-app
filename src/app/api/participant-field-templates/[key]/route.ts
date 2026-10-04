@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { PORTAL_ACCESS_LEVELS } from "@/lib/portal-rules";
 
 export async function PATCH(
   req: NextRequest,
@@ -17,7 +18,11 @@ export async function PATCH(
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
   const body = await req.json();
-  const { key: newKey, label, fieldType, options, defaultSurfaces, active } = body;
+  const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess } = body;
+  // Parent portal rule (child profiles) -- see PortalAccess in the schema.
+  if (portalAccess !== undefined && !PORTAL_ACCESS_LEVELS.includes(portalAccess)) {
+    return NextResponse.json({ error: "bad_portal_access" }, { status: 400 });
+  }
 
   // Renaming only touches this org template -- it never retroactively
   // renames already-synced EventParticipantField rows (sync only adds
@@ -42,6 +47,7 @@ export async function PATCH(
       ...(options !== undefined && { options }),
       ...(defaultSurfaces !== undefined && { defaultSurfaces }),
       ...(active !== undefined && { active }),
+      ...(portalAccess !== undefined && { portalAccess }),
     },
   });
 

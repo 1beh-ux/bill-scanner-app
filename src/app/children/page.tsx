@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
+import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
 
 type EventRef = { id: string; name: string; startDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type ChildRow = {
   id: string;
   name: string;
   dateOfBirth: string | null;
+  hasPortalLink: boolean;
   participants: { id: string; registrationStatus: "pending" | "accepted"; event: EventRef }[];
 };
 type UnlinkedRow = { id: string; name: string; dateOfBirth: string | null; event: EventRef };
-type Data = { children: ChildRow[]; unlinked: UnlinkedRow[]; duplicates: string[][] };
+type Data = { children: ChildRow[]; unlinked: UnlinkedRow[]; duplicates: string[][]; pendingChanges: PendingChange[] };
 
 const inputClassSm =
   "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -31,6 +35,7 @@ export default function ChildrenPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [linkInput, setLinkInput] = useState<Record<string, string>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (roleLoaded && role !== "admin") router.replace("/events");
@@ -60,6 +65,26 @@ export default function ChildrenPage() {
   async function seed() {
     const r = await post({ action: "seed" });
     if (r) setMessage(t("children.seedDone", { linked: String(r.linked), created: String(r.created) }));
+  }
+
+  async function fillProfiles() {
+    const r = await post({ action: "fillProfiles" });
+    if (r) setMessage(t("childProfile.fillDone", { count: String(r.filled) }));
+  }
+
+  async function copyLink(c: ChildRow) {
+    const ok = await copyPortalLink(c.id);
+    setMessage(ok ? t("childProfile.linkCopied", { name: c.name }) : t("children.errorFailed"));
+    if (ok && !c.hasPortalLink) load();
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   }
 
   async function merge(keep: ChildRow, others: ChildRow[]) {
@@ -121,6 +146,9 @@ export default function ChildrenPage() {
         <button onClick={seed} disabled={busy} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
           {t("children.seedButton")}
         </button>
+        <button onClick={fillProfiles} disabled={busy} title={t("childProfile.fillHint")} className={btn}>
+          {t("childProfile.fillButton")}
+        </button>
         <input type="search" placeholder={t("children.search")} value={query} onChange={(e) => setQuery(e.target.value)} className={inputClassSm} />
       </div>
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
@@ -129,6 +157,7 @@ export default function ChildrenPage() {
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>
       ) : (
         <div className="flex flex-col gap-8">
+          <PendingChanges changes={data.pendingChanges} showChild onDecided={load} />
           {data.duplicates.length > 0 && (
             <section>
               <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("children.duplicatesTitle")}</h2>
@@ -195,17 +224,33 @@ export default function ChildrenPage() {
           )}
 
           <section>
-            <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(data.children.length) })}</h2>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(data.children.length) })}</h2>
+              {selected.size > 0 && (
+                <button onClick={() => router.push(portalComposeHref([...selected]))} className={btn}>
+                  {t("childProfile.sendLinkSelected", { count: String(selected.size) })}
+                </button>
+              )}
+            </div>
             {data.children.length === 0 ? (
               <p className="text-[13px] text-ink-secondary">{t("children.empty")}</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] border-collapse">
+                <table className="w-full min-w-[640px] border-collapse">
                   <thead>
                     <tr className="border-b border-mist text-left">
+                      <th className="w-8 p-2">
+                        <input
+                          type="checkbox"
+                          aria-label={t("childProfile.selectAll")}
+                          checked={selected.size > 0 && data.children.filter((c) => match(c.name)).every((c) => selected.has(c.id))}
+                          onChange={(e) => setSelected(e.target.checked ? new Set(data.children.filter((c) => match(c.name)).map((c) => c.id)) : new Set())}
+                        />
+                      </th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("children.colBirth")}</th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("children.colEvents")}</th>
+                      <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("childProfile.colPortal")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -213,9 +258,21 @@ export default function ChildrenPage() {
                       .filter((c) => match(c.name))
                       .map((c) => (
                         <tr key={c.id} className="border-b border-mist/60 align-top">
-                          <td className="p-2 text-[14px] text-ink">{c.name}</td>
+                          <td className="p-2">
+                            <input type="checkbox" aria-label={c.name} checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
+                          </td>
+                          <td className="p-2 text-[14px]">
+                            <Link href={`/children/${c.id}`} className="text-ink underline hover:text-ember">
+                              {c.name}
+                            </Link>
+                          </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
                           <td className="p-2">{c.participants.map(eventChip)}</td>
+                          <td className="whitespace-nowrap p-2">
+                            <button onClick={() => copyLink(c)} className="text-[13px] text-ember hover:underline">
+                              {t("childProfile.copyLink")}
+                            </button>
+                          </td>
                         </tr>
                       ))}
                   </tbody>
