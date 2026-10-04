@@ -29,6 +29,12 @@ unconnected event.
 - Event settings → Akce → "Registrace a členství" (admin): type, year, connected switch.
 - Self-check: `npx tsx scripts/test-membership.ts`.
 
+## Slice 2
+
+Profiles, pending changes, push to events, eligibility and the parent portal:
+`docs/registration-portal-spec.md`, built as described in
+`docs/registration-portal-build-summary.md`.
+
 ## Deliberately not in slice 1
 
 Profile data (contacts/health), parent portal + token link, profile → event push,
