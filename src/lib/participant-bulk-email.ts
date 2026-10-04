@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
-import { resolveVariables, resolveContactEmail, ensureRegistrationNumber } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
@@ -281,6 +282,8 @@ export async function sendBulkParticipantEmail(opts: {
 
   const results: BulkEmailResult[] = [];
   const sendEmail = opts.sendEmail !== false;
+  // For the price the acceptance e-mail carried (slice 3 C), loaded once on first use.
+  let priced: Awaited<ReturnType<typeof withMembers<typeof event>>> | null = null;
   let documentsGenerated = 0;
   const failedDocs = new Set<string>();
   const staticPdfs = new Map<string, Promise<Buffer>>();
@@ -355,6 +358,13 @@ export async function sendBulkParticipantEmail(opts: {
         });
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage });
       }
+    }
+    // Remember the amount this acceptance e-mail carried, so the roster can flag
+    // a live price that changed afterwards (e.g. a sibling's household discount).
+    if (opts.markAccepted && results.some((r) => r.participantId === participantId && r.status === "sent")) {
+      priced ??= await withMembers(event);
+      const amount = effectivePriceCzk({ ...fresh, customFieldValues: fresh.customFieldValues as Record<string, string> | null }, priced);
+      await prisma.participant.update({ where: { id: participantId }, data: { acceptedPriceCzk: amount } });
     }
   }
 

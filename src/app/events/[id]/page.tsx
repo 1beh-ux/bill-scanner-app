@@ -11,6 +11,7 @@ import HealthNotesSettings from "@/components/health/HealthNotesSettings";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import PortalSettings from "@/components/events/PortalSettings";
+import PriceSettings from "@/components/events/PriceSettings";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -43,6 +44,7 @@ type EventDetail = {
   registrationConnected: boolean;
   portalOpen: boolean;
   eligibility: unknown;
+  priceRules: unknown;
 };
 
 type Category = {
@@ -504,6 +506,7 @@ export default function EventDetailPage({
                   </div>
                 </form>
               </div>
+              {event && <PriceSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
             </div>
           )}
 

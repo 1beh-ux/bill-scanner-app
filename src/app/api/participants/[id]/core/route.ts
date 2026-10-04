@@ -4,7 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 import { fullNameFrom } from "@/lib/participant-name";
-import { confirmedMembershipKey } from "@/lib/document-variables";
+import { confirmedMembershipKey, effectivePriceCzk } from "@/lib/document-variables";
+import { allowedCategories, readPriceRules } from "@/lib/price-rules";
 import { withMembers } from "@/lib/children";
 
 // Core-identity view of a participant (name/group/dob/registration status)
@@ -45,6 +46,11 @@ export async function GET(
       childId: true,
       // Note typed by the parent when registering in the portal (null otherwise).
       portalNote: true,
+      priceCategory: true,
+      acceptedPriceCzk: true,
+      createdAt: true,
+      registrationNumber: true,
+      child: { select: { isAdult: true } },
     },
   });
   if (!participant) {
@@ -57,13 +63,28 @@ export async function GET(
   // Membership confirmed by the membership event (connected events only): the
   // detail shows the field as "Ano" + the year, the stored value stays as it is.
   let confirmedMembership: { key: string; year: number } | null = null;
-  if (participant.childId) {
-    const event = await prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } }).then(withMembers);
+  // Price category (slice 3 C): only when the event has price rules.
+  let pricing: { category: string | null; categories: { key: string; label: string }[]; price: number | null; priceSent: number | null } | null = null;
+  const rawEvent = await prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } });
+  const rules = readPriceRules(rawEvent.priceRules);
+  if (participant.childId || rules) {
+    const event = await withMembers(rawEvent);
     const key = confirmedMembershipKey(participant, event);
     if (key) confirmedMembership = { key, year: event.startDate.getUTCFullYear() };
+    if (rules) {
+      pricing = {
+        category: participant.priceCategory,
+        categories: allowedCategories(rules, !!participant.child?.isAdult).map((c) => ({ key: c.key, label: c.label })),
+        price: effectivePriceCzk({ ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null }, event),
+        priceSent: participant.acceptedPriceCzk,
+      };
+    }
   }
+  const { child: _child, ...rest } = participant;
+  void _child;
   const scoped = {
-    ...participant,
+    ...rest,
+    pricing,
     customFieldValues: Object.fromEntries(
       Object.entries((participant.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>
         allowedKeys.has(key)
@@ -93,6 +114,11 @@ export async function PATCH(
 
   const body = await req.json();
   const { groupName, dateOfBirth, customFieldValues } = body;
+  // Price category (slice 3 C): a key of the event's price rules, or null = the first allowed.
+  if (body.priceCategory !== undefined && body.priceCategory !== null && typeof body.priceCategory !== "string") {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+  const priceCategory: string | null | undefined = body.priceCategory === undefined ? undefined : body.priceCategory?.trim().slice(0, 40) || null;
   const firstName: string | undefined = typeof body.firstName === "string" ? body.firstName.trim() : undefined;
   const lastName: string | undefined = typeof body.lastName === "string" ? body.lastName.trim() : undefined;
   // Editing firstName/lastName recomputes `name` from the merged pair (the field not sent
@@ -134,6 +160,7 @@ export async function PATCH(
       ...(groupName !== undefined && { groupName: groupName || null }),
       ...(dateOfBirth !== undefined && { dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null }),
       ...(mergedCustomFieldValues !== undefined && { customFieldValues: mergedCustomFieldValues }),
+      ...(priceCategory !== undefined && { priceCategory }),
     },
     select: {
       id: true,

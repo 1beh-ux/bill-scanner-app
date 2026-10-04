@@ -326,6 +326,10 @@ model Event {
   // attendedEventIds?, childIds? }); null/empty = nobody.
   portalOpen            Boolean   @default(false) @map("portal_open")
   eligibility           Json?
+  // Price rules (docs/registration-slice3-spec.md C, src/lib/price-rules.ts
+  // PriceRules: categories, school-year date, household minimum). null =
+  // today's pricing exactly (memberPriceCzk / nonMemberPriceCzk by isMember).
+  priceRules            Json?     @map("price_rules")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -569,6 +573,12 @@ model Participant {
   childId       String?   @map("child_id")
   // Optional note a parent typed when registering through the portal.
   portalNote    String?   @map("portal_note")
+  // Price category key (Event.priceRules); null/unknown = the first category
+  // allowed for the person. Unused while the event has no price rules.
+  priceCategory String?   @map("price_category")
+  // The price the last acceptance e-mail carried -- the roster flags a live
+  // price that differs from it ("cena se změnila po odeslání").
+  acceptedPriceCzk Int?   @map("accepted_price_czk")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])

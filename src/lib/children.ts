@@ -6,6 +6,8 @@
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
+import { readPriceRules } from "@/lib/price-rules";
+import type { PriceContext } from "@/lib/document-variables";
 
 /** Match key: name without diacritics/case/extra spaces + birth date. Null = can't match safely. */
 export function childKey(name: string, dateOfBirth: Date | null): string | null {
@@ -166,7 +168,29 @@ export async function memberChildIds(eventId: string): Promise<Set<string> | und
   return new Set(rows.map((r) => r.childId!));
 }
 
-/** The event with its confirmed members attached, for isMember() in document-variables.ts. */
-export async function withMembers<E extends { id: string }>(event: E): Promise<E & { memberChildIds?: Set<string> }> {
-  return { ...event, memberChildIds: await memberChildIds(event.id) };
+/**
+ * Who is an adult and how many people of each Family are registered (active,
+ * pending or accepted) in the event -- what price rules need (slice 3 C).
+ * Counted live across the whole event, so a later sibling also lowers the
+ * earlier ones' price (retroactively, as decided).
+ */
+export async function priceContext(eventId: string): Promise<PriceContext> {
+  const rows = await prisma.participant.findMany({
+    where: { eventId, childId: { not: null } },
+    select: { childId: true, active: true, child: { select: { isAdult: true, familyId: true } } },
+  });
+  const perFamily = new Map<string, Set<string>>();
+  for (const r of rows) {
+    if (r.active && r.child?.familyId) perFamily.set(r.child.familyId, (perFamily.get(r.child.familyId) ?? new Set()).add(r.childId!));
+  }
+  return {
+    adultChildIds: new Set(rows.filter((r) => r.child?.isAdult).map((r) => r.childId!)),
+    householdSize: new Map(rows.map((r) => [r.childId!, r.child?.familyId ? (perFamily.get(r.child.familyId)?.size ?? 1) : 1])),
+  };
+}
+
+/** The event with its confirmed members (isMember() in document-variables.ts) and, with price rules, the price context attached. */
+export async function withMembers<E extends { id: string; priceRules?: unknown }>(event: E): Promise<E & { memberChildIds?: Set<string>; priceContext?: PriceContext }> {
+  const [members, context] = await Promise.all([memberChildIds(event.id), readPriceRules(event.priceRules) ? priceContext(event.id) : undefined]);
+  return { ...event, memberChildIds: members, priceContext: context };
 }

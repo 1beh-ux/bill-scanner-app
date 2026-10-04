@@ -5,6 +5,7 @@ import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
 import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
+import { readPriceRules, rulePrice } from "@/lib/price-rules";
 
 export type ParticipantForMerge = {
   name: string;
@@ -16,7 +17,17 @@ export type ParticipantForMerge = {
   customFieldValues: Record<string, string> | null;
   registrationNumber: number | null;
   childId?: string | null;
+  // Price rules (slice 3 C): the chosen category and when the registration was made.
+  priceCategory?: string | null;
+  createdAt?: Date;
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
+};
+
+/** What price rules need beyond the participant row (src/lib/children.ts withMembers). */
+export type PriceContext = {
+  adultChildIds: Set<string>;
+  // Child id -> people of its Family with an active registration in the event (itself included).
+  householdSize: Map<string, number>;
 };
 
 // Camp-fee membership used to be read from a hardcoded custom-field key;
@@ -44,6 +55,9 @@ export type EventForMerge = {
   // Children with an accepted membership for this event's year (src/lib/children.ts
   // withMembers) -- only set for registration-connected events.
   memberChildIds?: Set<string>;
+  // Event.priceRules (src/lib/price-rules.ts); null/missing = member / non-member pricing.
+  priceRules?: unknown;
+  priceContext?: PriceContext;
 };
 
 function formatDate(d: Date | null): string {
@@ -103,7 +117,16 @@ export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
 }
 
 export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): number | null {
-  return isMember(p, e) ? e.memberPriceCzk : e.nonMemberPriceCzk;
+  const rules = readPriceRules(e.priceRules);
+  if (!rules) return isMember(p, e) ? e.memberPriceCzk : e.nonMemberPriceCzk;
+  return rulePrice(rules, {
+    category: p.priceCategory,
+    isAdult: !!p.childId && !!e.priceContext?.adultChildIds.has(p.childId),
+    isMember: isMember(p, e),
+    createdAt: p.createdAt ?? new Date(),
+    eventStart: e.startDate,
+    householdCount: (p.childId && e.priceContext?.householdSize.get(p.childId)) || 1,
+  });
 }
 
 /**
@@ -192,7 +215,7 @@ export async function resolveVariables(
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};
 
-  if (participant.childId && event.memberChildIds === undefined) event = await withMembers(event);
+  if ((participant.childId && event.memberChildIds === undefined) || (event.priceRules && !event.priceContext)) event = await withMembers(event);
   const values = fieldTextValues(participant, event, allFields);
   // {{health_notes}}: the Zdravotní poznámky (Nastavení akce -> Zdraví), all of them, in order.
   const healthConfig = event.healthNotes == null ? defaultHealthNotes(allFields) : sanitizeHealthNotes(event.healthNotes, new Set(allFields.map((f) => f.key)));

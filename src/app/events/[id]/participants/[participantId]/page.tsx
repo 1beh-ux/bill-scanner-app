@@ -44,6 +44,8 @@ type Core = {
   // Membership confirmed by the membership event (registration-connected events).
   confirmedMembership: { key: string; year: number } | null;
   portalNote: string | null;
+  // Price rules (slice 3 C) -- null when the event has none.
+  pricing: { category: string | null; categories: { key: string; label: string }[]; price: number | null; priceSent: number | null } | null;
 };
 
 const inputClass =
@@ -576,6 +578,33 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
           </span>
         )}
       </div>
+
+      {core.pricing && (
+        <div className="mb-5 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink">
+          <span className="font-medium">{t("priceRules.category")}:</span>
+          <select
+            value={core.pricing.category ?? ""}
+            onChange={async (e) => {
+              const res = await fetch(`/api/participants/${participantId}/core`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priceCategory: e.target.value || null }) });
+              // Only the price block refreshes -- the form's unsaved edits stay.
+              const fresh = res.ok ? await fetch(`/api/participants/${participantId}/core`).then((r) => (r.ok ? r.json() : null)) : null;
+              if (fresh) setCore((c) => c && { ...c, pricing: fresh.pricing });
+            }}
+            className="rounded-lg border border-mist bg-paper px-2 py-1 text-[13px] text-ink"
+          >
+            <option value="">{t("priceRules.categoryDefault")}</option>
+            {core.pricing.categories.map((c) => (
+              <option key={c.key} value={c.key}>
+                {c.label}
+              </option>
+            ))}
+          </select>
+          <span>{core.pricing.price != null ? `${core.pricing.price} Kč` : "—"}</span>
+          {core.pricing.priceSent != null && core.pricing.priceSent !== core.pricing.price && (
+            <span className="text-amber-700">{t("priceRules.changedAfterSend", { old: String(core.pricing.priceSent), new: String(core.pricing.price ?? "—") })}</span>
+          )}
+        </div>
+      )}
 
       {core.portalNote && (
         <p className="mb-5 whitespace-pre-wrap rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[13px] text-ink">

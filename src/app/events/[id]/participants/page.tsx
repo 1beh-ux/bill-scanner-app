@@ -29,8 +29,11 @@ type Participant = {
   documentsReceived: number;
   customFieldValues: Record<string, string> | null;
   guardian: { name: string | null; email: string; relationship: string | null; phone: string | null } | null;
-  computed: { price: number | null; var_symb: string; contact_email: string };
+  computed: { price: number | null; priceSent: number | null; var_symb: string; contact_email: string };
 };
+
+// "cena se změnila po odeslání" (slice 3 C): the live price differs from the acceptance e-mail's.
+const priceChanged = (p: Participant) => p.computed.priceSent != null && p.computed.price !== p.computed.priceSent;
 
 const resolveDynamicValue = columnValue;
 
@@ -439,6 +442,11 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
                     <td className="p-2 text-[13px]">
                       {statusButton(p)}
+                      {priceChanged(p) && (
+                        <span className="ml-1 block whitespace-nowrap text-[11.5px] text-amber-700">
+                          {t("priceRules.changedAfterSend", { old: String(p.computed.priceSent), new: String(p.computed.price ?? "—") })}
+                        </span>
+                      )}
                     </td>
                     <td className="p-2 text-[13px] text-ink-secondary">
                       {p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"}
@@ -482,6 +490,7 @@ export default function EventParticipantsPage({
                   <span className="shrink-0 text-[12px]">{statusButton(p)}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">
+                  {priceChanged(p) && <span className="text-amber-700">{t("priceRules.changedAfterSend", { old: String(p.computed.priceSent), new: String(p.computed.price ?? "—") })}</span>}
                   {p.groupName && <span>{p.groupName}</span>}
                   {age !== null && <span>{t("participantsPage.colAge")}: {age}</span>}
                   {p.documentsTotal > 0 && (

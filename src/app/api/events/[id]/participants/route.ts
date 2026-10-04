@@ -65,6 +65,9 @@ export async function GET(
       guardian: guardians.find((g) => g.receivesCommunications) ?? guardians[0] ?? null,
       computed: {
         price: effectivePriceCzk(forMerge, event),
+        // What the last acceptance e-mail carried (null = never sent) -- only
+        // flagged with price rules on; without them the roster stays as it was.
+        priceSent: event.priceContext ? p.acceptedPriceCzk : null,
         var_symb: buildVariableSymbol(forMerge, event),
         contact_email: resolveContactEmail({ guardians }),
       },

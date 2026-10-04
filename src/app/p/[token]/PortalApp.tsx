@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toBoolean } from "@/lib/participant-fields";
+import { previewPrices, type PriceRules } from "@/lib/price-rules";
+import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
 
 // The parent portal UI, mobile-first. Data from /api/portal/<token>
 // (src/lib/portal-server.ts); every request carries the birth-date cookie.
@@ -30,7 +32,18 @@ type Data = {
   name: string;
   members: Member[];
   contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
-  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[] })[];
+  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[]; pricing: Pricing })[];
+};
+// For the live price of a registration (src/lib/portal-server.ts registrationPricing).
+type Pricing = {
+  rules: PriceRules | null;
+  memberPriceCzk: number | null;
+  nonMemberPriceCzk: number | null;
+  eventStart: string;
+  alreadyRegistered: number;
+  inFamily: boolean;
+  oddil: OddilField | null;
+  members: { id: string; isAdult: boolean; isMember: boolean; categories: CategoryOption[] }[];
 };
 type Tab = "profile" | "events" | "registrations" | "history";
 
@@ -285,6 +298,8 @@ function FieldInput({ field, value, onChange, t }: { field: Field; value: string
 function Available({ api, data, t, evName, onRegistered }: { api: string; data: Data; t: T; evName: (e: EventRef) => string; onRegistered: () => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  // Per picked member: price category + Oddíl (price rules, slice 3 C).
+  const [choice, setChoice] = useState<Record<string, { category?: string; oddil?: string }>>({});
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -294,7 +309,8 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
   async function register(eventId: string) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, memberIds: picked, note }) }).catch(() => null);
+    const picks = picked.map((memberId) => ({ memberId, priceCategory: choice[memberId]?.category, oddil: choice[memberId]?.oddil }));
+    const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setError(t("portal.registerFailed"));
     setOpenId(null);
@@ -313,16 +329,28 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
           </div>
           {e.registrationDeadline && <span className="text-[13px] text-ink-secondary">{t("portal.deadline", { date: date(e.registrationDeadline) })}</span>}
           {openId !== e.id ? (
-            <button onClick={() => { setOpenId(e.id); setPicked(e.memberIds); setError(null); }} className={btnPrimary}>
+            <button onClick={() => { setOpenId(e.id); setPicked(e.memberIds); setChoice({}); setError(null); }} className={btnPrimary}>
               {t("portal.register")}
             </button>
           ) : (
             <div className="flex flex-col gap-3 rounded-lg bg-paper-2 p-3">
               <p className="text-[13px] text-ink-secondary">{t("portal.reviewHint")}</p>
+              {(() => {
+                // Live prices of the picked members together (the household counts them all).
+                const pm = (id: string) => e.pricing.members.find((x) => x.id === id)!;
+                const prices = previewPrices(
+                  { ...e.pricing, eventStart: new Date(e.pricing.eventStart) },
+                  picked.map((id) => ({ category: choice[id]?.category ?? pm(id).categories[0]?.key, isAdult: pm(id).isAdult, isMember: pm(id).isMember }))
+                );
+                const priceOf = (id: string) => (picked.includes(id) ? prices[picked.indexOf(id)] : null);
+                const total = prices.reduce<number>((s, p) => s + (p ?? 0), 0);
+                return (
+                  <>
               {e.memberIds.map((id) => {
                 const m = memberOf(id);
                 return (
-                  <label key={id} className="flex items-start gap-2 rounded-lg border border-mist bg-paper p-2 text-[14px]">
+                  <div key={id} className="flex flex-col gap-2 rounded-lg border border-mist bg-paper p-2 text-[14px]">
+                  <label className="flex items-start gap-2">
                     {e.memberIds.length > 1 && (
                       <input type="checkbox" className="mt-1" checked={picked.includes(id)} onChange={() => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))} />
                     )}
@@ -335,8 +363,25 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                       </span>
                     </span>
                   </label>
+                  {picked.includes(id) && (
+                    <PersonPrice
+                      categories={pm(id).categories}
+                      category={choice[id]?.category}
+                      onCategory={(category) => setChoice((c) => ({ ...c, [id]: { ...c[id], category } }))}
+                      oddil={e.pricing.oddil}
+                      oddilValue={choice[id]?.oddil}
+                      onOddil={(oddil) => setChoice((c) => ({ ...c, [id]: { ...c[id], oddil } }))}
+                      price={priceOf(id)}
+                      t={t}
+                    />
+                  )}
+                  </div>
                 );
               })}
+              {picked.length > 1 && <p className="text-[14px] font-medium text-ink">{t("portal.total", { price: String(total) })}</p>}
+                  </>
+                );
+              })()}
               <label className="text-[13px] text-ink-secondary">
                 {t("portal.note")}
                 <textarea value={note} onChange={(ev) => setNote(ev.target.value)} rows={3} maxLength={2000} className={inputClass + " mt-1"} />

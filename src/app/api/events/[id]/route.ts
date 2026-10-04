@@ -8,6 +8,7 @@ import { normalizeBillColumns } from "@/lib/bill-columns";
 import { invalidateDriveIdentity } from "@/lib/drive";
 import { linkChildren } from "@/lib/children";
 import { readEligibility } from "@/lib/portal-rules";
+import { readPriceRules } from "@/lib/price-rules";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -67,6 +68,7 @@ export async function PATCH(
     registrationConnected,
     portalOpen,
     eligibility,
+    priceRules,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -158,6 +160,8 @@ export async function PATCH(
       ...(portalOpen !== undefined && { portalOpen }),
       // Stored cleaned (src/lib/portal-rules.ts readEligibility); null/{} = nobody.
       ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),
+      // Price rules (slice 3 C), stored cleaned; null (or nothing usable) = today's member/non-member pricing.
+      ...(priceRules !== undefined && { priceRules: readPriceRules(priceRules) ?? Prisma.DbNull }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.
