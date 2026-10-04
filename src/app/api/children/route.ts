@@ -6,10 +6,20 @@ import { participantDisplayName } from "@/lib/participant-name";
 
 // Děti (child profiles) admin page: children with their events, unlinked
 // participants, and possible duplicates (same name, different/missing birth date).
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+
+  // ?list=1: just the children, for the add-participant picker.
+  if (new URL(req.url).searchParams.get("list")) {
+    return NextResponse.json(
+      await prisma.child.findMany({
+        orderBy: [{ lastName: "asc" }, { name: "asc" }],
+        select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
+      })
+    );
+  }
 
   const eventSelect = { select: { id: true, name: true, startDate: true, kind: true, membershipYear: true } };
   const [children, unlinked] = await Promise.all([

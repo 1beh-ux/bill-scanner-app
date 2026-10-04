@@ -96,6 +96,18 @@ export default function ChildrenPage() {
       >
         {membership ? t("children.membershipChip", { year: String(p.event.membershipYear ?? "?") }) : p.event.name}
         {membership && !accepted && ` (${t("children.pending")})`}
+        <button
+          type="button"
+          title={t("children.unlink")}
+          aria-label={t("children.unlink")}
+          disabled={busy}
+          onClick={async () => {
+            if (await confirm({ message: t("children.unlinkConfirm", { event: p.event.name }) })) post({ action: "link", participantId: p.id, childId: null });
+          }}
+          className="ml-1 text-ink-secondary hover:text-red-600"
+        >
+          ×
+        </button>
       </span>
     );
   };

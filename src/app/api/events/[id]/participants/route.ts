@@ -134,6 +134,11 @@ export async function POST(
   // here -- that's still deferred to whenever one is actually needed (document
   // generation), same as the existing accept flow (see ensureRegistrationNumber).
   const acceptImmediately = body.acceptImmediately === true;
+  // Picked existing child (add form, registration-connected events) -- admin only.
+  const childId: string | null = typeof body.childId === "string" && user.role === "admin" ? body.childId : null;
+  if (childId && !(await prisma.child.findUnique({ where: { id: childId }, select: { id: true } }))) {
+    return NextResponse.json({ error: "child_not_found" }, { status: 400 });
+  }
 
   if (!name || typeof name !== "string" || !name.trim()) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
@@ -155,6 +160,7 @@ export async function POST(
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
         customFieldValues: customFieldValues ?? undefined,
         ...(acceptImmediately && { registrationStatus: "accepted" }),
+        ...(childId && { childId }),
       },
     });
 

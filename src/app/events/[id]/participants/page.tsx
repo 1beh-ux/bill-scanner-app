@@ -12,7 +12,10 @@ import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 
-type EventBasic = { id: string; name: string; participantsListColumns: string[] | null };
+type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean };
+type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
+const childOptionLabel = (c: ChildOption) =>
+  `${c.name} (${c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—"})`;
 
 type Participant = {
   id: string;
@@ -48,7 +51,7 @@ export default function EventParticipantsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
   const confirm = useConfirm();
   const router = useRouter();
   const openCompose = (req: ComposeRequest) => router.push(composeHref(id, req));
@@ -66,6 +69,11 @@ export default function EventParticipantsPage({
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [guardians, setGuardians] = useState<GuardianDraft[]>([emptyGuardian()]);
   const [acceptImmediately, setAcceptImmediately] = useState(false);
+  // Registration-connected events: admin picks an existing child (src/lib/children.ts) --
+  // fills name + birth date and links exactly, instead of relying on name matching.
+  const [children, setChildren] = useState<ChildOption[] | null>(null);
+  const [childPick, setChildPick] = useState("");
+  const [childId, setChildId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,6 +148,14 @@ export default function EventParticipantsPage({
     setDateOfBirth("");
     setGuardians([emptyGuardian()]);
     setAcceptImmediately(false);
+    setChildPick("");
+    setChildId(null);
+    if (role === "admin" && (event?.registrationConnected || event?.kind === "membership") && children === null) {
+      fetch("/api/children?list=1")
+        .then((r) => (r.ok ? r.json() : []))
+        .then(setChildren)
+        .catch(() => {});
+    }
     setAddOpen(true);
   }
 
@@ -175,6 +191,7 @@ export default function EventParticipantsPage({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         acceptImmediately,
+        childId: childId ?? undefined,
         groupName: groupName.trim() || undefined,
         dateOfBirth: dateOfBirth || undefined,
         guardians: guardianPayload,
@@ -496,6 +513,32 @@ export default function EventParticipantsPage({
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-paper p-5">
             <h2 className="mb-4 text-[16px] font-semibold text-ink">{t("participantsPage.addButton")}</h2>
             <form onSubmit={handleCreate} className="flex flex-col gap-3">
+              {children && children.length > 0 && (
+                <label className="text-[13px] text-ink-secondary">
+                  {t("participantsPage.pickChild")}
+                  <input
+                    list="add-children-list"
+                    value={childPick}
+                    onChange={(e) => {
+                      setChildPick(e.target.value);
+                      const c = children.find((o) => childOptionLabel(o) === e.target.value);
+                      setChildId(c?.id ?? null);
+                      if (c) {
+                        setFirstName(c.firstName ?? c.name);
+                        setLastName(c.lastName ?? "");
+                        setDateOfBirth(c.dateOfBirth ? c.dateOfBirth.slice(0, 10) : "");
+                      }
+                    }}
+                    className={inputClass + " mt-1"}
+                  />
+                  <datalist id="add-children-list">
+                    {children.map((c) => (
+                      <option key={c.id} value={childOptionLabel(c)} />
+                    ))}
+                  </datalist>
+                  <span className="mt-1 block text-[11.5px]">{childId ? t("participantsPage.pickChildLinked") : t("participantsPage.pickChildHint")}</span>
+                </label>
+              )}
               <div className="flex gap-2">
                 <label className="flex-1 text-[13px] text-ink-secondary">
                   {t("participantsPage.firstNameLabel")}
