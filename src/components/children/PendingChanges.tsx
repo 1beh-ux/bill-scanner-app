@@ -36,7 +36,12 @@ export default function PendingChanges({ changes, showChild, onDecided }: { chan
   }
 
   if (changes.length === 0) return null;
-  const show = (v: string | null) => (v ? v : "—");
+  const show = (c: PendingChange, v: string | null) => {
+    if (!v) return "—";
+    if (c.fieldKey !== "__guardians") return v; // GUARDIANS_CHANGE_KEY: a JSON list
+    const list = JSON.parse(v) as { name: string | null; email: string; phone: string | null; receivesCommunications: boolean }[];
+    return list.map((g) => [g.name, g.email, g.phone].filter(Boolean).join(" · ") + (g.receivesCommunications ? "" : " ✉✗")).join(" | ") || "—";
+  };
   return (
     <section>
       <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("childProfile.pendingTitle", { count: String(changes.length) })}</h2>
@@ -52,9 +57,9 @@ export default function PendingChanges({ changes, showChild, onDecided }: { chan
             )}
             <span className="min-w-32 text-ink-secondary">{c.fieldLabel}</span>
             <span className="flex flex-1 flex-wrap items-center gap-2">
-              <span className="rounded bg-paper-2 px-1.5 py-0.5 text-ink-secondary line-through">{show(c.oldValue)}</span>
+              <span className="rounded bg-paper-2 px-1.5 py-0.5 text-ink-secondary line-through">{show(c, c.oldValue)}</span>
               <span aria-hidden="true">→</span>
-              <span className="rounded bg-pine-bg px-1.5 py-0.5 text-pine">{show(c.newValue)}</span>
+              <span className="rounded bg-pine-bg px-1.5 py-0.5 text-pine">{show(c, c.newValue)}</span>
             </span>
             <span className="flex gap-2">
               <button disabled={busy === c.id} onClick={() => decide(c, true)} className="rounded-lg bg-ember px-3 py-1 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">

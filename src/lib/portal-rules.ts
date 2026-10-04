@@ -16,7 +16,11 @@ export const PROFILE_BUILTINS = {
 } as const;
 export type ProfileBuiltinKey = keyof typeof PROFILE_BUILTINS;
 export const BUILTIN_PORTAL_ACCESS: PortalAccessLevel = "approval";
-export const GUARDIANS_PORTAL_ACCESS: PortalAccessLevel = "edit";
+// Guardians decide who gets every e-mail -- a parent's change waits for an admin
+// (a leaked link must not be able to redirect mail). Stored as ONE pending
+// change under GUARDIANS_CHANGE_KEY holding the whole list as JSON.
+export const GUARDIANS_PORTAL_ACCESS: PortalAccessLevel = "approval";
+export const GUARDIANS_CHANGE_KEY = "__guardians";
 
 export const isProfileBuiltin = (key: string): key is ProfileBuiltinKey => key in PROFILE_BUILTINS;
 

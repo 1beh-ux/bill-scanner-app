@@ -11,7 +11,7 @@ type Guardian = { name: string | null; email: string; relationship: string | nul
 type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type Data = {
   child: { name: string };
-  profile: { fields: Field[]; guardians: Guardian[] };
+  profile: { fields: Field[]; guardians: Guardian[]; guardiansPending: Guardian[] | null };
   available: (EventRef & { id: string; registrationDeadline: string | null })[];
   registrations: {
     participantId: string;
@@ -132,7 +132,7 @@ function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void })
 function Profile({ api, data, t, onSaved }: { api: string; data: Data; t: T; onSaved: () => void }) {
   const fields = data.profile.fields;
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, f.pending ?? f.value])));
-  const [guardians, setGuardians] = useState<Guardian[]>(data.profile.guardians);
+  const [guardians, setGuardians] = useState<Guardian[]>(data.profile.guardiansPending ?? data.profile.guardians);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -189,6 +189,9 @@ function Profile({ api, data, t, onSaved }: { api: string; data: Data; t: T; onS
 
       <section className={card + " flex flex-col gap-3"}>
         <h2 className="text-[16px] font-semibold text-ink">{t("portal.guardians")}</h2>
+        <p className="text-[13px] text-ink-secondary">
+          {data.profile.guardiansPending ? t("portal.guardiansPending", { current: data.profile.guardians.map((g) => g.email).join(", ") || "—" }) : t("portal.guardiansApprovalHint")}
+        </p>
         {guardians.map((g, i) => {
           const set = (p: Partial<Guardian>) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, ...p } : x)));
           return (

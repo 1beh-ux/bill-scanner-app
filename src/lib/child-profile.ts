@@ -9,7 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { fullNameFrom } from "@/lib/participant-name";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
-import { isIsoDate, isProfileBuiltin, profileValues, pushPatch, type EligibilityFacts } from "@/lib/portal-rules";
+import { GUARDIANS_CHANGE_KEY, isIsoDate, isProfileBuiltin, profileValues, pushPatch, type EligibilityFacts } from "@/lib/portal-rules";
 
 export type GuardianInput = { name?: string | null; email: string; relationship?: string | null; phone?: string | null; receivesCommunications?: boolean };
 
@@ -26,6 +26,13 @@ export function readGuardians(raw: unknown): GuardianInput[] | null {
     out.push({ name: str(o.name), email, relationship: str(o.relationship), phone: str(o.phone), receivesCommunications: o.receivesCommunications !== false });
   }
   return out;
+}
+
+/** Guardians as the stable JSON a pending guardians change stores (same shape -> same string). */
+export function guardiansJson(guardians: GuardianInput[]): string {
+  return JSON.stringify(
+    guardians.map((g) => ({ name: g.name ?? null, email: g.email, relationship: g.relationship ?? null, phone: g.phone ?? null, receivesCommunications: g.receivesCommunications ?? true }))
+  );
 }
 
 /**
@@ -154,7 +161,12 @@ export async function decideChange(changeId: string, accept: boolean, userId: st
   if (res.count === 0) return false;
   if (accept) {
     const change = await prisma.childChange.findUniqueOrThrow({ where: { id: changeId } });
-    await updateProfile(change.childId, { [change.fieldKey]: change.newValue ?? "" });
+    if (change.fieldKey === GUARDIANS_CHANGE_KEY) {
+      const guardians = readGuardians(JSON.parse(change.newValue ?? "[]"));
+      if (guardians && guardians.length > 0) await setGuardians(change.childId, guardians);
+    } else {
+      await updateProfile(change.childId, { [change.fieldKey]: change.newValue ?? "" });
+    }
   }
   return true;
 }
@@ -165,6 +177,7 @@ export async function profileFieldLabels(): Promise<Record<string, string>> {
   return {
     ...Object.fromEntries(FIXED_PARTICIPANT_FIELDS.filter((f) => isProfileBuiltin(f.key)).map((f) => [f.key, f.label])),
     ...Object.fromEntries(templates.map((t) => [t.key, t.label])),
+    [GUARDIANS_CHANGE_KEY]: "Zákonní zástupci",
   };
 }
 

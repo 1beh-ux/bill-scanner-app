@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { portalAccessMap, portalChild } from "@/lib/portal-server";
-import { proposeChange, readGuardians, setGuardians, updateProfile } from "@/lib/child-profile";
-import { isIsoDate, profileValues } from "@/lib/portal-rules";
+import { guardiansJson, proposeChange, readGuardians, updateProfile } from "@/lib/child-profile";
+import { GUARDIANS_CHANGE_KEY, isIsoDate, profileValues } from "@/lib/portal-rules";
 
 // A parent's profile edit: { values?: Record<key, string>, guardians?: [...] }.
 // Per field rule: `edit` applies (and pushes) at once, `approval` becomes a
-// pending change, `read`/`hidden` are ignored. Guardians are `edit`.
+// pending change, `read`/`hidden` are ignored. Guardians always need approval
+// (they decide who gets e-mails) -- one pending change for the whole list.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const { child, error } = await portalChild(token, true);
@@ -31,7 +32,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
   if (body.guardians !== undefined) {
     const guardians = readGuardians(body.guardians);
     if (!guardians || guardians.length === 0) return NextResponse.json({ error: "bad_guardians" }, { status: 400 });
-    await setGuardians(child.id, guardians);
+    await proposeChange(child.id, GUARDIANS_CHANGE_KEY, guardiansJson(child.guardians), guardiansJson(guardians));
   }
 
   return NextResponse.json({ ok: true });

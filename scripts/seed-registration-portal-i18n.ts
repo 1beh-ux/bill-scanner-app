@@ -75,6 +75,8 @@ async function main() {
     { key: "portalSettings.saved", cs: "Uloženo.", en: "Saved." },
 
     // G. the parent portal (/p/<token>, Czech only -- read as cs by src/app/p/[token]/page.tsx)
+    { key: "portal.guardiansApprovalHint", cs: "Změny zákonných zástupců (hlavně e-mailů) platí až po schválení organizátorem.", en: "Changes to guardians (especially e-mails) apply once the organiser approves them." },
+    { key: "portal.guardiansPending", cs: "Vaše změna čeká na schválení. Do té doby platí: {current}", en: "Your change is waiting for approval. Until then: {current}" },
     { key: "portal.title", cs: "Portál rodičů", en: "Parent portal" },
     { key: "portal.loading", cs: "Načítám…", en: "Loading…" },
     { key: "portal.unavailable", cs: "Portál teď není dostupný. Zkuste to prosím později, případně se ozvěte pořadatelům.", en: "The portal isn't available right now. Please try later or contact the organisers." },

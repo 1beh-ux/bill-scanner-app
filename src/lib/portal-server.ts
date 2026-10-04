@@ -10,6 +10,7 @@ import { gateCookieName, gateCookieValid, portalSecret } from "@/lib/portal-gate
 import {
   BUILTIN_PORTAL_ACCESS,
   GUARDIANS_PORTAL_ACCESS,
+  GUARDIANS_CHANGE_KEY,
   PROFILE_BUILTINS,
   isEligible,
   profileValues,
@@ -148,6 +149,8 @@ export async function portalData(child: PortalChild) {
         ...templates.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options)),
       ],
       guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
+      // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
+      guardiansPending: pendingBy.has(GUARDIANS_CHANGE_KEY) ? JSON.parse(pendingBy.get(GUARDIANS_CHANGE_KEY)!) : null,
       guardiansAccess: GUARDIANS_PORTAL_ACCESS,
     },
     available,
