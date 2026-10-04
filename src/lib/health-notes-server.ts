@@ -2,6 +2,7 @@
 // (or its default) and the resolved notes per participant for one place.
 import { prisma } from "@/lib/prisma";
 import { fieldTextValues, type EventForMerge } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, notesFor, sanitizeHealthNotes, type HealthNote, type HealthNoteConfig, type HealthNotePlace } from "@/lib/health-notes";
 
 type Field = Awaited<ReturnType<typeof prisma.eventParticipantField.findMany>>[number];
@@ -39,7 +40,7 @@ export async function saveHealthNotesConfig(eventId: string, input: unknown): Pr
 /** Notes of `place` for the given participants (all of the event when omitted), keyed by participant id. */
 export async function healthNotesByParticipant(eventId: string, place: HealthNotePlace | "all", participantIds?: string[]): Promise<Record<string, HealthNote[]>> {
   const [event, fields, participants] = await Promise.all([
-    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
     prisma.participant.findMany({
       where: { eventId, ...(participantIds ? { id: { in: participantIds } } : {}) },

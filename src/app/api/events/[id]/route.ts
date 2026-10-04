@@ -6,6 +6,7 @@ import { requireModuleAccess, requireAnyModuleAccess } from "@/lib/module-access
 import { parseFolderId } from "@/lib/drive-errors";
 import { normalizeBillColumns } from "@/lib/bill-columns";
 import { invalidateDriveIdentity } from "@/lib/drive";
+import { linkChildren } from "@/lib/children";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -60,7 +61,19 @@ export async function PATCH(
     qrSizeMm,
     billsListColumns,
     registrationDeadline,
+    kind,
+    membershipYear,
+    registrationConnected,
   } = body;
+
+  // Registration & membership switches: admin only, validated.
+  const touchesRegistration = kind !== undefined || membershipYear !== undefined || registrationConnected !== undefined;
+  if (touchesRegistration && user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
+  if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
+    return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
+  }
+  if (registrationConnected !== undefined && typeof registrationConnected !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
   // is not recognisably an id is rejected (and says which field). Empty = unset.
@@ -134,8 +147,13 @@ export async function PATCH(
       ...(qrSizeMm !== undefined && { qrSizeMm: qrSizeMm === null ? null : Math.min(150, Math.max(10, Math.round(Number(qrSizeMm)) || 35)) }),
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),
       ...(registrationDeadline !== undefined && { registrationDeadline: registrationDeadline ? new Date(registrationDeadline) : null }),
+      ...(kind !== undefined && { kind }),
+      ...(membershipYear !== undefined && { membershipYear }),
+      ...(registrationConnected !== undefined && { registrationConnected }),
     },
   });
+  // Switching the connection on links the participants already there.
+  if (registrationConnected === true) await linkChildren({ eventId: id });
   if (savesDrive) invalidateDriveIdentity(id);
   if (exportFolderChanged) {
     await prisma.bill.updateMany({

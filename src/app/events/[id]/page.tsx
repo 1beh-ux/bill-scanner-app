@@ -37,6 +37,9 @@ type EventDetail = {
   mailQuestionnaireUrl: string | null;
   registrationDeadline: string | null;
   senderEmail: string | null;
+  kind: "event" | "membership";
+  membershipYear: number | null;
+  registrationConnected: boolean;
 };
 
 type Category = {
@@ -438,6 +441,7 @@ export default function EventDetailPage({
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
               {isAdmin && <ModulesTab eventId={id} t={t} />}
+              {isAdmin && event && <RegistrationSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
@@ -899,6 +903,82 @@ function MailSyncSettings({
           {t("mailTab.lastSyncedAt", { date: new Date(event.statusExportLastSyncedAt).toLocaleString("cs-CZ") })}
         </p>
       )}
+    </div>
+  );
+}
+
+// Registration & membership (docs/registration-membership.md): event type,
+// membership year, and the "connected" switch. All off = the event works as before.
+function RegistrationSettings({
+  eventId,
+  event,
+  onSaved,
+  t,
+}: {
+  eventId: string;
+  event: EventDetail;
+  onSaved: () => void;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const [kind, setKind] = useState(event.kind);
+  const [year, setYear] = useState(event.membershipYear != null ? String(event.membershipYear) : String(new Date(event.startDate).getUTCFullYear() + 1));
+  const [connected, setConnected] = useState(event.registrationConnected);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const membershipYear = kind === "membership" ? Number(year) : null;
+    if (kind === "membership" && !(Number.isInteger(membershipYear) && membershipYear! >= 2000 && membershipYear! <= 2100)) {
+      setError(t("registrationSettings.badYear"));
+      return;
+    }
+    setSaving(true);
+    const res = await fetch(`/api/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, membershipYear, registrationConnected: connected }),
+    });
+    setSaving(false);
+    if (!res.ok) {
+      setError(t("registrationSettings.saveFailed"));
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div>
+      <h3 className="mb-1 text-[15px] font-semibold text-ink">{t("registrationSettings.title")}</h3>
+      <p className="mb-3 max-w-md text-[12.5px] text-ink-secondary">{t("registrationSettings.hint")}</p>
+      {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+      <form onSubmit={save} className="flex max-w-md flex-col gap-3">
+        <label className="flex items-center gap-2 text-[14px] text-ink">
+          <input type="checkbox" checked={connected} onChange={(e) => setConnected(e.target.checked)} className="h-4 w-4 accent-ember" />
+          {t("registrationSettings.connected")}
+        </label>
+        <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("registrationSettings.connectedHint")}</span>
+        <label className="text-[13px] text-ink-secondary">
+          {t("registrationSettings.kind")}
+          <select value={kind} onChange={(e) => setKind(e.target.value as EventDetail["kind"])} className={inputClass + " mt-1"}>
+            <option value="event">{t("registrationSettings.kindEvent")}</option>
+            <option value="membership">{t("registrationSettings.kindMembership")}</option>
+          </select>
+        </label>
+        {kind === "membership" && (
+          <label className="text-[13px] text-ink-secondary">
+            {t("registrationSettings.year")}
+            <input type="number" value={year} onChange={(e) => setYear(e.target.value)} className={inputClass + " mt-1"} />
+            <span className="mt-1 block text-[11.5px]">{t("registrationSettings.yearHint")}</span>
+          </label>
+        )}
+        <div className="flex justify-end">
+          <button type="submit" disabled={saving} className={btnPrimary}>
+            {t("common.save")}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

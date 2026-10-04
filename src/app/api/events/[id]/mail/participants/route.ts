@@ -5,6 +5,7 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
 import { resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
 
 // Lean, mail-scoped roster read -- deliberately NOT the full
 // /api/events/[id]/participants route, which carries health-only fields
@@ -32,7 +33,7 @@ export async function GET(
 
   const [activeFields, event] = await Promise.all([
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
-    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
   ]);
   const mailListFields = activeFields.filter((f) => f.surfaces.includes("mail_list"));
   const allowedKeys = new Set(mailListFields.map((f) => f.key));

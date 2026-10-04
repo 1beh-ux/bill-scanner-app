@@ -18,6 +18,14 @@ enum EventStatus {
   closed
 }
 
+// membership = the organisation's yearly membership registration (Členský
+// rok), run through the same participants/acceptance/payment machinery as a
+// camp. See docs/registration-membership.md.
+enum EventKind {
+  event
+  membership
+}
+
 // pending: just entered the roster (manually, pasted, or imported from a
 // registration Sheet) and hasn't been reviewed yet. accepted: an admin
 // decided to accept them and (normally) sent the acceptance email -- see
@@ -301,6 +309,14 @@ model Event {
   // Participant detail / Zdraví detail layouts (src/lib/participant-layout.ts
   // ParticipantLayout: { detail?, health? }). null = the built-in layout.
   participantLayout Json? @map("participant_layout")
+  // Registration & membership (docs/registration-membership.md). All off by
+  // default: an unconnected event behaves exactly as before.
+  kind                  EventKind @default(event)
+  // Only for kind = membership: the calendar year the membership counts for.
+  membershipYear        Int?      @map("membership_year")
+  // On: participants get linked to Child profiles, and member pricing reads
+  // the child's accepted membership for the event's start year.
+  registrationConnected Boolean   @default(false) @map("registration_connected")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -539,9 +555,13 @@ model Participant {
   // Camp-fee variable symbol -- assigned once, at acceptance (see
   // src/lib/document-variables.ts), stable afterwards. Null until accepted.
   registrationNumber Int?     @map("registration_number")
+  // The persistent child profile this event's row belongs to (null = not
+  // linked; everything works as before). See src/lib/children.ts.
+  childId       String?   @map("child_id")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   event        Event                 @relation(fields: [eventId], references: [id])
+  child        Child?                @relation(fields: [childId], references: [id])
   guardians    ParticipantGuardian[]
   incidents    Incident[]
   medPlans     ParticipantMedPlan[]
@@ -551,7 +571,23 @@ model Participant {
   mailActionLogs MailActionLog[]
 
   @@unique([eventId, registrationNumber])
+  @@index([childId])
   @@map("participants")
+}
+
+// One child across all events and years. Identity only for now (name +
+// birth date, what linking matches on); profile data comes later.
+model Child {
+  id          String    @id @default(uuid())
+  name        String
+  firstName   String?   @map("first_name")
+  lastName    String?   @map("last_name")
+  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  participants Participant[]
+
+  @@map("children")
 }
 
 model ParticipantGuardian {

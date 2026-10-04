@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
+import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
 
 type GuardianInput = {
@@ -37,7 +38,7 @@ export async function GET(
       include: { guardians: true },
     }),
     allowedParticipantFieldKeys(user, eventId),
-    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
   ]);
   // Composite ("složené") fields aren't stored -- computed here so they work as columns.
@@ -176,5 +177,6 @@ export async function POST(
     });
   });
 
+  await linkChildrenIfConnected(eventId);
   return NextResponse.json(participant, { status: 201 });
 }

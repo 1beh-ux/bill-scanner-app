@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { allowedParticipantFieldKeys, requireAnyModuleAccess } from "@/lib/module-access";
 import { fieldTextValues } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
 
 // One participant's display value of every field (computed/combined ones too,
 // Ano/Ne readable) -- for read-only sections like the Zdraví detail's own ones.
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
   if (denied) return denied;
   const [event, fields, allowed] = await Promise.all([
-    prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } }),
+    prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } }).then(withMembers),
     prisma.eventParticipantField.findMany({ where: { eventId: participant.eventId, active: true } }),
     allowedParticipantFieldKeys(user, participant.eventId),
   ]);

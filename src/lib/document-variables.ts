@@ -3,6 +3,7 @@ import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
+import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 
 export type ParticipantForMerge = {
@@ -14,6 +15,7 @@ export type ParticipantForMerge = {
   registrationStatus: string;
   customFieldValues: Record<string, string> | null;
   registrationNumber: number | null;
+  childId?: string | null;
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
 };
 
@@ -39,6 +41,9 @@ export type EventForMerge = {
   qrSizeMm: number | null;
   registrationDeadline: Date | null;
   healthNotes?: unknown;
+  // Children with an accepted membership for this event's year (src/lib/children.ts
+  // withMembers) -- only set for registration-connected events.
+  memberChildIds?: Set<string>;
 };
 
 function formatDate(d: Date | null): string {
@@ -78,7 +83,10 @@ export function memberValues(e: { vsMemberValues?: unknown }): string[] {
 
 // Stored "true" (a field's Ano/Ne values are normalised on save/import) or a
 // default Ano value is a member; vsMemberValues is the older per-event list.
+// In a registration-connected event, an accepted membership for the year also
+// counts -- on top of the manual field, never instead of it.
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
+  if (p.childId && e.memberChildIds?.has(p.childId)) return true;
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
   const raw = p.customFieldValues?.[key] ?? "";
   return toBoolean(raw) === "true" || memberValues(e).includes(normalizeMemberValue(raw));
@@ -174,6 +182,7 @@ export async function resolveVariables(
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};
 
+  if (participant.childId && event.memberChildIds === undefined) event = await withMembers(event);
   const values = fieldTextValues(participant, event, allFields);
   // {{health_notes}}: the Zdravotní poznámky (Nastavení akce -> Zdraví), all of them, in order.
   const healthConfig = event.healthNotes == null ? defaultHealthNotes(allFields) : sanitizeHealthNotes(event.healthNotes, new Set(allFields.map((f) => f.key)));

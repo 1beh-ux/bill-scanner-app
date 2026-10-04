@@ -10,6 +10,8 @@ type EventItem = {
   startDate: string;
   endDate: string;
   status: "active" | "closed";
+  kind: "event" | "membership";
+  membershipYear: number | null;
 };
 
 const inputClass =
@@ -140,6 +142,11 @@ export default function EventsPage() {
                     <a href={`/events/${ev.id}`} className="text-ink underline hover:text-ember">
                       {ev.name}
                     </a>
+                    {ev.kind === "membership" && (
+                      <span className="ml-2 rounded bg-pine-bg px-1.5 py-0.5 text-[12px] text-pine">
+                        {t("children.membershipChip", { year: String(ev.membershipYear ?? "?") })}
+                      </span>
+                    )}
                   </td>
                   <td className="p-2 text-[14px] text-ink-secondary">
                     {new Date(ev.startDate).toLocaleDateString("cs-CZ")}

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby } from "lucide-react";
 
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
@@ -20,6 +20,7 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
     sectionLabelKey: "nav.organization",
     items: [
       { path: "/events", labelKey: "nav.events", icon: Calendar, adminOnly: true },
+      { path: "/children", labelKey: "nav.children", icon: Baby, adminOnly: true },
       { path: "/admin/overview", labelKey: "nav.adminOverview", icon: LayoutDashboard, adminOnly: true },
       { path: "/users", labelKey: "nav.users", icon: UserCog, adminOnly: true },
       // Global payer list -- admin-only, event-independent (see docs/drive-payers-roles-change-notes.md);

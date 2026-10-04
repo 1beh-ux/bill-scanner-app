@@ -9,6 +9,7 @@ import { toDriveError } from "@/lib/drive";
 import type { DriveErrorCode } from "@/lib/drive-errors";
 import { readSheetTable } from "@/lib/sheet-import";
 import { fieldTextValues } from "@/lib/document-variables";
+import { linkChildrenIfConnected } from "@/lib/children";
 import {
   MATCH_BY_NAME,
   REGNUM_TARGET,
@@ -187,6 +188,7 @@ export async function applyPlan(
       failedRows.push(r.rowNumber);
     }
   }
+  await linkChildrenIfConnected(eventId);
   return { counts, seen, failedRows };
 }
 
