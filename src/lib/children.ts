@@ -65,10 +65,10 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise
   return { linked, created };
 }
 
-/** Auto-link after participants were added to an event -- only when the event is connected. */
+/** Auto-link after participants were added -- in connected events and always in a membership year (it's the module's own event). */
 export async function linkChildrenIfConnected(eventId: string): Promise<void> {
-  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { registrationConnected: true } });
-  if (event?.registrationConnected) await linkChildren({ eventId });
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { registrationConnected: true, kind: true } });
+  if (event?.registrationConnected || event?.kind === "membership") await linkChildren({ eventId });
 }
 
 /**

@@ -7,7 +7,7 @@ Concept + decisions: the "Registration & Membership Module (concept)" Claude doc
 Nothing changes for an event unless an admin turns it on. `Event.registrationConnected`
 defaults to false and `Event.kind` defaults to `event`. With both left alone:
 
-- participants aren't linked to children on add/import,
+- participants aren't linked to children on add/import (a membership-year event always links),
 - `isMember()` ignores `childId` (no `memberChildIds` is loaded), so pricing and
   the variable-symbol digit come only from the manual membership field, as before.
 

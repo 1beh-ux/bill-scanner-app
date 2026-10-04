@@ -152,8 +152,8 @@ export async function PATCH(
       ...(registrationConnected !== undefined && { registrationConnected }),
     },
   });
-  // Switching the connection on links the participants already there.
-  if (registrationConnected === true) await linkChildren({ eventId: id });
+  // Switching the connection on (or making it a membership year) links the participants already there.
+  if (registrationConnected === true || kind === "membership") await linkChildren({ eventId: id });
   if (savesDrive) invalidateDriveIdentity(id);
   if (exportFolderChanged) {
     await prisma.bill.updateMany({
