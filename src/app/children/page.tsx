@@ -78,6 +78,13 @@ export default function ChildrenPage() {
     if (ok && !c.hasPortalLink) load();
   }
 
+  // A new link kills the old one (and every device's birth-date cookie) at once.
+  async function newLink(c: ChildRow) {
+    if (!(await confirm({ message: t("childProfile.newLinkConfirm"), danger: true }))) return;
+    const res = await fetch(`/api/children/${c.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "token", regenerate: true }) });
+    setMessage(res.ok ? t("childProfile.newLinkDone") : t("children.errorFailed"));
+  }
+
   function toggleSelected(id: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -268,9 +275,17 @@ export default function ChildrenPage() {
                           </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
                           <td className="p-2">{c.participants.map(eventChip)}</td>
-                          <td className="whitespace-nowrap p-2">
-                            <button onClick={() => copyLink(c)} className="text-[13px] text-ember hover:underline">
+                          <td className="whitespace-nowrap p-2 text-[13px]">
+                            <button onClick={() => copyLink(c)} className="text-ember hover:underline">
                               {t("childProfile.copyLink")}
+                            </button>
+                            {c.hasPortalLink && (
+                              <button onClick={() => newLink(c)} disabled={busy} className="ml-3 text-ink-secondary hover:text-ink">
+                                {t("childProfile.newLink")}
+                              </button>
+                            )}
+                            <button onClick={() => router.push(portalComposeHref([c.id]))} className="ml-3 text-ink-secondary hover:text-ink">
+                              {t("childProfile.sendLinkShort")}
                             </button>
                           </td>
                         </tr>

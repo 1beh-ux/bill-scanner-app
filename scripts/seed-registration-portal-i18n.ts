@@ -33,6 +33,7 @@ async function main() {
     { key: "childProfile.newLinkConfirm", cs: "Vytvořit nový odkaz? Starý přestane okamžitě fungovat a rodiče budou potřebovat nový.", en: "Create a new link? The old one stops working at once and the parents will need the new one." },
     { key: "childProfile.newLinkDone", cs: "Nový odkaz vytvořen — starý už nefunguje.", en: "New link created — the old one no longer works." },
     { key: "childProfile.sendLink", cs: "Poslat odkaz e-mailem", en: "Send link by e-mail" },
+    { key: "childProfile.sendLinkShort", cs: "Poslat", en: "Send" },
     { key: "childProfile.profileTitle", cs: "Profil", en: "Profile" },
     { key: "childProfile.profileHint", cs: "Všechna pole organizace. Uložené změny se propíšou do nadcházejících akcí připojených k registraci (jen pole, která akce má).", en: "All organisation fields. Saved changes go to upcoming registration-connected events (only fields the event has)." },
     { key: "childProfile.saved", cs: "Uloženo.", en: "Saved." },
