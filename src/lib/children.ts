@@ -19,41 +19,70 @@ export function nameKey(name: string): string {
   return childKey(name, new Date(0))!.split("|")[0];
 }
 
+type LinkCandidate = { id: string; eventId: string; name: string; dateOfBirth: Date | null };
+type LinkChild = { id: string; name: string; dateOfBirth: Date | null; eventIds: string[] };
+
+/**
+ * Which participants link to which child (null = create one), by name + birth
+ * date. Ambiguous matches are left out -- they go to the Děti page for manual
+ * linking, since two different kids can share a name and birth date:
+ * - two existing children with the same key,
+ * - two candidates with the same key in the same event (they're two kids),
+ * - a candidate in an event the matching child is already in.
+ */
+export function planLinks(participants: LinkCandidate[], children: LinkChild[]): { childId: string | null; participantIds: string[] }[] {
+  const byKey = new Map<string, LinkChild | "ambiguous">();
+  for (const c of children) {
+    const k = childKey(c.name, c.dateOfBirth);
+    if (k) byKey.set(k, byKey.has(k) ? "ambiguous" : c);
+  }
+  const groups = new Map<string, LinkCandidate[]>();
+  for (const p of participants) {
+    const k = childKey(p.name, p.dateOfBirth);
+    if (k) groups.set(k, [...(groups.get(k) ?? []), p]);
+  }
+  const out: { childId: string | null; participantIds: string[] }[] = [];
+  for (const [k, ps] of groups) {
+    const child = byKey.get(k);
+    if (child === "ambiguous") continue;
+    const eventIds = ps.map((p) => p.eventId);
+    if (new Set(eventIds).size !== eventIds.length) continue;
+    const ok = child ? ps.filter((p) => !child.eventIds.includes(p.eventId)) : ps;
+    if (ok.length > 0) out.push({ childId: child?.id ?? null, participantIds: ok.map((p) => p.id) });
+  }
+  return out;
+}
+
 /**
  * Links every not-yet-linked participant matching `where` to a Child with the
- * same name + birth date, creating the Child when none exists. Participants
- * without a birth date are left unlinked (never guessed) -- the Děti page
- * lists them for manual linking.
+ * same name + birth date, creating the Child when none exists (see planLinks
+ * for what's left out as ambiguous). Participants without a birth date are
+ * left unlinked (never guessed) -- the Děti page lists them for manual linking.
  */
 // ponytail: no DB constraint on the match key -- two links running at the same
 // instant could create a duplicate Child; the Děti page's merge fixes that.
 export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
     where: { ...where, childId: null, dateOfBirth: { not: null } },
-    select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
+    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };
 
-  const children = await prisma.child.findMany({ select: { id: true, name: true, dateOfBirth: true } });
-  const byKey = new Map<string, string>();
-  for (const c of children) {
-    const k = childKey(c.name, c.dateOfBirth);
-    if (k && !byKey.has(k)) byKey.set(k, c.id);
-  }
-
-  const groups = new Map<string, typeof participants>();
-  for (const p of participants) {
-    const k = childKey(participantDisplayName(p), p.dateOfBirth);
-    if (k) groups.set(k, [...(groups.get(k) ?? []), p]);
-  }
+  const children = await prisma.child.findMany({ select: { id: true, name: true, dateOfBirth: true, participants: { select: { eventId: true } } } });
+  const plan = planLinks(
+    participants.map((p) => ({ ...p, name: participantDisplayName(p) })),
+    children.map((c) => ({ ...c, eventIds: c.participants.map((x) => x.eventId) }))
+  );
+  const byId = new Map(participants.map((p) => [p.id, p]));
 
   let linked = 0;
   let created = 0;
-  for (const [k, ps] of groups) {
-    let childId = byKey.get(k);
+  for (const step of plan) {
+    let childId = step.childId;
     const isNew = !childId;
     if (!childId) {
       // Prefer a row that has the first/last split for the profile's own name.
+      const ps = step.participantIds.map((id) => byId.get(id)!);
       const src = ps.find((p) => p.lastName) ?? ps[0];
       const child = await prisma.child.create({
         data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth },
@@ -61,7 +90,7 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise
       childId = child.id;
       created++;
     }
-    const res = await prisma.participant.updateMany({ where: { id: { in: ps.map((p) => p.id) }, childId: null }, data: { childId } });
+    const res = await prisma.participant.updateMany({ where: { id: { in: step.participantIds }, childId: null }, data: { childId } });
     linked += res.count;
     // A new child's profile starts as a copy of its latest participation.
     if (isNew) await copyProfileFromLatest(childId);
