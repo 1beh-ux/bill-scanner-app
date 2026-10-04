@@ -51,15 +51,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 }
 
-// { values: Record<key, string> } -- built-ins + org fields; changed values are pushed.
+// { values?: Record<key, string>, isAdult?: boolean } -- built-ins + org fields
+// (changed values are pushed); isAdult = adult member (slice 3 A).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireAdmin();
   if (error) return error;
   const { id } = await params;
   const body = await req.json();
-  if (!body.values || typeof body.values !== "object") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if ((body.values !== undefined && (!body.values || typeof body.values !== "object")) || (body.isAdult !== undefined && typeof body.isAdult !== "boolean")) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
   if (!(await prisma.child.findUnique({ where: { id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const changed = await updateProfile(id, body.values as Record<string, string>);
+  if (body.isAdult !== undefined) await prisma.child.update({ where: { id }, data: { isAdult: body.isAdult } });
+  const changed = body.values ? await updateProfile(id, body.values as Record<string, string>) : [];
   return NextResponse.json({ ok: true, changed });
 }
 

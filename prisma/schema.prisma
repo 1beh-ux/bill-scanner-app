@@ -605,6 +605,11 @@ model Child {
   // Wrong birth-date attempts in the current one-hour window (throttle).
   portalGateFailures    Int       @default(0) @map("portal_gate_failures")
   portalGateWindowStart DateTime? @map("portal_gate_window_start")
+  // Slice 3 (docs/registration-slice3-spec.md A): members are people -- an
+  // adult member (leader, supporter) is a Child row with isAdult on (the table
+  // keeps its name, no destructive rename). An adult's own contact is their
+  // first guardian row (same e-mail = same person in the family view).
+  isAdult     Boolean   @default(false) @map("is_adult")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   participants Participant[]

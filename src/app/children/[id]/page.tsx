@@ -19,6 +19,7 @@ type Detail = {
   id: string;
   name: string;
   dateOfBirth: string | null;
+  isAdult: boolean;
   values: Record<string, string>;
   fields: Field[];
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
@@ -82,6 +83,13 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     if (res.ok) load();
   }
 
+  // Adult member (slice 3 A): leaders/supporters are people in the register too.
+  async function setAdult(isAdult: boolean) {
+    const res = await fetch(`/api/children/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isAdult }) });
+    setMessage(res.ok ? t("childProfile.saved") : t("children.errorFailed"));
+    if (res.ok) load();
+  }
+
   async function action(body: object): Promise<Response> {
     setSaving(true);
     setMessage(null);
@@ -136,9 +144,13 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       {back}
       <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">{data.name}</h1>
-      <p className="mb-5 text-[13px] text-ink-secondary">
+      <p className="mb-2 text-[13px] text-ink-secondary">
         {t("children.colBirth")}: {date(data.dateOfBirth)}
       </p>
+      <label className="mb-5 flex items-center gap-2 text-[13px] text-ink">
+        <input type="checkbox" checked={data.isAdult} disabled={saving} onChange={(e) => setAdult(e.target.checked)} />
+        {t("people.isAdult")}
+      </label>
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
 
       <div className="flex flex-col gap-8">

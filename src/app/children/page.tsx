@@ -13,6 +13,7 @@ type ChildRow = {
   id: string;
   name: string;
   dateOfBirth: string | null;
+  isAdult: boolean;
   hasPortalLink: boolean;
   participants: { id: string; registrationStatus: "pending" | "accepted"; event: EventRef }[];
 };
@@ -36,6 +37,8 @@ export default function ChildrenPage() {
   const [busy, setBusy] = useState(false);
   const [linkInput, setLinkInput] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Lidé (slice 3 A): children stay the default view; adults are members too.
+  const [who, setWho] = useState<"children" | "adults" | "all">("children");
 
   useEffect(() => {
     if (roleLoaded && role !== "admin") router.replace("/events");
@@ -112,6 +115,7 @@ export default function ChildrenPage() {
   const byId = useMemo(() => new Map((data?.children ?? []).map((c) => [c.id, c])), [data]);
   const q = fold(query.trim());
   const match = (name: string) => !q || fold(name).includes(q);
+  const listed = (data?.children ?? []).filter((c) => match(c.name) && (who === "all" || c.isAdult === (who === "adults")));
 
   if (!roleLoaded || role !== "admin") return null;
 
@@ -157,6 +161,11 @@ export default function ChildrenPage() {
           {t("childProfile.fillButton")}
         </button>
         <input type="search" placeholder={t("children.search")} value={query} onChange={(e) => setQuery(e.target.value)} className={inputClassSm} />
+        <select value={who} onChange={(e) => setWho(e.target.value as typeof who)} aria-label={t("people.filter")} className={inputClassSm}>
+          <option value="children">{t("people.filterChildren")}</option>
+          <option value="adults">{t("people.filterAdults")}</option>
+          <option value="all">{t("people.filterAll")}</option>
+        </select>
       </div>
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
 
@@ -232,14 +241,14 @@ export default function ChildrenPage() {
 
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(data.children.length) })}</h2>
+              <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(listed.length) })}</h2>
               {selected.size > 0 && (
                 <button onClick={() => router.push(portalComposeHref([...selected]))} className={btn}>
                   {t("childProfile.sendLinkSelected", { count: String(selected.size) })}
                 </button>
               )}
             </div>
-            {data.children.length === 0 ? (
+            {listed.length === 0 ? (
               <p className="text-[13px] text-ink-secondary">{t("children.empty")}</p>
             ) : (
               <div className="overflow-x-auto">
@@ -250,8 +259,8 @@ export default function ChildrenPage() {
                         <input
                           type="checkbox"
                           aria-label={t("childProfile.selectAll")}
-                          checked={selected.size > 0 && data.children.filter((c) => match(c.name)).every((c) => selected.has(c.id))}
-                          onChange={(e) => setSelected(e.target.checked ? new Set(data.children.filter((c) => match(c.name)).map((c) => c.id)) : new Set())}
+                          checked={selected.size > 0 && listed.every((c) => selected.has(c.id))}
+                          onChange={(e) => setSelected(e.target.checked ? new Set(listed.map((c) => c.id)) : new Set())}
                         />
                       </th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
@@ -261,9 +270,7 @@ export default function ChildrenPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.children
-                      .filter((c) => match(c.name))
-                      .map((c) => (
+                    {listed.map((c) => (
                         <tr key={c.id} className="border-b border-mist/60 align-top">
                           <td className="p-2">
                             <input type="checkbox" aria-label={c.name} checked={selected.has(c.id)} onChange={() => toggleSelected(c.id)} />
@@ -272,6 +279,7 @@ export default function ChildrenPage() {
                             <Link href={`/children/${c.id}`} className="text-ink underline hover:text-ember">
                               {c.name}
                             </Link>
+                            {c.isAdult && <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t("people.adult")}</span>}
                           </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
                           <td className="p-2">{c.participants.map(eventChip)}</td>

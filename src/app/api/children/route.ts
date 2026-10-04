@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       await prisma.child.findMany({
         orderBy: [{ lastName: "asc" }, { name: "asc" }],
-        select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
+        select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true, isAdult: true },
       })
     );
   }
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
         id: true,
         name: true,
         dateOfBirth: true,
+        isAdult: true,
         portalToken: true,
         participants: { select: { id: true, registrationStatus: true, event: eventSelect } },
       },
