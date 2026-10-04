@@ -56,6 +56,23 @@ async function main() {
     { key: "portalCompose.confirmSend", cs: "Opravdu odeslat odkaz do portálu rodičům {count} dětí? Dětem bez odkazu se odkaz vytvoří.", en: "Really send the portal link to the parents of {count} children? Children without a link get one created." },
     { key: "portalCompose.done", cs: "Odesláno: {sent}, chyby: {failed}, bez příjemce: {none}.", en: "Sent: {sent}, failed: {failed}, no recipient: {none}." },
 
+    // H. opening an event in the portal + eligibility (event settings -> Registrace a členství)
+    { key: "portalSettings.title", cs: "Portál rodičů", en: "Parent portal" },
+    { key: "portalSettings.open", cs: "Otevřeno pro přihlášky v portálu", en: "Open for registration in the portal" },
+    { key: "portalSettings.openHint", cs: "Rodiče vybraných dětí uvidí akci v portálu a mohou dítě přihlásit (vznikne nepřijatý účastník, přijímáte jako dosud). Po termínu přihlášek se akce v portálu skryje.", en: "Parents of the chosen children see the event in the portal and can register (a not-yet-accepted participant; you accept as before). Hidden after the registration deadline." },
+    { key: "portalSettings.pastDeadline", cs: "Termín přihlášek už uplynul — v portálu se akce nezobrazuje.", en: "The registration deadline has passed — the event isn't shown in the portal." },
+    { key: "portalSettings.whoTitle", cs: "Kdo se může přihlásit", en: "Who can register" },
+    { key: "portalSettings.everyone", cs: "Všechny děti", en: "All children" },
+    { key: "portalSettings.criteriaHint", cs: "Musí platit všechna vyplněná kritéria. Nic nevyplněno = nikdo (kromě dětí vybraných níže).", en: "All filled-in criteria must match. Nothing filled in = nobody (except the children picked below)." },
+    { key: "portalSettings.birthYearFrom", cs: "Rok narození od", en: "Birth year from" },
+    { key: "portalSettings.birthYearTo", cs: "Rok narození do", en: "Birth year to" },
+    { key: "portalSettings.groups", cs: "Skupina (podle poslední akce)", en: "Group (from the latest event)" },
+    { key: "portalSettings.attended", cs: "Byl(a) přijat(a) na některou z akcí", en: "Was accepted to one of the events" },
+    { key: "portalSettings.children", cs: "Navíc tyto děti (vždy)", en: "Plus these children (always)" },
+    { key: "portalSettings.add", cs: "Přidat", en: "Add" },
+    { key: "portalSettings.eligibleCount", cs: "Může se přihlásit: {count} dětí", en: "Can register: {count} children" },
+    { key: "portalSettings.saved", cs: "Uloženo.", en: "Saved." },
+
     // C. per-field portal rule (Šablony -> Účastníci)
     { key: "portalAccess.label", cs: "Portál:", en: "Portal:" },
     { key: "portalAccess.hidden", cs: "skryto", en: "hidden" },

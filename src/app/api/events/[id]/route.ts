@@ -7,6 +7,7 @@ import { parseFolderId } from "@/lib/drive-errors";
 import { normalizeBillColumns } from "@/lib/bill-columns";
 import { invalidateDriveIdentity } from "@/lib/drive";
 import { linkChildren } from "@/lib/children";
+import { readEligibility } from "@/lib/portal-rules";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -64,10 +65,14 @@ export async function PATCH(
     kind,
     membershipYear,
     registrationConnected,
+    portalOpen,
+    eligibility,
   } = body;
 
   // Registration & membership switches: admin only, validated.
-  const touchesRegistration = kind !== undefined || membershipYear !== undefined || registrationConnected !== undefined;
+  const touchesRegistration =
+    kind !== undefined || membershipYear !== undefined || registrationConnected !== undefined || portalOpen !== undefined || eligibility !== undefined;
+  if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (touchesRegistration && user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
@@ -150,6 +155,9 @@ export async function PATCH(
       ...(kind !== undefined && { kind }),
       ...(membershipYear !== undefined && { membershipYear }),
       ...(registrationConnected !== undefined && { registrationConnected }),
+      ...(portalOpen !== undefined && { portalOpen }),
+      // Stored cleaned (src/lib/portal-rules.ts readEligibility); null/{} = nobody.
+      ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.

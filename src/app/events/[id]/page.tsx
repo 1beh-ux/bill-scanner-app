@@ -10,6 +10,7 @@ import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import HealthNotesSettings from "@/components/health/HealthNotesSettings";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
+import PortalSettings from "@/components/events/PortalSettings";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -40,6 +41,8 @@ type EventDetail = {
   kind: "event" | "membership";
   membershipYear: number | null;
   registrationConnected: boolean;
+  portalOpen: boolean;
+  eligibility: unknown;
 };
 
 type Category = {
@@ -979,6 +982,7 @@ function RegistrationSettings({
           </button>
         </div>
       </form>
+      {(event.registrationConnected || event.kind === "membership") && <PortalSettings eventId={eventId} event={event} onSaved={onSaved} t={t} />}
     </div>
   );
 }
