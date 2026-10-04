@@ -45,6 +45,17 @@ async function main() {
     { key: "childProfile.sent", cs: "odesláno", en: "sent" },
     { key: "childProfile.failed", cs: "chyba", en: "failed" },
 
+    // F. sending the portal link (compose page, template)
+    { key: "childProfile.portalLinkTemplate", cs: "Odkaz do portálu rodičů", en: "Parent portal link" },
+    { key: "portalCompose.title", cs: "Poslat odkaz do portálu rodičů", en: "Send the parent portal link" },
+    { key: "portalCompose.from", cs: "Odesílá se z vaší připojené schránky {email}.", en: "Sent from your connected mailbox {email}." },
+    { key: "portalCompose.noSender", cs: "Nemáte připojenou odesílací schránku. Připojte ji v nastavení akce (Připojení → odesílací e-mail) svým účtem a zkuste to znovu.", en: "You have no connected sending mailbox. Connect one with your own account in an event's settings (Connections → sender e-mail) and try again." },
+    { key: "portalCompose.linkCreatedOnSend", cs: "(odkaz se vytvoří při odeslání)", en: "(the link is created on send)" },
+    { key: "portalCompose.sendButton", cs: "Odeslat ({count})", en: "Send ({count})" },
+    { key: "portalCompose.send", cs: "Odeslat", en: "Send" },
+    { key: "portalCompose.confirmSend", cs: "Opravdu odeslat odkaz do portálu rodičům {count} dětí? Dětem bez odkazu se odkaz vytvoří.", en: "Really send the portal link to the parents of {count} children? Children without a link get one created." },
+    { key: "portalCompose.done", cs: "Odesláno: {sent}, chyby: {failed}, bez příjemce: {none}.", en: "Sent: {sent}, failed: {failed}, no recipient: {none}." },
+
     // C. per-field portal rule (Šablony -> Účastníci)
     { key: "portalAccess.label", cs: "Portál:", en: "Portal:" },
     { key: "portalAccess.hidden", cs: "skryto", en: "hidden" },

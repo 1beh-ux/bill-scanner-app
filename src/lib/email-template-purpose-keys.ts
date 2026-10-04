@@ -16,3 +16,7 @@ export const REGISTRATION_ACCEPTANCE_PURPOSE_KEY = "registration_acceptance";
 // a ParentEmailLog.purposeKey tag so these sends are distinguishable from
 // the others in the action log.
 export const PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY = "participant_open_email";
+// The parent portal link of one child (docs/registration-portal-spec.md F),
+// sent from the Děti page / child detail -- org-level, no event. Editable org
+// default at Šablony -> Zdraví -> E-mail.
+export const PORTAL_LINK_PURPOSE_KEY = "portal_link";

@@ -6,6 +6,7 @@ import {
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
+  PORTAL_LINK_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 // Re-exported for existing server-side callers -- client components must
@@ -23,6 +24,20 @@ export {
 // Exported for scripts/fix-registration-acceptance-template.ts, which needs to know
 // the real default text without duplicating it.
 export const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
+  // Parent portal link (src/app/api/children/portal-email/route.ts) -- org level, no event.
+  [PORTAL_LINK_PURPOSE_KEY]: {
+    subject: "Odkaz do portálu rodičů – {{child_name}}",
+    body: `Dobrý den,
+
+posíláme odkaz do portálu rodičů pro {{child_name}}:
+
+{{portal_link}}
+
+V portálu uvidíte údaje dítěte, můžete je opravit a přihlásit dítě na akce, které jsou právě otevřené. Při prvním otevření budete požádáni o datum narození dítěte. Odkaz prosím nikomu dalšímu neposílejte.
+
+S pozdravem
+{{signature}}`,
+  },
   // Pošta reply (the subject is always "Re: <their subject>", so only the body
   // is edited). Empty {{questionnaire_line}}/{{note}} lines collapse on send.
   [MAIL_HELPER_REPLY_PURPOSE_KEY]: {

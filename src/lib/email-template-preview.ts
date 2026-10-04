@@ -4,6 +4,7 @@ import {
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
+  PORTAL_LINK_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
@@ -20,6 +21,8 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   // Free e-mail to participants (compose page, "Napsat e-mail").
   [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "health_notes", "sender_email", "sender_name", "signature"],
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature"],
+  // Child-level, no event: the child's own profile fields are the other {{key}}s.
+  [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature"],
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
@@ -48,6 +51,13 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     questionnaire_url: "https://forms.example.com/dotaznik",
     sender_name: "Pošta táboru",
     signature: "S pozdravem\nPošta táboru",
+  },
+  [PORTAL_LINK_PURPOSE_KEY]: {
+    child_name: "Anna Nováková",
+    portal_link: "https://example.com/p/…",
+    sender_email: "tabor@example.com",
+    sender_name: "Pavel",
+    signature: "S pozdravem\nPavel, hlavní vedoucí",
   },
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: {
     participant_name: "Anna Nováková",
