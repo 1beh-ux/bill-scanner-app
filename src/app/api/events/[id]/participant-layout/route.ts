@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { id: eventId } = await params;
   const body = await req.json().catch(() => ({}));
-  const page = body.page === "health" ? "health" : body.page === "detail" ? "detail" : null;
+  const page = body.page === "health" ? "health" : body.page === "detail" ? "detail" : body.page === "portal" ? "portal" : null;
   if (!page) return NextResponse.json({ error: "invalid_page" }, { status: 400 });
   const denied =
     page === "health" || body.healthConfig !== undefined

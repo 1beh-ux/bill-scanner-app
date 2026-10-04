@@ -20,7 +20,9 @@ import {
   type PortalAccessLevel,
 } from "@/lib/portal-rules";
 import { eligibilityFacts, profileFieldLabels } from "@/lib/child-profile";
-import { buildVariableSymbol, effectivePriceCzk, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
+import { buildVariableSymbol, effectivePriceCzk, fieldTextValues, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
+import { readParticipantLayout, resolvePortalLayout } from "@/lib/participant-layout";
+import { eventSender } from "@/lib/auto-accept";
 import { allowedCategories, categoryFor, readPriceRules, type PriceRules } from "@/lib/price-rules";
 import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
@@ -144,13 +146,14 @@ export async function portalData(scope: PortalScope) {
     availableEvents(memberIds),
     prisma.participant.findMany({
       where: { childId: { in: memberIds } },
-      include: { event: true, guardians: true, documents: { where: { gcsPath: { not: null } }, include: { eventListItem: true }, orderBy: { receivedAt: "desc" } } },
+      include: { event: true, guardians: true, documents: { orderBy: { receivedAt: "desc" } } },
       orderBy: { event: { startDate: "desc" } },
     }),
   ]);
 
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
+  const cards = new Map<string, Promise<EventCard>>();
 
   const members = [];
   for (const child of scope.members) {
@@ -172,32 +175,7 @@ export async function portalData(scope: PortalScope) {
       const e = p.event;
       // Upcoming/current registrations only of events using the module; the rest is history.
       if (!isCurrent(e) || !(e.registrationConnected || e.kind === "membership")) continue;
-      let payment = null;
-      if (p.registrationStatus === "accepted" && p.registrationNumber != null) {
-        const event = await withMembers(e);
-        const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
-        const qr = await resolvePaymentQrImage(forMerge, event);
-        payment = {
-          priceCzk: effectivePriceCzk(forMerge, event),
-          account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
-          variableSymbol: buildVariableSymbol(forMerge, event),
-          qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
-        };
-      }
-      registrations.push({
-        participantId: p.id,
-        event: { name: e.name, startDate: e.startDate, endDate: e.endDate, kind: e.kind, membershipYear: e.membershipYear },
-        status: p.registrationStatus,
-        note: p.portalNote,
-        payment,
-        documents: p.documents.map((d) => ({
-          id: d.id,
-          name: documentDisplayName({ ...d.eventListItem, data: d.eventListItem.data as DocumentTypeData | null }),
-          // generated = we sent it to you; anything else = received from you
-          sentToParent: d.receivedVia === "generated",
-          date: d.receivedAt,
-        })),
-      });
+      registrations.push(await registrationCard(p, child, cards));
     }
 
     members.push({
@@ -294,6 +272,90 @@ export async function pickExtras(eventId: string, priceRules: unknown, isAdult: 
   const oddil = cat.asksOddil ? await oddilField(eventId, rules) : null;
   if (oddil && !(typeof pick.oddil === "string" && oddil.options.includes(pick.oddil))) return null;
   return { priceCategory: cat.key, values: oddil ? { [oddil.key]: pick.oddil as string } : {} };
+}
+
+type EventRow = Awaited<ReturnType<typeof prisma.event.findUniqueOrThrow>>;
+type EventCard = Awaited<ReturnType<typeof loadEventCard>>;
+
+/** Per event, once per request: its document types, fields, card layout, pricing and whether it can re-send. */
+async function loadEventCard(e: EventRow) {
+  const [docTypes, fields, sender, priced] = await Promise.all([
+    prisma.eventListItem.findMany({ where: { eventId: e.id, kind: "document", active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.eventParticipantField.findMany({ where: { eventId: e.id, active: true } }),
+    eventSender(e),
+    withMembers(e),
+  ]);
+  return {
+    // Fixed attachments (the same PDF for everyone) aren't tracked documents.
+    docTypes: docTypes.filter((d) => !(d.data as DocumentTypeData | null)?.staticAttachment),
+    fields,
+    layout: resolvePortalLayout(readParticipantLayout(e.participantLayout).portal, new Set(fields.map((f) => f.key))),
+    priced,
+    canResend: !!sender,
+  };
+}
+
+export const RESEND_PER_DAY = 3;
+
+/**
+ * One registration as the portal card shows it (slice 3 F), in the event's
+ * card layout (src/lib/participant-layout.ts, "portal"): event basics,
+ * status, price category, per document type what was sent / received /
+ * is missing (+ upload where allowed), re-send, payment, chosen fields.
+ */
+async function registrationCard(
+  p: Awaited<ReturnType<typeof prisma.participant.findFirstOrThrow<{ include: { event: true; guardians: true; documents: true } }>>>,
+  child: PortalChild,
+  cards: Map<string, Promise<EventCard>>
+) {
+  const e = p.event;
+  if (!cards.has(e.id)) cards.set(e.id, loadEventCard(e));
+  const card = await cards.get(e.id)!;
+  const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
+  const accepted = p.registrationStatus === "accepted";
+
+  let payment = null;
+  if (accepted && p.registrationNumber != null) {
+    const qr = await resolvePaymentQrImage(forMerge, card.priced);
+    payment = {
+      priceCzk: effectivePriceCzk(forMerge, card.priced),
+      account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
+      variableSymbol: buildVariableSymbol(forMerge, card.priced),
+      qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
+    };
+  }
+
+  const rules = readPriceRules(e.priceRules);
+  const values = card.layout.sections.some((s) => s.kind === "fields" && !s.hidden) ? fieldTextValues(forMerge, card.priced, card.fields) : {};
+  const label = (key: string) => card.fields.find((f) => f.key === key)?.label ?? key;
+  const resendUsed = accepted && card.canResend ? await prisma.portalRateHit.count({ where: { key: `resend:${p.id}`, createdAt: { gte: new Date(Date.now() - 24 * 3600 * 1000) } } }) : 0;
+  const file = (d: (typeof p.documents)[number] | undefined) => (d ? { id: d.gcsPath ? d.id : null, date: d.receivedAt } : null);
+
+  return {
+    participantId: p.id,
+    event: { name: e.name, startDate: e.startDate, endDate: e.endDate, kind: e.kind, membershipYear: e.membershipYear, location: e.location, info: e.portalInfo },
+    status: p.registrationStatus,
+    note: p.portalNote,
+    category: rules ? (categoryFor(rules, p.priceCategory, child.isAdult)?.label ?? null) : null,
+    payment,
+    // Per tracked document type: sent to you (generated) / received from you / missing.
+    documents: card.docTypes.map((dt) => {
+      const data = dt.data as DocumentTypeData | null;
+      const mine = p.documents.filter((d) => d.eventListItemId === dt.id);
+      return {
+        typeId: dt.id,
+        name: documentDisplayName({ ...dt, data }),
+        sent: file(mine.find((d) => d.receivedVia === "generated")),
+        received: file(mine.find((d) => d.receivedVia !== "generated")),
+        canUpload: !!data?.allowPortalUpload,
+      };
+    }),
+    // Re-send the acceptance e-mail (needs the event's sending account).
+    resend: accepted && card.canResend ? { left: Math.max(0, RESEND_PER_DAY - resendUsed) } : null,
+    sections: card.layout.sections
+      .filter((s) => !s.hidden)
+      .map((s) => (s.kind === "fields" ? { kind: s.kind, title: s.title ?? null, items: (s.fields ?? []).map((k) => ({ label: label(k), value: values[k] ?? "" })) } : { kind: s.kind })),
+  };
 }
 
 /**

@@ -1,19 +1,22 @@
 // Layout of the participant detail and the Zdraví participant detail (the
-// in-place "Upravit rozvržení" editor). Stored per event as
-// Event.participantLayout = { detail?, health? }; null/missing = the built-in
-// layout, which reproduces the pages as they were before the editor existed.
+// in-place "Upravit rozvržení" editor), and of the parent portal's
+// registration card (slice 3 F). Stored per event as
+// Event.participantLayout = { detail?, health?, portal? }; null/missing = the
+// built-in layout, which reproduces the pages as they were before the editor existed.
 // Prisma-free: both pages and the API use it.
 import type { HealthNoteConfig, HealthNotePlace } from "@/lib/health-notes";
 
 export type DetailSectionKind = "basics" | "guardians" | "documents" | "fields" | "health";
 // "fields" on the Zdraví page = own read-only sections of chosen variables (e.g. less important questionnaire data).
 export type HealthSectionKind = "notes" | "medsReported" | "medPlans" | "incidents" | "guardians" | "fields";
-export type SectionKind = DetailSectionKind | HealthSectionKind;
+// Portal registration card (docs/registration-slice3-spec.md F); "fields" = chosen event fields, read-only.
+export type PortalSectionKind = "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields";
+export type SectionKind = DetailSectionKind | HealthSectionKind | PortalSectionKind;
 export type Column = "left" | "right";
 export type Section = { id: string; kind: SectionKind; title?: string; column: Column; hidden?: boolean; fields?: string[] };
 export type PageLayout = { sections: Section[]; hiddenFields?: string[] };
-export type ParticipantLayout = { detail?: PageLayout; health?: PageLayout };
-export type LayoutPage = "detail" | "health";
+export type ParticipantLayout = { detail?: PageLayout; health?: PageLayout; portal?: PageLayout };
+export type LayoutPage = "detail" | "health" | "portal";
 
 export type LayoutField = { key: string; kind: string; fieldType: string; surfaces: string[] };
 
@@ -21,6 +24,9 @@ const DETAIL_KINDS: DetailSectionKind[] = ["basics", "guardians", "documents", "
 // Documents and sent e-mails are no longer on the Zdraví page (they live in Mail / the participant detail).
 export const HEALTH_KINDS: HealthSectionKind[] = ["notes", "guardians", "medsReported", "medPlans", "incidents", "fields"];
 const HEALTH_FIXED_ORDER: HealthSectionKind[] = ["notes", "guardians", "medsReported", "medPlans", "incidents"];
+// The card as specified: event basics, approval status, price category, documents (+ re-download / upload), re-send, payment.
+export const PORTAL_FIXED_ORDER: PortalSectionKind[] = ["event", "status", "category", "documents", "resend", "payment"];
+export const PORTAL_KINDS: PortalSectionKind[] = [...PORTAL_FIXED_ORDER, "fields"];
 /** Always on the detail page, never hidden. */
 export const FIXED_KINDS: SectionKind[] = ["basics", "guardians"];
 export const NEW_NOTE_PLACES: HealthNotePlace[] = ["detail", "meds", "incident", "pdf"];
@@ -55,6 +61,7 @@ export function defaultDetailLayout(fields: LayoutField[], healthConfig: HealthN
 }
 
 export const defaultHealthLayout = (): PageLayout => ({ sections: HEALTH_FIXED_ORDER.map((k) => ({ id: k, kind: k, column: "left" })) });
+export const defaultPortalLayout = (): PageLayout => ({ sections: PORTAL_FIXED_ORDER.map((k) => ({ id: k, kind: k, column: "left" })) });
 
 /** The saved detail layout made consistent with today's fields and health config (or the default). */
 export function resolveDetailLayout(saved: PageLayout | null | undefined, fields: LayoutField[], healthConfig: HealthNoteConfig[]): PageLayout {
@@ -109,9 +116,18 @@ export function resolveDetailLayout(saved: PageLayout | null | undefined, fields
 
 /** `fieldKeys`: active fields (own "fields" sections may show any of them, read-only). */
 export function resolveHealthLayout(saved: PageLayout | null | undefined, fieldKeys?: Set<string>): PageLayout {
+  return resolveSingleColumn(saved, HEALTH_KINDS, defaultHealthLayout(), fieldKeys);
+}
+
+/** The portal registration card (same rules as the Zdraví detail: one column, fixed blocks + own field sections). */
+export function resolvePortalLayout(saved: PageLayout | null | undefined, fieldKeys?: Set<string>): PageLayout {
+  return resolveSingleColumn(saved, PORTAL_KINDS, defaultPortalLayout(), fieldKeys);
+}
+
+function resolveSingleColumn(saved: PageLayout | null | undefined, kinds: string[], def: PageLayout, fieldKeys?: Set<string>): PageLayout {
   const sections: Section[] = [];
   for (const s of saved?.sections ?? []) {
-    if (!HEALTH_KINDS.includes(s.kind as HealthSectionKind)) continue;
+    if (!kinds.includes(s.kind)) continue;
     if (s.kind === "fields") {
       if (sections.some((x) => x.id === s.id)) continue;
       const fields = (s.fields ?? []).filter((k) => !fieldKeys || fieldKeys.has(k));
@@ -121,7 +137,7 @@ export function resolveHealthLayout(saved: PageLayout | null | undefined, fieldK
     if (sections.some((x) => x.kind === s.kind)) continue;
     sections.push({ id: s.kind, kind: s.kind, column: "left", ...(s.hidden ? { hidden: true } : {}) });
   }
-  for (const d of defaultHealthLayout().sections) if (!sections.some((s) => s.kind === d.kind)) sections.push(d);
+  for (const d of def.sections) if (!sections.some((s) => s.kind === d.kind)) sections.push(d);
   return { sections };
 }
 
@@ -130,7 +146,7 @@ export function sanitizePageLayout(input: unknown, page: LayoutPage, fieldKeys: 
   if (!input || typeof input !== "object") return null;
   const raw = input as { sections?: unknown; hiddenFields?: unknown };
   if (!Array.isArray(raw.sections)) return null;
-  const kinds: string[] = page === "detail" ? DETAIL_KINDS : HEALTH_KINDS;
+  const kinds: string[] = page === "detail" ? DETAIL_KINDS : page === "health" ? HEALTH_KINDS : PORTAL_KINDS;
   const keys = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((k): k is string => typeof k === "string" && fieldKeys.has(k)))].slice(0, 500) : []);
   const sections: Section[] = [];
   for (const r of raw.sections.slice(0, 50)) {
@@ -138,7 +154,7 @@ export function sanitizePageLayout(input: unknown, page: LayoutPage, fieldKeys: 
     const s = r as Record<string, unknown>;
     if (typeof s.id !== "string" || !s.id || s.id.length > 64 || typeof s.kind !== "string" || !kinds.includes(s.kind)) continue;
     const out: Section = { id: s.id, kind: s.kind as SectionKind, column: s.column === "left" ? "left" : "right" };
-    if (page === "health") out.column = "left";
+    if (page !== "detail") out.column = "left";
     if (s.hidden === true) out.hidden = true;
     if (typeof s.title === "string" && s.title.trim() && s.kind === "fields") out.title = s.title.trim().slice(0, 100);
     if (s.kind === "fields" || s.kind === "health" || s.kind === "basics" || s.kind === "guardians") out.fields = keys(s.fields);
@@ -152,7 +168,7 @@ export function readParticipantLayout(json: unknown): ParticipantLayout {
   if (!json || typeof json !== "object") return {};
   const o = json as Record<string, unknown>;
   const pick = (v: unknown) => (v && typeof v === "object" && Array.isArray((v as PageLayout).sections) ? (v as PageLayout) : undefined);
-  return { detail: pick(o.detail), health: pick(o.health) };
+  return { detail: pick(o.detail), health: pick(o.health), portal: pick(o.portal) };
 }
 
 // ---- editing ----

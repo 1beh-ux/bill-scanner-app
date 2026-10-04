@@ -207,3 +207,17 @@ export function familyContacts<G extends { email: string }>(members: { name: str
   }
   return out;
 }
+
+// --- Portal upload (docs/registration-slice3-spec.md F) ---------------------
+
+export const UPLOAD_MAX_BYTES = 15 * 1024 * 1024;
+
+/** A parent's upload by its content (never the claimed type): PDF, PNG or JPEG under 15 MB, else null. */
+export function uploadContentType(bytes: Uint8Array): "application/pdf" | "image/png" | "image/jpeg" | null {
+  if (bytes.length === 0 || bytes.length > UPLOAD_MAX_BYTES) return null;
+  const starts = (sig: number[]) => sig.every((b, i) => bytes[i] === b);
+  if (starts([0x25, 0x50, 0x44, 0x46, 0x2d])) return "application/pdf"; // %PDF-
+  if (starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
+  if (starts([0xff, 0xd8, 0xff])) return "image/jpeg";
+  return null;
+}

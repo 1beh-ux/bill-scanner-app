@@ -13,6 +13,7 @@ import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import PortalSettings from "@/components/events/PortalSettings";
 import PriceSettings from "@/components/events/PriceSettings";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
+import PortalCardLayout from "@/components/events/PortalCardLayout";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -51,6 +52,8 @@ type EventDetail = {
   landingContent: string | null;
   autoAccept: "manual" | "accept" | "accept_send";
   autoSendReady?: boolean | null;
+  location: string | null;
+  portalInfo: string | null;
 };
 
 type Category = {
@@ -992,6 +995,7 @@ function RegistrationSettings({
         </div>
       </form>
       {(event.registrationConnected || event.kind === "membership") && <PortalSettings eventId={eventId} event={event} onSaved={onSaved} t={t} />}
+      {(event.registrationConnected || event.kind === "membership") && <PortalCardLayout eventId={eventId} t={t} />}
       {(event.registrationConnected || event.kind === "membership") && <PublicRegistrationSettings eventId={eventId} event={event} onSaved={onSaved} t={t} />}
     </div>
   );

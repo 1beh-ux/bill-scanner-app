@@ -129,6 +129,9 @@ enum MailDocReceivedVia {
   // Ticked by a participant table sync (a questionnaire sheet row exists for
   // them -- ParticipantSync.markDocumentId, src/lib/participant-sync-run.ts).
   sheet
+  // Uploaded by a parent in the portal instead of e-mailing it (slice 3 F;
+  // only for document types with allowPortalUpload). No receiving user.
+  portal
 }
 
 enum MailActionType {
@@ -348,6 +351,9 @@ model Event {
   publicSlug            String?   @unique @map("public_slug")
   landingContent        String?   @map("landing_content")
   autoAccept            AutoAccept @default(manual) @map("auto_accept")
+  // Shown on the portal's registration card (slice 3 F): place + a short info.
+  location              String?
+  portalInfo            String?   @map("portal_info")
   createdAt           DateTime    @default(now()) @map("created_at")
   closedAt            DateTime?   @map("closed_at")
 
@@ -1108,11 +1114,12 @@ model ParticipantDocument {
   receivedVia          MailDocReceivedVia @map("received_via")
   sourceEmailMessageId String?            @map("source_email_message_id")
   receivedAt           DateTime           @default(now()) @map("received_at")
-  receivedByUserId     String             @map("received_by_user_id")
+  // Null only for a parent's portal upload (receivedVia = portal).
+  receivedByUserId     String?            @map("received_by_user_id")
 
   participant     Participant   @relation(fields: [participantId], references: [id])
   eventListItem   EventListItem @relation("ParticipantDocumentType", fields: [eventListItemId], references: [id])
-  receivedByUser  User          @relation("ParticipantDocumentReceivedBy", fields: [receivedByUserId], references: [id])
+  receivedByUser  User?         @relation("ParticipantDocumentReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
 
   @@map("participant_documents")
 }

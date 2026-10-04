@@ -30,7 +30,15 @@ export default function PortalSettings({
   t,
 }: {
   eventId: string;
-  event: { portalOpen: boolean; eligibility: unknown; registrationDeadline: string | null; autoAccept: AutoAcceptMode; autoSendReady?: boolean | null };
+  event: {
+    portalOpen: boolean;
+    eligibility: unknown;
+    registrationDeadline: string | null;
+    autoAccept: AutoAcceptMode;
+    autoSendReady?: boolean | null;
+    location: string | null;
+    portalInfo: string | null;
+  };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -38,6 +46,9 @@ export default function PortalSettings({
   const [open, setOpen] = useState(event.portalOpen);
   // Auto-accept of portal / public registrations (slice 3 E); manual = as before.
   const [autoAccept, setAutoAccept] = useState<AutoAcceptMode>(event.autoAccept);
+  // Shown on the portal's registration card (slice 3 F).
+  const [location, setLocation] = useState(event.location ?? "");
+  const [portalInfo, setPortalInfo] = useState(event.portalInfo ?? "");
   const [everyone, setEveryone] = useState(!!initial.everyone);
   const [yearFrom, setYearFrom] = useState(initial.birthYearFrom != null ? String(initial.birthYearFrom) : "");
   const [yearTo, setYearTo] = useState(initial.birthYearTo != null ? String(initial.birthYearTo) : "");
@@ -85,7 +96,7 @@ export default function PortalSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portalOpen: open, eligibility: rule, autoAccept }),
+      body: JSON.stringify({ portalOpen: open, eligibility: rule, autoAccept, location, portalInfo }),
     });
     setSaving(false);
     setMessage(res.ok ? t("portalSettings.saved") : t("registrationSettings.saveFailed"));
@@ -110,6 +121,15 @@ export default function PortalSettings({
       </label>
       <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("portalSettings.openHint")}</span>
       {pastDeadline && <span className="text-[12px] text-amber-700">{t("portalSettings.pastDeadline")}</span>}
+
+      <label className="text-[13px] text-ink-secondary">
+        {t("portalCard.location")}
+        <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputClass + " mt-1"} />
+      </label>
+      <label className="text-[13px] text-ink-secondary">
+        {t("portalCard.info")}
+        <textarea value={portalInfo} onChange={(e) => setPortalInfo(e.target.value)} rows={3} className={inputClass + " mt-1"} />
+      </label>
 
       <label className="text-[13px] text-ink-secondary">
         {t("autoAccept.label")}

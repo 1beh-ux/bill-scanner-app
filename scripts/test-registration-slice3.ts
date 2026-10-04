@@ -168,9 +168,37 @@ async function autoAccept() {
   assert.deepEqual(autoAcceptPlan("accept_send", "portal", false), { accept: true, send: false, fallback: true }, "no sending account: accept only, flagged");
 }
 
+// --- F. portal upload + card layout -------------------------------------------------
+async function portalV2() {
+  const { uploadContentType, UPLOAD_MAX_BYTES } = await import("../src/lib/portal-rules");
+  const { resolvePortalLayout, sanitizePageLayout } = await import("../src/lib/participant-layout");
+  const bytes = (...b: number[]) => new Uint8Array([...b, 0, 0, 0]);
+  assert.equal(uploadContentType(new TextEncoder().encode("%PDF-1.7 ...")), "application/pdf");
+  assert.equal(uploadContentType(bytes(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)), "image/png");
+  assert.equal(uploadContentType(bytes(0xff, 0xd8, 0xff, 0xe0)), "image/jpeg");
+  assert.equal(uploadContentType(new TextEncoder().encode("<html>")), null, "by content, not by the claimed type");
+  assert.equal(uploadContentType(new Uint8Array(0)), null);
+  const big = new Uint8Array(UPLOAD_MAX_BYTES + 1);
+  big.set([0x25, 0x50, 0x44, 0x46, 0x2d]);
+  assert.equal(uploadContentType(big), null, "max 15 MB");
+
+  const kinds = (l: { sections: { kind: string; hidden?: boolean }[] }) => l.sections.map((s) => s.kind + (s.hidden ? "-" : ""));
+  assert.deepEqual(kinds(resolvePortalLayout(null)), ["event", "status", "category", "documents", "resend", "payment"], "default card = the spec's list");
+  const saved = sanitizePageLayout(
+    { sections: [{ id: "payment", kind: "payment", column: "right" }, { id: "x", kind: "fields", title: "Tričko", fields: ["tricko", "nope"] }, { id: "event", kind: "event", hidden: true }, { id: "n", kind: "notes" }] },
+    "portal",
+    new Set(["tricko"])
+  );
+  assert.ok(saved);
+  assert.deepEqual(kinds(resolvePortalLayout(saved, new Set(["tricko"]))), ["payment", "fields", "event-", "status", "category", "documents", "resend"], "saved order kept, missing blocks appended, foreign kinds dropped");
+  assert.deepEqual(saved!.sections[1].fields, ["tricko"], "unknown field keys dropped");
+  assert.ok(saved!.sections.every((s) => s.column === "left"), "one column");
+}
+
 prices()
   .then(publicForm)
   .then(autoAccept)
+  .then(portalV2)
   .then(() => console.log("ok"))
   .catch((err) => {
     console.error(err);

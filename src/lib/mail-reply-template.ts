@@ -16,6 +16,9 @@ export type DocumentTypeData = {
   // is -- no merge, no per-participant copy -- and it is not a tracked
   // document (no received/missing status, not in checklists).
   staticAttachment?: boolean;
+  // Parents may upload this document in the portal instead of e-mailing it
+  // (slice 3 F); default off.
+  allowPortalUpload?: boolean;
 };
 
 export type DocumentListItem = {

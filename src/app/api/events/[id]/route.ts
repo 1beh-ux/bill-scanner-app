@@ -77,6 +77,8 @@ export async function PATCH(
     publicSlug,
     landingContent,
     autoAccept,
+    location,
+    portalInfo,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -89,7 +91,10 @@ export async function PATCH(
     publicRegistration !== undefined ||
     publicSlug !== undefined ||
     landingContent !== undefined ||
-    autoAccept !== undefined;
+    autoAccept !== undefined ||
+    location !== undefined ||
+    portalInfo !== undefined;
+  for (const v of [location, portalInfo]) if (v !== undefined && v !== null && !(typeof v === "string" && v.length <= 2000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (autoAccept !== undefined && !["manual", "accept", "accept_send"].includes(autoAccept)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
   if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
@@ -188,6 +193,9 @@ export async function PATCH(
       ...(publicSlug !== undefined && { publicSlug: publicSlug || null }),
       ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
       ...(autoAccept !== undefined && { autoAccept }),
+      // Portal registration card basics (slice 3 F).
+      ...(location !== undefined && { location: location?.trim() || null }),
+      ...(portalInfo !== undefined && { portalInfo: portalInfo?.trim() || null }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.

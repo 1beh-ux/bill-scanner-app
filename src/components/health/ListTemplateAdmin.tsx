@@ -26,6 +26,7 @@ type DocumentData = {
   templateGoogleDocId?: string;
   autoAttachOnAccept?: boolean;
   staticAttachment?: boolean;
+  allowPortalUpload?: boolean;
 };
 
 type Item = {
@@ -78,6 +79,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [templateGoogleDocId, setTemplateGoogleDocId] = useState("");
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
   const [staticAttachment, setStaticAttachment] = useState(false);
+  const [allowPortalUpload, setAllowPortalUpload] = useState(false);
   const [planData, setPlanData] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -132,6 +134,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setTemplateGoogleDocId("");
     setAutoAttachOnAccept(true);
     setStaticAttachment(false);
+    setAllowPortalUpload(false);
     setPlanData(categoryGroup ? { group: categoryGroup } : {});
     setEditingId(null);
   }
@@ -158,6 +161,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setTemplateGoogleDocId((item.data as DocumentData | null)?.templateGoogleDocId ?? "");
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
     setStaticAttachment((item.data as DocumentData | null)?.staticAttachment ?? false);
+    setAllowPortalUpload((item.data as DocumentData | null)?.allowPortalUpload ?? false);
     setPlanData((item.data as Record<string, unknown> | null) ?? {});
     setFormOpen(true);
   }
@@ -191,6 +195,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           templateGoogleDocId: scope === "event" ? templateGoogleDocId.trim() || undefined : undefined,
           autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
           staticAttachment: scope === "event" && staticAttachment ? true : undefined,
+          allowPortalUpload: scope === "event" && allowPortalUpload && !staticAttachment ? true : undefined,
         }
       : undefined;
 
@@ -423,6 +428,15 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                       <span className="block text-[11.5px]">{t("listTemplateAdmin.staticAttachmentHint")}</span>
                     </span>
                   </label>
+                  {!staticAttachment && (
+                    <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
+                      <input type="checkbox" className="mt-0.5" checked={allowPortalUpload} onChange={(e) => setAllowPortalUpload(e.target.checked)} />
+                      <span>
+                        {t("listTemplateAdmin.allowPortalUploadLabel")}
+                        <span className="block text-[11.5px]">{t("listTemplateAdmin.allowPortalUploadHint")}</span>
+                      </span>
+                    </label>
+                  )}
                 </>
               )}
             </>
