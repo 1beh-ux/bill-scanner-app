@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 import { fullNameFrom } from "@/lib/participant-name";
+import { confirmedMembershipKey } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
 
 // Core-identity view of a participant (name/group/dob/registration status)
 // for the central "Seznam účastníků" section, reachable by health OR mail
@@ -40,6 +42,7 @@ export async function GET(
       // no createdAt on this model to sort by, and the DB's natural row order is closer
       // to insertion order than any derived key (id is a random UUID) would be.
       guardians: true,
+      childId: true,
     },
   });
   if (!participant) {
@@ -49,6 +52,14 @@ export async function GET(
   if (denied) return denied;
 
   const allowedKeys = await allowedParticipantFieldKeys(user, participant.eventId);
+  // Membership confirmed by the membership event (connected events only): the
+  // detail shows the field as "Ano" + the year, the stored value stays as it is.
+  let confirmedMembership: { key: string; year: number } | null = null;
+  if (participant.childId) {
+    const event = await prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } }).then(withMembers);
+    const key = confirmedMembershipKey(participant, event);
+    if (key) confirmedMembership = { key, year: event.startDate.getUTCFullYear() };
+  }
   const scoped = {
     ...participant,
     customFieldValues: Object.fromEntries(
@@ -56,6 +67,7 @@ export async function GET(
         allowedKeys.has(key)
       )
     ),
+    confirmedMembership,
   };
 
   return NextResponse.json(scoped);

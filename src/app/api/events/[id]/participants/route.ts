@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
-import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
+import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
 
@@ -51,6 +51,8 @@ export async function GET(
     const { guardians, ...rest } = p;
     const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
     const values = composites.length > 0 ? fieldTextValues(forMerge, event, activeFields) : {};
+    // Membership confirmed by the membership event shows as "Ano" (display only).
+    const confirmedKey = confirmedMembershipKey(p, event);
     return {
       ...rest,
       customFieldValues: {
@@ -58,6 +60,7 @@ export async function GET(
           Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) => allowedKeys.has(key))
         ),
         ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
+        ...(confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
       },
       guardian: guardians.find((g) => g.receivesCommunications) ?? guardians[0] ?? null,
       computed: {

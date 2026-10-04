@@ -81,12 +81,22 @@ export function memberValues(e: { vsMemberValues?: unknown }): string[] {
   return list.length > 0 ? list : DEFAULT_MEMBER_VALUES;
 }
 
+/**
+ * The membership field's key when the membership comes from the membership
+ * event (connected events only), else null. Lists, the participant detail and
+ * documents then show that field as "Ano" -- the stored manual value is never
+ * overwritten.
+ */
+export function confirmedMembershipKey(p: { childId?: string | null }, e: { vsMembershipFieldKey: string | null; memberChildIds?: Set<string> }): string | null {
+  return p.childId && e.memberChildIds?.has(p.childId) ? (e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY) : null;
+}
+
 // Stored "true" (a field's Ano/Ne values are normalised on save/import) or a
 // default Ano value is a member; vsMemberValues is the older per-event list.
 // In a registration-connected event, an accepted membership for the year also
 // counts -- on top of the manual field, never instead of it.
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
-  if (p.childId && e.memberChildIds?.has(p.childId)) return true;
+  if (confirmedMembershipKey(p, e)) return true;
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
   const raw = p.customFieldValues?.[key] ?? "";
   return toBoolean(raw) === "true" || memberValues(e).includes(normalizeMemberValue(raw));
@@ -236,9 +246,12 @@ type FieldForValues = { key: string; kind: string; fieldType: string; computedTy
  */
 export function fieldTextValues(participant: ParticipantForMerge, event: EventForMerge, fields: FieldForValues[]): Record<string, string> {
   const values: Record<string, string> = {};
+  const confirmedKey = confirmedMembershipKey(participant, event);
   for (const f of fields) {
     const fixedDef = FIXED_PARTICIPANT_FIELDS.find((d) => d.key === f.key);
-    if (f.kind === "builtin") {
+    if (f.kind === "custom" && f.key === confirmedKey) {
+      values[f.key] = "Ano";
+    } else if (f.kind === "builtin") {
       const fn = fixedDef?.builtinProp ? BUILTIN_RESOLVERS[fixedDef.builtinProp] : undefined;
       if (fn) values[f.key] = fn(participant);
     } else if (f.kind === "guardian") {

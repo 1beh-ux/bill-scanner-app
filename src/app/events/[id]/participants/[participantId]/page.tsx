@@ -41,6 +41,8 @@ type Core = {
   registrationStatus: "pending" | "accepted";
   customFieldValues: Record<string, string>;
   guardians: { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
+  // Membership confirmed by the membership event (registration-connected events).
+  confirmedMembership: { key: string; year: number } | null;
 };
 
 const inputClass =
@@ -469,6 +471,17 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         {!folded &&
           keys.map((k) => {
             const f = fieldByKey.get(k)!;
+            if (core?.confirmedMembership?.key === f.key) {
+              // Shown, not edited: the stored manual value stays untouched underneath.
+              return (
+                <p key={f.id} className="text-[13px] text-ink-secondary">
+                  {f.label}: <span className="text-ink">{t("membershipField.yes")}</span>{" "}
+                  <span className="rounded bg-pine-bg px-1.5 py-0.5 text-[12px] text-pine">
+                    {t("membershipField.confirmedHint", { year: String(core.confirmedMembership.year) })}
+                  </span>
+                </p>
+              );
+            }
             return <FieldInput key={f.id} field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} />;
           })}
       </section>

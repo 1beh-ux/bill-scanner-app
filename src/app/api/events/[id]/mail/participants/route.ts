@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
-import { resolveContactEmail, fieldTextValues } from "@/lib/document-variables";
+import { resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 
 // Lean, mail-scoped roster read -- deliberately NOT the full
@@ -55,6 +55,7 @@ export async function GET(
       },
       registrationNumber: true,
       groupName: true,
+      childId: true,
     },
     orderBy: { name: "asc" },
   });
@@ -62,12 +63,16 @@ export async function GET(
   const scoped = participants.map((p) => {
     const custom = (p.customFieldValues as Record<string, string> | null) ?? {};
     const values = composites.length > 0 ? fieldTextValues({ ...p, customFieldValues: custom }, event, activeFields) : {};
+    const { childId, ...row } = p;
+    // Membership confirmed by the membership event shows as "Ano" (display only).
+    const confirmedKey = confirmedMembershipKey({ childId }, event);
     return {
-      ...p,
+      ...row,
       contactEmail: resolveContactEmail(p),
       customFieldValues: {
         ...Object.fromEntries(Object.entries(custom).filter(([key]) => allowedKeys.has(key))),
         ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
+        ...(confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
       },
     };
   });
