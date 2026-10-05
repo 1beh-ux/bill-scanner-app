@@ -28,7 +28,7 @@ import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
-import { appliesTo, askedFields, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
+import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -221,7 +221,12 @@ export async function portalData(scope: PortalScope) {
     };
 
     const registrations = [];
-    for (const p of current) registrations.push(await registrationCard(p, child, cards, person));
+    for (const p of current) {
+      // Slice 5 #5: also an empty field this event requires of this person.
+      const asked = askedFields(eventFields.filter((x) => x.eventId === p.eventId), rules, child.isAdult);
+      const own = (p.customFieldValues as Record<string, string> | null) ?? {};
+      registrations.push(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }));
+    }
 
     members.push({
       id: child.id,

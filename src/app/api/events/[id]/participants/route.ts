@@ -5,6 +5,8 @@ import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/modul
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 import { countsAsReceived, registrationState, requiredEmpty, type ReviewStatus } from "@/lib/registration-status";
 import { profileValues } from "@/lib/portal-rules";
+import { templateRules } from "@/lib/portal-server";
+import { appliesTo, askedFields, askedMissing } from "@/lib/registration-fields";
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
@@ -109,20 +111,26 @@ export async function GET(
   // required org fields from the linked person's profile (unlinked: the
   // participant's own values of the fields this event has), pending profile changes.
   const childIds = participants.flatMap((p) => (p.childId ? [p.childId] : []));
-  const [required, people, changes] = await Promise.all([
-    prisma.participantFieldTemplate.findMany({ where: { active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true } }),
-    childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true } }) : [],
+  // Slice 5 #5: also the fields this event requires ("Vyžadovat při přihlášce"), per
+  // person's audience (unlinked = only fields for both); templates' required flag per audience too.
+  const [required, people, changes, rules] = await Promise.all([
+    prisma.participantFieldTemplate.findMany({ where: { active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true, audience: true } }),
+    childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, isAdult: true } }) : [],
     childIds.length ? prisma.childChange.findMany({ where: { childId: { in: childIds }, status: "pending" }, select: { childId: true } }) : [],
+    templateRules(),
   ]);
-  const profiles = new Map(people.map((c) => [c.id, profileValues(c)]));
+  const profiles = new Map(people.map((c) => [c.id, { values: profileValues(c), isAdult: c.isAdult }]));
   const changed = new Set(changes.map((c) => c.childId));
   const eventKeys = new Set(activeFields.map((f) => f.key));
-  const requiredKeys = required.map((f) => f.key);
+  const requiredKeys = (isAdult: boolean | null) => required.filter((f) => appliesTo(f.audience, isAdult)).map((f) => f.key);
   const typeIds = documentTypes.map((d) => d.id);
 
   const withDocuments = scopedParticipants.map((p, i) => {
     const raw = participants[i];
-    const profile = raw.childId ? profiles.get(raw.childId) : undefined;
+    const person = raw.childId ? profiles.get(raw.childId) : undefined;
+    const profile = person?.values;
+    const own = (raw.customFieldValues as Record<string, string> | null) ?? {};
+    const asked = askedFields(activeFields, rules, person ? person.isAdult : null);
     return {
       ...p,
       documentsTotal: documentTypes.length,
@@ -132,9 +140,10 @@ export async function GET(
         docTypeIds: typeIds,
         paymentDocTypeId: typeIds.includes(event.paymentDocTypeId ?? "") ? event.paymentDocTypeId : null,
         docs: docRows[p.id] ?? [],
-        requiredEmpty: profile
-          ? requiredEmpty(requiredKeys, profile)
-          : requiredEmpty(requiredKeys.filter((k) => eventKeys.has(k)), (raw.customFieldValues as Record<string, string> | null) ?? {}),
+        requiredEmpty:
+          (profile
+            ? requiredEmpty(requiredKeys(person.isAdult), profile)
+            : requiredEmpty(requiredKeys(null).filter((k) => eventKeys.has(k)), own)) || askedMissing(asked, profile ?? null, own),
         pendingProfileChange: !!raw.childId && changed.has(raw.childId),
       }),
     };
