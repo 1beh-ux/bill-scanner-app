@@ -34,6 +34,7 @@ type Field = {
   requiredInRegistration?: boolean; // org scope only (public registration form, slice 3 D)
   audience?: FieldAudience; // org scope only (slice 5 #1)
   level?: FieldLevel; // org scope only (slice 5 #1)
+  requiredOnRegistration?: boolean; // event scope only (slice 5 #2)
 };
 type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level">;
 
@@ -634,7 +635,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const isCustom = field.kind === "custom";
     return (
       <tr>
-        <td colSpan={8} className="border-b border-mist/60 bg-paper px-3 py-3">
+        <td colSpan={isEvent ? 9 : 8} className="border-b border-mist/60 bg-paper px-3 py-3">
           {isCustom && (
             <form onSubmit={(e) => handleEditSubmit(field, e)} className="flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">
@@ -840,6 +841,26 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     );
   }
 
+  // "Vyžadovat při přihlášce" (slice 5 #2), event scope: a template field only
+  // while parents may edit it; an event-only field = an event question.
+  async function setRequired(field: Field, on: boolean) {
+    setFields((prev) => prev.map((f) => (f.id === field.id ? { ...f, requiredOnRegistration: on } : f)));
+    const res = await fetch(itemUrl(field.id!), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requiredOnRegistration: on }) });
+    if (!res.ok) load();
+  }
+
+  function requiredCell(field: Field) {
+    if (field.kind !== "custom") return <span className="text-[12px] text-ink-secondary">—</span>;
+    const tpl = templates.get(field.key);
+    const parentsEdit = !tpl || tpl.portalAccess === "edit" || tpl.portalAccess === "approval";
+    return (
+      <label className="flex flex-col gap-0.5 text-[11.5px] text-ink-secondary">
+        <input type="checkbox" className="self-start" disabled={!parentsEdit} checked={parentsEdit && !!field.requiredOnRegistration} onChange={(e) => setRequired(field, e.target.checked)} aria-label={t("fieldMeta.required.title")} />
+        {!parentsEdit ? t("fieldMeta.required.hidden") : !tpl && t("fieldMeta.required.eventQuestion")}
+      </label>
+    );
+  }
+
   function fieldRow(field: Field) {
     const id = fieldId(isEvent, field);
     const isCustom = field.kind === "custom";
@@ -870,6 +891,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           <td className="p-2">{portalCell(field)}</td>
           <td className="p-2">{metaCell(field, "audience")}</td>
           <td className="p-2">{metaCell(field, "level")}</td>
+          {isEvent && <td className="p-2">{requiredCell(field)}</td>}
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">
@@ -1057,6 +1079,11 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                 <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("fieldMeta.level.title")}
                 </th>
+                {isEvent && (
+                  <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                    {t("fieldMeta.required.title")}
+                  </th>
+                )}
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -1064,7 +1091,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               {nonComputedFields.map((f) => <Fragment key={fieldId(isEvent, f)}>{fieldRow(f)}</Fragment>)}
               {computedFields.length > 0 && (
                 <tr>
-                  <td colSpan={8} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  <td colSpan={isEvent ? 9 : 8} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
                     {t("participantFieldAdmin.computedSection")}
                   </td>
                 </tr>

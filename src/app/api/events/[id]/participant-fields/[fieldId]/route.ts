@@ -27,9 +27,15 @@ export async function PATCH(
   if (denied) return denied;
 
   const body = await req.json();
-  const { key, label, fieldType, options, surfaces, sortOrder, active } = body;
+  const { key, label, fieldType, options, surfaces, sortOrder, active, requiredOnRegistration } = body;
   if (label !== undefined && (typeof label !== "string" || !label.trim())) {
     return NextResponse.json({ error: "label_required" }, { status: 400 });
+  }
+  // "Vyžadovat při přihlášce" (slice 5 #2) -- custom fields only (whether a
+  // template field is actually asked also depends on its portal rule, see
+  // src/lib/registration-fields.ts).
+  if (requiredOnRegistration !== undefined && (typeof requiredOnRegistration !== "boolean" || existing.kind !== "custom")) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   // builtin/guardian/computed rows are fixed system fields (see
   // src/lib/fixed-participant-fields.ts) -- only where they're shown/used
@@ -84,6 +90,7 @@ export async function PATCH(
         ...(surfaces !== undefined && { surfaces }),
         ...(sortOrder !== undefined && { sortOrder }),
         ...(active !== undefined && { active }),
+        ...(requiredOnRegistration !== undefined && { requiredOnRegistration }),
       },
     });
     if (applyBoolean) {

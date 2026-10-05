@@ -902,6 +902,10 @@ model EventParticipantField {
   // their key/fieldType/kind/computedType aren't editable, only surfaces/active.
   kind           ParticipantFieldKind      @default(custom)
   computedType   ComputedFieldType?        @map("computed_type")
+  // "Vyžadovat při přihlášce" (slice 5 #2): asked in the registration step. A
+  // field with an org template only while parents may edit it (edit/approval);
+  // an event-only field is an event question, stored on the participant only.
+  requiredOnRegistration Boolean           @default(false) @map("required_on_registration")
 
   event Event @relation(fields: [eventId], references: [id])
 
