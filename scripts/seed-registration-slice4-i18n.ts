@@ -9,6 +9,9 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "participantFieldAdmin.fromEvents", cs: "Převzít pole z akcí", en: "Take over fields from events" },
+    { key: "participantFieldAdmin.fromEventsNone", cs: "Všechna pole z akcí už mají šablonu.", en: "Every event field already has a template." },
+    { key: "participantFieldAdmin.fromEventsConfirm", cs: "Vytvořit {count} šablon z polí, která zatím existují jen v akcích? {names}. Použije se verze z nejnovější akce; akce samotné se nemění. Rodičům se pole ukážou až po nastavení sloupce „Rodiče v portálu“.", en: "Create {count} templates from fields that exist only in events? {names}. The newest event's version is used; the events themselves don't change. Parents see a field only once its “Parents in portal” column is set." },
     // 1-5. portal
     { key: "portal.everyone", cs: "Všichni", en: "Everyone" },
     { key: "portal.stateFilter", cs: "Stav přihlášek", en: "Registration status" },

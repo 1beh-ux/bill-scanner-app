@@ -161,7 +161,9 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     }
     const [fieldsData, moduleAccess, eventData, templateData] = await Promise.all(requests);
     if (isEvent) setTemplates(new Map((templateData as Field[]).filter((f) => f.active).map((f) => [f.key, f])));
-    setFields(fieldsData as Field[]);
+    // Org templates carry no `kind` -- they're all custom fields; without it every
+    // `kind === "custom"` check below hid them (empty Šablony → Účastníci list).
+    setFields(isEvent ? (fieldsData as Field[]) : (fieldsData as Field[]).map((f) => ({ ...f, kind: "custom" as const })));
     if (isEvent) {
       const access = moduleAccess as Record<string, boolean>;
       setEnabledModules(new Set((Object.keys(access) as ModuleKey[]).filter((k) => access[k])));
@@ -215,6 +217,21 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setNewSurfaces(["email", "documents"]);
     setCompositeParts([]);
     setCompositeSep(" ");
+  }
+
+  // Org scope: event-only custom fields -> org templates (the portal only knows templates).
+  async function takeFromEvents() {
+    const list: { key: string; label: string; events: string[] }[] = await fetch("/api/participant-field-templates/from-events").then((r) => (r.ok ? r.json() : []));
+    if (list.length === 0) {
+      await confirm({ message: t("participantFieldAdmin.fromEventsNone"), confirmLabel: t("common.ok") });
+      return;
+    }
+    const names = list.map((f) => `${f.label} ({{${f.key}}})`).join(", ");
+    if (!(await confirm({ message: t("participantFieldAdmin.fromEventsConfirm", { count: String(list.length), names }) }))) return;
+    setSyncing(true);
+    await fetch("/api/participant-field-templates/from-events", { method: "POST" });
+    setSyncing(false);
+    load();
   }
 
   function openAdd() {
@@ -865,6 +882,11 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50"
             >
               {syncing ? t("common.loading") : t("listTemplateAdmin.syncFromTemplates")}
+            </button>
+          )}
+          {!isEvent && (
+            <button onClick={takeFromEvents} disabled={syncing} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
+              {syncing ? t("common.loading") : t("participantFieldAdmin.fromEvents")}
             </button>
           )}
           <button onClick={openAdd} className="text-[13px] text-ember hover:underline">
