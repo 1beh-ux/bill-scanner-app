@@ -46,6 +46,15 @@ async function main() {
     { key: "publicSettings.requiredInRegistration", cs: "povinné při registraci", en: "required when registering" },
     { key: "people.portalFieldsLink", cs: "Co vidí a upravují rodiče →", en: "What parents see and edit →" },
 
+    // 10. public registration confirmation (updates the slice-3 public.doneHint)
+    { key: "public.doneHint", cs: "Přihlášku jsme přijali. Po potvrzení vám pošleme e-mail s dalšími informacemi a odkazem do portálu.", en: "We've received the registration. Once it's confirmed we'll e-mail you further information and a link to the portal." },
+    { key: "public.doneLinkHint", cs: "Přihláška je přijatá a potvrzení vám právě posíláme e-mailem. Tady je odkaz do vašeho rodinného portálu — uložte si tento odkaz:", en: "The registration is accepted and we're e-mailing you the confirmation now. Here is the link to your family portal — save this link:" },
+    { key: "public.doneLinkGate", cs: "Při otevření se portál zeptá na datum narození některého z přihlášených. Odkaz prosím nikomu dalšímu neposílejte.", en: "When opened, the portal asks for the birth date of one of the registered people. Please don't share the link." },
+    { key: "public.copyLink", cs: "Kopírovat odkaz", en: "Copy link" },
+    { key: "public.copied", cs: "Zkopírováno", en: "Copied" },
+    // 11. template variables
+    { key: "templatePreview.eventVariables", cs: "Vždy k dispozici: {{camp_name}}, {{questionnaire_url}}, {{questionnaire_line}}, {{registration_deadline}}, {{registration_deadline_line}}, {{health_notes}}, {{portal_link}}, {{portal_link_line}}", en: "Always available: {{camp_name}}, {{questionnaire_url}}, {{questionnaire_line}}, {{registration_deadline}}, {{registration_deadline_line}}, {{health_notes}}, {{portal_link}}, {{portal_link_line}}" },
+
     // 6-7. upload review
     { key: "portal.uploadDone", cs: "Nahráno — dokument teď zkontrolujeme.", en: "Uploaded — we'll check the document now." },
     { key: "portal.docInReview", cs: "nahráno, čeká na kontrolu", en: "uploaded, waiting for review" },

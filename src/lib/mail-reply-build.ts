@@ -3,7 +3,7 @@
 // preview in the inbox and the template editor's real-data preview.
 import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, senderIdentity, substituteVariables, MAIL_HELPER_REPLY_PURPOSE_KEY } from "@/lib/email-template";
-import { resolveContactEmail, resolveVariables } from "@/lib/document-variables";
+import { resolveContactEmail, resolveVariables, usesPortalLink } from "@/lib/document-variables";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistLines } from "@/lib/mail-reply-template";
 
@@ -32,10 +32,12 @@ export async function buildReplyText(opts: {
   const questionnaireNeeded = Boolean(questionnaire && !received.has(questionnaire.id));
   const url = (event.mailQuestionnaireUrl ?? "").trim();
 
+  const body = opts.template?.body ?? (await resolveEmailTemplate(opts.eventId, MAIL_HELPER_REPLY_PURPOSE_KEY)).body;
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
     event,
-    "email"
+    "email",
+    usesPortalLink(body)
   );
   const sender = senderIdentity(user, "Pošta tábora");
   const vars = {
@@ -50,7 +52,6 @@ export async function buildReplyText(opts: {
     signature: sender.signature,
     contact_email: resolveContactEmail(participant),
   };
-  const body = opts.template?.body ?? (await resolveEmailTemplate(opts.eventId, MAIL_HELPER_REPLY_PURPOSE_KEY)).body;
   // Empty optional lines (no questionnaire link, no note) leave no gaps.
   return substituteVariables(body, vars).replace(/\n{3,}/g, "\n\n").trim();
 }

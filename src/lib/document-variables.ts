@@ -6,6 +6,7 @@ import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields
 import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 import { readPriceRules, rulePrice } from "@/lib/price-rules";
+import { newPortalToken, portalBaseUrl, portalLinkLine } from "@/lib/portal-gate";
 
 export type ParticipantForMerge = {
   name: string;
@@ -58,6 +59,9 @@ export type EventForMerge = {
   // Event.priceRules (src/lib/price-rules.ts); null/missing = member / non-member pricing.
   priceRules?: unknown;
   priceContext?: PriceContext;
+  // {{portal_link}} only for events using the module (slice 4 #11).
+  registrationConnected?: boolean;
+  kind?: string;
 };
 
 function formatDate(d: Date | null): string {
@@ -181,11 +185,43 @@ export async function resolvePaymentQrImage(p: ParticipantForMerge, e: EventForM
 // from a printed page, small enough not to take over the form.
 export const DEFAULT_QR_SIZE_MM = 35;
 
+/**
+ * {{portal_link}} / {{portal_link_line}} (slice 4 #11): the participant's
+ * family link, else the person's own -- only for a linked participant of a
+ * connected event or a membership year, else both empty. A missing token is
+ * created only with `create` (a real send whose template uses it, or document
+ * generation); otherwise (previews) the link shows as ".../p/…".
+ */
+export async function portalLinkVars(
+  participant: { childId?: string | null },
+  event: { registrationConnected?: boolean; kind?: string },
+  create: boolean
+): Promise<{ portal_link: string; portal_link_line: string }> {
+  const base = portalBaseUrl();
+  const none = { portal_link: "", portal_link_line: "" };
+  if (!base || !participant.childId || !(event.registrationConnected || event.kind === "membership")) return none;
+  const child = await prisma.child.findUnique({ where: { id: participant.childId }, select: { id: true, portalToken: true, family: { select: { id: true, portalToken: true } } } });
+  if (!child) return none;
+  let token = child.family ? child.family.portalToken : child.portalToken;
+  if (!token && create) {
+    token = newPortalToken();
+    if (child.family) await prisma.family.update({ where: { id: child.family.id }, data: { portalToken: token } });
+    else await prisma.child.update({ where: { id: child.id }, data: { portalToken: token } });
+  }
+  const link = `${base}/p/${token ?? "…"}`;
+  return { portal_link: link, portal_link_line: portalLinkLine(link) };
+}
+
+/** Whether a template text uses the portal link (a send then creates a missing token). */
+export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link"));
+
 export async function resolveVariables(
   participant: ParticipantForMerge,
   event: EventForMerge,
   // Which fields are filled: generated documents ("documents") or e-mails ("email").
-  surface: "documents" | "email" = "documents"
+  surface: "documents" | "email" = "documents",
+  // Create a missing portal link for {{portal_link}} (see portalLinkVars).
+  createPortalLink = false
 ): Promise<{ text: Record<string, string>; images: Record<string, Buffer>; imageSizesMm: Record<string, number> }> {
   // All active fields: a composite field may be built from fields that aren't
   // themselves on this surface.
@@ -211,6 +247,7 @@ export async function resolveVariables(
     registration_deadline_line: event.registrationDeadline
       ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
       : "",
+    ...(await portalLinkVars(participant, event, createPortalLink)),
   };
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};

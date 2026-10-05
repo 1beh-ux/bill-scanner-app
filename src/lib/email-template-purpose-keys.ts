@@ -20,3 +20,7 @@ export const PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY = "participant_open_email";
 // sent from the Děti page / child detail -- org-level, no event. Editable org
 // default at Šablony -> Zdraví -> E-mail.
 export const PORTAL_LINK_PURPOSE_KEY = "portal_link";
+// Yearly invitation / onboarding existing people into the portal (slice 4
+// #12): the same send as PORTAL_LINK, another org template to pick on the
+// compose page. Editable at Šablony -> Zdraví -> E-mail.
+export const PORTAL_INVITATION_PURPOSE_KEY = "portal_invitation";

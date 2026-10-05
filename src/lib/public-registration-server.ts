@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { createRegistration, oddilField, visibleTemplates } from "@/lib/portal-server";
 import { readPriceRules } from "@/lib/price-rules";
 import { fullNameFrom } from "@/lib/participant-name";
+import { newPortalToken } from "@/lib/portal-gate";
 import type { CleanSubmission, FormField } from "@/lib/public-registration";
 
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
@@ -34,10 +35,15 @@ export async function publicFormContext(event: PublicEvent) {
   return { fields, rules, oddil: await oddilField(event.id, rules) };
 }
 
-/** A valid submission -> Family (needsReview) + people + pending participants. Returns the participant ids. */
-export async function createPublicRegistration(event: PublicEvent, data: CleanSubmission): Promise<string[]> {
+/**
+ * A valid submission -> Family (needsReview) + people + pending participants.
+ * Returns the participant ids, and the family's new portal token when the
+ * event auto-sends (slice 4 #10: the confirmation screen then shows the link).
+ */
+export async function createPublicRegistration(event: PublicEvent, data: CleanSubmission): Promise<{ ids: string[]; portalToken: string | null }> {
   const first = data.persons[0];
-  const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true } });
+  const portalToken = event.autoAccept === "accept_send" ? newPortalToken() : null;
+  const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true, portalToken } });
   const ids: string[] = [];
   for (const p of data.persons) {
     const child = await prisma.child.create({
@@ -55,5 +61,5 @@ export async function createPublicRegistration(event: PublicEvent, data: CleanSu
     });
     ids.push((await createRegistration(child, event.id, { note: data.note, priceCategory: p.category })).id);
   }
-  return ids;
+  return { ids, portalToken };
 }

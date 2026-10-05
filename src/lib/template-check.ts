@@ -8,7 +8,7 @@ import type { DocumentTypeData } from "@/lib/mail-reply-template";
 // Event-level keys document merge always resolves (see resolveVariables in
 // src/lib/document-variables.ts) -- not participant fields, so never "unmapped".
 // Event-level variables resolveVariables always provides (src/lib/document-variables.ts).
-const EVENT_KEYS = new Set(["camp_name", "questionnaire_url", "questionnaire_line", "registration_deadline", "registration_deadline_line", "health_notes"]);
+const EVENT_KEYS = new Set(["camp_name", "questionnaire_url", "questionnaire_line", "registration_deadline", "registration_deadline_line", "health_notes", "portal_link", "portal_link_line"]);
 const VALID_KEY = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 
 export type PlaceholderStatus = "ok" | "field_off" | "unknown" | "invalid";

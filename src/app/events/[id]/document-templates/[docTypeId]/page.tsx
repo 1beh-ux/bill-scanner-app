@@ -183,6 +183,7 @@ export default function DocumentTemplatePage({ params }: { params: Promise<{ id:
 
         <aside className="w-full shrink-0 rounded-lg border border-mist bg-paper p-4 lg:w-[380px]">
           <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("templatePreview.variables")}</h2>
+          <p className="mb-2 font-mono text-[11.5px] text-ink-secondary [overflow-wrap:anywhere]">{t("templatePreview.eventVariables")}</p>
           {!checkReady ? (
             <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>
           ) : !data ? (

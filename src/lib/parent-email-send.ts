@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, senderIdentity, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 import { generateParticipantSummaryPdf } from "@/lib/parent-summary-pdf";
 import { sendParentSummaryEmail } from "@/lib/mail";
-import { resolveVariables, resolveContactEmail } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, usesPortalLink } from "@/lib/document-variables";
 
 export interface GuardianSendResult {
   guardianId: string;
@@ -108,7 +108,8 @@ export async function sendSummaryToGuardians(
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
     participant.event,
-    "email"
+    "email",
+    usesPortalLink(templateSubject, templateBody)
   );
   const vars = {
     ...fieldVars,

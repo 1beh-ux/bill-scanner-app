@@ -84,6 +84,9 @@ export default function PublicForm({
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[] | null>(null);
   const [done, setDone] = useState(false);
+  // The family's portal link -- only when the event auto-sends (slice 4 #10).
+  const [portalLink, setPortalLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const title = event.kind === "membership" ? t("portal.membership", { year: String(event.membershipYear ?? "") }) : event.name;
   const setPerson = (i: number, patch: Partial<Person>) => setPersons((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -109,7 +112,10 @@ export default function PublicForm({
     };
     const res = await fetch(`/api/public/r/${slug}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
-    if (res?.ok) return setDone(true);
+    if (res?.ok) {
+      setPortalLink((await res.json().catch(() => ({}))).portalLink ?? null);
+      return setDone(true);
+    }
     const d = res ? await res.json().catch(() => ({})) : {};
     setErrors(res?.status === 429 ? [t("public.throttled")] : Array.isArray(d.fields) ? d.fields.map(describe) : [t("public.failed")]);
   }
@@ -129,7 +135,29 @@ export default function PublicForm({
         <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{title}</h1>
         <div className={card + " flex flex-col gap-2"}>
           <p className="text-[16px] font-semibold text-ink">{t("public.doneTitle")}</p>
-          <p className="text-[14px] text-ink-secondary">{t("public.doneHint")}</p>
+          {portalLink ? (
+            <>
+              <p className="text-[14px] text-ink">{t("public.doneLinkHint")}</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 rounded bg-paper-2 px-2 py-1.5 text-[13px] text-ink [overflow-wrap:anywhere]">{portalLink}</code>
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigator.clipboard
+                      .writeText(portalLink)
+                      .then(() => setCopied(true))
+                      .catch(() => {})
+                  }
+                  className={btn}
+                >
+                  {t(copied ? "public.copied" : "public.copyLink")}
+                </button>
+              </div>
+              <p className="text-[13px] text-ink-secondary">{t("public.doneLinkGate")}</p>
+            </>
+          ) : (
+            <p className="text-[14px] text-ink-secondary">{t("public.doneHint")}</p>
+          )}
         </div>
       </div>
     );

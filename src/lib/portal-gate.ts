@@ -45,3 +45,15 @@ export function portalUrl(token: string, req: Request): string {
   const origin = host ? `${proto}://${host}` : new URL(req.url).origin;
   return `${origin}/p/${token}`;
 }
+
+/**
+ * Base URL for portal links outside a request (e-mail / document variables,
+ * slice 4 #11): PORTAL_BASE_URL, else APP_BASE_URL (set on Cloud Run). Null = neither.
+ */
+export function portalBaseUrl(): string | null {
+  return (process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "") || null;
+}
+
+/** {{portal_link_line}}: the whole sentence, or "" without a link (so the line vanishes). */
+export const portalLinkLine = (link: string | null) =>
+  link ? `Vaše přihlášky, dokumenty a platby najdete v rodinném portálu: ${link} (při prvním otevření se zeptá na datum narození).` : "";

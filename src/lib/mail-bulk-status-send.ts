@@ -3,7 +3,7 @@ import { resolveEmailTemplate, senderIdentity, substituteVariables, MAIL_HELPER_
 import { sendPlainTextEmail } from "@/lib/mail";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
-import { resolveVariables, resolveContactEmail } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, usesPortalLink } from "@/lib/document-variables";
 
 export interface BulkStatusSendResult {
   participantId: string;
@@ -23,13 +23,15 @@ async function bulkStatusVars(
   participant: ParticipantRow,
   event: EventRow,
   sender: { name: string; signature: string },
-  documentTypes: Awaited<ReturnType<typeof getActiveDocumentTypes>>
+  documentTypes: Awaited<ReturnType<typeof getActiveDocumentTypes>>,
+  createPortalLink: boolean
 ): Promise<Record<string, string>> {
   const receivedItemIds = await getReceivedItemIds(participant.id);
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
     event,
-    "email"
+    "email",
+    createPortalLink
   );
   return {
     ...fieldVars,
@@ -56,7 +58,7 @@ export async function previewBulkStatusEmail(
     prisma.user.findUnique({ where: { id: sentByUserId } }),
   ]);
   if (!event || !participant || participant.eventId !== eventId) return null;
-  const vars = await bulkStatusVars(participant, event, senderIdentity(user, "Pošta tábora"), await getActiveDocumentTypes(eventId));
+  const vars = await bulkStatusVars(participant, event, senderIdentity(user, "Pošta tábora"), await getActiveDocumentTypes(eventId), false);
   return { subject: substituteVariables(template.subject, vars), body: substituteVariables(template.body, vars) };
 }
 
@@ -90,7 +92,7 @@ export async function sendBulkStatusUpdates(
     });
     if (!participant || participant.guardians.length === 0) continue;
 
-    const vars = await bulkStatusVars(participant, event, sender, documentTypes);
+    const vars = await bulkStatusVars(participant, event, sender, documentTypes, usesPortalLink(templateSubject, templateBody));
     const subject = substituteVariables(templateSubject, vars);
     const body = substituteVariables(templateBody, vars);
 

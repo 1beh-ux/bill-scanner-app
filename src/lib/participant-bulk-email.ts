@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
-import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, usesPortalLink } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
@@ -86,7 +86,10 @@ async function buildAutoAttachDocuments(
       customFieldValues: refreshed.customFieldValues as Record<string, string> | null,
       guardians: participant.guardians,
     },
-    event
+    event,
+    "documents",
+    // Documents are generated on a real send: a {{portal_link}} in them gets a real link.
+    true
   );
 
   // The participant's Drive folder, when one is configured: the merged Google
@@ -180,12 +183,14 @@ async function participantEmailVars(
   participant: ParticipantRow,
   event: EventRow,
   sender: { name: string; signature: string },
-  attachedDocumentNames: string[]
+  attachedDocumentNames: string[],
+  createPortalLink: boolean
 ): Promise<Record<string, string>> {
   const { text: fieldVars } = await resolveVariables(
     { ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null },
     event,
-    "email"
+    "email",
+    createPortalLink
   );
   return {
     ...fieldVars,
@@ -233,7 +238,7 @@ export async function previewParticipantEmail(opts: {
       forVars = { ...participant, registrationNumber: (max._max.registrationNumber ?? 0) + 1 };
     }
   }
-  const vars = await participantEmailVars(forVars, event, senderIdentity(sentByUser, "Tábor"), docNames);
+  const vars = await participantEmailVars(forVars, event, senderIdentity(sentByUser, "Tábor"), docNames, false);
   return {
     subject: substituteVariables(opts.subject, vars),
     body: substituteVariables(opts.body, vars),
@@ -303,7 +308,7 @@ export async function sendBulkParticipantEmail(opts: {
 
     // Re-read: the acceptance send may just have assigned the registration number.
     const fresh = (await loadParticipant(participantId)) ?? participant;
-    const vars = await participantEmailVars(fresh, event, sender, generated.attachedDocumentNames);
+    const vars = await participantEmailVars(fresh, event, sender, generated.attachedDocumentNames, usesPortalLink(opts.subject, opts.body));
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 
