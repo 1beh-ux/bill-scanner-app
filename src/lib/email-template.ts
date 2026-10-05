@@ -7,6 +7,7 @@ import {
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
+  PORTAL_INVITATION_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
 // Re-exported for existing server-side callers -- client components must
@@ -34,6 +35,29 @@ posíláme odkaz do portálu rodičů pro {{child_name}}:
 {{portal_link}}
 
 V portálu uvidíte údaje dítěte, můžete je opravit a přihlásit dítě na akce, které jsou právě otevřené. Při prvním otevření budete požádáni o datum narození dítěte. Odkaz prosím nikomu dalšímu neposílejte.
+
+S pozdravem
+{{signature}}`,
+  },
+  // Yearly invitation / onboarding existing people (slice 4 #12) -- same send as the link.
+  [PORTAL_INVITATION_PURPOSE_KEY]: {
+    subject: "Rodinný portál – {{child_name}}",
+    body: `Dobrý den,
+
+posíláme odkaz do našeho rodinného portálu pro {{child_name}}:
+
+{{portal_link}}
+
+Co v portálu najdete:
+- údaje o členech rodiny a kontakty na zákonné zástupce — můžete je sami opravit,
+- přihlášky na akce, které jsou právě otevřené, a stav těch, na které jste přihlášeni (dokumenty, platba),
+- přehled akcí, kterých jste se účastnili v minulých letech (sekce „Historie“).
+
+Při prvním otevření se portál zeptá na datum narození některého člena rodiny — tím ověříme, že jde o vás. Na stejném zařízení se pak už ptát nebude.
+
+Členství na nový rok obnovíte přímo v portálu: u členství na nový rok klikněte na „Obnovit členství“, zaškrtněte, koho přihlašujete, a potvrďte. Cenu uvidíte předem.
+
+Odkaz prosím nikomu dalšímu neposílejte.
 
 S pozdravem
 {{signature}}`,

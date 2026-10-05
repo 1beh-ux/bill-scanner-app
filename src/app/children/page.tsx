@@ -7,7 +7,7 @@ import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
 import Families from "@/components/children/Families";
-import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
+import { copyPortalLink, familyTarget, portalComposeHref } from "@/components/children/portal-link";
 
 type EventRef = { id: string; name: string; startDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type ChildRow = {
@@ -18,6 +18,8 @@ type ChildRow = {
   familyId: string | null;
   family: { name: string } | null;
   hasPortalLink: boolean;
+  // The family's link for a family member, else the person's own.
+  hasLink: boolean;
   participants: { id: string; registrationStatus: "pending" | "accepted"; event: EventRef }[];
 };
 type UnlinkedRow = { id: string; name: string; dateOfBirth: string | null; event: EventRef };
@@ -42,6 +44,11 @@ export default function ChildrenPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Lidé (slice 3 A): children stay the default view; adults are members too.
   const [who, setWho] = useState<"children" | "adults" | "all">("children");
+  // Yearly invitation filters (slice 4 #12); "" = any.
+  const [memberYear, setMemberYear] = useState("");
+  const [eventId, setEventId] = useState("");
+  const [linkFilter, setLinkFilter] = useState<"" | "yes" | "no">("");
+  const [familyFilter, setFamilyFilter] = useState<"" | "yes" | "no">("");
 
   useEffect(() => {
     if (roleLoaded && role !== "admin") router.replace("/events");
@@ -118,7 +125,21 @@ export default function ChildrenPage() {
   const byId = useMemo(() => new Map((data?.children ?? []).map((c) => [c.id, c])), [data]);
   const q = fold(query.trim());
   const match = (name: string) => !q || fold(name).includes(q);
-  const listed = (data?.children ?? []).filter((c) => match(c.name) && (who === "all" || c.isAdult === (who === "adults")));
+  const yesNo = (filter: "" | "yes" | "no", value: boolean) => !filter || value === (filter === "yes");
+  const listed = (data?.children ?? []).filter(
+    (c) =>
+      match(c.name) &&
+      (who === "all" || c.isAdult === (who === "adults")) &&
+      (!memberYear || c.participants.some((p) => p.event.kind === "membership" && p.registrationStatus === "accepted" && String(p.event.membershipYear) === memberYear)) &&
+      (!eventId || c.participants.some((p) => p.event.id === eventId)) &&
+      yesNo(linkFilter, c.hasLink) &&
+      yesNo(familyFilter, !!c.familyId)
+  );
+  // Filter choices from the people's own registrations.
+  const allEvents = [...new Map((data?.children ?? []).flatMap((c) => c.participants.map((p) => [p.event.id, p.event] as const))).values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const memberYears = [...new Set(allEvents.flatMap((e) => (e.kind === "membership" && e.membershipYear ? [e.membershipYear] : [])))].sort((a, b) => b - a);
+  // "Poslat odkaz": one e-mail per family (its link), people without a family their own.
+  const sendTargets = [...new Set((data?.children ?? []).filter((c) => selected.has(c.id)).map((c) => (c.familyId ? familyTarget(c.familyId) : c.id)))];
 
   if (!roleLoaded || role !== "admin") return null;
 
@@ -173,6 +194,32 @@ export default function ChildrenPage() {
           <option value="children">{t("people.filterChildren")}</option>
           <option value="adults">{t("people.filterAdults")}</option>
           <option value="all">{t("people.filterAll")}</option>
+        </select>
+        <select value={memberYear} onChange={(e) => setMemberYear(e.target.value)} aria-label={t("people.filterMemberYear")} className={inputClassSm}>
+          <option value="">{t("people.filterMemberYear")}</option>
+          {memberYears.map((y) => (
+            <option key={y} value={String(y)}>
+              {t("people.memberInYear", { year: String(y) })}
+            </option>
+          ))}
+        </select>
+        <select value={eventId} onChange={(e) => setEventId(e.target.value)} aria-label={t("people.filterEvent")} className={inputClassSm + " max-w-56"}>
+          <option value="">{t("people.filterEvent")}</option>
+          {allEvents.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.kind === "membership" ? t("children.membershipChip", { year: String(e.membershipYear ?? "?") }) : e.name}
+            </option>
+          ))}
+        </select>
+        <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value as typeof linkFilter)} aria-label={t("people.filterLink")} className={inputClassSm}>
+          <option value="">{t("people.filterLink")}</option>
+          <option value="yes">{t("people.hasLink")}</option>
+          <option value="no">{t("people.noLink")}</option>
+        </select>
+        <select value={familyFilter} onChange={(e) => setFamilyFilter(e.target.value as typeof familyFilter)} aria-label={t("people.filterFamily")} className={inputClassSm}>
+          <option value="">{t("people.filterFamily")}</option>
+          <option value="yes">{t("people.inFamily")}</option>
+          <option value="no">{t("people.noFamily")}</option>
         </select>
       </div>
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
@@ -253,8 +300,8 @@ export default function ChildrenPage() {
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(listed.length) })}</h2>
               {selected.size > 0 && (
-                <button onClick={() => router.push(portalComposeHref([...selected]))} className={btn}>
-                  {t("childProfile.sendLinkSelected", { count: String(selected.size) })}
+                <button onClick={() => router.push(portalComposeHref(sendTargets))} title={t("people.sendLinkHint")} className={btn}>
+                  {t("people.sendLinkSelected", { count: String(selected.size), targets: String(sendTargets.length) })}
                 </button>
               )}
             </div>

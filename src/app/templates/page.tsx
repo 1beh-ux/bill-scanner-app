@@ -5,7 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
-import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY, PORTAL_INVITATION_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type CategoryTemplateRow = { id: string; name: string; description: string | null };
@@ -146,6 +146,7 @@ function HealthTemplatesTab() {
             label={t("healthTemplatesPage.tabRegistrationEmail")}
           />
           <EmailTemplateAdmin scope="org" purposeKey={PORTAL_LINK_PURPOSE_KEY} label={t("childProfile.portalLinkTemplate")} />
+          <EmailTemplateAdmin scope="org" purposeKey={PORTAL_INVITATION_PURPOSE_KEY} label={t("portalCompose.purpose.portal_invitation")} />
         </div>
       )}
     </div>

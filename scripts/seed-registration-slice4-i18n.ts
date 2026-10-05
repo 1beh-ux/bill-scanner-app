@@ -55,6 +55,23 @@ async function main() {
     // 11. template variables
     { key: "templatePreview.eventVariables", cs: "Vždy k dispozici: {{camp_name}}, {{questionnaire_url}}, {{questionnaire_line}}, {{registration_deadline}}, {{registration_deadline_line}}, {{health_notes}}, {{portal_link}}, {{portal_link_line}}", en: "Always available: {{camp_name}}, {{questionnaire_url}}, {{questionnaire_line}}, {{registration_deadline}}, {{registration_deadline_line}}, {{health_notes}}, {{portal_link}}, {{portal_link_line}}" },
 
+    // 12. yearly invitation / onboarding
+    { key: "people.filterMemberYear", cs: "Členství: kdykoli", en: "Membership: any year" },
+    { key: "people.memberInYear", cs: "byl členem v roce {year}", en: "was a member in {year}" },
+    { key: "people.filterEvent", cs: "Akce: jakákoli", en: "Event: any" },
+    { key: "people.filterLink", cs: "Odkaz do portálu: vše", en: "Portal link: all" },
+    { key: "people.hasLink", cs: "má odkaz do portálu", en: "has a portal link" },
+    { key: "people.noLink", cs: "nemá odkaz do portálu", en: "has no portal link" },
+    { key: "people.filterFamily", cs: "Rodina: vše", en: "Family: all" },
+    { key: "people.inFamily", cs: "v rodině", en: "in a family" },
+    { key: "people.noFamily", cs: "bez rodiny", en: "without a family" },
+    { key: "people.sendLinkSelected", cs: "Poslat odkaz ({count} lidí → {targets} e-mailů)", en: "Send link ({count} people → {targets} e-mails)" },
+    { key: "people.sendLinkHint", cs: "Členům rodiny jde jeden e-mail s rodinným odkazem, ostatním každému jejich vlastní. Před odesláním uvidíte náhled a potvrdíte.", en: "Family members get one e-mail with the family link, everyone else their own. You'll see a preview and confirm before sending." },
+    { key: "portalCompose.purposeLabel", cs: "Šablona:", en: "Template:" },
+    { key: "portalCompose.purpose.portal_link", cs: "Odkaz do portálu", en: "Portal link" },
+    { key: "portalCompose.purpose.portal_invitation", cs: "Pozvánka do portálu / nový rok", en: "Portal invitation / new year" },
+    { key: "portalCompose.purposeSwitchConfirm", cs: "Přepnout šablonu? Vaše úpravy textu se ztratí.", en: "Switch the template? Your text edits will be lost." },
+
     // 6-7. upload review
     { key: "portal.uploadDone", cs: "Nahráno — dokument teď zkontrolujeme.", en: "Uploaded — we'll check the document now." },
     { key: "portal.docInReview", cs: "nahráno, čeká na kontrolu", en: "uploaded, waiting for review" },

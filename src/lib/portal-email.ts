@@ -109,7 +109,7 @@ export async function previewPortalEmail(opts: { childId: string; subject: strin
 }
 
 /** Sends the link to every receiving guardian of each target (a missing link is created first). */
-export async function sendPortalLinks(opts: { childIds: string[]; subject: string; body: string; user: User; req: Request }) {
+export async function sendPortalLinks(opts: { childIds: string[]; subject: string; body: string; user: User; req: Request; purposeKey?: string }) {
   const senderEmail = await orgSenderEmail(opts.user);
   if (!senderEmail) throw new Error("sender_not_connected");
   const sender = senderIdentity(opts.user, "Tábor");
@@ -127,7 +127,7 @@ export async function sendPortalLinks(opts: { childIds: string[]; subject: strin
     const subject = substituteVariables(opts.subject, v);
     const body = substituteVariables(opts.body, v);
     for (const email of target.emails) {
-      const log = { email, purposeKey: PORTAL_LINK_PURPOSE_KEY, sentByUserId: opts.user.id, subject };
+      const log = { email, purposeKey: opts.purposeKey ?? PORTAL_LINK_PURPOSE_KEY, sentByUserId: opts.user.id, subject };
       const childIds = target.logChildIds(email);
       try {
         await sendPlainTextEmail({ to: email, fromName: sender.name, senderEmail, subject, body });

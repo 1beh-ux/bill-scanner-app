@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { readPortalComposeIds } from "@/components/children/portal-link";
-import { PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { PORTAL_INVITATION_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { templateVariablesFor } from "@/lib/email-template-preview";
 
 const inputClass =
@@ -24,6 +24,8 @@ export default function PortalLinkComposePage() {
   const router = useRouter();
   const confirm = useConfirm();
   const [childIds, setChildIds] = useState<string[] | null>(null);
+  // Which org template to start from (slice 4 #12): the link or the yearly invitation.
+  const [purposeKey, setPurposeKey] = useState(PORTAL_LINK_PURPOSE_KEY);
   const [info, setInfo] = useState<Info | null>(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -42,9 +44,9 @@ export default function PortalLinkComposePage() {
     const ids = readPortalComposeIds(new URLSearchParams(window.location.search));
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setChildIds(ids);
-    setPreviewFor(ids[0] ?? "");
+    setPreviewFor((prev) => prev || ids[0] || "");
     if (ids.length === 0) return;
-    fetch("/api/children/portal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "info", childIds: ids }) })
+    fetch("/api/children/portal-email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "info", childIds: ids, purposeKey }) })
       .then((r) => (r.ok ? r.json() : null))
       .then((d: Info | null) => {
         if (!d) return;
@@ -53,7 +55,7 @@ export default function PortalLinkComposePage() {
         setBody(d.body);
       })
       .catch(() => {});
-  }, []);
+  }, [purposeKey]);
 
   // Filled-in preview, re-rendered on the server as the text changes.
   useEffect(() => {
@@ -88,7 +90,7 @@ export default function PortalLinkComposePage() {
     const res = await fetch("/api/children/portal-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "send", childIds: info.children.map((c) => c.id), subject, body }),
+      body: JSON.stringify({ action: "send", childIds: info.children.map((c) => c.id), subject, body, purposeKey }),
     });
     setSending(false);
     if (!res.ok) {
@@ -146,6 +148,24 @@ export default function PortalLinkComposePage() {
           <p className={"text-[12.5px] " + (info.senderEmail ? "text-ink-secondary" : "text-red-600")}>
             {info.senderEmail ? t("portalCompose.from", { email: info.senderEmail }) : t("portalCompose.noSender")}
           </p>
+          <label className="flex flex-wrap items-center gap-2 text-[13px] text-ink-secondary">
+            {t("portalCompose.purposeLabel")}
+            <select
+              value={purposeKey}
+              onChange={async (e) => {
+                const next = e.target.value;
+                if (info && (subject !== info.subject || body !== info.body) && !(await confirm({ message: t("portalCompose.purposeSwitchConfirm") }))) return;
+                setPurposeKey(next);
+              }}
+              className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink"
+            >
+              {[PORTAL_LINK_PURPOSE_KEY, PORTAL_INVITATION_PURPOSE_KEY].map((k) => (
+                <option key={k} value={k}>
+                  {t(`portalCompose.purpose.${k}`)}
+                </option>
+              ))}
+            </select>
+          </label>
           <p className="text-[12px] text-ink-secondary">
             {t("compose.templateOrg")}{" "}
             <Link href="/templates" className="text-ember hover:underline">
@@ -153,7 +173,7 @@ export default function PortalLinkComposePage() {
             </Link>
           </p>
           <div className="flex flex-wrap gap-1.5">
-            {templateVariablesFor(PORTAL_LINK_PURPOSE_KEY).map((v) => (
+            {templateVariablesFor(purposeKey).map((v) => (
               <button
                 key={v}
                 type="button"

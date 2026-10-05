@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
         dateOfBirth: true,
         isAdult: true,
         familyId: true,
-        family: { select: { name: true } },
+        family: { select: { name: true, portalToken: true } },
         portalToken: true,
         participants: { select: { id: true, registrationStatus: true, event: eventSelect } },
       },
@@ -57,7 +57,13 @@ export async function GET(req: NextRequest) {
     byName.set(k, [...(byName.get(k) ?? []), c.id]);
   }
   return NextResponse.json({
-    children: children.map(({ portalToken, ...c }) => ({ ...c, hasPortalLink: !!portalToken })),
+    // Link = the family's for a family member (slice 4 #12 filter), else the person's own.
+    children: children.map(({ portalToken, family, ...c }) => ({
+      ...c,
+      family: family && { name: family.name },
+      hasPortalLink: !!portalToken,
+      hasLink: family ? !!family.portalToken : !!portalToken,
+    })),
     unlinked: unlinked.map((p) => ({ ...p, name: participantDisplayName(p) })),
     duplicates: [...byName.values()].filter((ids) => ids.length > 1),
     pendingChanges: pending.map((c) => ({ ...c, childName: c.child.name, fieldLabel: labels[c.fieldKey] ?? c.fieldKey })),
