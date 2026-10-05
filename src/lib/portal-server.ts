@@ -19,7 +19,7 @@ import {
   readEligibility,
   type PortalAccessLevel,
 } from "@/lib/portal-rules";
-import { eligibilityFacts, profileFieldLabels } from "@/lib/child-profile";
+import { eligibilityFacts, profileFieldLabels, proposeChange, updateProfile } from "@/lib/child-profile";
 import { buildVariableSymbol, effectivePriceCzk, fieldTextValues, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
 import { readParticipantLayout, resolvePortalLayout } from "@/lib/participant-layout";
 import { eventSender } from "@/lib/auto-accept";
@@ -28,7 +28,7 @@ import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
-import { appliesTo, type FieldLevel } from "@/lib/registration-fields";
+import { appliesTo, askedFields, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -111,6 +111,33 @@ export async function portalAccessMap(): Promise<Map<string, PortalAccessLevel>>
   return map;
 }
 
+/** Active org templates by key -- what an event field marked "Vyžadovat při přihlášce" resolves against (slice 5 #2). */
+export async function templateRules(): Promise<Map<string, TemplateRule>> {
+  return new Map((await prisma.participantFieldTemplate.findMany({ where: { active: true } })).map((t) => [t.key, t]));
+}
+
+/** The events' fields marked "Vyžadovat při přihlášce", in the event's field order. */
+export const requiredEventFields = (eventIds: string[]) =>
+  eventIds.length
+    ? prisma.eventParticipantField.findMany({ where: { eventId: { in: eventIds }, active: true, kind: "custom", requiredOnRegistration: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] })
+    : Promise.resolve([]);
+
+/** A profile as the parent sees it: live values, a pending proposal instead where there is one. */
+const shownValues = (child: PortalChild, pending: { childId: string; fieldKey: string; newValue: string | null }[]) => ({
+  ...profileValues(child),
+  ...Object.fromEntries(pending.filter((c) => c.childId === child.id && c.fieldKey !== GUARDIANS_CHANGE_KEY).map((c) => [c.fieldKey, c.newValue ?? ""])),
+});
+
+/**
+ * The registration step (slice 5 #3) of one person for one event: the asked
+ * fields, profile ones pre-filled with what the parent sees, event questions
+ * empty; + whether the "Údaje jsou aktuální" tick is needed.
+ */
+function registrationStep(eventFields: Awaited<ReturnType<typeof requiredEventFields>>, rules: Map<string, TemplateRule>, child: PortalChild, shown: Record<string, string>) {
+  const asked = askedFields(eventFields, rules, child.isAdult);
+  return { asked, fields: asked.map((f) => ({ ...f, value: f.source === "profile" ? (shown[f.key] ?? "") : "" })), reviewTick: needsReviewTick(asked, shown) };
+}
+
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
 
 /**
@@ -141,7 +168,7 @@ export async function availableEvents(memberIds: string[]) {
 /** Everything the portal shows for a scope (after the gate). */
 export async function portalData(scope: PortalScope) {
   const memberIds = scope.members.map((m) => m.id);
-  const [templates, labels, pending, available, participations] = await Promise.all([
+  const [templates, labels, pending, available, participations, rules] = await Promise.all([
     visibleTemplates(),
     profileFieldLabels(),
     prisma.childChange.findMany({ where: { childId: { in: memberIds }, status: "pending" } }),
@@ -151,7 +178,9 @@ export async function portalData(scope: PortalScope) {
       include: { event: true, guardians: true, documents: { orderBy: { receivedAt: "desc" } } },
       orderBy: { event: { startDate: "desc" } },
     }),
+    templateRules(),
   ]);
+  const availableFields = await requiredEventFields(available.map((a) => a.event.id));
 
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
@@ -226,6 +255,15 @@ export async function portalData(scope: PortalScope) {
         membershipYear: e.membershipYear,
         memberIds,
         pricing: await registrationPricing(e, scope.members.filter((m) => memberIds.includes(m.id))),
+        // Per member: the event's required fields to fill in when registering (slice 5 #3).
+        steps: Object.fromEntries(
+          scope.members
+            .filter((m) => memberIds.includes(m.id))
+            .map((m) => {
+              const { fields, reviewTick } = registrationStep(availableFields.filter((f) => f.eventId === e.id), rules, m, shownValues(m, pending));
+              return [m.id, { fields, reviewTick }];
+            })
+        ),
       }))
     ),
   };
@@ -271,7 +309,8 @@ async function registrationPricing(
   };
 }
 
-export type RegistrationPick = { memberId: string; priceCategory?: unknown; oddil?: unknown };
+// answers / reviewed: the registration step (slice 5 #3) -- the event's required fields + the "Údaje jsou aktuální" tick.
+export type RegistrationPick = { memberId: string; priceCategory?: unknown; oddil?: unknown; answers?: unknown; reviewed?: unknown };
 
 /** A pick's category (null without rules) + the Oddíl value when its category asks for it (null = invalid pick). */
 export async function pickExtras(eventId: string, priceRules: unknown, isAdult: boolean, pick: { priceCategory?: unknown; oddil?: unknown }) {
@@ -432,23 +471,48 @@ export async function createRegistration(
 /**
  * Portal "Přihlásit": the picked members of the scope -> pending
  * participants. Only members the event is available to (open, eligible,
- * before the deadline, not registered yet); null = none of the picks was.
+ * before the deadline, not registered yet); "not_available" = none of the
+ * picks was. Each picked person must answer the event's required fields
+ * (slice 5 #3, else "invalid" + the error codes "<memberId>.<key>"): the
+ * answers go onto the participant, profile fields also to the profile by
+ * their portal rule (edit applied + pushed, approval a pending change).
  */
-export async function registerFromPortal(scope: PortalScope, eventId: string, picks: RegistrationPick[], note: string): Promise<{ ids: string[] } | null> {
+export async function registerFromPortal(
+  scope: PortalScope,
+  eventId: string,
+  picks: RegistrationPick[],
+  note: string
+): Promise<{ ids: string[] } | { error: "not_available" } | { error: "invalid"; fields: string[] }> {
   const open = (await availableEvents(scope.members.map((m) => m.id))).find((a) => a.event.id === eventId);
-  if (!open) return null;
+  if (!open) return { error: "not_available" };
+  const [eventFields, rules, pending] = await Promise.all([
+    requiredEventFields([eventId]),
+    templateRules(),
+    prisma.childChange.findMany({ where: { childId: { in: open.memberIds }, status: "pending" } }),
+  ]);
   const chosen = [];
+  const errors: string[] = [];
   for (const m of scope.members) {
     const pick = picks.find((p) => p.memberId === m.id);
     if (!pick || !open.memberIds.includes(m.id)) continue;
     const extras = await pickExtras(eventId, open.event.priceRules, m.isAdult, pick);
-    if (!extras) return null;
-    chosen.push({ child: m, extras });
+    if (!extras) return { error: "not_available" };
+    const shown = shownValues(m, pending);
+    const { asked } = registrationStep(eventFields, rules, m, shown);
+    const checked = checkAnswers(asked, pick.answers, { prefill: shown, reviewed: pick.reviewed === true });
+    if (!checked.ok) errors.push(...checked.errors.map((e) => `${m.id}.${e}`));
+    else chosen.push({ child: m, extras, routed: routeAnswers(asked, checked.values, profileValues(m), shown) });
   }
-  if (chosen.length === 0) return null;
+  if (errors.length) return { error: "invalid", fields: errors };
+  if (chosen.length === 0) return { error: "not_available" };
   const ids: string[] = [];
   // ponytail: availableEvents' duplicate check and these creates aren't atomic --
   // a double-click race could register twice; the admin sees and deletes the extra row.
-  for (const { child, extras } of chosen) ids.push((await createRegistration(child, eventId, { note, ...extras })).id);
+  for (const { child, extras, routed } of chosen) {
+    ids.push((await createRegistration(child, eventId, { note, priceCategory: extras.priceCategory, values: { ...extras.values, ...routed.participant } })).id);
+    // Same as a profile edit in the portal (src/app/api/portal/[token]/profile/route.ts).
+    if (Object.keys(routed.profile).length) await updateProfile(child.id, routed.profile);
+    for (const c of routed.proposals) await proposeChange(child.id, c.key, c.oldValue, c.newValue);
+  }
   return { ids };
 }

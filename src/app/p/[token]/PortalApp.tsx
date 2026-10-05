@@ -53,12 +53,15 @@ type Pricing = {
   oddil: OddilField | null;
   members: { id: string; isAdult: boolean; isMember: boolean; categories: CategoryOption[] }[];
 };
+// The registration step (slice 5 #3): the event's required fields for one person.
+type StepField = { key: string; label: string; fieldType: string; options: unknown; source: "profile" | "event"; access: "edit" | "approval" | null; value: string };
+type Step = { fields: StepField[]; reviewTick: boolean };
 type Data = {
   kind: "child" | "family";
   name: string;
   members: Member[];
   contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
-  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[]; pricing: Pricing })[];
+  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
 };
 type T = (key: string, vars?: Record<string, string>) => string;
 
@@ -335,6 +338,9 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
   const [openId, setOpenId] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [choice, setChoice] = useState<Record<string, { category?: string; oddil?: string }>>({});
+  // Registration step (slice 5 #3): answers + "Údaje jsou aktuální" per person.
+  const [answers, setAnswers] = useState<Record<string, Record<string, string>>>({});
+  const [reviewed, setReviewed] = useState<Record<string, boolean>>({});
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -344,10 +350,10 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
   async function register(eventId: string) {
     setBusy(true);
     setError(null);
-    const picks = picked.map((memberId) => ({ memberId, priceCategory: choice[memberId]?.category, oddil: choice[memberId]?.oddil }));
+    const picks = picked.map((memberId) => ({ memberId, priceCategory: choice[memberId]?.category, oddil: choice[memberId]?.oddil, answers: answers[memberId], reviewed: reviewed[memberId] }));
     const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
     setBusy(false);
-    if (!res?.ok) return setError(t("portal.registerFailed"));
+    if (!res?.ok) return setError(t(res?.status === 400 ? "portal.stepIncomplete" : "portal.registerFailed"));
     // The parent already has this link: only the status (slice 4 #10).
     const { outcome } = await res.json().catch(() => ({ outcome: null }));
     setOpenId(null);
@@ -365,6 +371,11 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
         );
         const total = prices.reduce<number>((s, p) => s + (p ?? 0), 0);
         const renew = e.kind === "membership" && data.members.some((m) => m.history.some((h) => h.kind === "membership"));
+        // Every picked person's required fields filled (an Ano/Ne box is always an answer) and the tick where needed.
+        const stepDone = picked.every((id) => {
+          const step = e.steps[id];
+          return !step || (step.fields.every((f) => f.fieldType === "boolean" || answers[id]?.[f.key]?.trim()) && (!step.reviewTick || reviewed[id]));
+        });
         return (
           <li key={e.id} className={card + " flex flex-col gap-3"}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -378,6 +389,8 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                   setOpenId(e.id);
                   setPicked(e.memberIds);
                   setChoice({});
+                  setAnswers(Object.fromEntries(e.memberIds.map((id) => [id, Object.fromEntries((e.steps[id]?.fields ?? []).map((f) => [f.key, f.value]))])));
+                  setReviewed({});
                   setError(null);
                 }}
                 className={btnPrimary}
@@ -417,6 +430,16 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                           t={t}
                         />
                       )}
+                      {on && e.steps[id] && e.steps[id].fields.length > 0 && (
+                        <RegistrationStep
+                          step={e.steps[id]}
+                          values={answers[id] ?? {}}
+                          onChange={(key, v) => setAnswers((a) => ({ ...a, [id]: { ...a[id], [key]: v } }))}
+                          reviewed={!!reviewed[id]}
+                          onReviewed={(v) => setReviewed((r) => ({ ...r, [id]: v }))}
+                          t={t}
+                        />
+                      )}
                     </div>
                   );
                 })}
@@ -427,7 +450,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                 </label>
                 {error && <p className="text-[14px] text-red-600">{error}</p>}
                 <div className="flex flex-wrap gap-2">
-                  <button onClick={() => register(e.id)} disabled={busy || picked.length === 0} className={btnPrimary}>
+                  <button onClick={() => register(e.id)} disabled={busy || picked.length === 0 || !stepDone} className={btnPrimary}>
                     {t("portal.registerConfirm")}
                   </button>
                   <button onClick={() => setOpenId(null)} disabled={busy} className={btn}>
@@ -440,6 +463,34 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
         );
       })}
     </ul>
+  );
+}
+
+// The event's required fields for one person (slice 5 #3): profile fields
+// pre-filled (saved back to the profile by their rule), event questions empty,
+// and "Údaje jsou aktuální" when detailed data came pre-filled.
+function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: { step: Step; values: Record<string, string>; onChange: (key: string, v: string) => void; reviewed: boolean; onReviewed: (v: boolean) => void; t: T }) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-mist pt-2">
+      <p className="text-[13px] font-medium text-ink">{t("portal.stepTitle")}</p>
+      {step.fields.map((f) => (
+        <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+          <span>
+            {f.label}
+            {f.fieldType !== "boolean" && " *"}
+            {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
+          </span>
+          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} />
+        </label>
+      ))}
+      {step.fields.some((f) => f.source === "profile") && <p className="text-[12px] text-ink-secondary">{t("portal.stepSavedToProfile")}</p>}
+      {step.reviewTick && (
+        <label className="flex items-start gap-2 text-[14px] text-ink">
+          <input type="checkbox" className="mt-1" checked={reviewed} onChange={(e) => onReviewed(e.target.checked)} />
+          {t("portal.stepReviewed")}
+        </label>
+      )}
+    </div>
   );
 }
 

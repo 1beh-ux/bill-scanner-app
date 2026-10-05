@@ -17,12 +17,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
 
   const body = await req.json().catch(() => null);
   if (isSpam(body)) return NextResponse.json({ ok: true }, { status: 201 });
-  const result = validateSubmission(body, { ...(await publicFormContext(event)), today: new Date() });
+  const ctx = await publicFormContext(event);
+  const result = validateSubmission(body, { ...ctx, today: new Date() });
   if (!result.ok) return NextResponse.json({ error: "invalid", fields: result.errors }, { status: 400 });
   // Counted per valid submit (a parent fixing typos isn't locked out); invalid ones store nothing.
   if (!(await takeRateSlot(`submit:${hashedIp(req)}`, SUBMIT_LIMIT_PER_HOUR, 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
-  const { ids, portalToken } = await createPublicRegistration(event, result.data);
+  const { ids, portalToken } = await createPublicRegistration(event, result.data, ctx.fields);
   // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
   await autoAcceptRegistrations(event.id, ids, "public");
   // accept_send events show the family's portal link on the confirmation screen (slice 4 #10).
