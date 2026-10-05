@@ -11,7 +11,9 @@ import type { DocumentTypeData } from "@/lib/mail-reply-template";
 // sends a document of a type that allows it (allowPortalUpload). PDF / JPG /
 // PNG by content, max 15 MB, 20 per registration a day. Stored exactly like
 // an e-mailed one (same GCS path convention, a ParticipantDocument row, Drive
-// sync picks it up) with receivedVia = portal -- so it counts as received.
+// sync picks it up once approved) with receivedVia = portal and reviewStatus
+// = pending: it counts as received only after an admin approves it (slice 4
+// #6). The event's payment document type is never uploadable (slice 4 #5).
 // multipart: participantId, docTypeId, file
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -32,6 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     docType?.eventId === participant.eventId &&
     docType.kind === "document" &&
     docType.active &&
+    docType.id !== participant.event.paymentDocTypeId &&
     (docType.data as DocumentTypeData | null)?.allowPortalUpload === true;
   if (!ok) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!(file instanceof File) || file.size > UPLOAD_MAX_BYTES) return NextResponse.json({ error: "bad_file" }, { status: 400 });
@@ -46,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   const gcsPath = `events/${participant.eventId}/mail/documents/${participant.id}/${hash}-${sanitizeFilename(filename)}`;
   await billsBucket.file(gcsPath).save(buffer, { contentType });
   await prisma.participantDocument.create({
-    data: { participantId: participant.id, eventListItemId: docType.id, gcsPath, contentHash: hash, originalFilename: filename, receivedVia: "portal", receivedByUserId: null },
+    data: { participantId: participant.id, eventListItemId: docType.id, gcsPath, contentHash: hash, originalFilename: filename, receivedVia: "portal", receivedByUserId: null, reviewStatus: "pending" },
   });
   return NextResponse.json({ ok: true }, { status: 201 });
 }

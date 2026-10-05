@@ -24,7 +24,7 @@ type Registration = {
   note: string | null;
   category: string | null;
   payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null } | null;
-  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; canUpload: boolean }[];
+  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
 };
@@ -474,7 +474,9 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
                 <span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
                   {fileLink(d.sent, t("portal.docSent"))}
                   {fileLink(d.received, t("portal.docReceived"))}
-                  {!d.received && <span className="text-amber-700">{t("portal.docMissing")}</span>}
+                  {d.review === "pending" && <span className="text-amber-700">{t("portal.docInReview")}</span>}
+                  {d.review === "rejected" && <span className="text-red-700">{t("portal.docRejected", { note: d.reviewNote ?? "" })}</span>}
+                  {!d.received && !d.review && <span className="text-amber-700">{t("portal.docMissing")}</span>}
                 </span>
                 {d.canUpload && (
                   <label className="text-[13px] text-ink-secondary">

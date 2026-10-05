@@ -27,6 +27,7 @@ import { allowedCategories, categoryFor, readPriceRules, type PriceRules } from 
 import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
+import { countsAsReceived, docState } from "@/lib/registration-status";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -338,15 +339,20 @@ async function registrationCard(
     note: p.portalNote,
     category: rules ? (categoryFor(rules, p.priceCategory, child.isAdult)?.label ?? null) : null,
     payment,
-    // Per tracked document type: sent to you (generated) / received from you / missing.
+    // Per tracked document type: sent to you (generated) / received from you /
+    // missing; an upload waits for review or was rejected (slice 4 #6) -- those
+    // don't count as received.
     documents: card.docTypes.map((dt) => {
       const data = dt.data as DocumentTypeData | null;
       const mine = p.documents.filter((d) => d.eventListItemId === dt.id);
+      const state = docState(mine, dt.id);
       return {
         typeId: dt.id,
         name: documentDisplayName({ ...dt, data }),
         sent: file(mine.find((d) => d.receivedVia === "generated")),
-        received: file(mine.find((d) => d.receivedVia !== "generated")),
+        received: file(mine.find(countsAsReceived)),
+        review: mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
+        reviewNote: state.note,
         canUpload: !!data?.allowPortalUpload,
       };
     }),

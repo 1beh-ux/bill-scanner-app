@@ -7,6 +7,7 @@ import MailInboxList from "@/components/mail/MailInboxList";
 import MailDetailPanel from "@/components/mail/MailDetailPanel";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import MailActionLogModal from "@/components/mail/MailActionLogModal";
+import { UploadReviewLink } from "@/components/participants/UploadReview";
 import type { DocumentType, MailMessage, Participant } from "@/components/mail/types";
 
 const btnSecondary =
@@ -154,6 +155,7 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
           {eventName} — {t("mailPage.title")}
         </h1>
         <div className="flex gap-2">
+          <UploadReviewLink eventId={eventId} />
           <StatusUpdateButton eventId={eventId} className={btnSecondary} />
           <button onClick={() => setLogsModalOpen(true)} className={btnSecondary}>
             {t("mailPage.logsButton")}

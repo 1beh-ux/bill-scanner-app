@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
+import { RECEIVED_WHERE } from "@/lib/registration-status";
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
@@ -90,7 +91,8 @@ export async function GET(
       where: {
         participantId: { in: scopedParticipants.map((p) => p.id) },
         eventListItemId: { in: documentTypes.map((d) => d.id) },
-        receivedVia: { not: "generated" },
+        // Portal uploads in review don't count (slice 4 #6).
+        ...RECEIVED_WHERE,
       },
       select: { participantId: true, eventListItemId: true },
     });

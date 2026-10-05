@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
+import { NOT_IN_REVIEW, countsAsReceived } from "@/lib/registration-status";
 
 async function logToggle(userId: string, eventId: string, participantId: string, docTypeId: string, marked: boolean) {
   const docType = await prisma.eventListItem.findUnique({ where: { id: docTypeId } });
@@ -41,10 +42,12 @@ export async function POST(
   // A guardian-returned row wins. Otherwise a `generated` row (we sent them a
   // blank form, see participant-document-store.ts) isn't "received" yet -- if
   // staff are marking this received (e.g. a printout handed in personally),
-  // upgrade it in place, or the toggle would silently do nothing.
-  const received = rows.find((r) => r.receivedVia !== "generated");
+  // upgrade it in place, or the toggle would silently do nothing. A portal
+  // upload in review isn't received either (slice 4 #6): ticking adds a
+  // manual row and leaves the upload to its own review.
+  const received = rows.find(countsAsReceived);
   if (received) return NextResponse.json(received);
-  const generated = rows[0];
+  const generated = rows.find((r) => r.receivedVia === "generated");
   if (generated) {
     const updated = await prisma.participantDocument.update({
       where: { id: generated.id },
@@ -78,8 +81,9 @@ export async function DELETE(
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
+  // Uploads still in review / rejected stay for the review list.
   const deleted = await prisma.participantDocument.deleteMany({
-    where: { participantId, eventListItemId: docTypeId },
+    where: { participantId, eventListItemId: docTypeId, ...NOT_IN_REVIEW },
   });
   if (deleted.count > 0) await logToggle(user.id, eventId, participantId, docTypeId, false);
   return NextResponse.json({ ok: true });

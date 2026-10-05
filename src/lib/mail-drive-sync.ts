@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { billsBucket } from "@/lib/gcs";
 import { getOrCreateSubfolder, uploadFileToFolder, updateFileContent } from "@/lib/drive";
 import { documentDisplayName } from "@/lib/mail-reply-template";
+import { NOT_IN_REVIEW } from "@/lib/registration-status";
 
 const MIME_BY_EXT: Record<string, string> = {
   ".pdf": "application/pdf",
@@ -84,7 +85,8 @@ export async function syncParticipantDocumentsToDrive(eventId: string): Promise<
   if (!rootFolderId) return { synced: 0, skipped: 0 };
 
   const pending = await prisma.participantDocument.findMany({
-    where: { participant: { eventId }, driveFileId: null, gcsPath: { not: null } },
+    // Portal uploads only once approved (slice 4 #6).
+    where: { participant: { eventId }, driveFileId: null, gcsPath: { not: null }, ...NOT_IN_REVIEW },
     select: { id: true },
   });
 

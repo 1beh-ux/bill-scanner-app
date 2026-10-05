@@ -10,6 +10,7 @@ import { composeHref } from "@/lib/compose-handoff";
 import { useConfirm } from "@/components/ConfirmDialog";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import AutoTextarea from "@/components/participants/AutoTextarea";
+import { UploadReviewActions } from "@/components/participants/UploadReview";
 import { useCollapsed } from "@/lib/use-collapsed";
 import type { HealthNoteConfig } from "@/lib/health-notes";
 import {
@@ -30,7 +31,16 @@ import { AddFieldSelect, DropZone, FieldRow, Inert, LayoutEditorBar, SectionCard
 // basics + guardians on the left, the event's own fields on the right.
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
 type EditGuardian = GuardianDraft & { id: string; receivesCommunications: boolean };
-type DocStatus = { docTypeId: string; name: string; received: boolean; receivedAt: string | null; receivedVia: string | null; driveUrl: string | null };
+type DocStatus = {
+  docTypeId: string;
+  name: string;
+  received: boolean;
+  receivedAt: string | null;
+  receivedVia: string | null;
+  driveUrl: string | null;
+  // Portal uploads waiting for review / rejected (slice 4 #6-7).
+  review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
+};
 type Core = {
   id: string;
   name: string;
@@ -436,6 +446,15 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
               {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
             </button>
           </span>
+          {d.review?.map((u) => (
+            <div key={u.id} className="flex basis-full flex-col gap-1 border-t border-mist/60 pt-1.5 text-[12.5px]">
+              <span className={u.status === "pending" ? "text-amber-700" : "text-red-700"}>
+                {t(u.status === "pending" ? "uploadReview.pendingFrom" : "uploadReview.rejectedNote", { date: new Date(u.receivedAt).toLocaleDateString("cs-CZ"), note: u.note ?? "" })}
+                {u.filename && <span className="text-ink-secondary"> · {u.filename}</span>}
+              </span>
+              {u.status === "pending" && <UploadReviewActions eventId={eventId} docId={u.id} onDone={loadDocs} />}
+            </div>
+          ))}
         </li>
       ))}
     </ul>

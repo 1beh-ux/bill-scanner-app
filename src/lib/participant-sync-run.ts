@@ -10,6 +10,7 @@ import type { DriveErrorCode } from "@/lib/drive-errors";
 import { readSheetTable } from "@/lib/sheet-import";
 import { fieldTextValues } from "@/lib/document-variables";
 import { linkChildrenIfConnected } from "@/lib/children";
+import { RECEIVED_WHERE } from "@/lib/registration-status";
 import {
   MATCH_BY_NAME,
   REGNUM_TARGET,
@@ -195,7 +196,7 @@ export async function applyPlan(
 /** Ticks the document as received (no file) unless it already is. True when newly ticked. */
 async function markReceived(participantId: string, m: { docTypeId: string; userId: string }): Promise<boolean> {
   const existing = await prisma.participantDocument.findFirst({
-    where: { participantId, eventListItemId: m.docTypeId, receivedVia: { not: "generated" } },
+    where: { participantId, eventListItemId: m.docTypeId, ...RECEIVED_WHERE },
     select: { id: true },
   });
   if (existing) return false;

@@ -11,6 +11,7 @@ import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { UploadReviewLink } from "@/components/participants/UploadReview";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
@@ -358,6 +359,7 @@ export default function EventParticipantsPage({
           {t("participantsPage.writeEmailButton")}
         </button>
         {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
+        <UploadReviewLink eventId={id} />
         <button onClick={openAdd} className={btnPrimary}>
           {t("participantsPage.addButton")}
         </button>
