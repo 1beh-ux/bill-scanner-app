@@ -9,6 +9,31 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    // 1-5. portal
+    { key: "portal.everyone", cs: "Všichni", en: "Everyone" },
+    { key: "portal.stateFilter", cs: "Stav přihlášek", en: "Registration status" },
+    { key: "portal.state.all", cs: "Vše", en: "All" },
+    { key: "portal.state.missing", cs: "Chybí údaje nebo dokumenty", en: "Details or documents missing" },
+    { key: "portal.state.waiting", cs: "Čeká na potvrzení", en: "Waiting for confirmation" },
+    { key: "portal.state.complete", cs: "Vše hotovo", en: "All done" },
+    { key: "portal.showMore", cs: "Zobrazit více", en: "Show more" },
+    { key: "portal.showLess", cs: "Zobrazit méně", en: "Show less" },
+    { key: "portal.upload", cs: "Nahrát dokument", en: "Upload document" },
+    { key: "portal.uploadAgain", cs: "Nahrát znovu", en: "Upload again" },
+    { key: "portal.uploadHint", cs: "Místo e-mailu: PDF, JPG nebo PNG, max 15 MB. Po kontrole se dokument označí jako přijatý.", en: "Instead of e-mail: PDF, JPG or PNG, max 15 MB. Marked received once we've checked it." },
+    { key: "portal.paid", cs: "Zaplaceno", en: "Paid" },
+    { key: "portal.awaitingPayment", cs: "Čeká na platbu", en: "Awaiting payment" },
+    { key: "portal.paymentDelayNote", cs: "Platba se zde zobrazí s několikadenním zpožděním — není třeba se znepokojovat.", en: "A payment shows up here with a delay of a few days — no need to worry." },
+    { key: "paymentDoc.label", cs: "Dokument platby", en: "Payment document" },
+    { key: "paymentDoc.none", cs: "— žádný —", en: "— none —" },
+    { key: "paymentDoc.hint", cs: "Typ dokumentu, jehož přijetí (ručně, z tabulky…) znamená „Zaplaceno“. V portálu se nenabízí k nahrání a místo v dokumentech se ukáže u platby („Čeká na platbu“ / „Zaplaceno“).", en: "The document type whose receipt (manual tick, sheet…) means “Paid”. Not offered for upload in the portal; shown in the payment block (“Awaiting payment” / “Paid”) instead of the documents." },
+    // 8. admin filter
+    { key: "participantsPage.stateFilter", cs: "Stav přihlášky", en: "Registration status" },
+    // 10. after a portal registration (the parent already has the link)
+    { key: "portal.registeredPending", cs: "Přihlášku jsme přijali. Po potvrzení vám pošleme e-mail s dalšími informacemi.", en: "We've received the registration. Once it's confirmed we'll e-mail you further information." },
+    { key: "portal.registeredAccepted", cs: "Přihláška je potvrzená.", en: "The registration is confirmed." },
+    { key: "portal.registeredSent", cs: "Přihláška je potvrzená — potvrzení a dokumenty jsme vám poslali e-mailem.", en: "The registration is confirmed — we've e-mailed you the confirmation and documents." },
+
     // 6-7. upload review
     { key: "portal.uploadDone", cs: "Nahráno — dokument teď zkontrolujeme.", en: "Uploaded — we'll check the document now." },
     { key: "portal.docInReview", cs: "nahráno, čeká na kontrolu", en: "uploaded, waiting for review" },

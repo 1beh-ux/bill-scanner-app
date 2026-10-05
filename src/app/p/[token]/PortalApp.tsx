@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Upload } from "lucide-react";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
+import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
 // docs/registration-slice3-spec.md F). Two columns on desktop -- the person /
@@ -21,9 +23,12 @@ type Registration = {
   participantId: string;
   event: EventRef & { location: string | null; info: string | null };
   status: "pending" | "accepted";
+  // Status filter (slice 4 #3, src/lib/registration-status.ts).
+  state: RegistrationState;
   note: string | null;
   category: string | null;
-  payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null } | null;
+  // paid: null = the event has no payment document type (slice 4 #5).
+  payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null } | null;
   documents: { typeId: string; name: string; sent: DocFile; received: DocFile; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
@@ -62,6 +67,7 @@ const btn = "rounded-lg border border-mist px-3 py-2 text-[14px] text-ink hover:
 const card = "rounded-lg border border-mist bg-paper p-4";
 const h2 = "text-[13px] font-semibold uppercase tracking-wide text-ink-secondary";
 const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—");
+const chip = (on: boolean) => "rounded-full border px-3 py-1 text-[14px] " + (on ? "border-ember bg-ember/15 text-ink" : "border-mist text-ink-secondary hover:text-ink");
 const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) === date(e.endDate) ? date(e.startDate) : `${date(e.startDate)} – ${date(e.endDate)}`);
 
 export default function PortalApp({ token, strings }: { token: string; strings: Record<string, string> }) {
@@ -77,6 +83,11 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
   const [phase, setPhase] = useState<"loading" | "gate" | "ready" | "unavailable">("loading");
   const [data, setData] = useState<Data | null>(null);
   const [memberId, setMemberId] = useState<string | null>(null);
+  // Family link: a picked member also filters "Moje přihlášky" (slice 4 #1); "Všichni" shows all.
+  const [onlyMember, setOnlyMember] = useState(false);
+  const [stateFilter, setStateFilter] = useState<RegistrationState | "all">("all");
+  // Shown after a portal registration (slice 4 #10): pending / accepted / accepted + sent.
+  const [registered, setRegistered] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const res = await fetch(api, { cache: "no-store" }).catch(() => null);
@@ -92,6 +103,8 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
   const evName = (e: EventRef) => (e.kind === "membership" ? t("portal.membership", { year: String(e.membershipYear ?? "") }) : e.name);
   const member = data ? (data.members.find((m) => m.id === memberId) ?? data.members[0]) : null;
   const many = (data?.members.length ?? 0) > 1;
+  const shown = data && member ? data.members.filter((m) => !onlyMember || m.id === member.id) : [];
+  const shownRegs = shown.flatMap((m) => m.registrations.map((r) => ({ m, r })));
 
   return (
     <div className="mx-auto w-full max-w-6xl p-4 pb-16">
@@ -108,11 +121,17 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
                 <section className={card + " flex flex-col gap-3"}>
                   <h2 className={h2}>{t("portal.family")}</h2>
                   <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setOnlyMember(false)} className={chip(!onlyMember)}>
+                      {t("portal.everyone")}
+                    </button>
                     {data.members.map((m) => (
                       <button
                         key={m.id}
-                        onClick={() => setMemberId(m.id)}
-                        className={"rounded-full border px-3 py-1 text-[14px] " + (m.id === member.id ? "border-ember bg-ember/15 text-ink" : "border-mist text-ink-secondary")}
+                        onClick={() => {
+                          setMemberId(m.id);
+                          setOnlyMember(true);
+                        }}
+                        className={chip(onlyMember && m.id === member.id)}
                       >
                         {m.name}
                       </button>
@@ -133,19 +152,40 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
               {data.available.length > 0 && (
                 <>
                   <h2 className={h2}>{t("portal.tab.events")}</h2>
-                  <Available api={api} data={data} t={t} evName={evName} onRegistered={load} />
+                  <Available
+                    api={api}
+                    data={data}
+                    t={t}
+                    evName={evName}
+                    onRegistered={(message) => {
+                      setRegistered(message);
+                      load();
+                    }}
+                  />
                 </>
               )}
+              {registered && <p className="rounded-lg border border-pine/40 bg-pine/10 px-3 py-2 text-[14px] text-pine">{registered}</p>}
               <h2 className={h2}>{t("portal.tab.registrations")}</h2>
-              {data.members.every((m) => m.registrations.length === 0) && <p className="text-[14px] text-ink-secondary">{t("portal.noRegistrations")}</p>}
-              {data.members.flatMap((m) =>
-                m.registrations.map((r) => <RegistrationCard key={r.participantId} api={api} r={r} who={many ? m.name : null} t={t} evName={evName} onChanged={load} />)
+              {shownRegs.length === 0 && <p className="text-[14px] text-ink-secondary">{t("portal.noRegistrations")}</p>}
+              {shownRegs.length > 0 && (
+                <div className="flex flex-wrap gap-2" role="group" aria-label={t("portal.stateFilter")}>
+                  {(["all", ...REGISTRATION_STATES] as const).map((st) => (
+                    <button key={st} onClick={() => setStateFilter(st)} className={chip(stateFilter === st)}>
+                      {t(`portal.state.${st}`)} ({st === "all" ? shownRegs.length : shownRegs.filter((x) => x.r.state === st).length})
+                    </button>
+                  ))}
+                </div>
               )}
-              {data.members.some((m) => m.history.length > 0) && (
+              {shownRegs
+                .filter((x) => stateFilter === "all" || x.r.state === stateFilter)
+                .map(({ m, r }) => (
+                  <RegistrationCard key={r.participantId} api={api} r={r} who={many ? m.name : null} t={t} evName={evName} onChanged={load} />
+                ))}
+              {shown.some((m) => m.history.length > 0) && (
                 <details className={card}>
                   <summary className="cursor-pointer text-[14px] font-medium text-ink">{t("portal.tab.history")}</summary>
                   <ul className="mt-2 flex flex-col gap-1.5 text-[14px]">
-                    {data.members.flatMap((m) =>
+                    {shown.flatMap((m) =>
                       m.history.map((h) => (
                         <li key={h.id} className="flex flex-wrap justify-between gap-2">
                           <span className="text-ink">
@@ -291,7 +331,7 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
 
 // Register (or renew a membership) for an open event: pick who, a category
 // per person, the live price incl. the household discount, confirm.
-function Available({ api, data, t, evName, onRegistered }: { api: string; data: Data; t: T; evName: (e: EventRef) => string; onRegistered: () => void }) {
+function Available({ api, data, t, evName, onRegistered }: { api: string; data: Data; t: T; evName: (e: EventRef) => string; onRegistered: (message: string) => void }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
   const [choice, setChoice] = useState<Record<string, { category?: string; oddil?: string }>>({});
@@ -308,9 +348,11 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
     const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setError(t("portal.registerFailed"));
+    // The parent already has this link: only the status (slice 4 #10).
+    const { outcome } = await res.json().catch(() => ({ outcome: null }));
     setOpenId(null);
     setNote("");
-    onRegistered();
+    onRegistered(t(outcome === "accepted_sent" ? "portal.registeredSent" : outcome === "accepted" ? "portal.registeredAccepted" : "portal.registeredPending"));
   }
 
   return (
@@ -448,7 +490,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
           <div key={i} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
             <span>{range(r.event)}</span>
             {r.event.location && <span>{t("portal.location", { place: r.event.location })}</span>}
-            {r.event.info && <p className="whitespace-pre-line text-[14px] text-ink">{r.event.info}</p>}
+            {r.event.info && <EventInfo text={r.event.info} t={t} />}
             {r.note && <span>{t("portal.yourNote", { note: r.note })}</span>}
           </div>
         );
@@ -479,11 +521,28 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
                   {!d.received && !d.review && <span className="text-amber-700">{t("portal.docMissing")}</span>}
                 </span>
                 {d.canUpload && (
-                  <label className="text-[13px] text-ink-secondary">
-                    {t(d.received ? "portal.uploadAgain" : "portal.upload")}
-                    <input type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={(e) => upload(d.typeId, e.target.files?.[0])} className="mt-1 block w-full text-[13px]" />
+                  // A filled accent button (slice 4 #2) -- the bare file input got lost on the card.
+                  <label
+                    className={
+                      "mt-1 inline-flex cursor-pointer items-center gap-2 self-start rounded-lg bg-ember px-3.5 py-2 text-[14px] font-medium text-white hover:bg-ember-hover focus-within:ring-2 focus-within:ring-ember focus-within:ring-offset-2 " +
+                      (busy ? "pointer-events-none opacity-50" : "")
+                    }
+                  >
+                    <Upload size={16} aria-hidden="true" />
+                    {t(d.received || d.review ? "portal.uploadAgain" : "portal.upload")}
+                    <input
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png"
+                      disabled={busy}
+                      onChange={(e) => {
+                        upload(d.typeId, e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                      className="sr-only"
+                    />
                   </label>
                 )}
+                {d.canUpload && <span className="text-[12px] text-ink-secondary">{t("portal.uploadHint")}</span>}
               </div>
             ))}
           </div>
@@ -501,6 +560,13 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
         return r.payment ? (
           <div key={i} className="flex flex-col gap-1 rounded-lg bg-paper-2 p-3 text-[14px]">
             <p className="font-medium text-ink">{t("portal.payment")}</p>
+            {r.payment.paid === true && <p className="self-start rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">{t("portal.paid")}</p>}
+            {r.payment.paid === false && (
+              <>
+                <p className="self-start rounded-full bg-ember/15 px-2.5 py-0.5 text-[13px] text-ember">{t("portal.awaitingPayment")}</p>
+                <p className="text-[12.5px] text-ink-secondary">{t("portal.paymentDelayNote")}</p>
+              </>
+            )}
             {r.payment.priceCzk != null && <p>{t("portal.price", { price: String(r.payment.priceCzk) })}</p>}
             {r.payment.account && <p>{t("portal.account", { account: r.payment.account })}</p>}
             {r.payment.variableSymbol && <p>{t("portal.vs", { vs: r.payment.variableSymbol })}</p>}
@@ -536,5 +602,21 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
       {r.sections.map(block)}
       {message && <p className="text-[13px] text-ink">{message}</p>}
     </section>
+  );
+}
+
+// The event's info on a card, folded to ~3 lines with "Zobrazit více / méně" (slice 4 #4).
+function EventInfo({ text, t }: { text: string; t: T }) {
+  const [open, setOpen] = useState(false);
+  const long = text.length > 220 || text.split("\n").length > 3;
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <p className={"whitespace-pre-line text-[14px] text-ink " + (long && !open ? "line-clamp-3" : "")}>{text}</p>
+      {long && (
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-[13px] text-ember hover:underline">
+          {t(open ? "portal.showLess" : "portal.showMore")}
+        </button>
+      )}
+    </div>
   );
 }

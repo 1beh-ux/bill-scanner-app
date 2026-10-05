@@ -38,6 +38,7 @@ export default function PortalSettings({
     autoSendReady?: boolean | null;
     location: string | null;
     portalInfo: string | null;
+    paymentDocTypeId: string | null;
   };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
@@ -49,6 +50,9 @@ export default function PortalSettings({
   // Shown on the portal's registration card (slice 3 F).
   const [location, setLocation] = useState(event.location ?? "");
   const [portalInfo, setPortalInfo] = useState(event.portalInfo ?? "");
+  // "Dokument platby" (slice 4 #5): received = "Zaplaceno" in the portal; none = as before.
+  const [paymentDocTypeId, setPaymentDocTypeId] = useState(event.paymentDocTypeId ?? "");
+  const [docTypes, setDocTypes] = useState<{ id: string; name: string }[]>([]);
   const [everyone, setEveryone] = useState(!!initial.everyone);
   const [yearFrom, setYearFrom] = useState(initial.birthYearFrom != null ? String(initial.birthYearFrom) : "");
   const [yearTo, setYearTo] = useState(initial.birthYearTo != null ? String(initial.birthYearTo) : "");
@@ -65,6 +69,10 @@ export default function PortalSettings({
     fetch(`/api/events/${eventId}/portal-eligibility`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setOptions)
+      .catch(() => {});
+    fetch(`/api/events/${eventId}/list-items?kind=document`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setDocTypes)
       .catch(() => {});
   }, [eventId]);
 
@@ -96,7 +104,7 @@ export default function PortalSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portalOpen: open, eligibility: rule, autoAccept, location, portalInfo }),
+      body: JSON.stringify({ portalOpen: open, eligibility: rule, autoAccept, location, portalInfo, paymentDocTypeId: paymentDocTypeId || null }),
     });
     setSaving(false);
     setMessage(res.ok ? t("portalSettings.saved") : t("registrationSettings.saveFailed"));
@@ -129,6 +137,18 @@ export default function PortalSettings({
       <label className="text-[13px] text-ink-secondary">
         {t("portalCard.info")}
         <textarea value={portalInfo} onChange={(e) => setPortalInfo(e.target.value)} rows={3} className={inputClass + " mt-1"} />
+      </label>
+      <label className="text-[13px] text-ink-secondary">
+        {t("paymentDoc.label")}
+        <select value={paymentDocTypeId} onChange={(e) => setPaymentDocTypeId(e.target.value)} className={inputClass + " mt-1"}>
+          <option value="">{t("paymentDoc.none")}</option>
+          {docTypes.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-[11.5px]">{t("paymentDoc.hint")}</span>
       </label>
 
       <label className="text-[13px] text-ink-secondary">

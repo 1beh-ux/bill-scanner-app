@@ -30,18 +30,21 @@ export async function eventSender(event: { senderEmail: string | null }): Promis
   return account ? { email: account.email, userId: account.connectedByUserId } : null;
 }
 
+export type AutoAcceptOutcome = "pending" | "accepted" | "accepted_sent";
+
 /**
  * Applies the event's autoAccept to freshly created portal/public
  * registrations. Never throws: the parent's registration already exists, a
- * failed send is in the send log like any other.
+ * failed send is in the send log like any other. Returns what happened, for
+ * the parent's confirmation screen (slice 4 #10).
  */
-export async function autoAcceptRegistrations(eventId: string, participantIds: string[], source: RegistrationSource): Promise<void> {
-  if (participantIds.length === 0) return;
+export async function autoAcceptRegistrations(eventId: string, participantIds: string[], source: RegistrationSource): Promise<AutoAcceptOutcome> {
+  if (participantIds.length === 0) return "pending";
   const event = await prisma.event.findUnique({ where: { id: eventId }, select: { autoAccept: true, senderEmail: true } });
-  if (!event || event.autoAccept === "manual") return;
+  if (!event || event.autoAccept === "manual") return "pending";
   const sender = event.autoAccept === "accept_send" ? await eventSender(event) : null;
   const plan = autoAcceptPlan(event.autoAccept, source, !!sender);
-  if (!plan.accept) return;
+  if (!plan.accept) return "pending";
   try {
     if (plan.send && sender) {
       const template = await resolveEmailTemplate(eventId, REGISTRATION_ACCEPTANCE_PURPOSE_KEY);
@@ -54,11 +57,12 @@ export async function autoAcceptRegistrations(eventId: string, participantIds: s
         sentByUserId: sender.userId,
         markAccepted: true,
       });
-      return;
+      return "accepted_sent";
     }
   } catch (err) {
     console.log(`[auto-accept] acceptance send failed for event ${eventId}:`, String(err));
   }
   // accept, the no-sender fallback, or a send that threw before marking.
   await prisma.participant.updateMany({ where: { id: { in: participantIds } }, data: { registrationStatus: "accepted" } });
+  return "accepted";
 }

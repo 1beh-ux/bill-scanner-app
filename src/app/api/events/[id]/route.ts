@@ -79,6 +79,7 @@ export async function PATCH(
     autoAccept,
     location,
     portalInfo,
+    paymentDocTypeId,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -93,7 +94,8 @@ export async function PATCH(
     landingContent !== undefined ||
     autoAccept !== undefined ||
     location !== undefined ||
-    portalInfo !== undefined;
+    portalInfo !== undefined ||
+    paymentDocTypeId !== undefined;
   for (const v of [location, portalInfo]) if (v !== undefined && v !== null && !(typeof v === "string" && v.length <= 2000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (autoAccept !== undefined && !["manual", "accept", "accept_send"].includes(autoAccept)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
@@ -101,6 +103,14 @@ export async function PATCH(
   if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
   if (landingContent !== undefined && landingContent !== null && !(typeof landingContent === "string" && landingContent.length <= 20000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug && (await prisma.event.findFirst({ where: { publicSlug, id: { not: id } }, select: { id: true } }))) return NextResponse.json({ error: "slug_taken" }, { status: 409 });
+  // "Dokument platby" (slice 4 #5): one of this event's document types, or null.
+  if (
+    paymentDocTypeId !== undefined &&
+    paymentDocTypeId !== null &&
+    !(typeof paymentDocTypeId === "string" && (await prisma.eventListItem.findFirst({ where: { id: paymentDocTypeId, eventId: id, kind: "document" }, select: { id: true } })))
+  ) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (touchesRegistration && user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
@@ -196,6 +206,7 @@ export async function PATCH(
       // Portal registration card basics (slice 3 F).
       ...(location !== undefined && { location: location?.trim() || null }),
       ...(portalInfo !== undefined && { portalInfo: portalInfo?.trim() || null }),
+      ...(paymentDocTypeId !== undefined && { paymentDocTypeId: paymentDocTypeId || null }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there.

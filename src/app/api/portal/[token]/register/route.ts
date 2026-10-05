@@ -17,6 +17,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
       : [];
   const created = await registerFromPortal(scope, body.eventId, picks, typeof body.note === "string" ? body.note : "");
   if (!created) return NextResponse.json({ error: "not_available" }, { status: 409 });
-  await autoAcceptRegistrations(body.eventId, created.ids, "portal");
-  return NextResponse.json({ ok: true }, { status: 201 });
+  const outcome = await autoAcceptRegistrations(body.eventId, created.ids, "portal");
+  return NextResponse.json({ ok: true, outcome }, { status: 201 });
 }

@@ -12,6 +12,7 @@ import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
+import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
@@ -28,6 +29,7 @@ type Participant = {
   registrationStatus: "pending" | "accepted";
   documentsTotal: number;
   documentsReceived: number;
+  state: RegistrationState;
   customFieldValues: Record<string, string> | null;
   guardian: { name: string | null; email: string; relationship: string | null; phone: string | null } | null;
   computed: { price: number | null; priceSent: number | null; var_symb: string; contact_email: string };
@@ -64,6 +66,8 @@ export default function EventParticipantsPage({
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  // Status filter (slice 4 #8), same states as the parent portal.
+  const [stateFilter, setStateFilter] = useState<RegistrationState | "">("");
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [addOpen, setAddOpen] = useState(false);
@@ -132,9 +136,8 @@ export default function EventParticipantsPage({
 
   const filteredParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) return participants;
-    return participants.filter((p) => p.name.toLowerCase().includes(query));
-  }, [participants, searchQuery]);
+    return participants.filter((p) => (!query || p.name.toLowerCase().includes(query)) && (!stateFilter || p.state === stateFilter));
+  }, [participants, searchQuery, stateFilter]);
 
   function openDetail(participantId: string) {
     // The detail page's previous/next walk the list exactly as shown here (search included).
@@ -322,6 +325,21 @@ export default function EventParticipantsPage({
             </button>
           )}
         </div>
+        <select
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value as RegistrationState | "")}
+          aria-label={t("participantsPage.stateFilter")}
+          className="rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink"
+        >
+          <option value="">
+            {t("portal.state.all")} ({participants.length})
+          </option>
+          {REGISTRATION_STATES.map((st) => (
+            <option key={st} value={st}>
+              {t(`portal.state.${st}`)} ({participants.filter((p) => p.state === st).length})
+            </option>
+          ))}
+        </select>
         <a
           href={`/events/${id}/participants/import`}
           className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
@@ -403,7 +421,7 @@ export default function EventParticipantsPage({
 
       {filteredParticipants.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
-          {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
+          {searchQuery || stateFilter ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
         <>

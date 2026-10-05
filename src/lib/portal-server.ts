@@ -27,7 +27,7 @@ import { allowedCategories, categoryFor, readPriceRules, type PriceRules } from 
 import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
-import { countsAsReceived, docState } from "@/lib/registration-status";
+import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -170,13 +170,18 @@ export async function portalData(scope: PortalScope) {
       pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
     });
     const own = participations.filter((p) => p.childId === child.id);
+    // For the status filter (slice 4 #3): the person's profile, not the registration.
+    const person = {
+      requiredEmpty: requiredEmpty(templates.filter((t) => t.requiredInRegistration).map((t) => t.key), values),
+      pendingChange: pendingBy.size > 0,
+    };
 
     const registrations = [];
     for (const p of own) {
       const e = p.event;
       // Upcoming/current registrations only of events using the module; the rest is history.
       if (!isCurrent(e) || !(e.registrationConnected || e.kind === "membership")) continue;
-      registrations.push(await registrationCard(p, child, cards));
+      registrations.push(await registrationCard(p, child, cards, person));
     }
 
     members.push({
@@ -307,22 +312,30 @@ export const RESEND_PER_DAY = 3;
 async function registrationCard(
   p: Awaited<ReturnType<typeof prisma.participant.findFirstOrThrow<{ include: { event: true; guardians: true; documents: true } }>>>,
   child: PortalChild,
-  cards: Map<string, Promise<EventCard>>
+  cards: Map<string, Promise<EventCard>>,
+  person: { requiredEmpty: boolean; pendingChange: boolean }
 ) {
   const e = p.event;
   if (!cards.has(e.id)) cards.set(e.id, loadEventCard(e));
   const card = await cards.get(e.id)!;
   const forMerge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
   const accepted = p.registrationStatus === "accepted";
+  // "Dokument platby" (slice 4 #5): shown in the payment block, not as a document / upload.
+  const paymentDocTypeId = card.docTypes.some((d) => d.id === e.paymentDocTypeId) ? e.paymentDocTypeId : null;
+  const paid = paymentDocTypeId ? docState(p.documents, paymentDocTypeId).state === "received" : null;
 
   let payment = null;
-  if (accepted && p.registrationNumber != null) {
-    const qr = await resolvePaymentQrImage(forMerge, card.priced);
+  if (accepted && (p.registrationNumber != null || paymentDocTypeId)) {
+    // Bank details only once the acceptance assigned a variable symbol (mirrors the e-mail).
+    const assigned = p.registrationNumber != null;
+    const qr = assigned ? await resolvePaymentQrImage(forMerge, card.priced) : null;
     payment = {
       priceCzk: effectivePriceCzk(forMerge, card.priced),
-      account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
-      variableSymbol: buildVariableSymbol(forMerge, card.priced),
+      account: assigned && e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
+      variableSymbol: assigned ? buildVariableSymbol(forMerge, card.priced) : "",
       qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
+      // null = no payment document type set (no paid / waiting line, as before).
+      paid,
     };
   }
 
@@ -336,13 +349,21 @@ async function registrationCard(
     participantId: p.id,
     event: { name: e.name, startDate: e.startDate, endDate: e.endDate, kind: e.kind, membershipYear: e.membershipYear, location: e.location, info: e.portalInfo },
     status: p.registrationStatus,
+    state: registrationState({
+      accepted,
+      docTypeIds: card.docTypes.map((d) => d.id),
+      paymentDocTypeId,
+      docs: p.documents,
+      requiredEmpty: person.requiredEmpty,
+      pendingProfileChange: person.pendingChange,
+    }),
     note: p.portalNote,
     category: rules ? (categoryFor(rules, p.priceCategory, child.isAdult)?.label ?? null) : null,
     payment,
     // Per tracked document type: sent to you (generated) / received from you /
     // missing; an upload waits for review or was rejected (slice 4 #6) -- those
     // don't count as received.
-    documents: card.docTypes.map((dt) => {
+    documents: card.docTypes.filter((dt) => dt.id !== paymentDocTypeId).map((dt) => {
       const data = dt.data as DocumentTypeData | null;
       const mine = p.documents.filter((d) => d.eventListItemId === dt.id);
       const state = docState(mine, dt.id);

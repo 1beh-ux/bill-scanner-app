@@ -54,6 +54,7 @@ type EventDetail = {
   autoSendReady?: boolean | null;
   location: string | null;
   portalInfo: string | null;
+  paymentDocTypeId: string | null;
 };
 
 type Category = {

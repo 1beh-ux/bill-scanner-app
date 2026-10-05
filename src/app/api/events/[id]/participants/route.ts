@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
-import { RECEIVED_WHERE } from "@/lib/registration-status";
+import { countsAsReceived, registrationState, requiredEmpty, type ReviewStatus } from "@/lib/registration-status";
+import { profileValues } from "@/lib/portal-rules";
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
@@ -85,27 +86,59 @@ export async function GET(
   // more attachments saved on top of an existing one) must never push the count above
   // documentTypes.length. A participantId+eventListItemId Set per participant does that;
   // the old code counted rows (files) instead.
+  // Portal uploads in review / rejected don't count (slice 4 #6) -- fetched
+  // anyway for the status filter below.
   const receivedTypeIds: Record<string, Set<string>> = {};
+  const docRows: Record<string, { eventListItemId: string; receivedVia: string; reviewStatus: ReviewStatus | null }[]> = {};
   if (documentTypes.length > 0 && scopedParticipants.length > 0) {
     const rows = await prisma.participantDocument.findMany({
       where: {
         participantId: { in: scopedParticipants.map((p) => p.id) },
         eventListItemId: { in: documentTypes.map((d) => d.id) },
-        // Portal uploads in review don't count (slice 4 #6).
-        ...RECEIVED_WHERE,
+        receivedVia: { not: "generated" },
       },
-      select: { participantId: true, eventListItemId: true },
+      select: { participantId: true, eventListItemId: true, receivedVia: true, reviewStatus: true },
     });
     for (const r of rows) {
-      (receivedTypeIds[r.participantId] ??= new Set()).add(r.eventListItemId);
+      (docRows[r.participantId] ??= []).push(r);
+      if (countsAsReceived(r)) (receivedTypeIds[r.participantId] ??= new Set()).add(r.eventListItemId);
     }
   }
 
-  const withDocuments = scopedParticipants.map((p) => ({
-    ...p,
-    documentsTotal: documentTypes.length,
-    documentsReceived: receivedTypeIds[p.id]?.size ?? 0,
-  }));
+  // Status filter (slice 4 #8), the portal's function (src/lib/registration-status.ts):
+  // required org fields from the linked person's profile (unlinked: the
+  // participant's own values of the fields this event has), pending profile changes.
+  const childIds = participants.flatMap((p) => (p.childId ? [p.childId] : []));
+  const [required, people, changes] = await Promise.all([
+    prisma.participantFieldTemplate.findMany({ where: { active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true } }),
+    childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true } }) : [],
+    childIds.length ? prisma.childChange.findMany({ where: { childId: { in: childIds }, status: "pending" }, select: { childId: true } }) : [],
+  ]);
+  const profiles = new Map(people.map((c) => [c.id, profileValues(c)]));
+  const changed = new Set(changes.map((c) => c.childId));
+  const eventKeys = new Set(activeFields.map((f) => f.key));
+  const requiredKeys = required.map((f) => f.key);
+  const typeIds = documentTypes.map((d) => d.id);
+
+  const withDocuments = scopedParticipants.map((p, i) => {
+    const raw = participants[i];
+    const profile = raw.childId ? profiles.get(raw.childId) : undefined;
+    return {
+      ...p,
+      documentsTotal: documentTypes.length,
+      documentsReceived: receivedTypeIds[p.id]?.size ?? 0,
+      state: registrationState({
+        accepted: p.registrationStatus === "accepted",
+        docTypeIds: typeIds,
+        paymentDocTypeId: typeIds.includes(event.paymentDocTypeId ?? "") ? event.paymentDocTypeId : null,
+        docs: docRows[p.id] ?? [],
+        requiredEmpty: profile
+          ? requiredEmpty(requiredKeys, profile)
+          : requiredEmpty(requiredKeys.filter((k) => eventKeys.has(k)), (raw.customFieldValues as Record<string, string> | null) ?? {}),
+        pendingProfileChange: !!raw.childId && changed.has(raw.childId),
+      }),
+    };
+  });
   // Default sort is by surname (Part 2: "Lists: sort by surname by default"), Czech
   // collation -- the DB-level `orderBy: { name: "asc" }` above only decides fetch order
   // before this, real presentation order is decided here where firstName/lastName exist.
