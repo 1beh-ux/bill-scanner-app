@@ -46,7 +46,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({
     ...rest,
     values: profileValues(child),
-    fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, active: t.active, portalAccess: t.portalAccess })),
+    fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, active: t.active, portalAccess: t.portalAccess, audience: t.audience, level: t.level })),
     pendingChanges: changes.map((c) => ({ ...c, childName: child.name, fieldLabel: labels[c.fieldKey] ?? c.fieldKey })),
     portalUrl: portalToken ? portalUrl(portalToken, req) : null,
   });

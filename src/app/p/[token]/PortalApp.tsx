@@ -14,7 +14,9 @@ import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-
 // Data from /api/portal/<token> (src/lib/portal-server.ts); every request
 // carries the birth-date cookie.
 type Access = "edit" | "approval" | "read" | "hidden";
-type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null };
+// level (slice 5 #4): basic = on the profile, detailed = the "Podrobné údaje" sub-screen.
+// requiredBy: the name of an upcoming registration's event that requires this field.
+type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; requiredBy: string | null };
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
 type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type DocFile = { id: string | null; date: string } | null;
@@ -242,6 +244,12 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
   const [guardians, setGuardians] = useState<Guardian[]>(member.profile.guardiansPending ?? member.profile.guardians);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // "Podrobné údaje" sub-screen (slice 5 #4).
+  const [detailed, setDetailed] = useState(false);
+  const detailedFields = fields.filter((f) => f.level === "detailed");
+  // Required by an upcoming registration and still empty -> highlighted.
+  const missing = (f: Field) => !!f.requiredBy && !(f.pending ?? f.value).trim();
+  const missingDetailed = detailedFields.filter(missing).length;
 
   async function patch(body: object) {
     setBusy(true);
@@ -266,11 +274,20 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
   return (
     <div className="flex flex-col gap-4">
       <section className={card + " flex flex-col gap-3"}>
-        <p className="text-[13px] text-ink-secondary">{t("portal.profileHint")}</p>
-        {fields.map((f) => {
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[16px] font-semibold text-ink">{t(detailed ? "portal.detailedTitle" : "portal.basicTitle")}</h3>
+          {(detailed || detailedFields.length > 0) && (
+            <button type="button" onClick={() => setDetailed(!detailed)} className={btn}>
+              {detailed ? t("portal.backToBasic") : t("portal.openDetailed")}
+              {!detailed && missingDetailed > 0 && <span className="ml-1.5 text-amber-700">({t("portal.detailedMissing", { n: String(missingDetailed) })})</span>}
+            </button>
+          )}
+        </div>
+        <p className="text-[13px] text-ink-secondary">{t(detailed ? "portal.detailedHint" : "portal.profileHint")}</p>
+        {fields.filter((f) => (f.level === "detailed") === detailed).map((f) => {
           const editable = f.access === "edit" || f.access === "approval";
           return (
-            <div key={f.key} className="flex flex-col gap-1">
+            <div key={f.key} className={"flex flex-col gap-1 " + (missing(f) ? "rounded-lg border border-amber-500/70 bg-amber-500/10 p-2" : "")}>
               <span className="text-[13px] text-ink-secondary">
                 {f.label}
                 {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
@@ -281,6 +298,7 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
                 <span className="text-[15px] text-ink">{show(f, f.value)}</span>
               )}
               {f.pending !== null && <span className="text-[12.5px] text-amber-700">{t("portal.pendingApproval", { value: show(f, f.pending), old: show(f, f.value) })}</span>}
+              {missing(f) && <span className="text-[12.5px] text-amber-700">{t("portal.requiredBy", { event: f.requiredBy! })}</span>}
             </div>
           );
         })}

@@ -8,12 +8,13 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { toBoolean } from "@/lib/participant-fields";
 import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
 import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
+import { appliesTo, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
 
 // Admin child detail (docs/registration-portal-spec.md B): the whole profile --
 // every org-wide field whatever its portal access -- guardians, linked events,
 // pending parent changes and the portal link tools. Saving pushes the changed
 // values into the child's upcoming registration-connected events.
-type Field = { key: string; label: string; fieldType: string; options: unknown; active: boolean; portalAccess: "edit" | "approval" | "read" | "hidden" };
+type Field = { key: string; label: string; fieldType: string; options: unknown; active: boolean; portalAccess: "edit" | "approval" | "read" | "hidden"; audience: FieldAudience; level: FieldLevel };
 type Guardian = { name: string; email: string; relationship: string; phone: string; receivesCommunications: boolean };
 type Detail = {
   id: string;
@@ -140,6 +141,8 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
       <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t(`portalAccess.${access}`)}</span>
     );
   const setValue = (key: string, v: string) => setValues((p) => ({ ...p, [key]: v }));
+  // Slice 5: only the person's audience, but a stored value is never hidden.
+  const shownField = (f: Field) => (f.active && appliesTo(f.audience, data.isAdult)) || !!values[f.key];
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
@@ -193,8 +196,20 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                 />
               </label>
             ))}
+            {/* Slice 5 #4: basic here, detailed below. */}
             {data.fields
-              .filter((f) => f.active || values[f.key])
+              .filter((f) => f.level !== "detailed" && shownField(f))
+              .map((f) => (
+                <ProfileInput key={f.key} field={f} value={values[f.key] ?? ""} onChange={(v) => setValue(f.key, v)} badge={accessBadge(f.portalAccess)} />
+              ))}
+            {data.fields.some((f) => f.level === "detailed" && shownField(f)) && (
+              <>
+                <h2 className={sectionTitle + " mb-0 mt-3"}>{t("childProfile.detailedTitle")}</h2>
+                <p className="-mt-2 text-[12px] text-ink-secondary">{t("childProfile.detailedHint")}</p>
+              </>
+            )}
+            {data.fields
+              .filter((f) => f.level === "detailed" && shownField(f))
               .map((f) => (
                 <ProfileInput key={f.key} field={f} value={values[f.key] ?? ""} onChange={(v) => setValue(f.key, v)} badge={accessBadge(f.portalAccess)} />
               ))}

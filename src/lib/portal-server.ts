@@ -180,10 +180,12 @@ export async function portalData(scope: PortalScope) {
     }),
     templateRules(),
   ]);
-  const availableFields = await requiredEventFields(available.map((a) => a.event.id));
-
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
+  // Upcoming/current registrations only of events using the module; the rest is history.
+  const isShown = (p: (typeof participations)[number]) => isCurrent(p.event) && (p.event.registrationConnected || p.event.kind === "membership");
+  // The required fields (slice 5 #2) of open events and of the shown registrations' events, in one go.
+  const eventFields = await requiredEventFields([...new Set([...available.map((a) => a.event.id), ...participations.filter(isShown).map((p) => p.eventId)])]);
   const cards = new Map<string, Promise<EventCard>>();
 
   const members = [];
@@ -192,6 +194,15 @@ export async function portalData(scope: PortalScope) {
     const pendingBy = new Map(pending.filter((c) => c.childId === child.id).map((c) => [c.fieldKey, c.newValue ?? ""]));
     // Only the fields for this person (slice 5 #1: children / adults / both).
     const mine = templates.filter((t) => appliesTo(t.audience, child.isAdult));
+    const own = participations.filter((p) => p.childId === child.id);
+    const current = own.filter(isShown);
+    // Profile fields an upcoming registration requires (slice 5 #4) -> that event's name.
+    const requiredBy = new Map<string, string>();
+    for (const p of current) {
+      for (const f of askedFields(eventFields.filter((x) => x.eventId === p.eventId), rules, child.isAdult)) {
+        if (f.source === "profile" && !requiredBy.has(f.key)) requiredBy.set(f.key, p.event.name);
+      }
+    }
     const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown, level: FieldLevel) => ({
       key,
       label: labels[key] ?? key,
@@ -201,8 +212,8 @@ export async function portalData(scope: PortalScope) {
       level,
       value: values[key] ?? "",
       pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
+      requiredBy: requiredBy.get(key) ?? null,
     });
-    const own = participations.filter((p) => p.childId === child.id);
     // For the status filter (slice 4 #3): the person's profile, not the registration.
     const person = {
       requiredEmpty: requiredEmpty(mine.filter((t) => t.requiredInRegistration).map((t) => t.key), values),
@@ -210,12 +221,7 @@ export async function portalData(scope: PortalScope) {
     };
 
     const registrations = [];
-    for (const p of own) {
-      const e = p.event;
-      // Upcoming/current registrations only of events using the module; the rest is history.
-      if (!isCurrent(e) || !(e.registrationConnected || e.kind === "membership")) continue;
-      registrations.push(await registrationCard(p, child, cards, person));
-    }
+    for (const p of current) registrations.push(await registrationCard(p, child, cards, person));
 
     members.push({
       id: child.id,
@@ -260,7 +266,7 @@ export async function portalData(scope: PortalScope) {
           scope.members
             .filter((m) => memberIds.includes(m.id))
             .map((m) => {
-              const { fields, reviewTick } = registrationStep(availableFields.filter((f) => f.eventId === e.id), rules, m, shownValues(m, pending));
+              const { fields, reviewTick } = registrationStep(eventFields.filter((f) => f.eventId === e.id), rules, m, shownValues(m, pending));
               return [m.id, { fields, reviewTick }];
             })
         ),
