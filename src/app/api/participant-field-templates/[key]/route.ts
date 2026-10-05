@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { PORTAL_ACCESS_LEVELS } from "@/lib/portal-rules";
+import { FIELD_AUDIENCES, FIELD_LEVELS } from "@/lib/registration-fields";
 
 export async function PATCH(
   req: NextRequest,
@@ -18,13 +19,17 @@ export async function PATCH(
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
   const body = await req.json();
-  const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration } = body;
+  const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration, audience, level } = body;
   if (requiredInRegistration !== undefined && typeof requiredInRegistration !== "boolean") {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   // Parent portal rule (child profiles) -- see PortalAccess in the schema.
   if (portalAccess !== undefined && !PORTAL_ACCESS_LEVELS.includes(portalAccess)) {
     return NextResponse.json({ error: "bad_portal_access" }, { status: 400 });
+  }
+  // Who the field is for + basic/detailed (slice 5 #1).
+  if ((audience !== undefined && !FIELD_AUDIENCES.includes(audience)) || (level !== undefined && !FIELD_LEVELS.includes(level))) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
   // Renaming only touches this org template -- it never retroactively
@@ -52,6 +57,8 @@ export async function PATCH(
       ...(active !== undefined && { active }),
       ...(portalAccess !== undefined && { portalAccess }),
       ...(requiredInRegistration !== undefined && { requiredInRegistration }),
+      ...(audience !== undefined && { audience }),
+      ...(level !== undefined && { level }),
     },
   });
 

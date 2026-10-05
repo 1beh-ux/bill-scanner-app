@@ -6,6 +6,7 @@ import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
 import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel } from "@/lib/portal-rules";
+import { FIELD_AUDIENCES, FIELD_LEVELS, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
@@ -31,7 +32,10 @@ type Field = {
   active: boolean;
   portalAccess?: PortalAccessLevel; // org scope only
   requiredInRegistration?: boolean; // org scope only (public registration form, slice 3 D)
+  audience?: FieldAudience; // org scope only (slice 5 #1)
+  level?: FieldLevel; // org scope only (slice 5 #1)
 };
+type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level">;
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -77,7 +81,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [fields, setFields] = useState<Field[]>([]);
   // Event scope: the org templates, for the "Rodiče v portálu" column (slice 4 #9) --
   // the portal rule lives on the template, so editing it here edits the template.
-  const [templates, setTemplates] = useState<Map<string, Pick<Field, "portalAccess" | "requiredInRegistration">>>(new Map());
+  const [templates, setTemplates] = useState<Map<string, TemplateMeta>>(new Map());
   const [enabledModules, setEnabledModules] = useState<Set<ModuleKey>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -298,7 +302,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // What parents may do with this field in the portal (child profiles,
   // docs/registration-portal-spec.md C) -- always the org template's rule, also
   // when edited from an event (slice 4 #9). Optimistic like the pills.
-  async function setPortalAccess(field: Field, patch: { portalAccess?: PortalAccessLevel; requiredInRegistration?: boolean }) {
+  // Also who the field is for + basic/detailed (slice 5 #1), same template rule.
+  async function setPortalAccess(field: Field, patch: TemplateMeta) {
     if (isEvent) setTemplates((prev) => new Map(prev).set(field.key, { ...prev.get(field.key), ...patch }));
     else setFields((prev) => prev.map((f) => (f.key === field.key ? { ...f, ...patch } : f)));
     const res = await fetch(`/api/participant-field-templates/${encodeURIComponent(field.key)}`, {
@@ -629,7 +634,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const isCustom = field.kind === "custom";
     return (
       <tr>
-        <td colSpan={6} className="border-b border-mist/60 bg-paper px-3 py-3">
+        <td colSpan={8} className="border-b border-mist/60 bg-paper px-3 py-3">
           {isCustom && (
             <form onSubmit={(e) => handleEditSubmit(field, e)} className="flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">
@@ -811,6 +816,30 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     );
   }
 
+  // "Pro koho" / "Údaje" (slice 5 #1): template rules like the portal column.
+  function metaCell(field: Field, which: "audience" | "level") {
+    if (field.kind !== "custom") return <span className="text-[12px] text-ink-secondary">—</span>;
+    const tpl = isEvent ? templates.get(field.key) : field;
+    if (!tpl) return <span className="text-[12px] text-ink-secondary">—</span>;
+    const value = which === "audience" ? (tpl.audience ?? "both") : (tpl.level ?? "basic");
+    const options: string[] = which === "audience" ? FIELD_AUDIENCES : FIELD_LEVELS;
+    return (
+      <select
+        value={value}
+        disabled={role !== "admin"}
+        onChange={(e) => setPortalAccess(field, { [which]: e.target.value })}
+        aria-label={t(`fieldMeta.${which}.title`)}
+        className="rounded border border-mist bg-paper-2 px-1.5 py-0.5 text-[12px] text-ink disabled:opacity-60"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {t(`fieldMeta.${which}.${o}`)}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
   function fieldRow(field: Field) {
     const id = fieldId(isEvent, field);
     const isCustom = field.kind === "custom";
@@ -839,6 +868,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           </td>
           <td className="p-2">{surfacePills(field)}</td>
           <td className="p-2">{portalCell(field)}</td>
+          <td className="p-2">{metaCell(field, "audience")}</td>
+          <td className="p-2">{metaCell(field, "level")}</td>
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">
@@ -1002,7 +1033,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       ) : (
         <div className="overflow-x-auto">
           <p className="mb-2 text-[12px] text-ink-secondary">{t(isEvent ? "portalColumn.eventHint" : "portalColumn.orgHint")}</p>
-          <table className="w-full min-w-[720px] border-collapse">
+          <table className="w-full min-w-[900px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
                 <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
@@ -1020,6 +1051,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                 <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("portalColumn.title")}
                 </th>
+                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                  {t("fieldMeta.audience.title")}
+                </th>
+                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                  {t("fieldMeta.level.title")}
+                </th>
                 <th className="p-2"></th>
               </tr>
             </thead>
@@ -1027,7 +1064,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               {nonComputedFields.map((f) => <Fragment key={fieldId(isEvent, f)}>{fieldRow(f)}</Fragment>)}
               {computedFields.length > 0 && (
                 <tr>
-                  <td colSpan={6} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  <td colSpan={8} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
                     {t("participantFieldAdmin.computedSection")}
                   </td>
                 </tr>

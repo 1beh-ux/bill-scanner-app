@@ -866,8 +866,24 @@ model ParticipantFieldTemplate {
   // Must be filled in the public registration form (slice 3 D); only for
   // fields the form shows (portalAccess != hidden).
   requiredInRegistration Boolean            @default(false) @map("required_in_registration")
+  // Slice 5 (docs/registration-slice5-spec.md 1): who the field applies to
+  // (children / adult members / both) and whether the profile asks it up
+  // front (basic) or only when an event needs it (detailed).
+  audience        FieldAudience             @default(both)
+  level           FieldLevel                @default(basic)
 
   @@map("participant_field_templates")
+}
+
+enum FieldAudience {
+  both
+  children
+  adults
+}
+
+enum FieldLevel {
+  basic
+  detailed
 }
 
 model EventParticipantField {

@@ -31,7 +31,7 @@ export type PublicEvent = NonNullable<Awaited<ReturnType<typeof publicEvent>>>;
 /** What the form asks: org fields a parent may see in the portal (same rule), with "required" marks; price rules + the Oddíl field. */
 export async function publicFormContext(event: PublicEvent) {
   const rules = readPriceRules(event.priceRules);
-  const fields: FormField[] = (await visibleTemplates()).map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, required: t.requiredInRegistration }));
+  const fields: FormField[] = (await visibleTemplates()).map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, required: t.requiredInRegistration, audience: t.audience }));
   return { fields, rules, oddil: await oddilField(event.id, rules) };
 }
 

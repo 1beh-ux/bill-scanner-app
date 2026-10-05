@@ -28,6 +28,7 @@ import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
+import { appliesTo, type FieldLevel } from "@/lib/registration-fields";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -160,19 +161,22 @@ export async function portalData(scope: PortalScope) {
   for (const child of scope.members) {
     const values = profileValues(child);
     const pendingBy = new Map(pending.filter((c) => c.childId === child.id).map((c) => [c.fieldKey, c.newValue ?? ""]));
-    const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown) => ({
+    // Only the fields for this person (slice 5 #1: children / adults / both).
+    const mine = templates.filter((t) => appliesTo(t.audience, child.isAdult));
+    const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown, level: FieldLevel) => ({
       key,
       label: labels[key] ?? key,
       access,
       fieldType,
       options,
+      level,
       value: values[key] ?? "",
       pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
     });
     const own = participations.filter((p) => p.childId === child.id);
     // For the status filter (slice 4 #3): the person's profile, not the registration.
     const person = {
-      requiredEmpty: requiredEmpty(templates.filter((t) => t.requiredInRegistration).map((t) => t.key), values),
+      requiredEmpty: requiredEmpty(mine.filter((t) => t.requiredInRegistration).map((t) => t.key), values),
       pendingChange: pendingBy.size > 0,
     };
 
@@ -190,8 +194,8 @@ export async function portalData(scope: PortalScope) {
       isAdult: child.isAdult,
       profile: {
         fields: [
-          ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null)),
-          ...templates.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options)),
+          ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic")),
+          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options, t.level)),
         ],
         guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
         // The parent's proposed list while it waits for approval (live list above still gets the e-mails).

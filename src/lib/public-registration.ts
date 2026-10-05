@@ -4,12 +4,14 @@
 // The server never trusts the client: everything is re-checked here.
 import { isIsoDate } from "@/lib/portal-rules";
 import { categoryFor, type PriceRules } from "@/lib/price-rules";
+import { appliesTo, type FieldAudience } from "@/lib/registration-fields";
 
 export const MAX_PERSONS = 10;
 export const SUBMIT_LIMIT_PER_HOUR = 5;
 export const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])$/;
 
-export type FormField = { key: string; label: string; fieldType: string; options: unknown; required: boolean };
+// audience (slice 5 #1): a field only for children / adults is neither shown to nor accepted from the others.
+export type FormField = { key: string; label: string; fieldType: string; options: unknown; required: boolean; audience?: FieldAudience };
 export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null };
 export type PersonIn = {
   firstName: string;
@@ -74,7 +76,7 @@ export function validateSubmission(
     for (const [key, v] of Object.entries(values)) {
       const f = fieldsByKey.get(key);
       const value = str(v, 2000);
-      if (!f || !value) continue;
+      if (!f || !value || !appliesTo(f.audience, p.isAdult)) continue;
       if (f.fieldType === "select" && selectOptions(f.options).length && !selectOptions(f.options).includes(value)) {
         errors.push(`p${i}.${key}`);
         continue;
@@ -85,7 +87,7 @@ export function validateSubmission(
       }
       p.values[key] = f.fieldType === "boolean" ? (value === "true" ? "true" : "false") : value;
     }
-    for (const f of ctx.fields) if (f.required && !p.values[f.key]) errors.push(`p${i}.${f.key}`);
+    for (const f of ctx.fields) if (f.required && appliesTo(f.audience, p.isAdult) && !p.values[f.key]) errors.push(`p${i}.${f.key}`);
 
     if (ctx.rules) {
       const cat = categoryFor(ctx.rules, str(r.category, 40) || null, p.isAdult);

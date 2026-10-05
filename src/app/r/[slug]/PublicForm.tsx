@@ -6,6 +6,7 @@ import FieldInput, { portalInputClass as inputClass } from "@/components/registr
 import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
+import { appliesTo } from "@/lib/registration-fields";
 
 // The public new-family form (docs/registration-slice3-spec.md D): 1+ adults
 // and/or children, each with the org fields the portal shows (required ones
@@ -91,8 +92,13 @@ export default function PublicForm({
   const title = event.kind === "membership" ? t("portal.membership", { year: String(event.membershipYear ?? "") }) : event.name;
   const setPerson = (i: number, patch: Partial<Person>) => setPersons((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const categoriesOf = (p: Person) => (rules ? allowedCategories(rules, p.isAdult).map((c) => ({ key: c.key, label: c.label, asksOddil: !!c.asksOddil })) : []);
-  // "Same details as the first person": the first person's field values are sent for this one.
-  const valuesOf = (p: Person) => (p.sameAsFirst && persons[0] ? { ...persons[0].values } : p.values);
+  // Only the fields for this person (slice 5 #1: children / adults / both).
+  const fieldsOf = (p: Person) => fields.filter((f) => appliesTo(f.audience, p.isAdult));
+  // "Same details as the first person": the first person's values of the fields
+  // both have are sent for this one; the rest (e.g. children-only) stay asked.
+  const shared = (p: Person, f: FormField) => p.sameAsFirst && !!persons[0] && appliesTo(f.audience, persons[0].isAdult);
+  const valuesOf = (p: Person) =>
+    p.sameAsFirst && persons[0] ? { ...p.values, ...Object.fromEntries(fieldsOf(p).filter((f) => shared(p, f) && persons[0].values[f.key]).map((f) => [f.key, persons[0].values[f.key]])) } : p.values;
   const prices = previewPrices(
     { rules, memberPriceCzk: event.memberPriceCzk, nonMemberPriceCzk: event.nonMemberPriceCzk, eventStart: new Date(event.startDate), alreadyRegistered: 0, inFamily: true },
     persons.map((p) => ({ category: p.category ?? categoriesOf(p)[0]?.key, isAdult: p.isAdult, isMember: false }))
@@ -225,15 +231,15 @@ export default function PublicForm({
                 </>
               )}
             </div>
-            {fields.length > 0 && i > 0 && (
+            {fieldsOf(p).length > 0 && i > 0 && (
               <label className="flex items-center gap-2 text-[14px] text-ink">
                 <input type="checkbox" checked={p.sameAsFirst} onChange={(e) => setPerson(i, { sameAsFirst: e.target.checked })} />
                 {t("public.sameAsFirst")}
               </label>
             )}
-            {!(i > 0 && p.sameAsFirst) && fields.length > 0 && (
+            {fieldsOf(p).some((f) => !(i > 0 && shared(p, f))) && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {fields.map((f) => (
+                {fieldsOf(p).filter((f) => !(i > 0 && shared(p, f))).map((f) => (
                   <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
                     <span>
                       {f.label}
