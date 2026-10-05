@@ -34,6 +34,18 @@ async function main() {
     { key: "portal.registeredAccepted", cs: "Přihláška je potvrzená.", en: "The registration is confirmed." },
     { key: "portal.registeredSent", cs: "Přihláška je potvrzená — potvrzení a dokumenty jsme vám poslali e-mailem.", en: "The registration is confirmed — we've e-mailed you the confirmation and documents." },
 
+    // 9. field settings for parents
+    { key: "portalColumn.title", cs: "Rodiče v portálu", en: "Parents in the portal" },
+    { key: "portalColumn.orgHint", cs: "„Rodiče v portálu“: co rodiče u pole v portálu vidí a smí upravit (úprava ke schválení čeká na vás v Lidé) a zda je povinné ve veřejné přihlášce.", en: "“Parents in the portal”: what parents see and may edit for the field in the portal (edits with approval wait for you on People) and whether it's required in the public form." },
+    { key: "portalColumn.eventHint", cs: "„Rodiče v portálu“ patří šabloně pole organizace — změna zde upraví šablonu (Šablony → Účastníci), tedy všechny akce. Pole jen pro tuto akci v portálu být nemohou.", en: "“Parents in the portal” belongs to the organisation's field template — changing it here edits the template (Templates → Participants), i.e. every event. Fields only for this event can't be in the portal." },
+    { key: "portalColumn.eventOnly", cs: "jen pro tuto akci — v portálu nelze", en: "this event only — not in the portal" },
+    { key: "portalAccess.hidden", cs: "skryté", en: "hidden" },
+    { key: "portalAccess.read", cs: "jen vidí", en: "view only" },
+    { key: "portalAccess.edit", cs: "mohou upravit", en: "may edit" },
+    { key: "portalAccess.approval", cs: "úprava ke schválení", en: "edit needs approval" },
+    { key: "publicSettings.requiredInRegistration", cs: "povinné při registraci", en: "required when registering" },
+    { key: "people.portalFieldsLink", cs: "Co vidí a upravují rodiče →", en: "What parents see and edit →" },
+
     // 6-7. upload review
     { key: "portal.uploadDone", cs: "Nahráno — dokument teď zkontrolujeme.", en: "Uploaded — we'll check the document now." },
     { key: "portal.docInReview", cs: "nahráno, čeká na kontrolu", en: "uploaded, waiting for review" },

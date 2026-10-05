@@ -154,7 +154,12 @@ export default function ChildrenPage() {
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <h1 className="mb-2 text-[22px] font-semibold text-ink">{t("children.title")}</h1>
-      <p className="mb-4 max-w-2xl text-[13px] text-ink-secondary">{t("children.intro")}</p>
+      <p className="mb-4 max-w-2xl text-[13px] text-ink-secondary">
+        {t("children.intro")}{" "}
+        <Link href="/templates?tab=participants" className="whitespace-nowrap text-ember hover:underline">
+          {t("people.portalFieldsLink")}
+        </Link>
+      </p>
 
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <button onClick={seed} disabled={busy} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">

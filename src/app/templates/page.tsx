@@ -18,6 +18,11 @@ const btnPrimary =
 export default function TemplatesPage() {
   const { t } = useTranslations();
   const [tab, setTab] = useState<"health" | "mail" | "bills" | "participants" | "planning">("health");
+  // ?tab=participants: the Lidé page's "Co vidí a upravují rodiče" link (slice 4 #9).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (new URLSearchParams(window.location.search).get("tab") === "participants") setTab("participants");
+  }, []);
 
   return (
     <div className="mx-auto max-w-2xl p-4 md:p-8">
