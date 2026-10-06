@@ -9,7 +9,8 @@ import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 
 type EventBasic = { id: string; name: string; documentsListColumns: string[] | null };
 
-type DocStatus = { eventListItemId: string; name: string; received: boolean };
+// fromProfile: covered by the person's permanent document (slice 6 #4) -- not a toggle.
+type DocStatus = { eventListItemId: string; name: string; received: boolean; fromProfile?: boolean };
 
 type Participant = {
   id: string;
@@ -107,19 +108,24 @@ export default function MailParticipantsPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   // Received/missing toggle for one document (shared by the table and the mobile cards).
-  const docButton = (participantId: string, d: { eventListItemId: string; received: boolean }) => (
-    <button
-      onClick={() => toggleDoc(participantId, d.eventListItemId, d.received)}
-      disabled={togglingKey === `${participantId}:${d.eventListItemId}`}
-      className={
-        "rounded-full px-2 py-0.5 disabled:opacity-50 " +
-        (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
-      }
-      title={t("participantsPage.toggleDocumentHint")}
-    >
-      {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
-    </button>
-  );
+  const docButton = (participantId: string, d: DocStatus) =>
+    d.fromProfile ? (
+      <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine" title={t("personDocs.fromProfileHint")}>
+        {t("personDocs.fromProfile")}
+      </span>
+    ) : (
+      <button
+        onClick={() => toggleDoc(participantId, d.eventListItemId, d.received)}
+        disabled={togglingKey === `${participantId}:${d.eventListItemId}`}
+        className={
+          "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+          (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+        }
+        title={t("participantsPage.toggleDocumentHint")}
+      >
+        {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+      </button>
+    );
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">

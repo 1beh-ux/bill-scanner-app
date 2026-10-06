@@ -6,6 +6,7 @@ import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-co
 import { documentDisplayName } from "@/lib/mail-reply-template";
 import { resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
+import { profileDocuments } from "@/lib/person-documents";
 
 // Lean, mail-scoped roster read -- deliberately NOT the full
 // /api/events/[id]/participants route, which carries health-only fields
@@ -80,6 +81,8 @@ export async function GET(
   if (!withDocs) return NextResponse.json(scoped);
 
   const documentTypes = await getActiveDocumentTypes(eventId);
+  // Received through the person's permanent document (slice 6 #4): shown, not toggled.
+  const fromProfile = await profileDocuments(participants.map((p) => ({ id: p.id, eventId, childId: p.childId })));
   const withDocuments = await Promise.all(
     scoped.map(async (p) => {
       const receivedItemIds = await getReceivedItemIds(p.id);
@@ -89,6 +92,7 @@ export async function GET(
           eventListItemId: d.id,
           name: documentDisplayName(d),
           received: receivedItemIds.has(d.id),
+          fromProfile: !!fromProfile.get(p.id)?.some((c) => c.eventListItemId === d.id),
         })),
       };
     })

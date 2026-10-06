@@ -28,6 +28,7 @@ import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
+import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
@@ -185,7 +186,11 @@ export async function portalData(scope: PortalScope) {
   // Upcoming/current registrations only of events using the module; the rest is history.
   const isShown = (p: (typeof participations)[number]) => isCurrent(p.event) && (p.event.registrationConnected || p.event.kind === "membership");
   // The required fields (slice 5 #2) of open events and of the shown registrations' events, in one go.
-  const eventFields = await requiredEventFields([...new Set([...available.map((a) => a.event.id), ...participations.filter(isShown).map((p) => p.eventId)])]);
+  const [eventFields, fromProfile] = await Promise.all([
+    requiredEventFields([...new Set([...available.map((a) => a.event.id), ...participations.filter(isShown).map((p) => p.eventId)])]),
+    // Document types the person's permanent documents cover (slice 6 #4).
+    profileDocuments(participations),
+  ]);
   const cards = new Map<string, Promise<EventCard>>();
 
   const members = [];
@@ -225,7 +230,7 @@ export async function portalData(scope: PortalScope) {
       // Slice 5 #5: also an empty field this event requires of this person.
       const asked = askedFields(eventFields.filter((x) => x.eventId === p.eventId), rules, child.isAdult);
       const own = (p.customFieldValues as Record<string, string> | null) ?? {};
-      registrations.push(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }));
+      registrations.push(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }, fromProfile.get(p.id) ?? []));
     }
 
     members.push({
@@ -367,7 +372,8 @@ async function registrationCard(
   p: Awaited<ReturnType<typeof prisma.participant.findFirstOrThrow<{ include: { event: true; guardians: true; documents: true } }>>>,
   child: PortalChild,
   cards: Map<string, Promise<EventCard>>,
-  person: { requiredEmpty: boolean; pendingChange: boolean }
+  person: { requiredEmpty: boolean; pendingChange: boolean },
+  fromProfile: ProfileDoc[]
 ) {
   const e = p.event;
   if (!cards.has(e.id)) cards.set(e.id, loadEventCard(e));
@@ -376,7 +382,9 @@ async function registrationCard(
   const accepted = p.registrationStatus === "accepted";
   // "Dokument platby" (slice 4 #5): shown in the payment block, not as a document / upload.
   const paymentDocTypeId = card.docTypes.some((d) => d.id === e.paymentDocTypeId) ? e.paymentDocTypeId : null;
-  const paid = paymentDocTypeId ? docState(p.documents, paymentDocTypeId).state === "received" : null;
+  // The registration's own documents plus the ones its person's profile covers.
+  const docs = [...p.documents, ...fromProfile];
+  const paid = paymentDocTypeId ? docState(docs, paymentDocTypeId).state === "received" : null;
 
   let payment = null;
   if (accepted && (p.registrationNumber != null || paymentDocTypeId)) {
@@ -407,7 +415,7 @@ async function registrationCard(
       accepted,
       docTypeIds: card.docTypes.map((d) => d.id),
       paymentDocTypeId,
-      docs: p.documents,
+      docs,
       requiredEmpty: person.requiredEmpty,
       pendingProfileChange: person.pendingChange,
     }),
@@ -416,19 +424,22 @@ async function registrationCard(
     payment,
     // Per tracked document type: sent to you (generated) / received from you /
     // missing; an upload waits for review or was rejected (slice 4 #6) -- those
-    // don't count as received.
+    // don't count as received. One the person's permanent document covers is
+    // received "z profilu (<event>)" and not asked for (slice 6 #4).
     documents: card.docTypes.filter((dt) => dt.id !== paymentDocTypeId).map((dt) => {
       const data = dt.data as DocumentTypeData | null;
       const mine = p.documents.filter((d) => d.eventListItemId === dt.id);
       const state = docState(mine, dt.id);
+      const profile = fromProfile.find((f) => f.eventListItemId === dt.id)?.doc;
       return {
         typeId: dt.id,
         name: documentDisplayName({ ...dt, data }),
         sent: file(mine.find((d) => d.receivedVia === "generated")),
-        received: file(mine.find(countsAsReceived)),
-        review: mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
+        received: profile ? { id: null, date: profile.createdAt } : file(mine.find(countsAsReceived)),
+        fromProfile: profile ? { event: profile.sourceEvent?.name ?? null } : null,
+        review: profile ? null : mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
         reviewNote: state.note,
-        canUpload: !!data?.allowPortalUpload,
+        canUpload: !!data?.allowPortalUpload && !profile,
       };
     }),
     // Re-send the acceptance e-mail (needs the event's sending account).

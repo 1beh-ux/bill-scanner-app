@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
+import { profileDocuments } from "@/lib/person-documents";
 import { countsAsReceived, registrationState, requiredEmpty, type ReviewStatus } from "@/lib/registration-status";
 import { profileValues } from "@/lib/portal-rules";
 import { templateRules } from "@/lib/portal-server";
@@ -93,7 +94,7 @@ export async function GET(
   const receivedTypeIds: Record<string, Set<string>> = {};
   const docRows: Record<string, { eventListItemId: string; receivedVia: string; reviewStatus: ReviewStatus | null }[]> = {};
   if (documentTypes.length > 0 && scopedParticipants.length > 0) {
-    const rows = await prisma.participantDocument.findMany({
+    const rows: { participantId: string; eventListItemId: string; receivedVia: string; reviewStatus: ReviewStatus | null }[] = await prisma.participantDocument.findMany({
       where: {
         participantId: { in: scopedParticipants.map((p) => p.id) },
         eventListItemId: { in: documentTypes.map((d) => d.id) },
@@ -101,6 +102,11 @@ export async function GET(
       },
       select: { participantId: true, eventListItemId: true, receivedVia: true, reviewStatus: true },
     });
+    // Types the linked person's permanent document covers count as received (slice 6 #4).
+    const typeSet = new Set(documentTypes.map((d) => d.id));
+    for (const [participantId, covered] of await profileDocuments(participants)) {
+      rows.push(...covered.filter((c) => typeSet.has(c.eventListItemId)).map((c) => ({ participantId, eventListItemId: c.eventListItemId, receivedVia: c.receivedVia, reviewStatus: c.reviewStatus })));
+    }
     for (const r of rows) {
       (docRows[r.participantId] ??= []).push(r);
       if (countsAsReceived(r)) (receivedTypeIds[r.participantId] ??= new Set()).add(r.eventListItemId);

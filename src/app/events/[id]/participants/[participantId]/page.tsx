@@ -40,6 +40,8 @@ type DocStatus = {
   driveUrl: string | null;
   // The newest received file (slice 6 #3), opened via /api/events/<id>/documents/<fileId>.
   fileId: string | null;
+  // Received through the person's permanent document (slice 6 #4); `event` = where it came from.
+  fromProfile: { event: string | null; url: string } | null;
   // Portal uploads waiting for review / rejected (slice 4 #6-7).
   review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
 };
@@ -436,7 +438,12 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         <li key={d.docTypeId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist px-3 py-2 text-[14px]">
           <span className="text-ink">{d.name}</span>
           <span className="flex items-center gap-2 text-[12px] text-ink-secondary">
-            {d.received && d.receivedAt && (
+            {d.fromProfile && (
+              <a href={d.fromProfile.url} target="_blank" rel="noreferrer" className="text-pine hover:underline" title={t("personDocs.fromProfileHint")}>
+                {d.fromProfile.event ? t("personDocs.fromProfileEvent", { event: d.fromProfile.event }) : t("personDocs.fromProfile")}
+              </a>
+            )}
+            {d.received && d.receivedAt && !(d.fromProfile && !d.receivedVia) && (
               <span>
                 {new Date(d.receivedAt).toLocaleDateString("cs-CZ")}
                 {d.receivedVia && ` · ${t(`participantDetail.documentsVia.${d.receivedVia}`)}`}
@@ -464,18 +471,23 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
                 className="sr-only"
               />
             </label>
-            <button
-              type="button"
-              onClick={() => toggleDoc(d)}
-              disabled={togglingDoc === d.docTypeId}
-              title={t("participantsPage.toggleDocumentHint")}
-              className={
-                "rounded-full px-2 py-0.5 disabled:opacity-50 " +
-                (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
-              }
-            >
-              {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
-            </button>
+            {/* Only from the profile: nothing here to untick (revoke it on the person page). */}
+            {d.fromProfile && !d.receivedVia ? (
+              <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">{t("participantsPage.docReceived")}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => toggleDoc(d)}
+                disabled={togglingDoc === d.docTypeId}
+                title={t("participantsPage.toggleDocumentHint")}
+                className={
+                  "rounded-full px-2 py-0.5 disabled:opacity-50 " +
+                  (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
+                }
+              >
+                {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+              </button>
+            )}
           </span>
           {d.review?.map((u) => (
             <div key={u.id} className="flex basis-full flex-col gap-1 border-t border-mist/60 pt-1.5 text-[12.5px]">

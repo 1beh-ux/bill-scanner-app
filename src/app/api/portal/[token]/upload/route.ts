@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { readUploadedFile, storeParticipantFile } from "@/lib/participant-document-store";
 import { portalScope } from "@/lib/portal-server";
 import { takeRateSlot } from "@/lib/portal-rate";
+import { profileDocuments } from "@/lib/person-documents";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
 // Upload instead of e-mail (docs/registration-slice3-spec.md F): a parent
@@ -11,7 +12,8 @@ import type { DocumentTypeData } from "@/lib/mail-reply-template";
 // an e-mailed one (same GCS path convention, a ParticipantDocument row, Drive
 // sync picks it up once approved) with receivedVia = portal and reviewStatus
 // = pending: it counts as received only after an admin approves it (slice 4
-// #6). The event's payment document type is never uploadable (slice 4 #5).
+// #6). The event's payment document type is never uploadable (slice 4 #5), nor
+// a type the person's permanent document already covers (slice 6 #4).
 // multipart: participantId, docTypeId, file
 export async function POST(req: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -35,6 +37,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     docType.id !== participant.event.paymentDocTypeId &&
     (docType.data as DocumentTypeData | null)?.allowPortalUpload === true;
   if (!ok) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  // Covered by the person's permanent document (slice 6 #4): not asked for.
+  if ((await profileDocuments([participant])).get(participant.id)?.some((c) => c.eventListItemId === docType.id)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
   const upload = await readUploadedFile(file);
   if (!upload) return NextResponse.json({ error: "bad_file" }, { status: 400 });
   if (!(await takeRateSlot(`upload:${participant.id}`, 20, 24 * 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });

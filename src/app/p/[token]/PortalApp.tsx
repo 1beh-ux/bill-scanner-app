@@ -31,7 +31,8 @@ type Registration = {
   category: string | null;
   // paid: null = the event has no payment document type (slice 4 #5).
   payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null } | null;
-  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
+  // fromProfile: received through the person's permanent document (slice 6 #4).
+  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
 };
@@ -584,7 +585,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
                 <span className="text-ink">{d.name}</span>
                 <span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
                   {fileLink(d.sent, t("portal.docSent"))}
-                  {fileLink(d.received, t("portal.docReceived"))}
+                  {fileLink(d.received, d.fromProfile ? (d.fromProfile.event ? t("portal.docFromProfileEvent", { event: d.fromProfile.event }) : t("portal.docFromProfile")) : t("portal.docReceived"))}
                   {d.review === "pending" && <span className="text-amber-700">{t("portal.docInReview")}</span>}
                   {d.review === "rejected" && <span className="text-red-700">{t("portal.docRejected", { note: d.reviewNote ?? "" })}</span>}
                   {!d.received && !d.review && <span className="text-amber-700">{t("portal.docMissing")}</span>}

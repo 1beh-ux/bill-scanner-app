@@ -5,6 +5,7 @@ import { requireAnyModuleAccess } from "@/lib/module-access";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
+import { profileDocuments } from "@/lib/person-documents";
 
 // Part 11-D of the participants/settings/Health/Mail prompt: what the inbox (or a manual
 // mark) saved for this participant, checkable without opening Drive. Excludes `generated`
@@ -35,15 +36,18 @@ export async function GET(
 
   // ?byType=1: one row per tracked document type, received or missing (participant detail page).
   if (new URL(req.url).searchParams.get("byType") === "1") {
-    const [types, inReview] = await Promise.all([
+    const [types, inReview, fromProfile] = await Promise.all([
       getActiveDocumentTypes(participant.eventId),
       prisma.participantDocument.findMany({ where: { participantId, reviewStatus: { in: ["pending", "rejected"] } }, orderBy: { receivedAt: "desc" } }),
+      profileDocuments([participant]).then((m) => m.get(participantId) ?? []),
     ]);
     return NextResponse.json(
       types.map((type) => {
         const latest = docs.find((d) => d.eventListItemId === type.id);
         // The newest received file of the type (Zobrazit / Stáhnout, slice 6 #3).
         const file = docs.find((d) => d.eventListItemId === type.id && d.gcsPath);
+        // Covered by the person's permanent document (slice 6 #4): "z profilu (<event>)".
+        const profile = fromProfile.find((p) => p.eventListItemId === type.id)?.doc;
         return {
           // Portal uploads waiting for review (Schválit / Zamítnout) or rejected, newest first.
           review: inReview
@@ -51,10 +55,13 @@ export async function GET(
             .map((d) => ({ id: d.id, filename: d.originalFilename, receivedAt: d.receivedAt, status: d.reviewStatus, note: d.reviewNote })),
           docTypeId: type.id,
           name: documentDisplayName(type),
-          received: !!latest,
-          receivedAt: latest?.receivedAt ?? null,
+          received: !!latest || !!profile,
+          receivedAt: latest?.receivedAt ?? profile?.createdAt ?? null,
           receivedVia: latest?.receivedVia ?? null,
           fileId: file?.id ?? null,
+          fromProfile: profile
+            ? { event: profile.sourceEvent?.name ?? null, url: `/api/children/${profile.childId}/documents/${profile.id}?event=${participant.eventId}&inline=1` }
+            : null,
           driveUrl: latest?.driveFileId ? `https://drive.google.com/file/d/${latest.driveFileId}/view` : null,
         };
       })
