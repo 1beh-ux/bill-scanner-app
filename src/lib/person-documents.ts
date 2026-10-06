@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
 import { RECEIVED_WHERE, backfillPicks, canBecomePersonDocument, profileDocRows } from "@/lib/registration-status";
@@ -49,19 +50,19 @@ export async function savePersonDocument(opts: {
   childId: string;
   docKey: string;
   buffer?: Buffer;
-  // Instead of `buffer`: copy an already stored file (a participant document's).
+  // Instead of `buffer`: copy an already stored file (a participant document's) with its hash.
   copyFrom?: string;
+  contentHash?: string | null;
   contentType?: string;
   filename: string | null;
   sourceParticipantDocumentId?: string;
   sourceEventId?: string;
   userId: string | null;
 }) {
-  const buffer = opts.buffer ?? (await billsBucket.file(opts.copyFrom!).download())[0];
-  const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+  const hash = opts.contentHash || crypto.createHash("sha256").update(opts.buffer ?? (await billsBucket.file(opts.copyFrom!).download())[0]).digest("hex").slice(0, 16);
   const gcsPath = `people/${opts.childId}/documents/${hash}-${sanitizeFilename(opts.filename || "dokument")}`;
   if (opts.copyFrom) await billsBucket.file(opts.copyFrom).copy(billsBucket.file(gcsPath));
-  else await billsBucket.file(gcsPath).save(buffer, { contentType: opts.contentType });
+  else await billsBucket.file(gcsPath).save(opts.buffer!, { contentType: opts.contentType });
   return prisma.personDocument.create({
     data: {
       childId: opts.childId,
@@ -82,28 +83,31 @@ export async function savePersonDocument(opts: {
  * person's current document (the previous one stays as history). Anything
  * else (a tick, a generated document, an upload in review, an event-only
  * type, an unlinked participant) does nothing. Once per participant document.
- * Never throws: the save that called it already succeeded.
+ * Never throws: the save that called it already succeeded. True = created.
  */
-export async function promoteToPersonDocument(participantDocumentId: string, userId: string | null): Promise<void> {
+export async function promoteToPersonDocument(participantDocumentId: string, userId: string | null): Promise<boolean> {
   try {
     const d = await prisma.participantDocument.findUnique({
       where: { id: participantDocumentId },
       include: { participant: { select: { childId: true, eventId: true } }, eventListItem: { select: { key: true } } },
     });
     const key = d?.eventListItem.key;
-    if (!d || !key || !d.participant.childId || !canBecomePersonDocument(d) || !(await permanentDocKeys()).has(key)) return;
-    if (await prisma.personDocument.findFirst({ where: { sourceParticipantDocumentId: d.id }, select: { id: true } })) return;
+    if (!d || !key || !d.participant.childId || !canBecomePersonDocument(d) || !(await permanentDocKeys()).has(key)) return false;
+    if (await prisma.personDocument.findFirst({ where: { sourceParticipantDocumentId: d.id }, select: { id: true } })) return false;
     await savePersonDocument({
       childId: d.participant.childId,
       docKey: key,
       copyFrom: d.gcsPath!,
+      contentHash: d.contentHash,
       filename: d.originalFilename,
       sourceParticipantDocumentId: d.id,
       sourceEventId: d.participant.eventId,
       userId,
     });
+    return true;
   } catch (err) {
     console.error(`person document from participant document ${participantDocumentId} failed`, err);
+    return false;
   }
 }
 
@@ -113,11 +117,11 @@ export async function promoteToPersonDocument(participantDocumentId: string, use
  * received file of this key (backfillPicks). `items` = which event document
  * types are this template's (by key, or for a template without one yet, by name).
  */
-export async function backfillCandidates(docKey: string | null, items: object) {
+export async function backfillCandidates(docKey: string | null, items: Prisma.EventListItemWhereInput) {
   const [candidates, existing] = await Promise.all([
     prisma.participantDocument.findMany({
       where: { eventListItem: { kind: "document", ...items }, participant: { childId: { not: null } }, gcsPath: { not: null }, ...RECEIVED_WHERE },
-      select: { id: true, gcsPath: true, receivedVia: true, reviewStatus: true, receivedAt: true, originalFilename: true, participant: { select: { childId: true, eventId: true } } },
+      select: { id: true, gcsPath: true, receivedVia: true, reviewStatus: true, receivedAt: true, participant: { select: { childId: true } } },
     }),
     docKey ? prisma.personDocument.findMany({ where: { docKey }, select: { childId: true, sourceParticipantDocumentId: true, revokedAt: true } }) : [],
   ]);

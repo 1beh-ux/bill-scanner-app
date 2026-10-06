@@ -108,15 +108,19 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     }
   }
 
-  // Slice 6 #1: "platí trvale" on an org template.
+  // Slice 6 #1, #6: "platí trvale" on an org template. On: preview first (how
+  // many people get a person document from their existing files), then confirm.
   async function togglePermanent(item: Item, on: boolean) {
-    if (!(await confirm({ message: t(on ? "personDocs.enableConfirm" : "personDocs.disableConfirm", { name: item.name }) }))) return;
-    const res = await fetch(`${itemUrl(item.id)}/permanent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ permanent: on }),
-    });
+    setError(null);
+    setSyncMessage(null);
+    const url = `${itemUrl(item.id)}/permanent`;
+    const preview = on ? await fetch(url).then((r) => (r.ok ? (r.json() as Promise<{ count: number }>) : null)) : null;
+    if (on && !preview) return setError(t("listTemplateAdmin.errorSaveFailed"));
+    const message = on ? t("personDocs.enableConfirm", { name: item.name, count: String(preview!.count) }) : t("personDocs.disableConfirm", { name: item.name });
+    if (!(await confirm({ message }))) return;
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ permanent: on }) });
     if (!res.ok) setError(t("listTemplateAdmin.errorSaveFailed"));
+    else if (on) setSyncMessage(t("personDocs.enabled", { count: String(((await res.json()) as { created: number }).created) }));
     load();
   }
 
