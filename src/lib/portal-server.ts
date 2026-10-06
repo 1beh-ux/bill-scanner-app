@@ -29,6 +29,7 @@ import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-tem
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
+import { memberFormFields, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
@@ -260,6 +261,8 @@ export async function portalData(scope: PortalScope) {
     members,
     // A family's contacts, each once (an adult member's own e-mail = that member).
     contacts: scope.kind === "family" ? familyContacts(scope.members).map((g) => ({ name: g.name, email: g.email, phone: g.phone, member: g.member })) : [],
+    // "Přidat člena rodiny" (slice 8 #1): family links only.
+    addMember: scope.kind === "family" ? { fields: memberFormFields(templates) } : null,
     available: await Promise.all(
       available.map(async ({ event: e, memberIds }) => ({
         id: e.id,
@@ -537,4 +540,36 @@ export async function registerFromPortal(
     for (const c of routed.proposals) await proposeChange(child.id, c.key, c.oldValue, c.newValue);
   }
   return { ids };
+}
+
+export const ADD_MEMBER_PER_DAY = 10;
+
+/**
+ * Portal "Přidat člena rodiny" (slice 8 #1, family links only): one person
+ * { firstName, lastName, birthDate, isAdult, values, email?, phone? } +
+ * guardians, checked exactly like a person of the public form
+ * (validateSubmission with the basic fields parents may edit). Creates the
+ * person in the family -- no registration, no membership -- and puts the
+ * family under "Ke kontrole" in Lidé. Nothing is sent.
+ */
+export async function addFamilyMember(scope: PortalScope, body: unknown): Promise<{ id: string } | { error: "invalid"; fields: string[] }> {
+  const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+  const checked = validateSubmission({ persons: [o.person], guardians: o.guardians }, { fields: memberFormFields(await visibleTemplates()), rules: null, oddil: null, today: new Date() });
+  if (!checked.ok) return { error: "invalid", fields: checked.errors };
+  const p = checked.data.persons[0];
+  const child = await prisma.child.create({
+    data: {
+      name: fullNameFrom(p.firstName, p.lastName),
+      firstName: p.firstName,
+      lastName: p.lastName,
+      dateOfBirth: new Date(p.birthDate),
+      isAdult: p.isAdult,
+      familyId: scope.id,
+      fieldValues: p.values,
+      guardians: { create: p.guardians.map((g) => ({ ...g, receivesCommunications: true })) },
+    },
+    select: { id: true },
+  });
+  await prisma.family.update({ where: { id: scope.id }, data: { needsReview: true } });
+  return child;
 }

@@ -33,6 +33,19 @@ export type CleanSubmission = {
 const str = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 200;
 
+/**
+ * Portal "Přidat člena rodiny" (slice 8 #1): what a parent fills for a new
+ * family member besides name / birth date / child-adult -- the basic profile
+ * fields parents may edit (edit / approval), required-in-registration ones
+ * required, per audience (validateSubmission filters by the person).
+ */
+export const memberFormFields = (
+  templates: { key: string; label: string; fieldType: string; options: unknown; portalAccess: string; level: string; requiredInRegistration: boolean; audience: FieldAudience }[]
+): FormField[] =>
+  templates
+    .filter((t) => t.level === "basic" && (t.portalAccess === "edit" || t.portalAccess === "approval"))
+    .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, required: t.requiredInRegistration, audience: t.audience }));
+
 /** The honeypot ("website") was filled = a bot; the route answers OK and stores nothing. */
 export const isSpam = (body: unknown) => !!body && typeof body === "object" && str((body as Record<string, unknown>).website) !== "";
 

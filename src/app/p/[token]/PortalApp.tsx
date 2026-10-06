@@ -8,6 +8,8 @@ import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
+import { appliesTo } from "@/lib/registration-fields";
+import type { FormField } from "@/lib/public-registration";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
 // docs/registration-slice3-spec.md F). Two columns on desktop -- the person /
@@ -66,6 +68,8 @@ type Data = {
   members: Member[];
   contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
   available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
+  // "Přidat člena rodiny" (slice 8 #1): family links only.
+  addMember: { fields: FormField[] } | null;
 };
 type T = (key: string, vars?: Record<string, string>) => string;
 
@@ -149,6 +153,12 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
                       {t("portal.contacts")}: {data.contacts.map((c) => (c.member ? `${c.member} (${c.email})` : c.name ? `${c.name} (${c.email})` : c.email)).join(", ")}
                     </p>
                   )}
+                  {data.addMember && <AddMember api={api} data={data} fields={data.addMember.fields} t={t} onAdded={load} />}
+                </section>
+              )}
+              {!many && data.addMember && (
+                <section className={card + " flex flex-col gap-3"}>
+                  <AddMember api={api} data={data} fields={data.addMember.fields} t={t} onAdded={load} />
                 </section>
               )}
               <h2 className={h2}>{t("portal.profileOf", { name: member.name })}</h2>
@@ -349,6 +359,125 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
         </div>
       </section>
     </div>
+  );
+}
+
+// "Přidat člena rodiny" (slice 8 #1): name, birth date, child/adult, the basic
+// fields parents may edit for that audience; a child's guardians pre-filled from
+// a family member. The person joins the family (no registration); the admin
+// sees the family under "Ke kontrole". Nothing is sent.
+function AddMember({ api, data, fields, t, onAdded }: { api: string; data: Data; fields: FormField[]; t: T; onAdded: () => void }) {
+  const familyGuardians = (): Guardian[] =>
+    data.members.find((m) => !m.isAdult && m.profile.guardians.length > 0)?.profile.guardians ??
+    data.contacts.map((c) => ({ name: c.name ?? c.member, email: c.email, phone: c.phone, relationship: null, receivesCommunications: true }));
+  const [open, setOpen] = useState(false);
+  const [person, setPerson] = useState({ firstName: "", lastName: "", birthDate: "", isAdult: false, email: "", phone: "" });
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [guardians, setGuardians] = useState<Guardian[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const mine = fields.filter((f) => appliesTo(f.audience, person.isAdult));
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    const body = { person: { ...person, values }, guardians: person.isAdult ? [] : guardians.filter((g) => g.email.trim()) };
+    const res = await fetch(`${api}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return setMessage(t(res?.status === 400 ? "portal.addMemberInvalid" : res?.status === 429 ? "portal.addMemberThrottled" : "portal.saveFailed"));
+    setOpen(false);
+    setMessage(t("portal.addMemberDone"));
+    onAdded();
+  }
+
+  if (!open) {
+    return (
+      <div className="flex flex-col gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            setPerson({ firstName: "", lastName: "", birthDate: "", isAdult: false, email: "", phone: "" });
+            setValues({});
+            setGuardians(familyGuardians());
+            setMessage(null);
+            setOpen(true);
+          }}
+          className={btn + " self-start"}
+        >
+          {t("portal.addMember")}
+        </button>
+        {message && <p className="text-[14px] text-ink">{message}</p>}
+      </div>
+    );
+  }
+  const set = (p: Partial<typeof person>) => setPerson((x) => ({ ...x, ...p }));
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-lg bg-paper-2 p-3">
+      <h3 className="text-[16px] font-semibold text-ink">{t("portal.addMember")}</h3>
+      <p className="text-[13px] text-ink-secondary">{t("portal.addMemberHint")}</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => set({ isAdult: false })} className={chip(!person.isAdult)}>
+          {t("portal.addMemberChild")}
+        </button>
+        <button type="button" onClick={() => set({ isAdult: true })} className={chip(person.isAdult)}>
+          {t("portal.addMemberAdult")}
+        </button>
+      </div>
+      <input required placeholder={t("portal.firstName")} value={person.firstName} onChange={(e) => set({ firstName: e.target.value })} className={inputClass} />
+      <input required placeholder={t("portal.lastName")} value={person.lastName} onChange={(e) => set({ lastName: e.target.value })} className={inputClass} />
+      <label className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+        {t("portal.birthDate")}
+        <input required type="date" value={person.birthDate} onChange={(e) => set({ birthDate: e.target.value })} className={inputClass} />
+      </label>
+      {person.isAdult && (
+        <>
+          <input required type="email" placeholder={t("portal.guardianEmail")} value={person.email} onChange={(e) => set({ email: e.target.value })} className={inputClass} />
+          <input type="tel" placeholder={t("portal.guardianPhone")} value={person.phone} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />
+        </>
+      )}
+      {mine.map((f) => (
+        <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+          <span>
+            {f.label}
+            {f.required && " *"}
+          </span>
+          <FieldInput field={f} value={values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
+        </label>
+      ))}
+      {!person.isAdult && (
+        <div className="flex flex-col gap-2">
+          <p className="text-[13px] font-medium text-ink">{t("portal.guardians")}</p>
+          {guardians.map((g, i) => {
+            const setG = (p: Partial<Guardian>) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, ...p } : x)));
+            return (
+              <div key={i} className="flex flex-col gap-2 rounded-lg border border-mist bg-paper p-2">
+                <input placeholder={t("portal.guardianName")} value={g.name ?? ""} onChange={(e) => setG({ name: e.target.value })} className={inputClass} />
+                <input type="email" placeholder={t("portal.guardianEmail")} value={g.email} onChange={(e) => setG({ email: e.target.value })} className={inputClass} />
+                <input type="tel" placeholder={t("portal.guardianPhone")} value={g.phone ?? ""} onChange={(e) => setG({ phone: e.target.value })} className={inputClass} />
+                {guardians.length > 1 && (
+                  <button type="button" onClick={() => setGuardians((prev) => prev.filter((_, j) => j !== i))} className="self-start text-[14px] text-red-600">
+                    {t("portal.remove")}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button type="button" onClick={() => setGuardians((p) => [...p, { name: "", email: "", relationship: null, phone: "", receivesCommunications: true }])} className={btn + " self-start"}>
+            {t("portal.addGuardian")}
+          </button>
+        </div>
+      )}
+      {message && <p className="text-[14px] text-red-600">{message}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={busy} className={btnPrimary}>
+          {t("portal.addMemberSubmit")}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className={btn}>
+          {t("portal.cancel")}
+        </button>
+      </div>
+    </form>
   );
 }
 
