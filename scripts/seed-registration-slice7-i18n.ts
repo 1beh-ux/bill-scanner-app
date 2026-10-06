@@ -12,6 +12,7 @@ async function main() {
     { key: "driveDocImport.hint", cs: "Soubory přímo ve složce (bez podsložek) se uloží do profilů lidí v Lidé jako jejich platný trvalý dokument. Akce slouží jen jako připojení k Drive. Nic se neposílá e-mailem.", en: "Files directly in the folder (no subfolders) are stored in people's profiles (People) as their valid permanent document. The event only provides the Drive connection. Nothing is e-mailed." },
     { key: "driveDocImport.folderPlaceholder", cs: "Odkaz na složku Google Drive nebo její ID", en: "Google Drive folder link or ID" },
     { key: "driveDocImport.load", cs: "Načíst", en: "Load" },
+    { key: "driveDocImport.identity", cs: "Drive čte účet {email} (připojení této akce).", en: "Drive is read as {email} (this event's connection)." },
     { key: "driveDocImport.empty", cs: "Ve složce nejsou žádné soubory.", en: "The folder has no files." },
     { key: "driveDocImport.file", cs: "Soubor", en: "File" },
     { key: "driveDocImport.statusHeader", cs: "Stav", en: "Status" },

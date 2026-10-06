@@ -110,6 +110,7 @@ export default function DriveDocImport({ eventId, itemId, typeName, onClose }: {
         </form>
         {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
 
+        {rows && <p className="mb-2 text-[12px] text-ink-secondary">{t("driveDocImport.identity", { email: identity })}</p>}
         {rows && rows.length === 0 && <p className="text-[13px] text-ink-secondary">{t("driveDocImport.empty")}</p>}
         {rows && rows.length > 0 && (
           <>
