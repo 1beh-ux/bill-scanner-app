@@ -27,10 +27,15 @@ type DocumentData = {
   autoAttachOnAccept?: boolean;
   staticAttachment?: boolean;
   allowPortalUpload?: boolean;
+  // Slice 6: org template "platí trvale" (set via /api/list-templates/<id>/permanent);
+  // event copy "vyžadovat nový" (this event ignores the person's stored document).
+  permanent?: boolean;
+  requireNew?: boolean;
 };
 
 type Item = {
   id: string;
+  key?: string | null;
   name: string;
   active: boolean;
   data: SituationData | DocumentData | Record<string, unknown> | null;
@@ -80,6 +85,9 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
   const [staticAttachment, setStaticAttachment] = useState(false);
   const [allowPortalUpload, setAllowPortalUpload] = useState(false);
+  const [requireNew, setRequireNew] = useState(false);
+  // Event scope: keys of the org templates that are "platí trvale" (slice 6).
+  const [permanentKeys, setPermanentKeys] = useState<Set<string>>(new Set());
   const [planData, setPlanData] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -94,6 +102,22 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
       setItems(categoryGroup ? all.filter((i) => ((i.data as { group?: string } | null)?.group ?? "primary") === categoryGroup) : all);
     }
     setLoading(false);
+    if (isDocument && scope === "event") {
+      const templates: Item[] = await fetch("/api/list-templates?kind=document").then((r) => (r.ok ? r.json() : []));
+      setPermanentKeys(new Set(templates.filter((i) => (i.data as DocumentData | null)?.permanent && i.key).map((i) => i.key!)));
+    }
+  }
+
+  // Slice 6 #1: "platí trvale" on an org template.
+  async function togglePermanent(item: Item, on: boolean) {
+    if (!(await confirm({ message: t(on ? "personDocs.enableConfirm" : "personDocs.disableConfirm", { name: item.name }) }))) return;
+    const res = await fetch(`${itemUrl(item.id)}/permanent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permanent: on }),
+    });
+    if (!res.ok) setError(t("listTemplateAdmin.errorSaveFailed"));
+    load();
   }
 
   async function syncFromTemplates() {
@@ -135,6 +159,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setAutoAttachOnAccept(true);
     setStaticAttachment(false);
     setAllowPortalUpload(false);
+    setRequireNew(false);
     setPlanData(categoryGroup ? { group: categoryGroup } : {});
     setEditingId(null);
   }
@@ -162,6 +187,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
     setStaticAttachment((item.data as DocumentData | null)?.staticAttachment ?? false);
     setAllowPortalUpload((item.data as DocumentData | null)?.allowPortalUpload ?? false);
+    setRequireNew((item.data as DocumentData | null)?.requireNew ?? false);
     setPlanData((item.data as Record<string, unknown> | null) ?? {});
     setFormOpen(true);
   }
@@ -196,6 +222,9 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
           staticAttachment: scope === "event" && staticAttachment ? true : undefined,
           allowPortalUpload: scope === "event" && allowPortalUpload && !staticAttachment ? true : undefined,
+          // Kept as is: the org flag has its own switch, the event copy's is only a copy.
+          permanent: (items.find((i) => i.id === editingId)?.data as DocumentData | null)?.permanent || undefined,
+          requireNew: scope === "event" && requireNew && editingPermanent ? true : undefined,
         }
       : undefined;
 
@@ -247,6 +276,9 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     load();
   }
 
+  const editingKey = items.find((i) => i.id === editingId)?.key;
+  const editingPermanent = !!editingKey && permanentKeys.has(editingKey);
+
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -290,8 +322,19 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                   />
                 )}
                 {item.name}
+                {scope === "event" && isDocument && item.key && permanentKeys.has(item.key) && (
+                  <span className="rounded bg-paper-2 px-1.5 text-[11.5px] text-ink-secondary">
+                    {t((item.data as DocumentData | null)?.requireNew ? "personDocs.requireNewBadge" : "personDocs.permanentBadge")}
+                  </span>
+                )}
               </span>
               <div className="flex items-center gap-3">
+                {scope === "org" && isDocument && (
+                  <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary" title={t("personDocs.permanentHint")}>
+                    <input type="checkbox" checked={!!(item.data as DocumentData | null)?.permanent} onChange={(e) => togglePermanent(item, e.target.checked)} />
+                    {t("personDocs.permanent")}
+                  </label>
+                )}
                 {scope === "event" && isDocument && (item.data as DocumentData | null)?.templateGoogleDocId && (
                   <a href={`/events/${eventId}/document-templates/${item.id}`} className="text-[13px] text-ember hover:underline">
                     {t("templatePreview.button")}
@@ -428,6 +471,15 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                       <span className="block text-[11.5px]">{t("listTemplateAdmin.staticAttachmentHint")}</span>
                     </span>
                   </label>
+                  {editingPermanent && (
+                    <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
+                      <input type="checkbox" className="mt-0.5" checked={requireNew} onChange={(e) => setRequireNew(e.target.checked)} />
+                      <span>
+                        {t("personDocs.requireNew")}
+                        <span className="block text-[11.5px]">{t("personDocs.requireNewHint")}</span>
+                      </span>
+                    </label>
+                  )}
                   {!staticAttachment && (
                     <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
                       <input type="checkbox" className="mt-0.5" checked={allowPortalUpload} onChange={(e) => setAllowPortalUpload(e.target.checked)} />
