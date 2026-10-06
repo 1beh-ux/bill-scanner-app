@@ -7,6 +7,13 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "portal.toggleTheme", cs: "Světlý / tmavý režim", en: "Light / dark mode" },
+    { key: "portal.pillAccepted", cs: "Přihláška přijata", en: "Registration accepted" },
+    { key: "portal.pillPending", cs: "Čeká na potvrzení", en: "Waiting for confirmation" },
+    { key: "portal.details", cs: "Podrobnosti", en: "Details" },
+    { key: "portal.docsSummary", cs: "Dokumenty {done}/{total}", en: "Documents {done}/{total}" },
+    { key: "portal.leaveTitle", cs: "Ukončení docházky", en: "Stopping attendance" },
+    { key: "portal.leaveExplain", cs: "Pokud {name} už k nám nebude chodit, můžete ho/ji tady označit jako neaktivní. Nepůjde pak přihlašovat na akce a nebudou mu/jí chodit pozvánky. Už podané přihlášky zůstanou — jejich zrušení (a případné vrácení peněz) vyřeší pořadatel. Kdykoli to vrátíte tlačítkem „Obnovit“.", en: "If {name} won't attend any more, you can mark them inactive here. They can't be registered for events and won't get invitations. Registrations already made stay — the organisers handle cancelling them (and any refund). You can undo it any time with “Restore”." },
     { key: "portal.moreDetails", cs: "Podrobnosti (dokumenty, údaje)", en: "Details (documents, data)" },
     { key: "composeEmailModal.acceptOnlyDone", cs: "Přijato: {count}. Nic nebylo odesláno.", en: "Accepted: {count}. Nothing was sent." },
     { key: "composeEmailModal.acceptOnlyButton", cs: "Jen přijmout ({count}) — bez e-mailu a dokumentů", en: "Just accept ({count}) — no e-mail, no documents" },

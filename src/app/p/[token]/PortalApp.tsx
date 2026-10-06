@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Upload } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 import { MarkdownText } from "@/components/registration/Markdown";
+import ThemeToggle from "@/components/registration/ThemeToggle";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
@@ -131,6 +132,7 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
 
   return (
     <div className="mx-auto w-full max-w-6xl p-4 pb-16">
+      <ThemeToggle label={t("portal.toggleTheme")} />
       <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("portal.title")}</p>
       {phase === "loading" && <p className="mt-6 text-[14px] text-ink-secondary">{t("portal.loading")}</p>}
       {phase === "unavailable" && <p className="mt-6 text-[15px] text-ink">{t("portal.unavailable")}</p>}
@@ -176,7 +178,6 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
               {inactive.length > 0 && <Inactive api={api} members={inactive} t={t} onChanged={load} />}
               <h2 className={h2}>{t("portal.profileOf", { name: member.name })}</h2>
               <Profile key={member.id} api={api} member={member} t={t} onSaved={load} />
-              {!member.leftAt && <Leave key={`leave-${member.id}`} api={api} member={member} t={t} onDone={load} />}
             </div>
 
             <div className="flex flex-col gap-4">
@@ -302,7 +303,7 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
       <section className={card + " flex flex-col gap-3"}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="text-[16px] font-semibold text-ink">{t(detailed ? "portal.detailedTitle" : "portal.basicTitle")}</h3>
-          {(detailed || detailedFields.length > 0) && (
+          {(detailed || detailedFields.length > 0 || !member.leftAt) && (
             <button type="button" onClick={() => setDetailed(!detailed)} className={btn}>
               {detailed ? t("portal.backToBasic") : t("portal.openDetailed")}
               {!detailed && missingDetailed > 0 && <span className="ml-1.5 text-amber-700">({t("portal.detailedMissing", { n: String(missingDetailed) })})</span>}
@@ -329,9 +330,12 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
           );
         })}
         {message && <p className="text-[14px] text-ink">{message}</p>}
-        <button onClick={saveFields} disabled={busy} className={btnPrimary}>
-          {t("portal.save")}
-        </button>
+        {fields.some((f) => (f.level === "detailed") === detailed) && (
+          <button onClick={saveFields} disabled={busy} className={btnPrimary}>
+            {t("portal.save")}
+          </button>
+        )}
+        {detailed && !member.leftAt && <Leave key={`leave-${member.id}`} api={api} member={member} t={t} onDone={onSaved} />}
       </section>
 
       <section className={card + " flex flex-col gap-3"}>
@@ -363,14 +367,12 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
             </div>
           );
         })}
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setGuardians((p) => [...p, { name: "", email: "", relationship: "", phone: "", receivesCommunications: true }])} className={btn}>
-            {t("portal.addGuardian")}
-          </button>
-          <button type="button" onClick={() => patch({ guardians: guardians.filter((g) => g.email.trim()) })} disabled={busy} className={btn}>
-            {t("portal.saveGuardians")}
-          </button>
-        </div>
+        <button type="button" onClick={() => setGuardians((p) => [...p, { name: "", email: "", relationship: "", phone: "", receivesCommunications: true }])} className="self-start text-[13px] text-ember hover:underline">
+          + {t("portal.addGuardian")}
+        </button>
+        <button type="button" onClick={() => patch({ guardians: guardians.filter((g) => g.email.trim()) })} disabled={busy} className={btnPrimary}>
+          {t("portal.saveGuardians")}
+        </button>
       </section>
     </div>
   );
@@ -393,13 +395,17 @@ function Leave({ api, member, t, onDone }: { api: string; member: Member; t: T; 
   }
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="self-start text-[14px] text-ink-secondary underline hover:text-ink">
-        {t("portal.leave")}
-      </button>
+      <div className="mt-2 flex flex-col gap-1.5 border-t border-mist pt-3">
+        <p className="text-[13px] font-medium text-ink">{t("portal.leaveTitle")}</p>
+        <p className="text-[12.5px] text-ink-secondary">{t("portal.leaveExplain", { name: member.name })}</p>
+        <button type="button" onClick={() => setOpen(true)} className="self-start rounded-lg border border-red-300 px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">
+          {t("portal.leave")}
+        </button>
+      </div>
     );
   }
   return (
-    <section className={card + " flex flex-col gap-3"}>
+    <section className="mt-2 flex flex-col gap-3 border-t border-mist pt-3">
       <p className="text-[14px] text-ink">{t("portal.leaveConfirm", { name: member.name })}</p>
       <label className="text-[13px] text-ink-secondary">
         {t("portal.leaveNote")}
@@ -735,6 +741,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [open, setOpen] = useState(r.state === "missing");
 
   async function cancel() {
     setBusy(true);
@@ -867,7 +874,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
             </p>
           );
         return r.payment ? (
-          <div key={i} className="flex flex-col gap-1 rounded-lg bg-paper p-3 text-[14px]">
+          <div key={i} className="flex flex-col gap-1 text-[14px]">
             <p className="font-medium text-ink">{t("portal.payment")}</p>
             {r.payment.paid === false && (
               <>
@@ -901,23 +908,54 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
     }
   };
 
+  // Header (event, status) is fixed on top; everything else (payment, documents,
+  // data, …) folds under "Podrobnosti" -- open while something is missing.
+  const has = (k: CardSection["kind"]) => r.sections.some((x) => x.kind === k);
+  const details = r.sections.filter((x) => x.kind !== "event" && x.kind !== "status" && x.kind !== "resend");
+  const received = r.documents.filter((d) => d.received).length;
+
   return (
-    <section className={eventCard + " flex flex-col gap-3"}>
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-[16px] font-semibold text-ink">{evName(r.event)}</span>
-        {who && <span className="text-[13px] text-ink-secondary">{who}</span>}
+    <section className={eventCard + " flex flex-col gap-2"}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-[16px] font-semibold leading-snug text-ink">{evName(r.event)}</h3>
+          {who && <p className="text-[13px] text-ink-secondary">{who}</p>}
+        </div>
+        {has("status") && (
+          <span className={"shrink-0 rounded-full px-2.5 py-0.5 text-[12.5px] font-medium " + (r.status === "accepted" ? "bg-pine/15 text-pine" : "bg-ember/15 text-ember")}>
+            {t(r.status === "accepted" ? "portal.pillAccepted" : "portal.pillPending")}
+          </span>
+        )}
       </div>
-      {r.state === "complete" ? (
-        // All confirmed: the overview (event, status, paid) and the rest folded away.
+      {has("event") && (
         <>
-          {r.sections.map((s, i) => (s.kind === "event" || s.kind === "status" || (s.kind === "payment" && r.payment?.paid === true) ? block(s, i) : null))}
-          <details className="text-[14px]">
-            <summary className="cursor-pointer text-[13px] text-ember">{t("portal.moreDetails")}</summary>
-            <div className="mt-3 flex flex-col gap-3">{r.sections.map((s, i) => (s.kind === "event" || s.kind === "status" || (s.kind === "payment" && r.payment?.paid === true) ? null : block(s, i)))}</div>
-          </details>
+          <p className="text-[13px] text-ink-secondary">
+            {range(r.event)}
+            {r.event.location && ` · ${r.event.location}`}
+          </p>
+          {r.event.info && <EventInfo text={r.event.info} t={t} />}
         </>
-      ) : (
-        r.sections.map(block)
+      )}
+      {details.length > 0 && (
+        <div className="mt-1 border-t border-mist pt-2">
+          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 text-left text-[13px]">
+            <span className="font-medium text-ink">{t("portal.details")}</span>
+            <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-ink-secondary">
+              {r.payment?.paid === true && <span className="text-pine">{t("portal.paid")}</span>}
+              {r.payment?.paid === false && <span className="text-ember">{t("portal.awaitingPayment")}</span>}
+              {r.documents.length > 0 && (
+                <span className={received < r.documents.length ? "text-amber-700" : ""}>{t("portal.docsSummary", { done: String(received), total: String(r.documents.length) })}</span>
+              )}
+              <ChevronDown size={16} aria-hidden="true" className={"transition-transform " + (open ? "rotate-180" : "")} />
+            </span>
+          </button>
+          {open && (
+            <div className="mt-3 flex flex-col gap-4">
+              {details.map(block)}
+              {r.note && <p className="text-[13px] text-ink-secondary">{t("portal.yourNote", { note: r.note })}</p>}
+            </div>
+          )}
+        </div>
       )}
       {message && <p className="text-[13px] text-ink">{message}</p>}
       {/* Only a registration not yet accepted can be cancelled here; after that, the event's admin does it. */}
@@ -947,13 +985,14 @@ function EventInfo({ text, t }: { text: string; t: T }) {
   const long = text.length > 220 || text.split("\n").length > 3;
   return (
     <div className="flex flex-col items-start gap-0.5">
-      {/* Folded by height: line-clamp doesn't work across markdown's block elements. */}
-      <MarkdownText text={text} className={"text-[14px] text-ink [&_p]:my-1 [&>:first-child]:mt-0 " + (long && !open ? "max-h-[4.6em] overflow-hidden" : "")} />
+      {/* Toggle above the text: it stays put, so a second click folds it straight back. */}
       {long && (
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-[13px] text-ember hover:underline">
           {t(open ? "portal.showLess" : "portal.showMore")}
         </button>
       )}
+      {/* Folded by height: line-clamp doesn't work across markdown's block elements. */}
+      <MarkdownText text={text} className={"text-[14px] text-ink [&_p]:my-1 [&>:first-child]:mt-0 " + (long && !open ? "max-h-[4.6em] overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]" : "")} />
     </div>
   );
 }
