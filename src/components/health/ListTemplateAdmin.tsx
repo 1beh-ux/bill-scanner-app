@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import DriveDocImport from "@/components/health/DriveDocImport";
 import PlanListDataFields, { type PlanKind } from "@/components/planning/PlanListDataFields";
 import type { PlanDayTemplateWindow } from "@/lib/planning";
 
@@ -56,7 +57,7 @@ interface ListTemplateAdminProps {
 }
 
 export default function ListTemplateAdmin({ kind, scope, eventId, label, categoryGroup }: ListTemplateAdminProps) {
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
   const confirm = useConfirm();
   const isSituation = kind === "situation";
   const isDocument = kind === "document";
@@ -88,6 +89,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [requireNew, setRequireNew] = useState(false);
   // Event scope: keys of the org templates that are "platí trvale" (slice 6).
   const [permanentKeys, setPermanentKeys] = useState<Set<string>>(new Set());
+  // Slice 7: the "platí trvale" type whose "Importovat z Drive" dialog is open.
+  const [driveImport, setDriveImport] = useState<Item | null>(null);
   const [planData, setPlanData] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -339,6 +342,11 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                     {t("personDocs.permanent")}
                   </label>
                 )}
+                {scope === "event" && isDocument && role === "admin" && item.key && permanentKeys.has(item.key) && (
+                  <button onClick={() => setDriveImport(item)} className="text-[13px] text-ember hover:underline">
+                    {t("driveDocImport.button")}
+                  </button>
+                )}
                 {scope === "event" && isDocument && (item.data as DocumentData | null)?.templateGoogleDocId && (
                   <a href={`/events/${eventId}/document-templates/${item.id}`} className="text-[13px] text-ember hover:underline">
                     {t("templatePreview.button")}
@@ -357,6 +365,10 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
             </li>
           ))}
         </ul>
+      )}
+
+      {driveImport && eventId && (
+        <DriveDocImport eventId={eventId} itemId={driveImport.id} typeName={driveImport.name} onClose={() => setDriveImport(null)} />
       )}
 
       {formOpen && (
