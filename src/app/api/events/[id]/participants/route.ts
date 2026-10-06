@@ -121,11 +121,11 @@ export async function GET(
   // person's audience (unlinked = only fields for both); templates' required flag per audience too.
   const [required, people, changes, rules] = await Promise.all([
     prisma.participantFieldTemplate.findMany({ where: { active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true, audience: true } }),
-    childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, isAdult: true } }) : [],
+    childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, isAdult: true, leftAt: true, leftVia: true } }) : [],
     childIds.length ? prisma.childChange.findMany({ where: { childId: { in: childIds }, status: "pending" }, select: { childId: true } }) : [],
     templateRules(),
   ]);
-  const profiles = new Map(people.map((c) => [c.id, { values: profileValues(c), isAdult: c.isAdult }]));
+  const profiles = new Map(people.map((c) => [c.id, { values: profileValues(c), isAdult: c.isAdult, left: c.leftAt ? { at: c.leftAt, via: c.leftVia } : null }]));
   const changed = new Set(changes.map((c) => c.childId));
   const eventKeys = new Set(activeFields.map((f) => f.key));
   const requiredKeys = (isAdult: boolean | null) => required.filter((f) => appliesTo(f.audience, isAdult)).map((f) => f.key);
@@ -139,6 +139,8 @@ export async function GET(
     const asked = askedFields(activeFields, rules, person ? person.isAdult : null);
     return {
       ...p,
+      // The linked person is marked "Už nebude chodit" (slice 8 #2) -- a badge; the admin decides.
+      personLeft: person?.left ?? null,
       documentsTotal: documentTypes.length,
       documentsReceived: receivedTypeIds[p.id]?.size ?? 0,
       state: registrationState({

@@ -16,6 +16,8 @@ type ChildRow = {
   dateOfBirth: string | null;
   isAdult: boolean;
   familyId: string | null;
+  // "Neaktivní" since (slice 8 #2); null = active.
+  leftAt: string | null;
   family: { name: string } | null;
   hasPortalLink: boolean;
   // The family's link for a family member, else the person's own.
@@ -52,6 +54,8 @@ export default function ChildrenPage() {
   const [eventId, setEventId] = useState("");
   const [linkFilter, setLinkFilter] = useState<"" | "yes" | "no">("");
   const [familyFilter, setFamilyFilter] = useState<"" | "yes" | "no">("");
+  // Slice 8 #2: the default list hides nobody; inactive people just get a badge.
+  const [activeFilter, setActiveFilter] = useState<"" | "active" | "inactive">("");
 
   useEffect(() => {
     if (roleLoaded && role !== "admin") router.replace("/events");
@@ -146,13 +150,17 @@ export default function ChildrenPage() {
       (!memberYear || c.participants.some((p) => p.event.kind === "membership" && p.registrationStatus === "accepted" && String(p.event.membershipYear) === memberYear)) &&
       (!eventId || (eventId === NO_EVENTS ? c.participants.length === 0 : c.participants.some((p) => p.event.id === eventId))) &&
       yesNo(linkFilter, c.hasLink) &&
-      yesNo(familyFilter, !!c.familyId)
+      yesNo(familyFilter, !!c.familyId) &&
+      (!activeFilter || !c.leftAt === (activeFilter === "active"))
   );
   // Filter choices from the people's own registrations.
   const allEvents = [...new Map((data?.children ?? []).flatMap((c) => c.participants.map((p) => [p.event.id, p.event] as const))).values()].sort((a, b) => b.startDate.localeCompare(a.startDate));
   const memberYears = [...new Set(allEvents.flatMap((e) => (e.kind === "membership" && e.membershipYear ? [e.membershipYear] : [])))].sort((a, b) => b - a);
   // "Poslat odkaz": one e-mail per family (its link), people without a family their own.
-  const sendTargets = [...new Set((data?.children ?? []).filter((c) => selected.has(c.id)).map((c) => (c.familyId ? familyTarget(c.familyId) : c.id)))];
+  // Inactive people (slice 8 #2) are skipped -- the button says how many.
+  const selectedPeople = (data?.children ?? []).filter((c) => selected.has(c.id));
+  const inactiveSelected = selectedPeople.filter((c) => c.leftAt).length;
+  const sendTargets = [...new Set(selectedPeople.filter((c) => !c.leftAt).map((c) => (c.familyId ? familyTarget(c.familyId) : c.id)))];
 
   if (!roleLoaded || role !== "admin") return null;
 
@@ -234,6 +242,11 @@ export default function ChildrenPage() {
           <option value="">{t("people.filterFamily")}</option>
           <option value="yes">{t("people.inFamily")}</option>
           <option value="no">{t("people.noFamily")}</option>
+        </select>
+        <select value={activeFilter} onChange={(e) => setActiveFilter(e.target.value as typeof activeFilter)} aria-label={t("people.filterActive")} className={inputClassSm}>
+          <option value="">{t("people.filterActive")}</option>
+          <option value="active">{t("people.active")}</option>
+          <option value="inactive">{t("people.inactive")}</option>
         </select>
       </div>
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}
@@ -318,9 +331,10 @@ export default function ChildrenPage() {
                   {t("people.deleteSelected", { count: String(selected.size) })}
                 </button>
               )}
-              {selected.size > 0 && (
+              {sendTargets.length > 0 && (
                 <button onClick={() => router.push(portalComposeHref(sendTargets))} title={t("people.sendLinkHint")} className={btn}>
-                  {t("people.sendLinkSelected", { count: String(selected.size), targets: String(sendTargets.length) })}
+                  {t("people.sendLinkSelected", { count: String(selected.size - inactiveSelected), targets: String(sendTargets.length) })}
+                  {inactiveSelected > 0 && ` · ${t("people.inactiveSkipped", { count: String(inactiveSelected) })}`}
                 </button>
               )}
             </div>
@@ -356,6 +370,7 @@ export default function ChildrenPage() {
                               {c.name}
                             </Link>
                             {c.isAdult && <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t("people.adult")}</span>}
+                            {c.leftAt && <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700">{t("people.inactive")}</span>}
                           </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
                           <td className="p-2">{c.participants.map(eventChip)}</td>
@@ -373,9 +388,11 @@ export default function ChildrenPage() {
                                 {t("childProfile.newLink")}
                               </button>
                             )}
-                            <button onClick={() => router.push(portalComposeHref([c.id]))} className="ml-3 text-ink-secondary hover:text-ink">
-                              {t("childProfile.sendLinkShort")}
-                            </button>
+                            {!c.leftAt && (
+                              <button onClick={() => router.push(portalComposeHref([c.id]))} className="ml-3 text-ink-secondary hover:text-ink">
+                                {t("childProfile.sendLinkShort")}
+                              </button>
+                            )}
                             </>
                             )}
                           </td>

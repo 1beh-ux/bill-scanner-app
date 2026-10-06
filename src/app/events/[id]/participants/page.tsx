@@ -30,6 +30,9 @@ type Participant = {
   documentsTotal: number;
   documentsReceived: number;
   state: RegistrationState;
+  // The linked person left (slice 8 #2): "Odhlášen(a) rodičem <date>".
+  personLeft: { at: string; via: "portal" | "admin" | null } | null;
+  childId: string | null;
   customFieldValues: Record<string, string> | null;
   guardian: { name: string | null; email: string; relationship: string | null; phone: string | null } | null;
   computed: { price: number | null; priceSent: number | null; var_symb: string; contact_email: string };
@@ -257,6 +260,15 @@ export default function EventParticipantsPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   // Registration status chip -> acceptance dialog (shared by the table and the mobile cards).
+  const leftBadge = (p: Participant) =>
+    p.personLeft && (
+      <span className="ml-1 block whitespace-nowrap text-[11.5px] text-amber-700">
+        {t(p.personLeft.via === "portal" ? "participantsPage.personLeftPortal" : "participantsPage.personLeftAdmin", {
+          date: new Date(p.personLeft.at).toLocaleDateString("cs-CZ"),
+        })}
+      </span>
+    );
+
   const statusButton = (p: (typeof filteredParticipants)[number]) =>
     p.registrationStatus === "accepted" ? (
       <button
@@ -462,6 +474,7 @@ export default function EventParticipantsPage({
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
                     <td className="p-2 text-[13px]">
                       {statusButton(p)}
+                      {leftBadge(p)}
                       {priceChanged(p) && (
                         <span className="ml-1 block whitespace-nowrap text-[11.5px] text-amber-700">
                           {t("priceRules.changedAfterSend", { old: String(p.computed.priceSent), new: String(p.computed.price ?? "—") })}
@@ -510,6 +523,7 @@ export default function EventParticipantsPage({
                   <span className="shrink-0 text-[12px]">{statusButton(p)}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">
+                  {leftBadge(p)}
                   {priceChanged(p) && <span className="text-amber-700">{t("priceRules.changedAfterSend", { old: String(p.computed.priceSent), new: String(p.computed.price ?? "—") })}</span>}
                   {p.groupName && <span>{p.groupName}</span>}
                   {age !== null && <span>{t("participantsPage.colAge")}: {age}</span>}

@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { decideChange, profileFieldLabels, readGuardians, setGuardians, updateProfile } from "@/lib/child-profile";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
-import { profileValues } from "@/lib/portal-rules";
+import { leftData, profileValues } from "@/lib/portal-rules";
 
 async function requireAdmin(): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; error?: undefined } | { user?: undefined; error: NextResponse }> {
   const user = await getCurrentUser();
@@ -52,18 +52,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
 }
 
-// { values?: Record<key, string>, isAdult?: boolean } -- built-ins + org fields
-// (changed values are pushed); isAdult = adult member (slice 3 A).
+// { values?: Record<key, string>, isAdult?: boolean, inactive?: boolean, leftNote?: string }
+// -- built-ins + org fields (changed values are pushed); isAdult = adult member
+// (slice 3 A); inactive = the admin's "Neaktivní" toggle (slice 8 #2, leftVia = admin).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireAdmin();
   if (error) return error;
   const { id } = await params;
   const body = await req.json();
-  if ((body.values !== undefined && (!body.values || typeof body.values !== "object")) || (body.isAdult !== undefined && typeof body.isAdult !== "boolean")) {
+  if (
+    (body.values !== undefined && (!body.values || typeof body.values !== "object")) ||
+    (body.isAdult !== undefined && typeof body.isAdult !== "boolean") ||
+    (body.inactive !== undefined && typeof body.inactive !== "boolean")
+  ) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   if (!(await prisma.child.findUnique({ where: { id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (body.isAdult !== undefined) await prisma.child.update({ where: { id }, data: { isAdult: body.isAdult } });
+  if (body.inactive !== undefined) await prisma.child.update({ where: { id }, data: leftData(body.inactive, "admin", body.leftNote) });
   const changed = body.values ? await updateProfile(id, body.values as Record<string, string>) : [];
   return NextResponse.json({ ok: true, changed });
 }

@@ -30,6 +30,24 @@ export function portalAccessOf(key: string, templateAccess: Map<string, PortalAc
   return templateAccess.get(key) ?? "hidden";
 }
 
+/** "Už nebude chodit" (docs/registration-slice8-spec.md #2): inactive people can't register in the portal; link e-mails skip them. */
+export const isActivePerson = (p: { leftAt: Date | string | null }) => !p.leftAt;
+
+/** A link e-mail's recipients: the (receiving) guardians of the ACTIVE people only, each address once (slice 8 #2). */
+export function linkRecipients(people: { leftAt: Date | string | null; guardians: { email: string }[] }[]): string[] {
+  const emails: string[] = [];
+  for (const g of people.filter(isActivePerson).flatMap((p) => p.guardians)) {
+    if (!emails.some((e) => e.trim().toLowerCase() === g.email.trim().toLowerCase())) emails.push(g.email);
+  }
+  return emails;
+}
+
+/** The Child columns that mark a person inactive (+ optional note) or active again (undo clears everything). */
+export const leftData = (left: boolean, via: "portal" | "admin", note?: unknown) =>
+  left
+    ? { leftAt: new Date(), leftVia: via, leftNote: (typeof note === "string" && note.trim().slice(0, 2000)) || null }
+    : { leftAt: null, leftVia: null, leftNote: null };
+
 /** A profile as flat strings: built-ins ("" when unset, birth date YYYY-MM-DD) + the org field values. */
 export function profileValues(child: {
   firstName: string | null;

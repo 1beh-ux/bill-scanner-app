@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
         dateOfBirth: true,
         isAdult: true,
         familyId: true,
+        leftAt: true,
         family: { select: { name: true, portalToken: true } },
         portalToken: true,
         participants: { select: { id: true, registrationStatus: true, event: eventSelect } },

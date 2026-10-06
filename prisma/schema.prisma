@@ -660,6 +660,12 @@ model Child {
   // The household this person belongs to (at most one); null = none. Families
   // are only ever made by an admin's confirm (or the public form, flagged for review).
   familyId    String?   @map("family_id")
+  // "Už nebude chodit" (docs/registration-slice8-spec.md #2): inactive since
+  // leftAt (null = active), marked in the portal or by an admin. Nothing is
+  // deleted; the portal won't register an inactive person and link e-mails skip them.
+  leftAt      DateTime?      @map("left_at")
+  leftNote    String?        @map("left_note")
+  leftVia     PersonLeftVia? @map("left_via")
   createdAt   DateTime  @default(now()) @map("created_at")
 
   family       Family?  @relation(fields: [familyId], references: [id], onDelete: SetNull)
@@ -671,6 +677,11 @@ model Child {
 
   @@index([familyId])
   @@map("children")
+}
+
+enum PersonLeftVia {
+  portal
+  admin
 }
 
 // Attempts counted for the public pages' rate limits (slice 3 D/F): key =

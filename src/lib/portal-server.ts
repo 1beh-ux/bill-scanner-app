@@ -238,6 +238,9 @@ export async function portalData(scope: PortalScope) {
       id: child.id,
       name: child.name,
       isAdult: child.isAdult,
+      // "Už nebude chodit" (slice 8 #2): inactive since.
+      leftAt: child.leftAt,
+      leftNote: child.leftNote,
       profile: {
         fields: [
           ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic")),

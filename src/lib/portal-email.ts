@@ -19,7 +19,7 @@ import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendPlainTextEmail } from "@/lib/mail";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
-import { profileValues } from "@/lib/portal-rules";
+import { isActivePerson, linkRecipients, profileValues } from "@/lib/portal-rules";
 
 type User = { id: string; email: string; displayName: string; emailSignature: string | null; emailBodySignature: string | null };
 
@@ -51,24 +51,27 @@ type Target = {
 const receiving = { guardians: { where: { receivesCommunications: true } } } as const;
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/** A child or a family as a send target (see the file comment). */
+/**
+ * A child or a family as a send target (see the file comment). Inactive people
+ * (slice 8 #2, "Už nebude chodit") are skipped: an inactive person = no target,
+ * a family = only its active members' guardians (none active = no target).
+ */
 export async function loadTarget(id: string): Promise<Target | null> {
   if (id.startsWith(FAMILY_TARGET_PREFIX)) {
     const family = await prisma.family.findUnique({ where: { id: id.slice(FAMILY_TARGET_PREFIX.length) }, include: { members: { include: receiving } } });
-    if (!family || family.members.length === 0) return null;
-    const emails: string[] = [];
-    for (const g of family.members.flatMap((m) => m.guardians)) if (!emails.some((e) => same(e, g.email))) emails.push(g.email);
+    const members = family?.members.filter(isActivePerson) ?? [];
+    if (!family || members.length === 0) return null;
     return {
       id,
       name: family.name,
       token: family.portalToken,
-      emails,
+      emails: linkRecipients(members),
       values: {},
-      logChildIds: (email) => family.members.filter((m) => m.guardians.some((g) => same(g.email, email))).map((m) => m.id),
+      logChildIds: (email) => members.filter((m) => m.guardians.some((g) => same(g.email, email))).map((m) => m.id),
     };
   }
   const child = await prisma.child.findUnique({ where: { id }, include: receiving });
-  if (!child) return null;
+  if (!child || !isActivePerson(child)) return null;
   return { id, name: child.name, token: child.portalToken, emails: child.guardians.map((g) => g.email), values: profileValues(child), logChildIds: () => [child.id] };
 }
 

@@ -13,7 +13,7 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-type Info = { subject: string; body: string; senderEmail: string | null; children: { id: string; name: string; emails: string[] }[] };
+type Info = { subject: string; body: string; senderEmail: string | null; children: { id: string; name: string; emails: string[] }[]; skipped: number };
 type Outcome = { sent: number; failed: number; noRecipients: number };
 
 // Send the parent-portal link (docs/registration-portal-spec.md F): editing on
@@ -136,7 +136,10 @@ export default function PortalLinkComposePage() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="flex flex-col gap-4">
           <section className="rounded-lg border border-mist bg-paper-2 p-3 text-[13px]">
-            <p className="mb-1 font-medium text-ink">{t("composeEmailModal.recipientCount", { count: String(info.children.length) })}</p>
+            <p className="mb-1 font-medium text-ink">
+              {t("composeEmailModal.recipientCount", { count: String(info.children.length) })}
+              {info.skipped > 0 && <span className="font-normal text-ink-secondary"> · {t("portalCompose.inactiveSkipped", { count: String(info.skipped) })}</span>}
+            </p>
             <ul className="scrollbar-app flex max-h-40 flex-col gap-0.5 overflow-y-auto text-ink-secondary">
               {info.children.map((c) => (
                 <li key={c.id} className={c.emails.length ? "" : "text-amber-700"}>

@@ -19,6 +19,24 @@ async function main() {
     { key: "portal.addMemberDone", cs: "Přidáno. Člen je v rodině; správce údaje zkontroluje.", en: "Added. The member is in the family; the admin will review the details." },
     { key: "portal.addMemberInvalid", cs: "Zkontrolujte údaje: jméno, příjmení, datum narození, povinná pole a e-mail (dospělý) nebo aspoň jednoho rodiče s e-mailem (dítě).", en: "Check the details: name, birth date, required fields and an e-mail (adult) or at least one guardian with an e-mail (child)." },
     { key: "portal.addMemberThrottled", cs: "Dnes už bylo přidáno příliš mnoho členů. Zkuste to zítra.", en: "Too many members added today. Try again tomorrow." },
+    // 2. "Už nebude chodit" / inactive people
+    { key: "portal.leave", cs: "Už nebude chodit", en: "Won't attend any more" },
+    { key: "portal.leaveConfirm", cs: "{name} už nebude chodit? Přesune se mezi neaktivní a nepůjde přihlásit na další akce. Stávající přihlášky zůstávají — správce se ozve, co s nimi.", en: "{name} won't attend any more? They move to inactive and can't be registered for further events. Existing registrations stay — the admin will get in touch about them." },
+    { key: "portal.leaveNote", cs: "Poznámka pro správce (nepovinné)", en: "Note for the admin (optional)" },
+    { key: "portal.leaveSubmit", cs: "Potvrdit", en: "Confirm" },
+    { key: "portal.inactive", cs: "Neaktivní ({count})", en: "Inactive ({count})" },
+    { key: "portal.inactiveSince", cs: "od {date}", en: "since {date}" },
+    { key: "portal.restore", cs: "Obnovit", en: "Restore" },
+    { key: "portal.inactiveHint", cs: "Neaktivní osobu nejde přihlásit na akci. Obnovit ji můžete kdykoli.", en: "An inactive person can't be registered for an event. You can restore them any time." },
+    { key: "people.inactive", cs: "Neaktivní", en: "Inactive" },
+    { key: "people.active", cs: "Aktivní", en: "Active" },
+    { key: "people.filterActive", cs: "Aktivní i neaktivní", en: "Active and inactive" },
+    { key: "people.leftViaPortal", cs: "od {date}, označil(a) rodič v portálu", en: "since {date}, marked by a parent in the portal" },
+    { key: "people.leftViaAdmin", cs: "od {date}, označil správce", en: "since {date}, marked by an admin" },
+    { key: "people.inactiveSkipped", cs: "neaktivní vynecháno: {count}", en: "inactive skipped: {count}" },
+    { key: "portalCompose.inactiveSkipped", cs: "neaktivní vynecháno: {count}", en: "inactive skipped: {count}" },
+    { key: "participantsPage.personLeftPortal", cs: "Odhlášen(a) rodičem {date}", en: "Withdrawn by a parent {date}" },
+    { key: "participantsPage.personLeftAdmin", cs: "Neaktivní v Lidech od {date}", en: "Inactive in People since {date}" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

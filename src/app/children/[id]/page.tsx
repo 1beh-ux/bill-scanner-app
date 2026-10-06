@@ -22,6 +22,10 @@ type Detail = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  // "Neaktivní" (slice 8 #2): since when, by whom, the note.
+  leftAt: string | null;
+  leftVia: "portal" | "admin" | null;
+  leftNote: string | null;
   family: { id: string; name: string } | null;
   values: Record<string, string>;
   fields: Field[];
@@ -93,6 +97,13 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     if (res.ok) load();
   }
 
+  // "Neaktivní" (slice 8 #2): the admin marks / unmarks; nothing is deleted.
+  async function setInactive(inactive: boolean) {
+    const res = await fetch(`/api/children/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inactive }) });
+    setMessage(res.ok ? t("childProfile.saved") : t("children.errorFailed"));
+    if (res.ok) load();
+  }
+
   async function action(body: object): Promise<Response> {
     setSaving(true);
     setMessage(null);
@@ -155,6 +166,16 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
       <label className="mb-5 flex items-center gap-2 text-[13px] text-ink">
         <input type="checkbox" checked={data.isAdult} disabled={saving} onChange={(e) => setAdult(e.target.checked)} />
         {t("people.isAdult")}
+      </label>
+      <label className="-mt-3 mb-5 flex items-center gap-2 text-[13px] text-ink">
+        <input type="checkbox" checked={!!data.leftAt} disabled={saving} onChange={(e) => setInactive(e.target.checked)} />
+        {t("people.inactive")}
+        {data.leftAt && (
+          <span className="text-ink-secondary">
+            — {t(data.leftVia === "portal" ? "people.leftViaPortal" : "people.leftViaAdmin", { date: date(data.leftAt) })}
+            {data.leftNote && `: ${data.leftNote}`}
+          </span>
+        )}
       </label>
       {data.family && <p className="-mt-3 mb-5 text-[13px] text-ink-secondary">{t("families.memberOf", { name: data.family.name })}</p>}
       {message && <p className="mb-4 text-[13px] text-ink">{message}</p>}

@@ -9,7 +9,7 @@
 import { prisma } from "@/lib/prisma";
 import { fullNameFrom } from "@/lib/participant-name";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
-import { GUARDIANS_CHANGE_KEY, isIsoDate, isProfileBuiltin, profileValues, pushPatch, type EligibilityFacts } from "@/lib/portal-rules";
+import { GUARDIANS_CHANGE_KEY, isActivePerson, isIsoDate, isProfileBuiltin, profileValues, pushPatch, type EligibilityFacts } from "@/lib/portal-rules";
 
 export type GuardianInput = { name?: string | null; email: string; relationship?: string | null; phone?: string | null; receivesCommunications?: boolean };
 
@@ -181,7 +181,7 @@ export async function profileFieldLabels(): Promise<Record<string, string>> {
   };
 }
 
-/** Eligibility facts (spec H) of the given children (all when omitted). */
+/** Eligibility facts (spec H) of the given children (all when omitted). Inactive people (slice 8 #2) are never eligible. */
 export async function eligibilityFacts(childIds?: string[]): Promise<(EligibilityFacts & { name: string; dateOfBirth: Date | null })[]> {
   const children = await prisma.child.findMany({
     where: childIds ? { id: { in: childIds } } : undefined,
@@ -189,6 +189,7 @@ export async function eligibilityFacts(childIds?: string[]): Promise<(Eligibilit
       id: true,
       name: true,
       dateOfBirth: true,
+      leftAt: true,
       participants: {
         select: { eventId: true, groupName: true, registrationStatus: true, active: true, event: { select: { startDate: true } } },
         orderBy: { event: { startDate: "desc" } },
@@ -196,7 +197,7 @@ export async function eligibilityFacts(childIds?: string[]): Promise<(Eligibilit
     },
     orderBy: [{ lastName: "asc" }, { name: "asc" }],
   });
-  return children.map((c) => ({
+  return children.filter(isActivePerson).map((c) => ({
     childId: c.id,
     name: c.name,
     dateOfBirth: c.dateOfBirth,

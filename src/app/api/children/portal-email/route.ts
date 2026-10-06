@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
       body: template.body,
       senderEmail,
       children: targets.flatMap((c) => (c ? [{ id: c.id, name: c.name, emails: c.emails }] : [])),
+      // Targets left out -- inactive people / families with no active member (slice 8 #2).
+      skipped: targets.filter((c) => !c).length,
     });
   }
 

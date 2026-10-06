@@ -44,6 +44,9 @@ type Member = {
   id: string;
   name: string;
   isAdult: boolean;
+  // "Už nebude chodit" (slice 8 #2): inactive since (null = active).
+  leftAt: string | null;
+  leftNote: string | null;
   profile: { fields: Field[]; guardians: Guardian[]; guardiansPending: Guardian[] | null };
   registrations: Registration[];
   history: (EventRef & { id: string; status: "pending" | "accepted" })[];
@@ -112,7 +115,10 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
   }, [load]);
 
   const evName = (e: EventRef) => (e.kind === "membership" ? t("portal.membership", { year: String(e.membershipYear ?? "") }) : e.name);
-  const member = data ? (data.members.find((m) => m.id === memberId) ?? data.members[0]) : null;
+  // Inactive people (slice 8 #2) sit in the folded "Neaktivní" section, not among the chips.
+  const active = data?.members.filter((m) => !m.leftAt) ?? [];
+  const inactive = data?.members.filter((m) => m.leftAt) ?? [];
+  const member = data ? (data.members.find((m) => m.id === memberId) ?? active[0] ?? data.members[0]) : null;
   const many = (data?.members.length ?? 0) > 1;
   const shown = data && member ? data.members.filter((m) => !onlyMember || m.id === member.id) : [];
   const shownRegs = shown.flatMap((m) => m.registrations.map((r) => ({ m, r })));
@@ -135,7 +141,7 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
                     <button onClick={() => setOnlyMember(false)} className={chip(!onlyMember)}>
                       {t("portal.everyone")}
                     </button>
-                    {data.members.map((m) => (
+                    {active.map((m) => (
                       <button
                         key={m.id}
                         onClick={() => {
@@ -161,8 +167,10 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
                   <AddMember api={api} data={data} fields={data.addMember.fields} t={t} onAdded={load} />
                 </section>
               )}
+              {inactive.length > 0 && <Inactive api={api} members={inactive} t={t} onChanged={load} />}
               <h2 className={h2}>{t("portal.profileOf", { name: member.name })}</h2>
               <Profile key={member.id} api={api} member={member} t={t} onSaved={load} />
+              {!member.leftAt && <Leave key={`leave-${member.id}`} api={api} member={member} t={t} onDone={load} />}
             </div>
 
             <div className="flex flex-col gap-4">
@@ -359,6 +367,77 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
         </div>
       </section>
     </div>
+  );
+}
+
+// "Už nebude chodit" (slice 8 #2): confirm + optional note; the person becomes
+// inactive (can't be registered), registrations stay for the admin to handle.
+function Leave({ api, member, t, onDone }: { api: string; member: Member; t: T; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function confirmLeave() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: member.id, leave: true, note }) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return setError(t("portal.saveFailed"));
+    onDone();
+  }
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="self-start text-[14px] text-ink-secondary underline hover:text-ink">
+        {t("portal.leave")}
+      </button>
+    );
+  }
+  return (
+    <section className={card + " flex flex-col gap-3"}>
+      <p className="text-[14px] text-ink">{t("portal.leaveConfirm", { name: member.name })}</p>
+      <label className="text-[13px] text-ink-secondary">
+        {t("portal.leaveNote")}
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={2000} className={inputClass + " mt-1"} />
+      </label>
+      {error && <p className="text-[14px] text-red-600">{error}</p>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={confirmLeave} disabled={busy} className={btnPrimary}>
+          {t("portal.leaveSubmit")}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} disabled={busy} className={btn}>
+          {t("portal.cancel")}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// The folded "Neaktivní" section (slice 8 #2): "Obnovit" makes the person active again.
+function Inactive({ api, members, t, onChanged }: { api: string; members: Member[]; t: T; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  async function restore(id: string) {
+    setBusy(true);
+    await fetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: id, leave: false }) }).catch(() => null);
+    setBusy(false);
+    onChanged();
+  }
+  return (
+    <details className={card}>
+      <summary className="cursor-pointer text-[14px] font-medium text-ink">{t("portal.inactive", { count: String(members.length) })}</summary>
+      <ul className="mt-2 flex flex-col gap-2 text-[14px]">
+        {members.map((m) => (
+          <li key={m.id} className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-ink">
+              {m.name} <span className="text-[13px] text-ink-secondary">· {t("portal.inactiveSince", { date: date(m.leftAt) })}</span>
+            </span>
+            <button type="button" onClick={() => restore(m.id)} disabled={busy} className={btn}>
+              {t("portal.restore")}
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[12.5px] text-ink-secondary">{t("portal.inactiveHint")}</p>
+    </details>
   );
 }
 
