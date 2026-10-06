@@ -9,6 +9,10 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "participantFieldAdmin.vsYearLabel", cs: "Rok (2 číslice, prázdné = podle začátku akce)", en: "Year (2 digits, empty = from event start)" },
+    { key: "participantFieldAdmin.fromEventsHint", cs: "Pole, která zatím existují jen v akcích. Zaškrtnutá se stanou šablonami (podle nejnovější akce); akce samotné se nemění. Rodičům se pole ukážou až po nastavení sloupce „Rodiče v portálu“.", en: "Fields that exist only in events. Ticked ones become templates (newest event's version); the events don't change. Parents see a field only once its “Parents in portal” column is set." },
+    { key: "participantFieldAdmin.fromEventsAll", cs: "Vybrat vše", en: "Select all" },
+    { key: "participantFieldAdmin.fromEventsApply", cs: "Vytvořit šablony ({count})", en: "Create templates ({count})" },
     // 1-2. field settings (Šablony → Účastníci, event participant fields)
     { key: "fieldMeta.audience.title", cs: "Pro koho", en: "For whom" },
     { key: "fieldMeta.audience.both", cs: "děti i dospělí", en: "children and adults" },

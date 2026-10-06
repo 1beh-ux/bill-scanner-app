@@ -44,6 +44,7 @@ async function buildAutoAttachDocuments(
     nonMemberPriceCzk: number | null;
     registrationBankAccountNumber: string | null;
     registrationBankCode: string | null;
+    vsYear?: number | null;
     vsEventType: number | null;
     vsOrderInYear: number | null;
     vsMembershipFieldKey: string | null;

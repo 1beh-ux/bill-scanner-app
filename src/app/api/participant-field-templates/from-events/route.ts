@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 // events (no org template with that key) become org templates -- the parent
 // portal and the public form only know template fields. The newest event's
 // version of each key wins (label, type, options, surfaces). Event rows are
-// left as they are. GET = what would be created, POST = create them.
+// left as they are. GET = what would be created, POST = create them (all, or `keys`).
 async function candidates() {
   const [templates, rows] = await Promise.all([
     prisma.participantFieldTemplate.findMany({ select: { key: true } }),
@@ -34,11 +34,14 @@ export async function GET() {
   return NextResponse.json((await candidates()).map(({ row, events }) => ({ key: row.key, label: row.label, fieldType: row.fieldType, events })));
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (user.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const list = await candidates();
+  // Optional `keys`: only the fields ticked in the picker.
+  const { keys } = await req.json().catch(() => ({}));
+  const only = Array.isArray(keys) ? new Set(keys.filter((k: unknown): k is string => typeof k === "string")) : null;
+  const list = (await candidates()).filter(({ row }) => !only || only.has(row.key));
   await prisma.participantFieldTemplate.createMany({
     data: list.map(({ row }) => ({
       key: row.key,

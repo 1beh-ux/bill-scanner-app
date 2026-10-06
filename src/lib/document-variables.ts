@@ -45,6 +45,7 @@ export type EventForMerge = {
   nonMemberPriceCzk: number | null;
   registrationBankAccountNumber: string | null;
   registrationBankCode: string | null;
+  vsYear?: number | null;
   vsEventType: number | null;
   vsOrderInYear: number | null;
   vsMembershipFieldKey: string | null;
@@ -143,7 +144,7 @@ export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): num
  */
 export function buildVariableSymbol(p: ParticipantForMerge, e: EventForMerge): string {
   if (p.registrationNumber == null) return "";
-  const year = String(e.startDate.getUTCFullYear() % 100).padStart(2, "0");
+  const year = String((e.vsYear ?? e.startDate.getUTCFullYear()) % 100).padStart(2, "0");
   const type = String(e.vsEventType ?? 0).slice(-1);
   const order = String(e.vsOrderInYear ?? 0).slice(-1);
   const membership = isMember(p, e) ? "1" : "0";

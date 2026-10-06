@@ -70,6 +70,8 @@ function fieldId(isEvent: boolean, field: Field): string {
 // deletable; the rest are fixed system rows seeded per event (see
 // src/lib/fixed-participant-fields.ts) -- at org scope they don't show at
 // all, since a template concept doesn't apply to a fixed field.
+type FromEventsField = { key: string; label: string; fieldType: string; events: string[] };
+
 export default function ParticipantFieldAdmin({ scope, eventId, label }: ParticipantFieldAdminProps) {
   const { t, role } = useTranslations();
   const confirm = useConfirm();
@@ -87,6 +89,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [fromEvents, setFromEvents] = useState<{ list: FromEventsField[]; picked: Set<string> } | null>(null);
   const [checkingTemplates, setCheckingTemplates] = useState(false);
   // Which existing row's edit panel is expanded, directly under that row
   // (accordion -- at most one at a time). Separate from `adding`, which
@@ -117,6 +120,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [eventStartDate, setEventStartDate] = useState<string | null>(null);
   const [vsEventType, setVsEventType] = useState("0");
   const [vsOrderInYear, setVsOrderInYear] = useState("0");
+  const [vsYear, setVsYear] = useState(""); // "" = from start date
   const [vsMembershipFieldKey, setVsMembershipFieldKey] = useState("");
   const [vsSaving, setVsSaving] = useState(false);
   const [qrSizeMm, setQrSizeMm] = useState("35");
@@ -174,6 +178,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       setEnabledModules(new Set((Object.keys(access) as ModuleKey[]).filter((k) => access[k])));
       const ev = eventData as {
         startDate: string | null;
+        vsYear: number | null;
         vsEventType: number | null;
         vsOrderInYear: number | null;
         vsMembershipFieldKey: string | null;
@@ -184,6 +189,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         setEventStartDate(ev.startDate);
         setVsEventType(String(ev.vsEventType ?? 0));
         setVsOrderInYear(String(ev.vsOrderInYear ?? 0));
+        setVsYear(ev.vsYear == null ? "" : String(ev.vsYear).padStart(2, "0"));
         setVsMembershipFieldKey(ev.vsMembershipFieldKey ?? "");
         setQrSizeMm(String(ev.qrSizeMm ?? 35));
       }
@@ -225,17 +231,26 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
 
   // Org scope: event-only custom fields -> org templates (the portal only knows templates).
+  // Opens a picker; only the ticked ones are created.
   async function takeFromEvents() {
-    const list: { key: string; label: string; events: string[] }[] = await fetch("/api/participant-field-templates/from-events").then((r) => (r.ok ? r.json() : []));
+    const list: FromEventsField[] = await fetch("/api/participant-field-templates/from-events").then((r) => (r.ok ? r.json() : []));
     if (list.length === 0) {
       await confirm({ message: t("participantFieldAdmin.fromEventsNone"), confirmLabel: t("common.ok") });
       return;
     }
-    const names = list.map((f) => `${f.label} ({{${f.key}}})`).join(", ");
-    if (!(await confirm({ message: t("participantFieldAdmin.fromEventsConfirm", { count: String(list.length), names }) }))) return;
+    setFromEvents({ list, picked: new Set(list.map((f) => f.key)) });
+  }
+
+  async function applyFromEvents() {
+    if (!fromEvents) return;
     setSyncing(true);
-    await fetch("/api/participant-field-templates/from-events", { method: "POST" });
+    await fetch("/api/participant-field-templates/from-events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keys: [...fromEvents.picked] }),
+    });
     setSyncing(false);
+    setFromEvents(null);
     load();
   }
 
@@ -407,6 +422,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        vsYear: vsYear.trim() === "" ? null : Number(vsYear) || 0,
         vsEventType: Number(vsEventType) || 0,
         vsOrderInYear: Number(vsOrderInYear) || 0,
         vsMembershipFieldKey: vsMembershipFieldKey || null,
@@ -598,7 +614,9 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // sequence is a placeholder (a real participant's is assigned at
   // acceptance), membership is shown both ways since it varies per person.
   function vsPreview() {
-    const year = eventStartDate ? String(new Date(eventStartDate).getUTCFullYear() % 100).padStart(2, "0") : "··";
+    const year = vsYear.trim() !== ""
+      ? String((Number(vsYear) || 0) % 100).padStart(2, "0")
+      : eventStartDate ? String(new Date(eventStartDate).getUTCFullYear() % 100).padStart(2, "0") : "··";
     const type = String(Number(vsEventType) || 0).slice(-1);
     const order = String(Number(vsOrderInYear) || 0).slice(-1);
     const seq = "0001";
@@ -635,7 +653,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const isCustom = field.kind === "custom";
     return (
       <tr>
-        <td colSpan={isEvent ? 9 : 8} className="border-b border-mist/60 bg-paper px-3 py-3">
+        <td colSpan={isEvent ? 7 : 6} className="border-b border-mist/60 bg-paper px-3 py-3">
           {isCustom && (
             <form onSubmit={(e) => handleEditSubmit(field, e)} className="flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">
@@ -729,7 +747,19 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
           {isEvent && field.kind === "computed" && field.computedType === "variable_symbol" && (
             <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <label className="text-[12px] text-ink-secondary">
+                  {t("participantFieldAdmin.vsYearLabel")}
+                  <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={vsYear}
+                    placeholder={eventStartDate ? String(new Date(eventStartDate).getUTCFullYear() % 100).padStart(2, "0") : ""}
+                    onChange={(e) => setVsYear(e.target.value)}
+                    className={inputClass + " mt-1"}
+                  />
+                </label>
                 <label className="text-[12px] text-ink-secondary">
                   {t("participantFieldAdmin.vsEventTypeLabel")}
                   <input
@@ -819,9 +849,10 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
   // "Pro koho" / "Údaje" (slice 5 #1): template rules like the portal column.
   function metaCell(field: Field, which: "audience" | "level") {
-    if (field.kind !== "custom") return <span className="text-[12px] text-ink-secondary">—</span>;
+    // Both selects share one cell -- show a single dash, not two.
+    if (field.kind !== "custom") return which === "level" ? null : <span className="text-[12px] text-ink-secondary">—</span>;
     const tpl = isEvent ? templates.get(field.key) : field;
-    if (!tpl) return <span className="text-[12px] text-ink-secondary">—</span>;
+    if (!tpl) return which === "level" ? null : <span className="text-[12px] text-ink-secondary">—</span>;
     const value = which === "audience" ? (tpl.audience ?? "both") : (tpl.level ?? "basic");
     const options: string[] = which === "audience" ? FIELD_AUDIENCES : FIELD_LEVELS;
     return (
@@ -880,20 +911,22 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             <button type="button" onClick={() => setKindFilter(kindFilter === field.kind ? "" : field.kind)} title={t("participantFieldAdmin.filterByKind")} className="hover:text-ink hover:underline">
               {t(`participantFieldAdmin.kind.${field.kind}`)}
             </button>
-          </td>
-          <td className="p-2 text-[12.5px] text-ink-secondary">
-            {t(`participantFieldAdmin.type.${field.fieldType}`)}
+            <div>{t(`participantFieldAdmin.type.${field.fieldType}`)}</div>
             {field.fieldType === "composite" && (
               <div className="font-mono text-[11px]">{readComposite(field.options).parts.map((k) => `{{${k}}}`).join(" + ") || "—"}</div>
             )}
           </td>
           <td className="p-2">{surfacePills(field)}</td>
           <td className="p-2">{portalCell(field)}</td>
-          <td className="p-2">{metaCell(field, "audience")}</td>
-          <td className="p-2">{metaCell(field, "level")}</td>
+          <td className="p-2">
+            <div className="flex flex-col gap-1">
+              {metaCell(field, "audience")}
+              {metaCell(field, "level")}
+            </div>
+          </td>
           {isEvent && <td className="p-2">{requiredCell(field)}</td>}
           <td className="whitespace-nowrap p-2 text-right">
-            <div className="flex items-center justify-end gap-3">
+            <div className="flex flex-col items-end gap-1">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">
                 {field.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
               </button>
@@ -1053,45 +1086,41 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
       ) : orgFields.length === 0 ? (
         <p className="mb-4 text-[13px] text-ink-secondary">{t("listTemplateAdmin.empty")}</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
           <p className="mb-2 text-[12px] text-ink-secondary">{t(isEvent ? "portalColumn.eventHint" : "portalColumn.orgHint")}</p>
-          <table className="w-full min-w-[900px] border-collapse">
+          {/* Own scroll box so the sticky header works (sticky can't escape an overflow container). */}
+          <div className="max-h-[75vh] overflow-auto rounded-lg border border-mist/60">
+          <table className="w-full min-w-[760px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("participantFieldAdmin.colField")}
                 </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                  {t("participantFieldAdmin.colKind")}
+                <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                  {t("participantFieldAdmin.colKind")} / {t("participantFieldAdmin.colType")}
                 </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                  {t("participantFieldAdmin.colType")}
-                </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("participantFieldAdmin.surfacesLabel")}
                 </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("portalColumn.title")}
                 </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                  {t("fieldMeta.audience.title")}
-                </th>
-                <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                  {t("fieldMeta.level.title")}
+                <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                  {t("fieldMeta.audience.title")} / {t("fieldMeta.level.title")}
                 </th>
                 {isEvent && (
-                  <th className="p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
+                  <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                     {t("fieldMeta.required.title")}
                   </th>
                 )}
-                <th className="p-2"></th>
+                <th className="sticky top-0 z-10 bg-paper p-2"></th>
               </tr>
             </thead>
             <tbody>
               {nonComputedFields.map((f) => <Fragment key={fieldId(isEvent, f)}>{fieldRow(f)}</Fragment>)}
               {computedFields.length > 0 && (
                 <tr>
-                  <td colSpan={isEvent ? 9 : 8} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  <td colSpan={isEvent ? 7 : 6} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
                     {t("participantFieldAdmin.computedSection")}
                   </td>
                 </tr>
@@ -1099,6 +1128,56 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               {computedFields.map((f) => <Fragment key={fieldId(isEvent, f)}>{fieldRow(f)}</Fragment>)}
             </tbody>
           </table>
+          </div>
+        </>
+      )}
+      {fromEvents && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-xl flex-col overflow-y-auto rounded-lg bg-paper p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-[16px] font-semibold text-ink">{t("participantFieldAdmin.fromEvents")}</h2>
+              <button onClick={() => setFromEvents(null)} className="text-[13px] text-ink-secondary hover:underline">
+                {t("common.close")}
+              </button>
+            </div>
+            <p className="mb-3 text-[12.5px] text-ink-secondary">{t("participantFieldAdmin.fromEventsHint")}</p>
+            <label className="mb-2 flex items-center gap-2 text-[13px] text-ink-secondary">
+              <input
+                type="checkbox"
+                checked={fromEvents.picked.size === fromEvents.list.length}
+                onChange={(e) => setFromEvents({ ...fromEvents, picked: new Set(e.target.checked ? fromEvents.list.map((f) => f.key) : []) })}
+              />
+              {t("participantFieldAdmin.fromEventsAll")}
+            </label>
+            <ul className="mb-4 flex flex-col gap-1.5">
+              {fromEvents.list.map((f) => (
+                <li key={f.key}>
+                  <label className="flex items-start gap-2 text-[13px]">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={fromEvents.picked.has(f.key)}
+                      onChange={() => {
+                        const picked = new Set(fromEvents.picked);
+                        if (picked.has(f.key)) picked.delete(f.key);
+                        else picked.add(f.key);
+                        setFromEvents({ ...fromEvents, picked });
+                      }}
+                    />
+                    <span>
+                      <span className="text-ink">{f.label}</span> <code className="text-[11.5px] text-ink-secondary">{`{{${f.key}}}`}</code>
+                      <span className="block text-[11.5px] text-ink-secondary">{f.events.join(", ")}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end">
+              <button onClick={applyFromEvents} disabled={syncing || fromEvents.picked.size === 0} className={btnPrimary}>
+                {syncing ? t("common.loading") : t("participantFieldAdmin.fromEventsApply", { count: String(fromEvents.picked.size) })}
+              </button>
+            </div>
+          </div>
         </div>
       )}
       {checkingTemplates && (

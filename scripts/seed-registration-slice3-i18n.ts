@@ -91,7 +91,7 @@ async function main() {
     { key: "families.reviewMerge", cs: "Je to tentýž člověk — sloučit", en: "Same person — merge" },
     { key: "families.reviewMergeConfirm", cs: "Sloučit {name} do existujícího profilu {existing}? Přihlášky a chybějící údaje se přesunou k existujícímu profilu.", en: "Merge {name} into the existing profile {existing}? Registrations and missing details move to the existing profile." },
     { key: "public.title", cs: "Přihláška", en: "Registration" },
-    { key: "public.formTitle", cs: "Přihláška nové rodiny", en: "New family registration" },
+    { key: "public.formTitle", cs: "Nová přihláška jednotlivce / rodiny", en: "New registration – individual / family" },
     { key: "public.formHint", cs: "Přihlaste najednou dospělé i děti z jedné domácnosti. Pole s * jsou povinná.", en: "Register adults and children of one household at once. Fields marked * are required." },
     { key: "public.personN", cs: "Osoba {n}", en: "Person {n}" },
     { key: "public.guardianN", cs: "Zástupce {n}", en: "Guardian {n}" },

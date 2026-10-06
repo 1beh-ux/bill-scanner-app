@@ -294,6 +294,9 @@ model Event {
   // vsMembershipFieldKey names the boolean custom field whose "true" value
   // sets the membership digit to 1 (else 0). Null vsMembershipFieldKey means
   // no membership digit is configured -- always 0.
+  // Two-digit year override (e.g. 27 for a registration run in 2026 for
+  // next year); null = from startDate.
+  vsYear               Int?     @map("vs_year")
   vsEventType          Int?     @map("vs_event_type")
   vsOrderInYear        Int?     @map("vs_order_in_year")
   // Values of the membership field that mean "member" (lower-cased); null =

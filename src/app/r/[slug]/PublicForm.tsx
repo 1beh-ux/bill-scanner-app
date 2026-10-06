@@ -170,7 +170,7 @@ export default function PublicForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl p-4 pb-16">
+    <div className="mx-auto w-full max-w-4xl p-4 pb-16">
       <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
       <h1 className="mt-1 text-[24px] font-semibold text-ink">{title}</h1>
       <p className="mb-4 text-[13px] text-ink-secondary">

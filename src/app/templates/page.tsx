@@ -25,7 +25,7 @@ export default function TemplatesPage() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-2xl p-4 md:p-8">
+    <div className={"mx-auto p-4 md:p-8 " + (tab === "participants" ? "max-w-5xl" : "max-w-2xl")}>
       <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("nav.templates")}</h1>
 
       <div className="mb-4 flex gap-1 border-b border-mist">
