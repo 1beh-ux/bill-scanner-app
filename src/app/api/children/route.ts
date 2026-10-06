@@ -40,7 +40,8 @@ export async function GET(req: NextRequest) {
       },
     }),
     prisma.participant.findMany({
-      where: { childId: null, event: { peopleUnlinked: false } },
+      // "jen stávající osoby" events (slice 8 #3) keep their unmatched participants out of Lidé on purpose.
+      where: { childId: null, event: { peopleUnlinked: false, peopleLinkMode: "all" } },
       select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: eventSelect },
       orderBy: { name: "asc" },
     }),

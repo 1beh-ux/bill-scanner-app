@@ -45,6 +45,7 @@ type EventDetail = {
   membershipYear: number | null;
   registrationConnected: boolean;
   peopleUnlinked: boolean;
+  peopleLinkMode: "all" | "existing";
   portalOpen: boolean;
   eligibility: unknown;
   priceRules: unknown;
@@ -956,6 +957,8 @@ function RegistrationSettings({
   const [kind, setKind] = useState(event.kind);
   const [year, setYear] = useState(event.membershipYear != null ? String(event.membershipYear) : String(new Date(event.startDate).getUTCFullYear() + 1));
   const [connected, setConnected] = useState(event.registrationConnected);
+  // Slice 8 #3: link everyone (creating people) or only people already in Lidé.
+  const [linkMode, setLinkMode] = useState(event.peopleLinkMode);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -971,7 +974,7 @@ function RegistrationSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ kind, membershipYear, registrationConnected: connected }),
+      body: JSON.stringify({ kind, membershipYear, registrationConnected: connected, ...(linkMode !== event.peopleLinkMode && { peopleLinkMode: linkMode }) }),
     });
     setSaving(false);
     if (!res.ok) {
@@ -992,6 +995,20 @@ function RegistrationSettings({
           {t("registrationSettings.connected")}
         </label>
         <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("registrationSettings.connectedHint")}</span>
+        {(connected || kind === "membership") && (
+          <fieldset className="-mt-1 flex flex-col gap-1 pl-6 text-[13px] text-ink">
+            <legend className="mb-1 text-[12.5px] text-ink-secondary">{t("registrationSettings.linkMode")}</legend>
+            {(["all", "existing"] as const).map((m) => (
+              <label key={m} className="flex items-start gap-2">
+                <input type="radio" name="peopleLinkMode" checked={linkMode === m} onChange={() => setLinkMode(m)} className="mt-0.5 accent-ember" />
+                <span>
+                  {t(`registrationSettings.linkMode.${m}`)}
+                  <span className="block text-[11.5px] text-ink-secondary">{t(`registrationSettings.linkModeHint.${m}`)}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        )}
         <label className="text-[13px] text-ink-secondary">
           {t("registrationSettings.kind")}
           <select value={kind} onChange={(e) => setKind(e.target.value as EventDetail["kind"])} className={inputClass + " mt-1"}>

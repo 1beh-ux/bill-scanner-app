@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
+import { linkChildren } from "@/lib/children";
+import { FAMILY_TARGET_PREFIX } from "@/lib/portal-email";
 
 interface FailureDetail {
   participantId: string;
@@ -27,11 +29,32 @@ export async function POST(
   const action: string = body.action;
   const participantIds: string[] = body.participantIds || [];
 
-  if (action !== "delete") {
+  if (action !== "delete" && action !== "link") {
     return NextResponse.json({ error: "unknown_action" }, { status: 400 });
   }
   if (participantIds.length === 0) {
     return NextResponse.json({ error: "no_participants_selected" }, { status: 400 });
+  }
+
+  // "Propojit s Lidmi" (docs/registration-slice8-spec.md #3, admin): links the
+  // selected participants by name + birth date, creating the person when
+  // missing whatever the event's peopleLinkMode. Returns the portal-link
+  // targets of everyone selected who is linked now (family link when in a
+  // family) for the compose page -- nothing is sent here.
+  if (action === "link") {
+    if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+    const event = await prisma.event.findUnique({ where: { id: eventId }, select: { peopleUnlinked: true } });
+    if (!event || event.peopleUnlinked) return NextResponse.json({ error: "people_unlinked" }, { status: 409 });
+    const where = { id: { in: participantIds.filter((x) => typeof x === "string") }, eventId };
+    const { linked, created } = await linkChildren(where, { createMissing: true });
+    const rows = await prisma.participant.findMany({ where, select: { child: { select: { id: true, familyId: true } } } });
+    const people = rows.flatMap((r) => (r.child ? [r.child] : []));
+    return NextResponse.json({
+      linked,
+      created,
+      notLinked: rows.length - people.length,
+      targets: [...new Set(people.map((c) => (c.familyId ? `${FAMILY_TARGET_PREFIX}${c.familyId}` : c.id)))],
+    });
   }
 
   // Only operate on participants that actually belong to this event.

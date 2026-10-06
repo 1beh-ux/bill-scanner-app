@@ -13,8 +13,9 @@ import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
+import { portalComposeHref } from "@/components/children/portal-link";
 
-type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean };
+type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
 const childOptionLabel = (c: ChildOption) =>
   `${c.name} (${c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—"})`;
@@ -113,6 +114,8 @@ export default function EventParticipantsPage({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkRunning, setBulkRunning] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  // After "Propojit s Lidmi" (slice 8 #3): the linked people's portal-link targets, offered for the compose page.
+  const [linkTargets, setLinkTargets] = useState<string[]>([]);
 
   const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
 
@@ -238,6 +241,7 @@ export default function EventParticipantsPage({
 
     setBulkRunning(true);
     setBulkMessage(null);
+    setLinkTargets([]);
     const res = await fetch(`/api/events/${id}/participants/bulk`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -253,6 +257,25 @@ export default function EventParticipantsPage({
       })
     );
     setSelected(new Set());
+    load();
+  }
+
+  // "Propojit s Lidmi" (slice 8 #3): link the selected participants (creating missing people),
+  // then offer the portal-link compose -- nothing is sent without it.
+  async function runBulkLink() {
+    setBulkRunning(true);
+    setBulkMessage(null);
+    setLinkTargets([]);
+    const res = await fetch(`/api/events/${id}/participants/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "link", participantIds: Array.from(selected) }),
+    });
+    setBulkRunning(false);
+    if (!res.ok) return setBulkMessage(t("children.errorFailed"));
+    const data = await res.json();
+    setBulkMessage(t("participantsPage.bulkLinkResult", { linked: String(data.linked), created: String(data.created), notLinked: String(data.notLinked) }));
+    setLinkTargets(data.targets);
     load();
   }
 
@@ -418,6 +441,16 @@ export default function EventParticipantsPage({
           >
             {t("participantsPage.bulkEmailButton")}
           </button>
+          {role === "admin" && !event.peopleUnlinked && (
+            <button
+              onClick={runBulkLink}
+              disabled={bulkRunning}
+              title={t("participantsPage.bulkLinkHint")}
+              className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
+            >
+              {t("participantsPage.bulkLinkButton")}
+            </button>
+          )}
           <button
             onClick={runBulkDelete}
             disabled={bulkRunning}
@@ -428,7 +461,16 @@ export default function EventParticipantsPage({
         </div>
       )}
 
-      {bulkMessage && <p className="mb-4 text-[13px] text-ink">{bulkMessage}</p>}
+      {bulkMessage && (
+        <p className="mb-4 flex flex-wrap items-center gap-3 text-[13px] text-ink">
+          {bulkMessage}
+          {linkTargets.length > 0 && (
+            <button onClick={() => router.push(portalComposeHref(linkTargets))} className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2">
+              {t("participantsPage.bulkLinkSend", { count: String(linkTargets.length) })}
+            </button>
+          )}
+        </p>
+      )}
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {filteredParticipants.length === 0 ? (

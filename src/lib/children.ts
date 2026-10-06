@@ -21,7 +21,9 @@ export function nameKey(name: string): string {
   return childKey(name, new Date(0))!.split("|")[0];
 }
 
-type LinkCandidate = { id: string; eventId: string; name: string; dateOfBirth: Date | null };
+// createMissing false: may only link to an existing child (Event.peopleLinkMode
+// `existing`, slice 8 #3); unlinked: the event is "Odpojit od Lidé" -- never linked.
+type LinkCandidate = { id: string; eventId: string; name: string; dateOfBirth: Date | null; createMissing?: boolean; unlinked?: boolean };
 type LinkChild = { id: string; name: string; dateOfBirth: Date | null; eventIds: string[] };
 
 /**
@@ -31,6 +33,8 @@ type LinkChild = { id: string; name: string; dateOfBirth: Date | null; eventIds:
  * - two existing children with the same key,
  * - two candidates with the same key in the same event (they're two kids),
  * - a candidate in an event the matching child is already in.
+ * Candidates of unlinked events are skipped; a new child is created only when
+ * some candidate of the group may create one (the others then link to it too).
  */
 export function planLinks(participants: LinkCandidate[], children: LinkChild[]): { childId: string | null; participantIds: string[] }[] {
   const byKey = new Map<string, LinkChild | "ambiguous">();
@@ -40,13 +44,14 @@ export function planLinks(participants: LinkCandidate[], children: LinkChild[]):
   }
   const groups = new Map<string, LinkCandidate[]>();
   for (const p of participants) {
+    if (p.unlinked) continue;
     const k = childKey(p.name, p.dateOfBirth);
     if (k) groups.set(k, [...(groups.get(k) ?? []), p]);
   }
   const out: { childId: string | null; participantIds: string[] }[] = [];
   for (const [k, ps] of groups) {
     const child = byKey.get(k);
-    if (child === "ambiguous") continue;
+    if (child === "ambiguous" || (!child && !ps.some((p) => p.createMissing !== false))) continue;
     const eventIds = ps.map((p) => p.eventId);
     if (new Set(eventIds).size !== eventIds.length) continue;
     const ok = child ? ps.filter((p) => !child.eventIds.includes(p.eventId)) : ps;
@@ -60,19 +65,22 @@ export function planLinks(participants: LinkCandidate[], children: LinkChild[]):
  * same name + birth date, creating the Child when none exists (see planLinks
  * for what's left out as ambiguous). Participants without a birth date are
  * left unlinked (never guessed) -- the Děti page lists them for manual linking.
+ * Whether a missing Child may be created is each event's peopleLinkMode
+ * (slice 8 #3: `existing` never creates), unless `createMissing` overrides it
+ * (the roster's "Propojit s Lidmi"). "Odpojit od Lidé" events are never linked.
  */
 // ponytail: no DB constraint on the match key -- two links running at the same
 // instant could create a duplicate Child; the Děti page's merge fixes that.
-export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise<{ linked: number; created: number }> {
+export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { createMissing?: boolean } = {}): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
-    where: { ...where, childId: null, dateOfBirth: { not: null }, event: { peopleUnlinked: false } },
-    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
+    where: { ...where, childId: null, dateOfBirth: { not: null } },
+    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true } } },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };
 
   const children = await prisma.child.findMany({ select: { id: true, name: true, dateOfBirth: true, participants: { select: { eventId: true } } } });
   const plan = planLinks(
-    participants.map((p) => ({ ...p, name: participantDisplayName(p) })),
+    participants.map((p) => ({ ...p, name: participantDisplayName(p), unlinked: p.event.peopleUnlinked, createMissing: opts.createMissing ?? p.event.peopleLinkMode === "all" })),
     children.map((c) => ({ ...c, eventIds: c.participants.map((x) => x.eventId) }))
   );
   const byId = new Map(participants.map((p) => [p.id, p]));

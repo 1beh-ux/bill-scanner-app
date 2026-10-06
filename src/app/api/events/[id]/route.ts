@@ -71,6 +71,7 @@ export async function PATCH(
     kind,
     membershipYear,
     registrationConnected,
+    peopleLinkMode,
     portalOpen,
     eligibility,
     priceRules,
@@ -88,6 +89,7 @@ export async function PATCH(
     kind !== undefined ||
     membershipYear !== undefined ||
     registrationConnected !== undefined ||
+    peopleLinkMode !== undefined ||
     portalOpen !== undefined ||
     eligibility !== undefined ||
     publicRegistration !== undefined ||
@@ -119,6 +121,7 @@ export async function PATCH(
     return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
   }
   if (registrationConnected !== undefined && typeof registrationConnected !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if (peopleLinkMode !== undefined && peopleLinkMode !== "all" && peopleLinkMode !== "existing") return NextResponse.json({ error: "bad_request" }, { status: 400 });
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
   // is not recognisably an id is rejected (and says which field). Empty = unset.
@@ -197,6 +200,7 @@ export async function PATCH(
       ...(membershipYear !== undefined && { membershipYear }),
       ...(registrationConnected !== undefined && { registrationConnected }),
       ...((registrationConnected === true || kind === "membership") && { peopleUnlinked: false }),
+      ...(peopleLinkMode !== undefined && { peopleLinkMode }),
       ...(portalOpen !== undefined && { portalOpen }),
       // Stored cleaned (src/lib/portal-rules.ts readEligibility); null/{} = nobody.
       ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),
@@ -212,8 +216,11 @@ export async function PATCH(
       ...(paymentDocTypeId !== undefined && { paymentDocTypeId: paymentDocTypeId || null }),
     },
   });
-  // Switching the connection on (or making it a membership year) links the participants already there.
-  if (registrationConnected === true || kind === "membership") await linkChildren({ eventId: id });
+  // Switching the connection on (or making it a membership year) links the participants already there
+  // (by the event's peopleLinkMode, slice 8 #3); so does switching a connected event back to "all".
+  if (registrationConnected === true || kind === "membership" || (peopleLinkMode === "all" && (event.registrationConnected || event.kind === "membership"))) {
+    await linkChildren({ eventId: id });
+  }
   if (savesDrive) invalidateDriveIdentity(id);
   if (exportFolderChanged) {
     await prisma.bill.updateMany({

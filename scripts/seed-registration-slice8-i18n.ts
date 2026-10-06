@@ -37,6 +37,16 @@ async function main() {
     { key: "portalCompose.inactiveSkipped", cs: "neaktivní vynecháno: {count}", en: "inactive skipped: {count}" },
     { key: "participantsPage.personLeftPortal", cs: "Odhlášen(a) rodičem {date}", en: "Withdrawn by a parent {date}" },
     { key: "participantsPage.personLeftAdmin", cs: "Neaktivní v Lidech od {date}", en: "Inactive in People since {date}" },
+    // 3. Selective linking
+    { key: "registrationSettings.linkMode", cs: "Koho propojovat s Lidmi", en: "Whom to link to People" },
+    { key: "registrationSettings.linkMode.all", cs: "Všechny účastníky", en: "All participants" },
+    { key: "registrationSettings.linkModeHint.all", cs: "Kdo v Lidech ještě není, přidá se.", en: "Anyone not in People yet is added." },
+    { key: "registrationSettings.linkMode.existing", cs: "Jen stávající osoby", en: "Existing people only" },
+    { key: "registrationSettings.linkModeHint.existing", cs: "Propojí jen účastníky, kteří už v Lidech jsou (např. členy kvůli členské ceně); nikoho nového nepřidá. Ostatní lze propojit ručně v seznamu účastníků (Propojit s Lidmi).", en: "Links only participants already in People (e.g. members, for member prices); adds nobody new. Others can be linked by hand in the participant list (Link to People)." },
+    { key: "participantsPage.bulkLinkButton", cs: "Propojit s Lidmi", en: "Link to People" },
+    { key: "participantsPage.bulkLinkHint", cs: "Propojí vybrané účastníky s osobami v Lidech podle jména a data narození; kdo tam není, přidá se. Nic se neodesílá.", en: "Links the selected participants to people in People by name and birth date; anyone missing is added. Nothing is sent." },
+    { key: "participantsPage.bulkLinkResult", cs: "Propojeno: {linked} (nově v Lidech: {created}). Nepropojeno (chybí datum narození nebo nejednoznačné — viz Lidé): {notLinked}.", en: "Linked: {linked} (new in People: {created}). Not linked (no birth date or ambiguous — see People): {notLinked}." },
+    { key: "participantsPage.bulkLinkSend", cs: "Poslat odkaz do portálu ({count})", en: "Send portal link ({count})" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });
