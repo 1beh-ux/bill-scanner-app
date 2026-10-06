@@ -3,12 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { billsBucket } from "@/lib/gcs";
+import { promoteToPersonDocument } from "@/lib/person-documents";
 
 // One stored participant document of the event, for the admin (slice 4 #7).
 // GET: the file (?inline=1 to preview in the browser, else a download).
 // POST { action: "approve" } | { action: "reject", note }: review of a portal
 // upload. Approve = counts as received, the reviewer becomes the receiving
-// user; reject needs a short reason, the parent sees it and may upload again.
+// user (and, of a permanent type, the person's document -- slice 6 #2);
+// reject needs a short reason, the parent sees it and may upload again.
 // No e-mail either way.
 async function load(params: Promise<{ id: string; docId: string }>) {
   const user = await getCurrentUser();
@@ -46,7 +48,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json().catch(() => ({}));
   const reviewed = { reviewedByUserId: user.id, reviewedAt: new Date() };
   if (body.action === "approve") {
-    return NextResponse.json(await prisma.participantDocument.update({ where: { id: doc.id }, data: { ...reviewed, reviewStatus: "approved", reviewNote: null, receivedByUserId: user.id } }));
+    const approved = await prisma.participantDocument.update({ where: { id: doc.id }, data: { ...reviewed, reviewStatus: "approved", reviewNote: null, receivedByUserId: user.id } });
+    await promoteToPersonDocument(doc.id, user.id);
+    return NextResponse.json(approved);
   }
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 300) : "";
   if (body.action === "reject" && note) {

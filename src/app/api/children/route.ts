@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       await tx.childGuardian.updateMany({ where: { id: { in: moveGuardians.map((g) => g.id) } }, data: { childId: keepId } });
       await tx.childEmailLog.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
       await tx.participant.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
+      await tx.personDocument.updateMany({ where: { childId: { in: mergeIds } }, data: { childId: keepId } });
       await tx.child.deleteMany({ where: { id: { in: mergeIds } } });
       // A family left without members (e.g. a public-form duplicate merged away) goes too.
       const familyIds = others.map((o) => o.familyId).filter((x): x is string => !!x && x !== familyId);

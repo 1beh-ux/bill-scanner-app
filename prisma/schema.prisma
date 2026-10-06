@@ -206,6 +206,8 @@ model User {
   mailActionsPerformed MailActionLog[]       @relation("MailActionLogUser")
   childChangesDecided  ChildChange[]         @relation("ChildChangeDecidedBy")
   documentsReviewed    ParticipantDocument[] @relation("ParticipantDocumentReviewedBy")
+  personDocumentsCreated PersonDocument[]    @relation("PersonDocumentCreatedBy")
+  personDocumentsRevoked PersonDocument[]    @relation("PersonDocumentRevokedBy")
   childEmailsSent      ChildEmailLog[]       @relation("ChildEmailSentBy")
 
   @@map("users")
@@ -373,6 +375,7 @@ model Event {
   bills                Bill[]
   participants         Participant[]
   eventListItems       EventListItem[]
+  personDocuments      PersonDocument[]
   eventEmailTemplates  EventEmailTemplate[]
   mailActionLogs       MailActionLog[]
   eventParticipantFields EventParticipantField[]
@@ -661,6 +664,7 @@ model Child {
   guardians    ChildGuardian[]
   changes      ChildChange[]
   emailLogs    ChildEmailLog[]
+  documents    PersonDocument[]
 
   @@index([familyId])
   @@map("children")
@@ -1164,6 +1168,41 @@ model ParticipantDocument {
   reviewedByUser  User?         @relation("ParticipantDocumentReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@map("participant_documents")
+}
+
+// A document that stays valid for years (docs/registration-slice6-spec.md 2),
+// stored once on the person: the org document-type template is marked
+// "platí trvale" (ListTemplate.data.permanent) and every event document type
+// with the same key counts it as received (src/lib/person-documents.ts).
+// History is kept -- the current one is the newest row not revoked. Only a
+// real file becomes one (never a tick, never a generated document); the file
+// is a copy under people/<childId>/documents/, so deleting the participant it
+// came from doesn't take it along.
+model PersonDocument {
+  id                          String    @id @default(uuid())
+  childId                     String    @map("child_id")
+  // The template key (ListTemplate.key = EventListItem.key).
+  docKey                      String    @map("doc_key")
+  gcsPath                     String    @map("gcs_path")
+  contentHash                 String    @map("content_hash")
+  originalFilename            String?   @map("original_filename")
+  // Where it came from: the participant document (plain id -- that row goes
+  // when its participant is deleted) and its event. Both null = uploaded on the person page.
+  sourceParticipantDocumentId String?   @map("source_participant_document_id")
+  sourceEventId               String?   @map("source_event_id")
+  createdAt                   DateTime  @default(now()) @map("created_at")
+  createdByUserId             String?   @map("created_by_user_id")
+  // "Neplatí": every event counts it as missing again (live, not snapshotted).
+  revokedAt                   DateTime? @map("revoked_at")
+  revokedByUserId             String?   @map("revoked_by_user_id")
+
+  child         Child  @relation(fields: [childId], references: [id])
+  sourceEvent   Event? @relation(fields: [sourceEventId], references: [id], onDelete: SetNull)
+  createdByUser User?  @relation("PersonDocumentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  revokedByUser User?  @relation("PersonDocumentRevokedBy", fields: [revokedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([childId, docKey])
+  @@map("person_documents")
 }
 
 // Everything Mail Helper does that isn't a sent email (which stays in

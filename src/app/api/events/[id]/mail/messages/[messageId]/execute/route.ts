@@ -13,6 +13,7 @@ import {
 } from "@/lib/mail-read";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
 import { MAIL_HELPER_REPLY_PURPOSE_KEY, senderIdentity } from "@/lib/email-template";
+import { promoteToPersonDocument } from "@/lib/person-documents";
 
 
 type AttachmentAction = { attachmentId: string; filename: string; mimeType: string; eventListItemId: string | null; participantId: string };
@@ -84,7 +85,7 @@ export async function POST(
 
         await billsBucket.file(gcsObjectPath).save(buffer, { contentType: action.mimeType || "application/octet-stream" });
 
-        await prisma.participantDocument.create({
+        const saved = await prisma.participantDocument.create({
           data: {
             participantId: action.participantId,
             eventListItemId: action.eventListItemId,
@@ -96,6 +97,8 @@ export async function POST(
             receivedByUserId: user.id,
           },
         });
+        // Of a permanent type: also the person's document (slice 6 #2).
+        await promoteToPersonDocument(saved.id, user.id);
 
         await prisma.mailActionLog.create({
           data: {
