@@ -653,7 +653,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const isCustom = field.kind === "custom";
     return (
       <tr>
-        <td colSpan={isEvent ? 7 : 6} className="border-b border-mist/60 bg-paper px-3 py-3">
+        <td colSpan={6} className="border-b border-mist/60 bg-paper px-3 py-3">
           {isCustom && (
             <form onSubmit={(e) => handleEditSubmit(field, e)} className="flex flex-col gap-2">
               <div className="grid grid-cols-2 gap-2">
@@ -885,10 +885,13 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const tpl = templates.get(field.key);
     const parentsEdit = !tpl || tpl.portalAccess === "edit" || tpl.portalAccess === "approval";
     return (
-      <label className="flex flex-col gap-0.5 text-[11.5px] text-ink-secondary">
-        <input type="checkbox" className="self-start" disabled={!parentsEdit} checked={parentsEdit && !!field.requiredOnRegistration} onChange={(e) => setRequired(field, e.target.checked)} aria-label={t("fieldMeta.required.title")} />
+      <div className="flex flex-col gap-0.5 text-[11.5px] text-ink-secondary">
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" disabled={!parentsEdit} checked={parentsEdit && !!field.requiredOnRegistration} onChange={(e) => setRequired(field, e.target.checked)} />
+          {t("fieldMeta.required.title")}
+        </label>
         {!parentsEdit ? t("fieldMeta.required.hidden") : !tpl && t("fieldMeta.required.eventQuestion")}
-      </label>
+      </div>
     );
   }
 
@@ -917,14 +920,19 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             )}
           </td>
           <td className="p-2">{surfacePills(field)}</td>
-          <td className="p-2">{portalCell(field)}</td>
+          <td className="p-2">
+            {/* Event scope: "Vyžadovat při přihlášce" sits under the portal rule (same columns as Šablony). */}
+            <div className="flex flex-col gap-1.5">
+              {portalCell(field)}
+              {isEvent && field.kind === "custom" && requiredCell(field)}
+            </div>
+          </td>
           <td className="p-2">
             <div className="flex flex-col gap-1">
               {metaCell(field, "audience")}
               {metaCell(field, "level")}
             </div>
           </td>
-          {isEvent && <td className="p-2">{requiredCell(field)}</td>}
           <td className="whitespace-nowrap p-2 text-right">
             <div className="flex flex-col items-end gap-1">
               <button onClick={() => toggleActive(field)} className="text-[12px] text-ink-secondary hover:text-ink">
@@ -1108,11 +1116,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                 <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
                   {t("fieldMeta.audience.title")} / {t("fieldMeta.level.title")}
                 </th>
-                {isEvent && (
-                  <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                    {t("fieldMeta.required.title")}
-                  </th>
-                )}
                 <th className="sticky top-0 z-10 bg-paper p-2"></th>
               </tr>
             </thead>
@@ -1120,7 +1123,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               {nonComputedFields.map((f) => <Fragment key={fieldId(isEvent, f)}>{fieldRow(f)}</Fragment>)}
               {computedFields.length > 0 && (
                 <tr>
-                  <td colSpan={isEvent ? 7 : 6} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
+                  <td colSpan={6} className="pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
                     {t("participantFieldAdmin.computedSection")}
                   </td>
                 </tr>
