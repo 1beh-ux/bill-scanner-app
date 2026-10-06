@@ -7,6 +7,7 @@ import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { toBoolean } from "@/lib/participant-fields";
 import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
+import PersonDocuments from "@/components/children/PersonDocuments";
 import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
 import { appliesTo, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
 
@@ -262,6 +263,8 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
               </div>
               <p className="text-[11.5px] text-ink-secondary">{t("childProfile.guardiansHint")}</p>
             </section>
+
+            <PersonDocuments childId={id} />
 
             <section>
               <h2 className={sectionTitle}>{t("children.colEvents")}</h2>

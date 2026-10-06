@@ -1,6 +1,27 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
+import { uploadContentType, UPLOAD_MAX_BYTES } from "@/lib/portal-rules";
+
+/** An uploaded file with the portal upload's limits (PDF / JPG / PNG by content, max 15 MB); null = refused. */
+export async function readUploadedFile(file: FormDataEntryValue | null | undefined) {
+  if (!(file instanceof File) || file.size > UPLOAD_MAX_BYTES) return null;
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const contentType = uploadContentType(buffer);
+  return contentType ? { buffer, contentType, filename: (file.name || "dokument").slice(0, 120) } : null;
+}
+
+/**
+ * Stores a received file of a participant under the same path convention as
+ * everything else (events/{eventId}/mail/documents/{participantId}/{hash}-{name}).
+ * Used by the portal upload and the admin "Nahrát soubor" (slice 6 #3).
+ */
+export async function storeParticipantFile(eventId: string, participantId: string, buffer: Buffer, filename: string, contentType: string) {
+  const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+  const gcsPath = `events/${eventId}/mail/documents/${participantId}/${hash}-${sanitizeFilename(filename)}`;
+  await billsBucket.file(gcsPath).save(buffer, { contentType });
+  return { gcsPath, contentHash: hash, originalFilename: filename };
+}
 
 // Persists a system-generated document (the registration-document merge on
 // acceptance send, see src/lib/document-merge.ts) the same way a

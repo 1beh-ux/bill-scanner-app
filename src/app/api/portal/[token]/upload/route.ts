@@ -1,9 +1,7 @@
-import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { billsBucket, sanitizeFilename } from "@/lib/gcs";
+import { readUploadedFile, storeParticipantFile } from "@/lib/participant-document-store";
 import { portalScope } from "@/lib/portal-server";
-import { uploadContentType, UPLOAD_MAX_BYTES } from "@/lib/portal-rules";
 import { takeRateSlot } from "@/lib/portal-rate";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 
@@ -37,19 +35,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     docType.id !== participant.event.paymentDocTypeId &&
     (docType.data as DocumentTypeData | null)?.allowPortalUpload === true;
   if (!ok) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (!(file instanceof File) || file.size > UPLOAD_MAX_BYTES) return NextResponse.json({ error: "bad_file" }, { status: 400 });
-
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const contentType = uploadContentType(buffer);
-  if (!contentType) return NextResponse.json({ error: "bad_file" }, { status: 400 });
+  const upload = await readUploadedFile(file);
+  if (!upload) return NextResponse.json({ error: "bad_file" }, { status: 400 });
   if (!(await takeRateSlot(`upload:${participant.id}`, 20, 24 * 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
-  const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
-  const filename = (file.name || "dokument").slice(0, 120);
-  const gcsPath = `events/${participant.eventId}/mail/documents/${participant.id}/${hash}-${sanitizeFilename(filename)}`;
-  await billsBucket.file(gcsPath).save(buffer, { contentType });
+  const stored = await storeParticipantFile(participant.eventId, participant.id, upload.buffer, upload.filename, upload.contentType);
   await prisma.participantDocument.create({
-    data: { participantId: participant.id, eventListItemId: docType.id, gcsPath, contentHash: hash, originalFilename: filename, receivedVia: "portal", receivedByUserId: null, reviewStatus: "pending" },
+    data: { participantId: participant.id, eventListItemId: docType.id, ...stored, receivedVia: "portal", receivedByUserId: null, reviewStatus: "pending" },
   });
   return NextResponse.json({ ok: true }, { status: 201 });
 }

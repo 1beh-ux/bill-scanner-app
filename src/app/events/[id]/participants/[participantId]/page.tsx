@@ -38,6 +38,8 @@ type DocStatus = {
   receivedAt: string | null;
   receivedVia: string | null;
   driveUrl: string | null;
+  // The newest received file (slice 6 #3), opened via /api/events/<id>/documents/<fileId>.
+  fileId: string | null;
   // Portal uploads waiting for review / rejected (slice 4 #6-7).
   review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
 };
@@ -116,6 +118,18 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
       .then((r) => (r.ok ? r.json() : []))
       .then(setDocs)
       .catch(() => {});
+
+  // "Nahrát soubor" (slice 6 #3): a file the parent handed over, received right away.
+  async function uploadDoc(d: DocStatus, file: File | undefined) {
+    if (!file) return;
+    setTogglingDoc(d.docTypeId);
+    const form = new FormData();
+    form.set("file", file);
+    const res = await fetch(`/api/events/${eventId}/participants/${participantId}/documents/${d.docTypeId}/upload`, { method: "POST", body: form }).catch(() => null);
+    setTogglingDoc(null);
+    if (!res?.ok) setError(t(res?.status === 400 ? "portal.uploadBadFile" : "portal.uploadFailed"));
+    loadDocs();
+  }
 
   // Received <-> missing by hand (same toggle as the Documents overview).
   async function toggleDoc(d: DocStatus) {
@@ -428,11 +442,28 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
                 {d.receivedVia && ` · ${t(`participantDetail.documentsVia.${d.receivedVia}`)}`}
               </span>
             )}
+            {d.fileId && (
+              <a href={`/api/events/${eventId}/documents/${d.fileId}?inline=1`} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                {t("uploadReview.open")}
+              </a>
+            )}
             {d.driveUrl && (
               <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
                 Drive ↗
               </a>
             )}
+            <label className={"cursor-pointer text-ember hover:underline " + (togglingDoc === d.docTypeId ? "pointer-events-none opacity-50" : "")}>
+              {t("personDocs.upload")}
+              <input
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={(e) => {
+                  uploadDoc(d, e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+                className="sr-only"
+              />
+            </label>
             <button
               type="button"
               onClick={() => toggleDoc(d)}

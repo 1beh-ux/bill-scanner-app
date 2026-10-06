@@ -42,6 +42,8 @@ export async function GET(
     return NextResponse.json(
       types.map((type) => {
         const latest = docs.find((d) => d.eventListItemId === type.id);
+        // The newest received file of the type (Zobrazit / Stáhnout, slice 6 #3).
+        const file = docs.find((d) => d.eventListItemId === type.id && d.gcsPath);
         return {
           // Portal uploads waiting for review (Schválit / Zamítnout) or rejected, newest first.
           review: inReview
@@ -52,6 +54,7 @@ export async function GET(
           received: !!latest,
           receivedAt: latest?.receivedAt ?? null,
           receivedVia: latest?.receivedVia ?? null,
+          fileId: file?.id ?? null,
           driveUrl: latest?.driveFileId ? `https://drive.google.com/file/d/${latest.driveFileId}/view` : null,
         };
       })
