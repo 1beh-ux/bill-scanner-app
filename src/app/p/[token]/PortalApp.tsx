@@ -22,7 +22,7 @@ type Access = "edit" | "approval" | "read" | "hidden";
 type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; requiredBy: string | null };
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
 type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
-type DocFile = { id: string | null; date: string } | null;
+type DocFile = { id: string | null; date: string; person?: boolean } | null;
 type CardSection = { kind: "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields"; title?: string | null; items?: { label: string; value: string }[] };
 type Registration = {
   participantId: string;
@@ -772,7 +772,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
   const fileLink = (f: DocFile, label: string) =>
     f &&
     (f.id ? (
-      <a href={`${api}/documents/${f.id}`} className="text-ember underline">
+      <a href={`${api}/${f.person ? "person-documents" : "documents"}/${f.id}`} className="text-ember underline">
         {label} {date(f.date)}
       </a>
     ) : (
@@ -843,22 +843,32 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
                 {d.canUpload && <span className="text-[12px] text-ink-secondary">{t("portal.uploadHint")}</span>}
               </div>
             ))}
+            {/* "Poslat znovu e-mailem" lives with the documents and only while one is missing
+                (not received and not waiting for review) -- e.g. never when the profile covers them. */}
+            {r.resend && r.documents.some((d) => !d.received && d.review !== "pending") && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={resend} disabled={busy || r.resend.left === 0} className={btn}>
+                  {t("portal.resend")}
+                </button>
+                <span className="text-[12.5px] text-ink-secondary">{r.resend.left === 0 ? t("portal.resendLimit") : t("portal.resendHint", { left: String(r.resend.left) })}</span>
+              </div>
+            )}
           </div>
         ) : null;
       case "resend":
-        return r.resend ? (
-          <div key={i} className="flex flex-wrap items-center gap-2">
-            <button onClick={resend} disabled={busy || r.resend.left === 0} className={btn}>
-              {t("portal.resend")}
-            </button>
-            <span className="text-[12.5px] text-ink-secondary">{r.resend.left === 0 ? t("portal.resendLimit") : t("portal.resendHint", { left: String(r.resend.left) })}</span>
-          </div>
-        ) : null;
+        // Shown inside the documents block now (kept so older card layouts don't break).
+        return null;
       case "payment":
+        if (r.payment?.paid === true)
+          return (
+            <p key={i} className="flex items-center gap-2 text-[14px] text-ink">
+              {t("portal.payment")}
+              <span className="rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">{t("portal.paid")}</span>
+            </p>
+          );
         return r.payment ? (
           <div key={i} className="flex flex-col gap-1 rounded-lg bg-paper p-3 text-[14px]">
             <p className="font-medium text-ink">{t("portal.payment")}</p>
-            {r.payment.paid === true && <p className="self-start rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">{t("portal.paid")}</p>}
             {r.payment.paid === false && (
               <>
                 <p className="self-start rounded-full bg-ember/15 px-2.5 py-0.5 text-[13px] text-ember">{t("portal.awaitingPayment")}</p>
@@ -897,7 +907,18 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
         <span className="text-[16px] font-semibold text-ink">{evName(r.event)}</span>
         {who && <span className="text-[13px] text-ink-secondary">{who}</span>}
       </div>
-      {r.sections.map(block)}
+      {r.state === "complete" ? (
+        // All confirmed: the overview (event, status, paid) and the rest folded away.
+        <>
+          {r.sections.map((s, i) => (s.kind === "event" || s.kind === "status" || (s.kind === "payment" && r.payment?.paid === true) ? block(s, i) : null))}
+          <details className="text-[14px]">
+            <summary className="cursor-pointer text-[13px] text-ember">{t("portal.moreDetails")}</summary>
+            <div className="mt-3 flex flex-col gap-3">{r.sections.map((s, i) => (s.kind === "event" || s.kind === "status" || (s.kind === "payment" && r.payment?.paid === true) ? null : block(s, i)))}</div>
+          </details>
+        </>
+      ) : (
+        r.sections.map(block)
+      )}
       {message && <p className="text-[13px] text-ink">{message}</p>}
       {/* Only a registration not yet accepted can be cancelled here; after that, the event's admin does it. */}
       {r.status === "pending" &&

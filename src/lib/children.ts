@@ -87,6 +87,7 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { 
 
   let linked = 0;
   let created = 0;
+  const touched: string[] = [];
   for (const step of plan) {
     let childId = step.childId;
     const isNew = !childId;
@@ -102,9 +103,11 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { 
     }
     const res = await prisma.participant.updateMany({ where: { id: { in: step.participantIds }, childId: null }, data: { childId } });
     linked += res.count;
+    if (res.count > 0) touched.push(childId);
     // A new child's profile starts as a copy of its latest participation.
     if (isNew) await copyProfileFromLatest(childId);
   }
+  if (touched.length > 0) await fillMissingGuardians(touched);
   return { linked, created };
 }
 
@@ -145,6 +148,37 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
     }),
   ]);
   return true;
+}
+
+/**
+ * People with NO guardians get them from their most recent participation that
+ * has any (copyProfileFromLatest only fills a completely empty profile, from the
+ * very latest event even if it had none). Existing guardians are never touched.
+ * `childIds` undefined = everyone. Returns how many people got guardians.
+ */
+export async function fillMissingGuardians(childIds?: string[]): Promise<number> {
+  const people = await prisma.child.findMany({
+    where: { guardians: { none: {} }, ...(childIds && { id: { in: childIds } }) },
+    select: {
+      id: true,
+      participants: {
+        where: { guardians: { some: {} } },
+        orderBy: [{ event: { startDate: "desc" } }, { createdAt: "desc" }],
+        take: 1,
+        select: { guardians: true },
+      },
+    },
+  });
+  let filled = 0;
+  for (const c of people) {
+    const source = c.participants[0];
+    if (!source) continue;
+    await prisma.childGuardian.createMany({
+      data: source.guardians.map((g) => ({ childId: c.id, name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
+    });
+    filled++;
+  }
+  return filled;
 }
 
 /** Auto-link after participants were added -- in connected events and always in a membership year (it's the module's own event). */

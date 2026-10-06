@@ -443,7 +443,8 @@ async function registrationCard(
         typeId: dt.id,
         name: documentDisplayName({ ...dt, data }),
         sent: file(mine.find((d) => d.receivedVia === "generated")),
-        received: profile ? { id: null, date: profile.createdAt } : file(mine.find(countsAsReceived)),
+        // A profile document downloads from the person store (portal person-documents route).
+        received: profile ? { id: profile.id, date: profile.createdAt, person: true } : file(mine.find(countsAsReceived)),
         fromProfile: profile ? { event: profile.sourceEvent?.name ?? null } : null,
         review: profile ? null : mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
         reviewNote: state.note,

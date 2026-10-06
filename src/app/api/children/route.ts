@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { copyProfileFromLatest, linkChildren, nameKey } from "@/lib/children";
+import { copyProfileFromLatest, linkChildren, nameKey, fillMissingGuardians } from "@/lib/children";
 import { profileFieldLabels } from "@/lib/child-profile";
 import { participantDisplayName } from "@/lib/participant-name";
 
@@ -136,6 +136,8 @@ export async function POST(req: NextRequest) {
     const empty = await prisma.child.findMany({ where: { guardians: { none: {} } }, select: { id: true } });
     let filled = 0;
     for (const c of empty) if (await copyProfileFromLatest(c.id)) filled++;
+    // Profiles that had values but no guardians: guardians from the latest event that has any.
+    filled += await fillMissingGuardians();
     return NextResponse.json({ filled });
   }
 

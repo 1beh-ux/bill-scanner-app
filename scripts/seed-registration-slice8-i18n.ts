@@ -7,6 +7,7 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "portal.moreDetails", cs: "Podrobnosti (dokumenty, údaje)", en: "Details (documents, data)" },
     { key: "composeEmailModal.acceptOnlyDone", cs: "Přijato: {count}. Nic nebylo odesláno.", en: "Accepted: {count}. Nothing was sent." },
     { key: "composeEmailModal.acceptOnlyButton", cs: "Jen přijmout ({count}) — bez e-mailu a dokumentů", en: "Just accept ({count}) — no e-mail, no documents" },
     { key: "portal.cancelRegistration", cs: "Zrušit přihlášku", en: "Cancel registration" },
