@@ -24,58 +24,47 @@ export default function TemplatesPage() {
     if (new URLSearchParams(window.location.search).get("tab") === "participants") setTab("participants");
   }, []);
 
+  const sections: { key: typeof tab; labelKey: string }[] = [
+    { key: "health", labelKey: "templatesPage.tabHealth" },
+    { key: "mail", labelKey: "templatesPage.tabMail" },
+    { key: "bills", labelKey: "templatesPage.tabBills" },
+    { key: "participants", labelKey: "templatesPage.tabParticipants" },
+    { key: "planning", labelKey: "nav.planning" },
+  ];
+
   return (
-    <div className={"mx-auto p-4 md:p-8 " + (tab === "participants" ? "max-w-5xl" : "max-w-2xl")}>
+    <div className="mx-auto max-w-6xl p-4 md:p-8">
       <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("nav.templates")}</h1>
 
-      <div className="mb-4 flex gap-1 border-b border-mist">
-        <button
-          onClick={() => setTab("health")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "health" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
+      {/* Same layout as event settings: vertical menu, a select on narrow screens. */}
+      <div className="flex flex-col gap-6 md:flex-row">
+        <select
+          value={tab}
+          onChange={(e) => setTab(e.target.value as typeof tab)}
+          className="w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink md:hidden"
         >
-          {t("templatesPage.tabHealth")}
-        </button>
-        <button
-          onClick={() => setTab("mail")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "mail" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("templatesPage.tabMail")}
-        </button>
-        <button
-          onClick={() => setTab("bills")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "bills" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("templatesPage.tabBills")}
-        </button>
-        <button
-          onClick={() => setTab("participants")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "participants" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("templatesPage.tabParticipants")}
-        </button>
-        <button
-          onClick={() => setTab("planning")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (tab === "planning" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("nav.planning")}
-        </button>
-      </div>
+          {sections.map((s) => (
+            <option key={s.key} value={s.key}>
+              {t(s.labelKey)}
+            </option>
+          ))}
+        </select>
+        <nav className="hidden w-44 shrink-0 flex-col gap-0.5 self-start md:sticky md:top-4 md:flex">
+          {sections.map((s) => (
+            <button
+              key={s.key}
+              onClick={() => setTab(s.key)}
+              className={
+                "rounded-lg px-3 py-2 text-left text-[13px] font-medium " +
+                (tab === s.key ? "bg-ember/15 text-ink" : "text-ink-secondary hover:bg-paper-2 hover:text-ink")
+              }
+            >
+              {t(s.labelKey)}
+            </button>
+          ))}
+        </nav>
 
+        <div className="min-w-0 flex-1">
       {tab === "health" && <HealthTemplatesTab />}
       {tab === "mail" && <ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} />}
       {tab === "bills" && <BillsTemplatesTab />}
@@ -91,6 +80,8 @@ export default function TemplatesPage() {
           <ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} />
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -65,7 +65,7 @@ export function planLinks(participants: LinkCandidate[], children: LinkChild[]):
 // instant could create a duplicate Child; the Děti page's merge fixes that.
 export async function linkChildren(where: Prisma.ParticipantWhereInput): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
-    where: { ...where, childId: null, dateOfBirth: { not: null } },
+    where: { ...where, childId: null, dateOfBirth: { not: null }, event: { peopleUnlinked: false } },
     select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };

@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
       },
     }),
     prisma.participant.findMany({
-      where: { childId: null },
+      where: { childId: null, event: { peopleUnlinked: false } },
       select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: eventSelect },
       orderBy: { name: "asc" },
     }),

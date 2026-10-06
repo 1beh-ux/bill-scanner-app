@@ -7,6 +7,15 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "eventSettings.tabPortal", cs: "Portál rodičů", en: "Parent portal" },
+    { key: "eventSettings.tabPublic", cs: "Veřejná přihláška", en: "Public registration" },
+    { key: "publicTab.notConnected", cs: "Veřejná přihláška je jen pro rok členství nebo akci propojenou s Lidmi — zapněte propojení v sekci Portál rodičů.", en: "The public registration page is only for a membership year or an event connected to People — switch the connection on under Parent portal." },
+    { key: "peopleUnlink.title", cs: "Odpojit od Lidí", en: "Disconnect from People" },
+    { key: "peopleUnlink.hint", cs: "Propojených účastníků: {count}. Odpojením se zruší jejich propojení s osobami v Lidech a akce se už nikdy automaticky nepropojí (ani tlačítkem Propojit v Lidech). Účastníci v akci i osoby v Lidech zůstanou, nic se neodesílá.", en: "Linked participants: {count}. Disconnecting removes their links to people in People and the event is never linked automatically again (not even by Link in People). Participants and people both stay; nothing is sent." },
+    { key: "peopleUnlink.button", cs: "Odpojit akci od Lidí", en: "Disconnect event from People" },
+    { key: "peopleUnlink.confirm", cs: "Odpojit {count} účastníků od osob v Lidech? Vypne se i propojení akce (portál rodičů ji neuvidí). Účastníci i osoby zůstanou.", en: "Disconnect {count} participants from their people? The event's connection is switched off too (the parent portal won't show it). Participants and people stay." },
+    { key: "peopleUnlink.isUnlinked", cs: "Akce je odpojená od Lidí: účastníci se s osobami nepropojují a nikomu z nich se z portálu nic neposílá.", en: "The event is disconnected from People: participants aren't linked to people and the portal sends them nothing." },
+    { key: "peopleUnlink.allow", cs: "Znovu povolit propojení", en: "Allow linking again" },
     { key: "mdToolbar.heading", cs: "Nadpis", en: "Heading" },
     { key: "mdToolbar.subheading", cs: "Menší nadpis", en: "Subheading" },
     { key: "mdToolbar.bold", cs: "Tučně", en: "Bold" },

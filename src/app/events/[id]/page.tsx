@@ -44,6 +44,7 @@ type EventDetail = {
   kind: "event" | "membership";
   membershipYear: number | null;
   registrationConnected: boolean;
+  peopleUnlinked: boolean;
   portalOpen: boolean;
   eligibility: unknown;
   priceRules: unknown;
@@ -90,8 +91,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
-const SECTION_KEYS: Tab[] = ["akce", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
+type Tab = "akce" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
+const SECTION_KEYS: Tab[] = ["akce", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -345,6 +346,8 @@ export default function EventDetailPage({
   // help = Nápověda topic for the tab (none for Plánování yet).
   const visibleSections: { key: Tab; labelKey: string; help?: string }[] = [
     { key: "akce", labelKey: "eventSettings.tabAkce", help: "uvod" },
+    ...(isAdmin ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
+    { key: "verejna", labelKey: "eventSettings.tabPublic" },
     ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
     { key: "pripojeni", labelKey: "eventSettings.tabPripojeni", help: "pripojeni" },
     { key: "uctenky", labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" },
@@ -357,7 +360,7 @@ export default function EventDetailPage({
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
 
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-8">
+    <div className="mx-auto max-w-6xl p-4 md:p-8">
       <a href="/events" className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("eventDetail.back")}
       </a>
@@ -456,7 +459,6 @@ export default function EventDetailPage({
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
               {isAdmin && <ModulesTab eventId={id} t={t} />}
-              {isAdmin && event && <RegistrationSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
@@ -516,7 +518,22 @@ export default function EventDetailPage({
                   </div>
                 </form>
               </div>
-              {event && <PriceSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
+            </div>
+          )}
+
+          {/* Portál rodičů: registrace a členství + portal settings + karta přihlášky. */}
+          {tab === "portal" && isAdmin && event && <RegistrationSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
+
+          {/* Veřejná přihláška: the public page + the special price rules (registration only;
+              the plain člen/nečlen prices stay under Akce for standard events). */}
+          {tab === "verejna" && event && (
+            <div className="flex flex-col gap-6">
+              {isAdmin && (event.registrationConnected || event.kind === "membership") ? (
+                <PublicRegistrationSettings eventId={id} event={event} onSaved={load} t={t} />
+              ) : (
+                isAdmin && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
+              )}
+              <PriceSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />
             </div>
           )}
 
@@ -995,9 +1012,54 @@ function RegistrationSettings({
           </button>
         </div>
       </form>
+      {event.kind !== "membership" && (
+        <PeopleUnlink eventId={eventId} unlinked={event.peopleUnlinked} onDone={() => { setConnected(false); onSaved(); }} t={t} />
+      )}
       {(event.registrationConnected || event.kind === "membership") && <PortalSettings eventId={eventId} event={event} onSaved={onSaved} t={t} />}
       {(event.registrationConnected || event.kind === "membership") && <PortalCardLayout eventId={eventId} t={t} />}
-      {(event.registrationConnected || event.kind === "membership") && <PublicRegistrationSettings eventId={eventId} event={event} onSaved={onSaved} t={t} />}
+    </div>
+  );
+}
+
+// "Odpojit od Lidé": unlink this event's participants from the people list for good
+// (both stay; never relinked, nothing sent) -- see /api/events/[id]/people-unlink.
+function PeopleUnlink({ eventId, unlinked, onDone, t }: { eventId: string; unlinked: boolean; onDone: () => void; t: (key: string, vars?: Record<string, string>) => string }) {
+  const confirm = useConfirm();
+  const [linked, setLinked] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/people-unlink`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setLinked(d?.linked ?? null))
+      .catch(() => {});
+  }, [eventId, unlinked]);
+
+  async function run(action: "unlink" | "allow") {
+    if (action === "unlink" && !(await confirm({ message: t("peopleUnlink.confirm", { count: String(linked ?? 0) }), danger: true }))) return;
+    setBusy(true);
+    await fetch(`/api/events/${eventId}/people-unlink`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    setBusy(false);
+    onDone();
+  }
+
+  return (
+    <div className="mt-6 flex max-w-md flex-col gap-2 border-t border-mist pt-4">
+      <h4 className="text-[14px] font-semibold text-ink">{t("peopleUnlink.title")}</h4>
+      {unlinked ? (
+        <>
+          <p className="text-[12.5px] text-ink-secondary">{t("peopleUnlink.isUnlinked")}</p>
+          <button type="button" onClick={() => run("allow")} disabled={busy} className="self-start text-[13px] text-ember hover:underline disabled:opacity-50">
+            {t("peopleUnlink.allow")}
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="text-[12.5px] text-ink-secondary">{t("peopleUnlink.hint", { count: String(linked ?? "…") })}</p>
+          <button type="button" onClick={() => run("unlink")} disabled={busy} className="self-start rounded-lg border border-red-300 bg-paper-2 px-3 py-1.5 text-[13px] text-red-600 hover:bg-red-50 disabled:opacity-50">
+            {t("peopleUnlink.button")}
+          </button>
+        </>
+      )}
     </div>
   );
 }

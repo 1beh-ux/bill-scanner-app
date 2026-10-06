@@ -45,7 +45,7 @@ export default function PublicRegistrationSettings({
   const url = slug.trim() && typeof window !== "undefined" ? `${window.location.origin}/r/${slug.trim()}` : null;
 
   return (
-    <div className="mt-6 flex max-w-md flex-col gap-3 border-t border-mist pt-4">
+    <div className="flex max-w-xl flex-col gap-3">
       <h4 className="text-[14px] font-semibold text-ink">{t("publicSettings.title")}</h4>
       <label className="flex items-center gap-2 text-[14px] text-ink">
         <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} className="h-4 w-4 accent-ember" />

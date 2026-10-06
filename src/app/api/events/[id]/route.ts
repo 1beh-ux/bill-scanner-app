@@ -196,6 +196,7 @@ export async function PATCH(
       ...(kind !== undefined && { kind }),
       ...(membershipYear !== undefined && { membershipYear }),
       ...(registrationConnected !== undefined && { registrationConnected }),
+      ...((registrationConnected === true || kind === "membership") && { peopleUnlinked: false }),
       ...(portalOpen !== undefined && { portalOpen }),
       // Stored cleaned (src/lib/portal-rules.ts readEligibility); null/{} = nobody.
       ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),

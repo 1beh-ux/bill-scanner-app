@@ -339,6 +339,9 @@ model Event {
   // On: participants get linked to Child profiles, and member pricing reads
   // the child's accepted membership for the event's start year.
   registrationConnected Boolean   @default(false) @map("registration_connected")
+  // "Odpojit od Lidé": this event's participants are unlinked from the people
+  // list and never linked again (not even by Lidé's "Propojit"), until reconnected.
+  peopleUnlinked        Boolean   @default(false) @map("people_unlinked")
   // Parent portal (docs/registration-portal-spec.md H): "Otevřeno pro přihlášky
   // v portálu" -- only used when the event is connected (or a membership year),
   // hidden after registrationDeadline. eligibility = src/lib/portal-rules.ts
