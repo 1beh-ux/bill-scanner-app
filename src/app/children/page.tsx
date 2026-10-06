@@ -32,6 +32,9 @@ const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ", 
 const childLabel = (c: ChildRow) => `${c.name} (${date(c.dateOfBirth)})`;
 const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
+// Lidé "Byl na akci" filter value for people with no event registrations at all.
+const NO_EVENTS = "__none__";
+
 export default function ChildrenPage() {
   const { t, role, roleLoaded } = useTranslations();
   const router = useRouter();
@@ -73,6 +76,16 @@ export default function ChildrenPage() {
     }
     await load();
     return res.json();
+  }
+
+  // Only people without any event and without permanent documents are deleted; the rest are skipped.
+  async function removeSelected() {
+    if (!(await confirm({ message: t("people.deleteConfirm", { count: String(selected.size) }), danger: true }))) return;
+    const r = await post({ action: "delete", childIds: [...selected] });
+    if (r) {
+      setSelected(new Set());
+      setMessage(t("people.deleteDone", { deleted: String(r.deleted), skipped: String(r.skipped) }));
+    }
   }
 
   async function seed() {
@@ -131,7 +144,7 @@ export default function ChildrenPage() {
       match(c.name) &&
       (who === "all" || c.isAdult === (who === "adults")) &&
       (!memberYear || c.participants.some((p) => p.event.kind === "membership" && p.registrationStatus === "accepted" && String(p.event.membershipYear) === memberYear)) &&
-      (!eventId || c.participants.some((p) => p.event.id === eventId)) &&
+      (!eventId || (eventId === NO_EVENTS ? c.participants.length === 0 : c.participants.some((p) => p.event.id === eventId))) &&
       yesNo(linkFilter, c.hasLink) &&
       yesNo(familyFilter, !!c.familyId)
   );
@@ -205,6 +218,7 @@ export default function ChildrenPage() {
         </select>
         <select value={eventId} onChange={(e) => setEventId(e.target.value)} aria-label={t("people.filterEvent")} className={inputClassSm + " max-w-56"}>
           <option value="">{t("people.filterEvent")}</option>
+          <option value={NO_EVENTS}>{t("people.noEvents")}</option>
           {allEvents.map((e) => (
             <option key={e.id} value={e.id}>
               {e.kind === "membership" ? t("children.membershipChip", { year: String(e.membershipYear ?? "?") }) : e.name}
@@ -299,6 +313,11 @@ export default function ChildrenPage() {
           <section>
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-[15px] font-semibold text-ink">{t("children.listTitle", { count: String(listed.length) })}</h2>
+              {selected.size > 0 && (
+                <button onClick={removeSelected} disabled={busy} title={t("people.deleteHint")} className={btn + " text-red-600"}>
+                  {t("people.deleteSelected", { count: String(selected.size) })}
+                </button>
+              )}
               {selected.size > 0 && (
                 <button onClick={() => router.push(portalComposeHref(sendTargets))} title={t("people.sendLinkHint")} className={btn}>
                   {t("people.sendLinkSelected", { count: String(selected.size), targets: String(sendTargets.length) })}

@@ -7,6 +7,11 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "people.noEvents", cs: "— bez akcí —", en: "— no events —" },
+    { key: "people.deleteSelected", cs: "Smazat ({count})", en: "Delete ({count})" },
+    { key: "people.deleteHint", cs: "Smaže jen osoby, které nejsou v žádné akci a nemají trvalé dokumenty.", en: "Deletes only people who are in no event and have no permanent documents." },
+    { key: "people.deleteConfirm", cs: "Smazat {count} vybraných osob z Lidí? Smažou se jen ty, které nejsou v žádné akci a nemají trvalé dokumenty — i s kontakty rodičů a odkazem do portálu (odkaz přestane fungovat). Nelze vrátit.", en: "Delete {count} selected people from People? Only those in no event and without permanent documents are deleted — with their guardian contacts and portal link (the link stops working). Can't be undone." },
+    { key: "people.deleteDone", cs: "Smazáno: {deleted}. Přeskočeno (jsou v akci nebo mají dokumenty): {skipped}.", en: "Deleted: {deleted}. Skipped (in an event or with documents): {skipped}." },
     { key: "eventSettings.tabPortal", cs: "Portál rodičů", en: "Parent portal" },
     { key: "eventSettings.tabPublic", cs: "Veřejná přihláška", en: "Public registration" },
     { key: "publicTab.notConnected", cs: "Veřejná přihláška je jen pro rok členství nebo akci propojenou s Lidmi — zapněte propojení v sekci Portál rodičů.", en: "The public registration page is only for a membership year or an event connected to People — switch the connection on under Parent portal." },

@@ -113,6 +113,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  // "Smazat" (selected people): only people with no event registrations and no
+  // permanent documents -- anyone else is skipped and reported. Guardians,
+  // pending changes and e-mail log go with them (cascade), so does their own
+  // portal link; a family left empty is removed with its link.
+  if (body.action === "delete") {
+    const ids: string[] = Array.isArray(body.childIds) ? body.childIds.filter((x: unknown): x is string => typeof x === "string") : [];
+    const people = await prisma.child.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, familyId: true, _count: { select: { participants: true, documents: true } } },
+    });
+    const ok = people.filter((c) => c._count.participants === 0 && c._count.documents === 0);
+    await prisma.child.deleteMany({ where: { id: { in: ok.map((c) => c.id) } } });
+    const familyIds = [...new Set(ok.map((c) => c.familyId).filter((x): x is string => !!x))];
+    if (familyIds.length) await prisma.family.deleteMany({ where: { id: { in: familyIds }, members: { none: {} } } });
+    return NextResponse.json({ deleted: ok.length, skipped: people.length - ok.length });
+  }
+
   if (body.action === "fillProfiles") {
     const empty = await prisma.child.findMany({ where: { guardians: { none: {} } }, select: { id: true } });
     let filled = 0;
