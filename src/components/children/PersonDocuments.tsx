@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useConfirm } from "@/components/ConfirmDialog";
 
 // Lidé → person: permanent documents (docs/registration-slice6-spec.md 3, 5).
 // Per "platí trvale" document type the current file + history, view /
-// download, and "Nahrát soubor" straight to the person store.
+// download, "Nahrát soubor" straight to the person store and "Neplatí".
 type PersonDoc = { id: string; filename: string | null; createdAt: string; revokedAt: string | null; sourceEvent: string | null; current: boolean };
 type DocType = { key: string; name: string; permanent: boolean; docs: PersonDoc[] };
 
@@ -14,6 +15,7 @@ const date = (d: string) => new Date(d).toLocaleDateString("cs-CZ");
 
 export default function PersonDocuments({ childId }: { childId: string }) {
   const { t } = useTranslations();
+  const confirm = useConfirm();
   const [types, setTypes] = useState<DocType[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -39,6 +41,16 @@ export default function PersonDocuments({ childId }: { childId: string }) {
     const res = await fetch(api, { method: "POST", body: form }).catch(() => null);
     setBusy(null);
     if (!res?.ok) setMessage(t(res?.status === 400 ? "portal.uploadBadFile" : "portal.uploadFailed"));
+    load();
+  }
+
+  // "Neplatí" (slice 6 #5): every event counts the type as missing again, past ones too.
+  async function revoke(type: DocType, d: PersonDoc) {
+    if (!(await confirm({ message: t("personDocs.revokeConfirm", { name: type.name }), confirmLabel: t("personDocs.revoke"), danger: true }))) return;
+    setBusy(type.key);
+    const res = await fetch(`${api}/${d.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "revoke" }) }).catch(() => null);
+    setBusy(null);
+    setMessage(res?.ok ? null : t("children.errorFailed"));
     load();
   }
 
@@ -85,6 +97,11 @@ export default function PersonDocuments({ childId }: { childId: string }) {
                 <a href={`${api}/${d.id}`} className="text-ember hover:underline">
                   {t("uploadReview.download")}
                 </a>
+                {!d.revokedAt && (
+                  <button type="button" onClick={() => revoke(type, d)} disabled={busy === type.key} className="text-red-600 hover:underline disabled:opacity-50">
+                    {t("personDocs.revoke")}
+                  </button>
+                )}
               </div>
             ))}
           </li>
