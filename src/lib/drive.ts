@@ -247,6 +247,11 @@ export interface DriveFileEntry {
   id: string;
   name: string;
   mimeType: string;
+  // For the document import from Drive (slice 7): Drive link, bytes, and the
+  // content hash Drive keeps for uploaded (non-native) files.
+  webViewLink?: string;
+  size?: number;
+  sha256Checksum?: string;
 }
 
 /** Which of the event's folders an operation targets (only used to word error messages). */
@@ -265,7 +270,7 @@ async function listChildren(
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
-      fields: "nextPageToken, files(id, name, mimeType)",
+      fields: "nextPageToken, files(id, name, mimeType, webViewLink, size, sha256Checksum)",
       pageSize: 200,
       pageToken,
       supportsAllDrives: true,
@@ -273,7 +278,14 @@ async function listChildren(
     });
     for (const f of res.data.files ?? []) {
       if (f.id && f.name && f.mimeType) {
-        results.push({ id: f.id, name: f.name, mimeType: f.mimeType });
+        results.push({
+          id: f.id,
+          name: f.name,
+          mimeType: f.mimeType,
+          webViewLink: f.webViewLink ?? undefined,
+          size: f.size ? Number(f.size) : undefined,
+          sha256Checksum: f.sha256Checksum ?? undefined,
+        });
       }
     }
     pageToken = res.data.nextPageToken ?? undefined;
@@ -315,7 +327,6 @@ export function isGoogleNativeFile(mimeType: string): boolean {
   return mimeType.startsWith(GOOGLE_NATIVE_MIME_PREFIX);
 }
 
-/** Downloads a file's raw bytes. Check isGoogleNativeFile first — don't call this on a native Google file. */
 /** Name + MIME type of one Drive file (the table import needs both before downloading). */
 export async function getDriveFileMeta(eventId: string, fileId: string): Promise<{ name: string; mimeType: string }> {
   return withRetry(
@@ -330,6 +341,7 @@ export async function getDriveFileMeta(eventId: string, fileId: string): Promise
   );
 }
 
+/** Downloads a file's raw bytes. Check isGoogleNativeFile first — don't call this on a native Google file. */
 export async function downloadFileBuffer(eventId: string, fileId: string): Promise<Buffer> {
   return withRetry(
     eventId,
@@ -342,6 +354,27 @@ export async function downloadFileBuffer(eventId: string, fileId: string): Promi
       return Buffer.from(res.data as ArrayBuffer);
     },
     `download file ${fileId}`,
+    { purpose: "read" }
+  );
+}
+
+// Native Google files Drive can export as PDF in one call (Docs, Sheets, Slides, Drawings).
+const PDF_EXPORTABLE = new Set(["document", "spreadsheet", "presentation", "drawing"].map((k) => GOOGLE_NATIVE_MIME_PREFIX + k));
+
+export function isPdfExportable(mimeType: string): boolean {
+  return PDF_EXPORTABLE.has(mimeType);
+}
+
+/** A native Google file exported as PDF (Drive caps exports at 10 MB). Check isPdfExportable first. */
+export async function exportFileAsPdf(eventId: string, fileId: string): Promise<Buffer> {
+  return withRetry(
+    eventId,
+    async () => {
+      const drive = await getDriveClient(eventId);
+      const res = await drive.files.export({ fileId, mimeType: "application/pdf" }, { responseType: "arraybuffer" });
+      return Buffer.from(res.data as ArrayBuffer);
+    },
+    `export file ${fileId}`,
     { purpose: "read" }
   );
 }
