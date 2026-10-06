@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MarkdownEditor } from "@/components/registration/Markdown";
 import type { Eligibility } from "@/lib/portal-rules";
 
 type AutoAcceptMode = "manual" | "accept" | "accept_send";
@@ -136,7 +137,7 @@ export default function PortalSettings({
       </label>
       <label className="text-[13px] text-ink-secondary">
         {t("portalCard.info")}
-        <textarea value={portalInfo} onChange={(e) => setPortalInfo(e.target.value)} rows={3} className={inputClass + " mt-1"} />
+        <MarkdownEditor value={portalInfo} onChange={setPortalInfo} rows={5} className={inputClass + " font-mono text-[13px]"} t={t} />
       </label>
       <label className="text-[13px] text-ink-secondary">
         {t("paymentDoc.label")}

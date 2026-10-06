@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MarkdownEditor } from "@/components/registration/Markdown";
 
 // Event settings -> "Registrace a členství" -> public page /r/<slug>
 // (docs/registration-slice3-spec.md D): switch, slug, landing content
@@ -62,7 +63,7 @@ export default function PublicRegistrationSettings({
       </label>
       <label className="text-[13px] text-ink-secondary">
         {t("publicSettings.landing")}
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={8} className={inputClass + " mt-1 font-mono text-[13px]"} />
+        <MarkdownEditor value={content} onChange={setContent} rows={8} className={inputClass + " font-mono text-[13px]"} t={t} />
         <span className="mt-1 block text-[11.5px]">{t("publicSettings.landingHint")}</span>
       </label>
       {message && <p className="text-[13px] text-ink">{message}</p>}

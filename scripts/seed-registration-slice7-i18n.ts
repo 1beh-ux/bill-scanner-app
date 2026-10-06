@@ -7,6 +7,17 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "mdToolbar.heading", cs: "Nadpis", en: "Heading" },
+    { key: "mdToolbar.subheading", cs: "Menší nadpis", en: "Subheading" },
+    { key: "mdToolbar.bold", cs: "Tučně", en: "Bold" },
+    { key: "mdToolbar.italic", cs: "Kurzíva", en: "Italic" },
+    { key: "mdToolbar.bullet", cs: "Odrážka", en: "Bullet" },
+    { key: "mdToolbar.subBullet", cs: "Odrážka 2. úrovně", en: "Second-level bullet" },
+    { key: "mdToolbar.numbered", cs: "Číslovaný seznam", en: "Numbered list" },
+    { key: "mdToolbar.link", cs: "Odkaz", en: "Link" },
+    { key: "mdToolbar.preview", cs: "Náhled", en: "Preview" },
+    { key: "mdToolbar.edit", cs: "Upravit", en: "Edit" },
+    { key: "publicSettings.landingHint", cs: "Formátování přes tlačítka nahoře, nebo ručně: ## nadpis, **tučně**, *kurzíva*, - odrážka, „  - “ (2 mezery) odrážka 2. úrovně, 1. číslovaný seznam, [odkaz](https://…).", en: "Format with the buttons above, or by hand: ## heading, **bold**, *italic*, - bullet, “  - ” (2 spaces) second-level bullet, 1. numbered list, [link](https://…)." },
     { key: "driveDocImport.button", cs: "Importovat z Drive", en: "Import from Drive" },
     { key: "driveDocImport.title", cs: "Importovat z Drive: {name}", en: "Import from Drive: {name}" },
     { key: "driveDocImport.hint", cs: "Soubory přímo ve složce (bez podsložek) se uloží do profilů lidí v Lidé jako jejich platný trvalý dokument. Akce slouží jen jako připojení k Drive. Nic se neposílá e-mailem.", en: "Files directly in the folder (no subfolders) are stored in people's profiles (People) as their valid permanent document. The event only provides the Drive connection. Nothing is e-mailed." },

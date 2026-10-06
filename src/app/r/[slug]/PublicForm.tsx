@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { MarkdownText } from "@/components/registration/Markdown";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
@@ -178,9 +178,7 @@ export default function PublicForm({
         {event.registrationDeadline && ` · ${t("portal.deadline", { date: date(event.registrationDeadline) })}`}
       </p>
       {event.landingContent && (
-        <div className={card + " mb-6 text-[15px] leading-relaxed text-ink [&_a]:text-ember [&_a]:underline [&_h2]:mt-3 [&_h2]:text-[18px] [&_h2]:font-semibold [&_li]:ml-5 [&_li]:list-disc [&_p]:my-2"}>
-          <ReactMarkdown>{event.landingContent}</ReactMarkdown>
-        </div>
+        <MarkdownText text={event.landingContent} className={card + " mb-6 text-[15px] leading-relaxed text-ink"} />
       )}
 
       <form onSubmit={submit} className="flex flex-col gap-4">

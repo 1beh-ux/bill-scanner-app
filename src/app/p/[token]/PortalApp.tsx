@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Upload } from "lucide-react";
+import { MarkdownText } from "@/components/registration/Markdown";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
@@ -681,7 +682,8 @@ function EventInfo({ text, t }: { text: string; t: T }) {
   const long = text.length > 220 || text.split("\n").length > 3;
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <p className={"whitespace-pre-line text-[14px] text-ink " + (long && !open ? "line-clamp-3" : "")}>{text}</p>
+      {/* Folded by height: line-clamp doesn't work across markdown's block elements. */}
+      <MarkdownText text={text} className={"text-[14px] text-ink [&_p]:my-1 [&>:first-child]:mt-0 " + (long && !open ? "max-h-[4.6em] overflow-hidden" : "")} />
       {long && (
         <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-[13px] text-ember hover:underline">
           {t(open ? "portal.showLess" : "portal.showMore")}
