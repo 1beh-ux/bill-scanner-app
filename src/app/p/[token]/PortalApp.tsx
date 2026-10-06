@@ -70,7 +70,7 @@ type Data = {
   name: string;
   members: Member[];
   contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
-  available: (EventRef & { id: string; registrationDeadline: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
+  available: (EventRef & { id: string; registrationDeadline: string | null; location: string | null; info: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
   // "Přidat člena rodiny" (slice 8 #1): family links only.
   addMember: { fields: FormField[] } | null;
 };
@@ -79,10 +79,16 @@ type T = (key: string, vars?: Record<string, string>) => string;
 const btnPrimary = "rounded-lg bg-ember px-4 py-2.5 text-[15px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const btn = "rounded-lg border border-mist px-3 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
 const card = "rounded-lg border border-mist bg-paper p-4";
+// Event cards (registrations, events to choose from) stand out from the page background.
+const eventCard = "rounded-lg border border-mist bg-paper-2 p-4 shadow-sm";
 const h2 = "text-[13px] font-semibold uppercase tracking-wide text-ink-secondary";
 const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—");
 const chip = (on: boolean) => "rounded-full border px-3 py-1 text-[14px] " + (on ? "border-ember bg-ember/15 text-ink" : "border-mist text-ink-secondary hover:text-ink");
 const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) === date(e.endDate) ? date(e.startDate) : `${date(e.startDate)} – ${date(e.endDate)}`);
+
+// Portal chips: "Čeká na potvrzení" = not accepted yet OR waiting, so a pending registration
+// with something missing shows under both "Chybí…" and "Čeká…" (the states themselves are exclusive).
+const inState = (r: { state: RegistrationState; status: string }, st: RegistrationState) => r.state === st || (st === "waiting" && r.status === "pending");
 
 export default function PortalApp({ token, strings }: { token: string; strings: Record<string, string> }) {
   const t = useCallback(
@@ -196,13 +202,13 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
                 <div className="flex flex-wrap gap-2" role="group" aria-label={t("portal.stateFilter")}>
                   {(["all", ...REGISTRATION_STATES] as const).map((st) => (
                     <button key={st} onClick={() => setStateFilter(st)} className={chip(stateFilter === st)}>
-                      {t(`portal.state.${st}`)} ({st === "all" ? shownRegs.length : shownRegs.filter((x) => x.r.state === st).length})
+                      {t(`portal.state.${st}`)} ({st === "all" ? shownRegs.length : shownRegs.filter((x) => inState(x.r, st)).length})
                     </button>
                   ))}
                 </div>
               )}
               {shownRegs
-                .filter((x) => stateFilter === "all" || x.r.state === stateFilter)
+                .filter((x) => stateFilter === "all" || inState(x.r, stateFilter))
                 .map(({ m, r }) => (
                   <RegistrationCard key={r.participantId} api={api} r={r} who={many ? m.name : null} t={t} evName={evName} onChanged={load} />
                 ))}
@@ -605,12 +611,14 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
           return !step || (step.fields.every((f) => f.fieldType === "boolean" || answers[id]?.[f.key]?.trim()) && (!step.reviewTick || reviewed[id]));
         });
         return (
-          <li key={e.id} className={card + " flex flex-col gap-3"}>
+          <li key={e.id} className={eventCard + " flex flex-col gap-3"}>
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-[16px] font-semibold text-ink">{evName(e)}</span>
               <span className="text-[13px] text-ink-secondary">{range(e)}</span>
             </div>
             {e.registrationDeadline && <span className="text-[13px] text-ink-secondary">{t("portal.deadline", { date: date(e.registrationDeadline) })}</span>}
+            {e.location && <span className="text-[13px] text-ink-secondary">{t("portal.location", { place: e.location })}</span>}
+            {e.info && <EventInfo text={e.info} t={t} />}
             {openId !== e.id ? (
               <button
                 onClick={() => {
@@ -626,7 +634,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                 {t(renew ? "portal.renew" : "portal.register")}
               </button>
             ) : (
-              <div className="flex flex-col gap-3 rounded-lg bg-paper-2 p-3">
+              <div className="flex flex-col gap-3 rounded-lg bg-paper p-3">
                 <p className="text-[13px] text-ink-secondary">{t("portal.reviewHint")}</p>
                 {e.memberIds.map((id) => {
                   const m = memberOf(id);
@@ -726,6 +734,17 @@ function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: {
 function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; r: Registration; who: string | null; t: T; evName: (e: EventRef) => string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+
+  async function cancel() {
+    setBusy(true);
+    setMessage(null);
+    const res = await fetch(`${api}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId }) }).catch(() => null);
+    setBusy(false);
+    setConfirmCancel(false);
+    if (res?.ok) onChanged();
+    else setMessage(t("portal.cancelFailed"));
+  }
 
   async function resend() {
     setBusy(true);
@@ -837,7 +856,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
         ) : null;
       case "payment":
         return r.payment ? (
-          <div key={i} className="flex flex-col gap-1 rounded-lg bg-paper-2 p-3 text-[14px]">
+          <div key={i} className="flex flex-col gap-1 rounded-lg bg-paper p-3 text-[14px]">
             <p className="font-medium text-ink">{t("portal.payment")}</p>
             {r.payment.paid === true && <p className="self-start rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">{t("portal.paid")}</p>}
             {r.payment.paid === false && (
@@ -873,13 +892,30 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
   };
 
   return (
-    <section className={card + " flex flex-col gap-3"}>
+    <section className={eventCard + " flex flex-col gap-3"}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-[16px] font-semibold text-ink">{evName(r.event)}</span>
         {who && <span className="text-[13px] text-ink-secondary">{who}</span>}
       </div>
       {r.sections.map(block)}
       {message && <p className="text-[13px] text-ink">{message}</p>}
+      {/* Only a registration not yet accepted can be cancelled here; after that, the event's admin does it. */}
+      {r.status === "pending" &&
+        (confirmCancel ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-300 p-2 text-[13px]">
+            <span className="text-ink">{t("portal.cancelConfirm")}</span>
+            <button onClick={cancel} disabled={busy} className="rounded-lg bg-red-600 px-3 py-1.5 text-white disabled:opacity-50">
+              {t("portal.cancelYes")}
+            </button>
+            <button onClick={() => setConfirmCancel(false)} className="text-ink-secondary hover:underline">
+              {t("portal.cancelNo")}
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => setConfirmCancel(true)} className="self-start text-[13px] text-red-600 hover:underline">
+            {t("portal.cancelRegistration")}
+          </button>
+        ))}
     </section>
   );
 }

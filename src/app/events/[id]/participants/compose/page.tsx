@@ -190,7 +190,9 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
         {backLink}
         <h1 className="mb-4 mt-2 text-[22px] font-semibold text-ink">{title}</h1>
         <p className={"rounded-lg border px-3 py-2 text-[14px] " + (warn ? "border-amber-300 bg-amber-50 text-amber-800" : "border-pine/40 bg-pine/10 text-pine")}>
-          {outcome.emailSkipped
+          {outcome.emailSkipped && outcome.documentsGenerated === 0 && mode === "acceptance"
+            ? t("composeEmailModal.acceptOnlyDone", { count: String(participantIds.length) })
+            : outcome.emailSkipped
             ? t("composeEmailModal.docsRegenerated", { count: String(outcome.documentsGenerated) })
             : t("composeEmailModal.sendDone", { sent: String(outcome.sentCount), failed: String(outcome.failedCount) })}
           {outcome.documentFailures.length > 0 && " " + t("composeEmailModal.docsFailed", { docs: outcome.documentFailures.join(", ") })}
@@ -315,14 +317,16 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
               <div>
                 <button
                   onClick={handleSend}
-                  disabled={sending || participantIds.length === 0 || (emailOn && (!subject.trim() || !body.trim())) || (!emailOn && selectedDocs.size === 0)}
+                  disabled={sending || participantIds.length === 0 || (emailOn && (!subject.trim() || !body.trim())) || (!emailOn && mode !== "acceptance" && selectedDocs.size === 0)}
                   className={btnPrimary}
                 >
                   {sending
                     ? t("common.loading")
                     : emailOn
                       ? t("composeEmailModal.sendButton", { count: String(participantIds.length) })
-                      : t("composeEmailModal.generateButton", { count: String(participantIds.length) })}
+                      : selectedDocs.size === 0
+                        ? t("composeEmailModal.acceptOnlyButton", { count: String(participantIds.length) })
+                        : t("composeEmailModal.generateButton", { count: String(participantIds.length) })}
                 </button>
               </div>
             </>

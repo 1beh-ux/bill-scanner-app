@@ -275,6 +275,8 @@ export async function portalData(scope: PortalScope) {
         registrationDeadline: e.registrationDeadline,
         kind: e.kind,
         membershipYear: e.membershipYear,
+        location: e.location,
+        info: e.portalInfo,
         memberIds,
         pricing: await registrationPricing(e, scope.members.filter((m) => memberIds.includes(m.id))),
         // Per member: the event's required fields to fill in when registering (slice 5 #3).

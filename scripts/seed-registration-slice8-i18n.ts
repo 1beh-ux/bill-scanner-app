@@ -7,6 +7,13 @@ config({ path: ".env.local", override: true });
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
   const rows = [
+    { key: "composeEmailModal.acceptOnlyDone", cs: "Přijato: {count}. Nic nebylo odesláno.", en: "Accepted: {count}. Nothing was sent." },
+    { key: "composeEmailModal.acceptOnlyButton", cs: "Jen přijmout ({count}) — bez e-mailu a dokumentů", en: "Just accept ({count}) — no e-mail, no documents" },
+    { key: "portal.cancelRegistration", cs: "Zrušit přihlášku", en: "Cancel registration" },
+    { key: "portal.cancelConfirm", cs: "Opravdu zrušit tuto přihlášku? Smaže se i s nahranými dokumenty.", en: "Really cancel this registration? It's deleted with any uploaded documents." },
+    { key: "portal.cancelYes", cs: "Ano, zrušit", en: "Yes, cancel" },
+    { key: "portal.cancelNo", cs: "Ne", en: "No" },
+    { key: "portal.cancelFailed", cs: "Přihlášku se nepodařilo zrušit — možná už byla potvrzena. Kontaktujte prosím pořadatele.", en: "The registration couldn't be cancelled — it may already be accepted. Please contact the organisers." },
     // 1. Portal: add a family member
     { key: "portal.addMember", cs: "Přidat člena rodiny", en: "Add a family member" },
     { key: "portal.addMemberHint", cs: "Nový člen se přidá do rodiny (ne na akci). Správce ho zkontroluje; nic se neodesílá.", en: "The new member joins the family (not an event). The admin reviews it; nothing is sent." },
