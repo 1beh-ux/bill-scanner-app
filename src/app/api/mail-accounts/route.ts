@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgWhere } from "@/lib/org-scope";
 
 // Addresses only, never the encrypted refresh tokens -- any authenticated
-// user can see which mailboxes are already connected, to reuse them on
-// another event without re-authorizing.
+// user can see which of the acting organization's mailboxes are already
+// connected, to reuse them on another event without re-authorizing.
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
@@ -12,6 +13,7 @@ export async function GET() {
   }
 
   const accounts = await prisma.mailSenderAccount.findMany({
+    where: await orgWhere(user),
     select: { email: true, scope: true },
     orderBy: { email: "asc" },
   });

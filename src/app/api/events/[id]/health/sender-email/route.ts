@@ -38,6 +38,10 @@ export async function PATCH(
   if (typeof senderEmail !== "string" || !senderEmail.trim()) {
     return NextResponse.json({ error: "sender_email_required" }, { status: 400 });
   }
+  // Only a mailbox connected in the event's organization (the picker lists exactly those):
+  // never another organization's mailbox to send as.
+  const owned = await prisma.mailSenderAccount.count({ where: { email: senderEmail.trim(), organization: { events: { some: { id: eventId } } } } });
+  if (!owned) return NextResponse.json({ error: "sender_not_connected" }, { status: 400 });
 
   const event = await prisma.event.update({
     where: { id: eventId },
