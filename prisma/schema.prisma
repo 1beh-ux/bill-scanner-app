@@ -388,6 +388,7 @@ model Event {
   eventParticipantFields EventParticipantField[]
   planDays             PlanDay[]
   planActivities       PlanActivity[]
+  publicHosts          PublicHost[]
 
   @@map("events")
 }
@@ -1365,4 +1366,32 @@ model PlanActivity {
 
   @@index([eventId])
   @@map("plan_activities")
+}
+
+// Hostnames other than the admin app that serve only the public registration
+// page and/or the parent portal (docs/custom-domain.md). Data, not env vars, so
+// a new domain needs no deploy. organizationId can join later, once there are organizations.
+enum PublicHostPurpose {
+  registration
+  portal
+  both
+}
+
+model PublicHost {
+  id              String            @id @default(uuid())
+  // Lowercase, no scheme, no port.
+  hostname        String            @unique
+  purpose         PublicHostPurpose
+  // Registration hosts only: tied to one event; null = every event. The API keeps it null for portal/both.
+  eventId         String?           @map("event_id")
+  // At most one active default per purpose (checked in the API).
+  isDefault       Boolean           @default(false) @map("is_default")
+  active          Boolean           @default(true)
+  createdAt       DateTime          @default(now()) @map("created_at")
+  createdByUserId String?           @map("created_by_user_id")
+
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("public_hosts")
 }
