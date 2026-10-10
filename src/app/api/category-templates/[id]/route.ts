@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { notFound, orgWhere } from "@/lib/org-scope";
+import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -11,6 +11,8 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  // Templates are the organization admin's (anyone else could edit them before step 4).
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const { id } = await params;
   // Another organization's template doesn't exist here.
@@ -36,6 +38,8 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  // Templates are the organization admin's (anyone else could edit them before step 4).
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const { id } = await params;
   // Another organization's template doesn't exist here.

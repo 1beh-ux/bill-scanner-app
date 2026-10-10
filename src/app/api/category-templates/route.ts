@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { orgWhere } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -24,6 +24,8 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  // Templates are the organization admin's (anyone else could edit them before step 4).
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const { name } = await req.json();
   if (!name) {
