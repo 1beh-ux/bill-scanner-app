@@ -17,7 +17,7 @@ Cloud Scheduler (/api/cron), Firebase's sign-in helper (/__/) and old links keep
 | Var | Value | What reads it |
 |---|---|---|
 | `APP_BASE_URL` | `https://tabornik.online` | mail OAuth redirect URI (`src/app/api/mail-oauth/authorize/route.ts`), Cloud Tasks target URL (`src/lib/cloud-tasks.ts`), fallback for public links |
-| `CANONICAL_HOST` | `tabornik.online` | `src/proxy.ts`: 308 from `*.run.app` to this host for GET/HEAD, except `/api/tasks`, `/api/cron`, `/__/` |
+| `CANONICAL_HOST` | `tabornik.online` | `src/proxy.ts`: 308 from `*.run.app` and `www.` + this host to this host for GET/HEAD, except `/api/tasks`, `/api/cron`, `/__/` |
 | `ADMIN_HOSTS` | unset = `tabornik.online,www.tabornik.online` | `src/lib/host-rules.ts`: admin hosts, plus `*.run.app`, localhost, `*.cloudshell.dev` |
 | `LB_IP` | `34.144.251.105` | "Ověřit" in Veřejné adresy: the hostname must resolve to it |
 | `PORTAL_BASE_URL` / `PUBLIC_BASE_URL` | unset | fallbacks in `publicUrl()` (`src/lib/public-host.ts`) when no public host row applies |
@@ -91,3 +91,13 @@ There is no organization column yet; `organizationId` can be added later.
 4. Press **Ověřit**. It checks that DNS points to LB_IP, then that the TLS certificate works, then that the landing page loads. Each step has its own error message.
 
 **Order matters:** a default host is used in links and the admin host redirects to it from the moment its row is active. Before the DNS points to it and the certificate works, keep the row inactive, or don't mark it default.
+
+## Google sign-in on our own host
+
+`src/lib/firebase.ts` sets Firebase's `authDomain` to the current host for every browser, so Google's window says "continue to tabornik.online". `/__/auth/*` and `/__/firebase/*` are proxied to `<project>.firebaseapp.com` (`next.config.ts`; never to NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN).
+
+Requirements:
+- `https://tabornik.online/__/auth/handler` is listed in the Firebase web OAuth client.
+- `tabornik.online` is listed among Firebase's authorized domains.
+
+Dev hosts (localhost, Cloud Shell) keep firebaseapp.com outside Apple browsers.

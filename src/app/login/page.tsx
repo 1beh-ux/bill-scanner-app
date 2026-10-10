@@ -1,6 +1,6 @@
 "use client";
 import { getRedirectResult, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
-import { auth, googleProvider, needsSameOriginAuth } from "@/lib/firebase";
+import { auth, googleProvider, prefersRedirectSignIn } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Tent, Receipt, HeartPulse, Mail as MailIcon } from "lucide-react";
@@ -49,7 +49,7 @@ export default function LoginPage() {
     setBusy(true);
     // Popups can't hand the result back from a home-screen app or through
     // Safari's tracking protection -- use a full-page redirect there.
-    if (needsSameOriginAuth()) {
+    if (prefersRedirectSignIn()) {
       await signInWithRedirect(auth, googleProvider).catch(showError);
       return;
     }

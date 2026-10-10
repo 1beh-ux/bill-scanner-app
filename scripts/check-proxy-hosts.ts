@@ -19,7 +19,7 @@ const publicHost: Record<string, string> = {
   "/api/public/r/x": "next", "/api/portal/x": "next", "/_next/static/x": "next", "/napoveda": "404",
 };
 const runApp = Object.fromEntries(PATHS.map((p) => [p, `308 https://tabornik.online${p}`]));
-const EXPECT: Record<string, Record<string, string>> = { "tabornik.online": admin, [RUN]: runApp, "prihlasky.kasicka.eu": publicHost, "unknown.example.com": publicHost };
+const EXPECT: Record<string, Record<string, string>> = { "tabornik.online": admin, "www.tabornik.online": runApp, [RUN]: runApp, "prihlasky.kasicka.eu": publicHost, "unknown.example.com": publicHost };
 
 function outcome(res: Response): string {
   const rewrite = res.headers.get("x-middleware-rewrite");

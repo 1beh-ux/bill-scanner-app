@@ -8,11 +8,12 @@ export function proxy(req: NextRequest) {
   // CANONICAL_HOST is set. Cloud Tasks (/api/tasks), Cloud Scheduler
   // (/api/cron) and Firebase's auth helper (/__/) keep working on run.app;
   // only GET/HEAD, so no form POST loses its body.
+  // www.<canonical> -> <canonical> too: one admin host (Google sign-in runs on it, src/lib/firebase.ts).
   const canonical = process.env.CANONICAL_HOST;
   const host = requestHost(req.headers);
   if (
     canonical &&
-    host.endsWith(".run.app") &&
+    (host.endsWith(".run.app") || host === `www.${canonical}`) &&
     (req.method === "GET" || req.method === "HEAD") &&
     !pathname.startsWith("/api/tasks") &&
     !pathname.startsWith("/api/cron") &&

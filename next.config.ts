@@ -16,12 +16,11 @@ const nextConfig: NextConfig = {
     "/api/**": ["./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],
   },
   serverExternalPackages: ["@google-cloud/tasks", "google-gax", "@grpc/grpc-js", "pdfjs-dist"],
-  // Firebase Auth's sign-in helper served from our own domain. Safari/iOS block
-  // the cross-site storage the default <project>.firebaseapp.com helper needs,
-  // so Google sign-in never completed there (src/lib/firebase.ts picks the
-  // same-origin auth domain for those browsers).
+  // Firebase Auth's sign-in helper served from our own domain (src/lib/firebase.ts
+  // uses it as authDomain). Always the project's firebaseapp.com -- never
+  // NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: set to our own host, it would proxy to itself.
   async rewrites() {
-    const firebaseHost = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com`;
+    const firebaseHost = `${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseapp.com`;
     return [
       { source: "/__/auth/:path*", destination: `https://${firebaseHost}/__/auth/:path*` },
       { source: "/__/firebase/:path*", destination: `https://${firebaseHost}/__/firebase/:path*` },
