@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
   const { keys } = await req.json().catch(() => ({}));
   const only = Array.isArray(keys) ? new Set(keys.filter((k: unknown): k is string => typeof k === "string")) : null;
   const list = (await candidates()).filter(({ row }) => !only || only.has(row.key));
+  const organizationId = await orgIdOfUser(user);
   await prisma.participantFieldTemplate.createMany({
     data: list.map(({ row }) => ({
       key: row.key,
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       options: row.options ?? undefined,
       defaultSurfaces: row.surfaces,
       active: row.active,
-      organizationId: orgIdOfUser(user),
+      organizationId,
     })),
     skipDuplicates: true,
   });

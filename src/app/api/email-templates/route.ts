@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   }
 
   const purposeKey = req.nextUrl.searchParams.get("purposeKey") || PARENT_SUMMARY_PURPOSE_KEY;
-  const template = await getOrCreateOrgEmailTemplate(orgIdOfUser(user), purposeKey);
+  const template = await getOrCreateOrgEmailTemplate(await orgIdOfUser(user), purposeKey);
   return NextResponse.json(template);
 }
 
@@ -31,9 +31,9 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updated = await prisma.emailTemplate.upsert({
-    where: { organizationId_purposeKey: { organizationId: orgIdOfUser(user), purposeKey: key } },
+    where: { organizationId_purposeKey: { organizationId: await orgIdOfUser(user), purposeKey: key } },
     update: { subject, body },
-    create: { purposeKey: key, subject, body, organizationId: orgIdOfUser(user) },
+    create: { purposeKey: key, subject, body, organizationId: await orgIdOfUser(user) },
   });
 
   return NextResponse.json(updated);

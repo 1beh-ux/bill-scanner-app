@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const template = await prisma.categoryTemplate.create({ data: { name, organizationId: orgIdOfUser(user) } });
+  const template = await prisma.categoryTemplate.create({ data: { name, organizationId: await orgIdOfUser(user) } });
   return NextResponse.json(template, { status: 201 });
 }

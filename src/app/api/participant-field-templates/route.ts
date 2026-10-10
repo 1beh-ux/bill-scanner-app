@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const template = await prisma.participantFieldTemplate.create({
-    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [], organizationId: orgIdOfUser(user) },
+    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [], organizationId: await orgIdOfUser(user) },
   });
 
   return NextResponse.json(template, { status: 201 });

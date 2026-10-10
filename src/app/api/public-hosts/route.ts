@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const checked = await checkHostInput(await req.json().catch(() => null), null);
   if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: 400 });
-  const host = await prisma.publicHost.create({ data: { ...checked.data, createdByUserId: user.id, organizationId: orgIdOfUser(user) } });
+  const host = await prisma.publicHost.create({ data: { ...checked.data, createdByUserId: user.id, organizationId: await orgIdOfUser(user) } });
   invalidatePublicHosts();
   return NextResponse.json(host, { status: 201 });
 }

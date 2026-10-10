@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "info") {
     const [template, senderEmail, targets] = await Promise.all([
-      getOrCreateOrgEmailTemplate(orgIdOfUser(user), purposeKey),
+      getOrCreateOrgEmailTemplate(await orgIdOfUser(user), purposeKey),
       orgSenderEmail(user),
       Promise.all(childIds.map(loadTarget)),
     ]);

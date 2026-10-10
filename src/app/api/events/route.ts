@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
         name,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
-        organizationId: orgIdOfUser(user),
+        organizationId: await orgIdOfUser(user),
       },
     });
 

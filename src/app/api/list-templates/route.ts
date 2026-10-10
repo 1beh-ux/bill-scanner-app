@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       key: key || null,
       sortOrder: sortOrder ?? null,
       data: data ?? undefined,
-      organizationId: orgIdOfUser(user),
+      organizationId: await orgIdOfUser(user),
     },
   });
 

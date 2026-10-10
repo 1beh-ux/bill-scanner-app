@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
 
   const author = await prisma.$transaction(async (tx) => {
-    const created = await tx.author.create({ data: { canonicalName: name, organizationId: orgIdOfUser(user) } });
+    const created = await tx.author.create({ data: { canonicalName: name, organizationId: await orgIdOfUser(user) } });
     if (bank.account !== null) {
       await setAuthorBank(tx, { authorId: created.id, bank, userId: user.id, eventId: null, source: "create" });
     }

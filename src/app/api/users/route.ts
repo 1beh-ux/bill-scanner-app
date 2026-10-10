@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const created = await prisma.user.create({
-      data: { email: email.trim().toLowerCase(), displayName: displayName.trim(), role, organizationId: orgIdOfUser(user) },
+      data: { email: email.trim().toLowerCase(), displayName: displayName.trim(), role, organizationId: await orgIdOfUser(user) },
     });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

@@ -1,7 +1,9 @@
 // Who owns a new org-level row (docs/organizations-change-notes.md): the
-// event's organization inside an event, else the creating user's. Every create
-// in the 13 owned tables goes through one of these. No read filtering yet.
+// event's organization inside an event, else the organization the user acts in
+// (their own; a super-admin's acting one). Every create in the 13 owned tables
+// goes through one of these.
 import { prisma } from "@/lib/prisma";
+import { getActingOrgId } from "@/lib/org-scope";
 import type { PrismaClient, User } from "@/generated/prisma";
 
 export async function orgIdOfEvent(eventId: string) {
@@ -9,7 +11,7 @@ export async function orgIdOfEvent(eventId: string) {
   return event.organizationId;
 }
 
-export const orgIdOfUser = (user: Pick<User, "organizationId">) => user.organizationId;
+export const orgIdOfUser = (user: Pick<User, "organizationId" | "isSuperAdmin">) => getActingOrgId(user);
 
 /** Seeds and test scripts: SEED_ORGANIZATION (default "Pionýrská skupina Záře"), created if missing (a fresh dev DB). */
 export async function orgIdForSeeds(db: Pick<PrismaClient, "organization"> = prisma): Promise<string> {

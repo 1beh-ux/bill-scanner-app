@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
     const childIds = ids(body.childIds);
     if (!name || childIds.length === 0) return NextResponse.json({ error: "bad_request" }, { status: 400 });
     const family = await prisma.$transaction(async (tx) => {
-      const f = await tx.family.create({ data: { name, organizationId: orgIdOfUser(user) } });
+      const f = await tx.family.create({ data: { name, organizationId: await orgIdOfUser(user) } });
       // Only people not in a family yet: a person is in at most one.
       await tx.child.updateMany({ where: { id: { in: childIds }, familyId: null }, data: { familyId: f.id } });
       return f;
