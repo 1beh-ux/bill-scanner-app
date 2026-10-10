@@ -44,6 +44,8 @@ type Target = {
   // Receiving guardians, each address once.
   emails: string[];
   values: Record<string, string>;
+  // {{organization_name}}: the family's / person's organization.
+  organizationName: string;
   // Child ids a send to this address is logged under.
   logChildIds: (email: string) => string[];
 };
@@ -58,7 +60,7 @@ const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLow
  */
 export async function loadTarget(id: string): Promise<Target | null> {
   if (id.startsWith(FAMILY_TARGET_PREFIX)) {
-    const family = await prisma.family.findUnique({ where: { id: id.slice(FAMILY_TARGET_PREFIX.length) }, include: { members: { include: receiving } } });
+    const family = await prisma.family.findUnique({ where: { id: id.slice(FAMILY_TARGET_PREFIX.length) }, include: { members: { include: receiving }, organization: { select: { name: true } } } });
     const members = family?.members.filter(isActivePerson) ?? [];
     if (!family || members.length === 0) return null;
     return {
@@ -67,12 +69,13 @@ export async function loadTarget(id: string): Promise<Target | null> {
       token: family.portalToken,
       emails: linkRecipients(members),
       values: {},
+      organizationName: family.organization.name,
       logChildIds: (email) => members.filter((m) => m.guardians.some((g) => same(g.email, email))).map((m) => m.id),
     };
   }
-  const child = await prisma.child.findUnique({ where: { id }, include: receiving });
+  const child = await prisma.child.findUnique({ where: { id }, include: { ...receiving, organization: { select: { name: true } } } });
   if (!child || !isActivePerson(child)) return null;
-  return { id, name: child.name, token: child.portalToken, emails: child.guardians.map((g) => g.email), values: profileValues(child), logChildIds: () => [child.id] };
+  return { id, name: child.name, token: child.portalToken, emails: child.guardians.map((g) => g.email), values: profileValues(child), organizationName: child.organization.name, logChildIds: () => [child.id] };
 }
 
 /** Creates the target's link when it has none yet. */
@@ -90,6 +93,7 @@ function vars(target: Target, link: string, user: User, senderEmail: string | nu
     // A child's profile fields are usable as {{key}} too, like participant fields elsewhere.
     ...target.values,
     child_name: target.name,
+    organization_name: target.organizationName,
     portal_link: link,
     sender_name: sender.name,
     signature: sender.signature,

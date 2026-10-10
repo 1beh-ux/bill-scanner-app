@@ -252,6 +252,8 @@ export async function resolveVariables(
       ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
       : "",
     ...(await portalLinkVars(participant, event, createPortalLink)),
+    // {{organization_name}} (organizations step 5): the event's organization, never a hard-coded name.
+    organization_name: (await prisma.organization.findFirst({ where: { events: { some: { id: event.id } } }, select: { name: true } }))?.name ?? "",
   };
   const images: Record<string, Buffer> = {};
   const imageSizesMm: Record<string, number> = {};
