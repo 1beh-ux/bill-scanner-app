@@ -2,6 +2,7 @@
 import { I18nProvider } from "@/lib/i18n";
 import AppSidebar from "@/components/AppSidebar";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
+import { ActingOrgStrip } from "@/components/ActingOrg";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -13,7 +14,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
               inside pages sticks while scrolling -- with overflow-x set and no
               height, main was a scroll container that never scrolled, and every
               sticky element in it stayed put. Print gets normal flow back. */}
-          <main className="min-w-0 flex-1 overflow-x-auto md:h-screen md:overflow-y-auto print:h-auto print:overflow-visible">{children}</main>
+          <main className="min-w-0 flex-1 overflow-x-auto md:h-screen md:overflow-y-auto print:h-auto print:overflow-visible">
+            <ActingOrgStrip />
+            {children}
+          </main>
         </div>
       </ConfirmProvider>
     </I18nProvider>

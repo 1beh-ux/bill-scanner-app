@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { Settings, Menu, X, Sun, Moon, Tent, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
+import { OrgSwitcher } from "@/components/ActingOrg";
 import { navItemVisible } from "@/lib/nav-sections";
 import { MENU_ITEMS, MENU_SECTIONS, type MenuSection } from "@/lib/menu-items";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
@@ -139,6 +140,8 @@ export default function AppSidebar() {
         </div>
         <span className="text-[14px] font-medium text-paper">tabornik.online</span>
       </div>
+
+      <OrgSwitcher />
 
       {selectableEvents.length > 0 && (
         <>

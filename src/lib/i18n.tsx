@@ -5,6 +5,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 type Lang = "cs" | "en";
 type Theme = "light" | "dark";
 type Role = "admin" | "accountant" | "user";
+export type OrgRef = { id: string; name: string; shortName: string };
 type TranslationsMap = Record<string, { cs: string; en: string }>;
 
 interface I18nContextValue {
@@ -19,6 +20,9 @@ interface I18nContextValue {
   roleLoaded: boolean;
   // Překlady, Kurzy, editing Veřejné adresy (organizations step 2). UI only; the server checks.
   isSuperAdmin: boolean;
+  // The organization this session acts in, and the user's own (they differ only for a super-admin who switched).
+  organization: OrgRef | null;
+  homeOrganization: OrgRef | null;
   hiddenModules: string[];
   setHiddenModules: (m: string[]) => void;
 }
@@ -91,6 +95,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(readCachedRole);
   const [roleLoaded, setRoleLoaded] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [organization, setOrganization] = useState<OrgRef | null>(null);
+  const [homeOrganization, setHomeOrganization] = useState<OrgRef | null>(null);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
   // script in layout.tsx already set the real class on <html> before this
@@ -139,9 +145,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role; isSuperAdmin?: boolean; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
+      .then((data: { role: Role; isSuperAdmin?: boolean; organization?: OrgRef; homeOrganization?: OrgRef; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
         setRole(data?.role ?? null);
         setIsSuperAdmin(data?.isSuperAdmin === true);
+        setOrganization(data?.organization ?? null);
+        setHomeOrganization(data?.homeOrganization ?? null);
         try {
           if (data?.role) localStorage.setItem("role", data.role);
           else localStorage.removeItem("role");
@@ -187,7 +195,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return (
     <I18nContext.Provider
-      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, hiddenModules, setHiddenModules }}
+      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, organization, homeOrganization, hiddenModules, setHiddenModules }}
     >
       {children}
     </I18nContext.Provider>
