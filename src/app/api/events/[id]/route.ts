@@ -84,6 +84,8 @@ export async function PATCH(
     location,
     portalInfo,
     paymentDocTypeId,
+    bankCheckEnabled,
+    bankAccountId,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -100,7 +102,9 @@ export async function PATCH(
     autoAccept !== undefined ||
     location !== undefined ||
     portalInfo !== undefined ||
-    paymentDocTypeId !== undefined;
+    paymentDocTypeId !== undefined ||
+    bankCheckEnabled !== undefined ||
+    bankAccountId !== undefined;
   for (const v of [location, portalInfo]) if (v !== undefined && v !== null && !(typeof v === "string" && v.length <= 2000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (autoAccept !== undefined && !["manual", "accept", "accept_send"].includes(autoAccept)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
@@ -115,6 +119,32 @@ export async function PATCH(
     !(typeof paymentDocTypeId === "string" && (await prisma.eventListItem.findFirst({ where: { id: paymentDocTypeId, eventId: id, kind: "document" }, select: { id: true } })))
   ) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+  // Bank payment check (docs/bank-payments-design.md): only with a payment document and an organization
+  // Fio account equal to the event's payment account. Asked for and impossible -> error; became
+  // impossible through another change (document / account cleared) -> switched off.
+  if (bankCheckEnabled !== undefined && typeof bankCheckEnabled !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if (bankAccountId !== undefined && bankAccountId !== null && typeof bankAccountId !== "string") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  let bankCheckOff = false;
+  if ([bankCheckEnabled, bankAccountId, paymentDocTypeId, registrationBankAccountNumber, registrationBankCode].some((v) => v !== undefined)) {
+    const cur = await prisma.event.findUniqueOrThrow({ where: { id } });
+    const pick = <T,>(v: T | undefined, old: T) => (v !== undefined ? v : old);
+    const wantOn = pick<boolean>(bankCheckEnabled, cur.bankCheckEnabled);
+    const accountId = pick<string | null>(bankAccountId || null, cur.bankAccountId);
+    const account = accountId ? await prisma.bankAccount.findFirst({ where: { id: accountId, organizationId: cur.organizationId } }) : null;
+    // Never another organization's account, even with the check off.
+    if (bankAccountId && !account) return NextResponse.json({ error: "bank_check_account" }, { status: 400 });
+    const error = !wantOn
+      ? null
+      : !pick<string | null>(paymentDocTypeId || null, cur.paymentDocTypeId)
+        ? "bank_check_no_payment_doc"
+        : !account ||
+            account.accountNumber !== String(pick(registrationBankAccountNumber, cur.registrationBankAccountNumber) ?? "").replace(/\s/g, "") ||
+            account.bankCode !== String(pick(registrationBankCode, cur.registrationBankCode) ?? "").trim()
+          ? "bank_check_account"
+          : null;
+    if (error && bankCheckEnabled === true) return NextResponse.json({ error }, { status: 400 });
+    bankCheckOff = !!error;
   }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (touchesRegistration && !isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
@@ -216,6 +246,9 @@ export async function PATCH(
       ...(location !== undefined && { location: location?.trim() || null }),
       ...(portalInfo !== undefined && { portalInfo: portalInfo?.trim() || null }),
       ...(paymentDocTypeId !== undefined && { paymentDocTypeId: paymentDocTypeId || null }),
+      ...(bankAccountId !== undefined && { bankAccountId: bankAccountId || null }),
+      ...(bankCheckEnabled !== undefined && { bankCheckEnabled }),
+      ...(bankCheckOff && { bankCheckEnabled: false }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there
