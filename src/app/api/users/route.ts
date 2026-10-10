@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere, requireSuperAdmin } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -34,6 +34,11 @@ export async function POST(req: NextRequest) {
   }
   if (role !== "admin" && role !== "accountant" && role !== "user") {
     return NextResponse.json({ error: "invalid_role" }, { status: 400 });
+  }
+  // Only a super-admin makes someone an admin (organizations step 3).
+  if (role === "admin") {
+    const notSuperAdmin = requireSuperAdmin(user);
+    if (notSuperAdmin) return notSuperAdmin;
   }
 
   try {

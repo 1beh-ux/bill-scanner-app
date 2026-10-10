@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
+import { isOrgAdmin, notFound, orgWhere, requireSuperAdmin } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -17,7 +17,9 @@ export async function PATCH(
 
   const { id } = await params;
   // Only a user of the acting organization; anyone else doesn't exist here.
-  if (!(await prisma.user.findFirst({ where: { id, ...(await orgWhere(user)) }, select: { id: true } }))) return notFound();
+  const target = await prisma.user.findFirst({ where: { id, ...(await orgWhere(user)) }, select: { role: true, active: true, organizationId: true } });
+  if (!target) return notFound();
+  // Only these three; isSuperAdmin (and the organization) are never editable through the API.
   const body = await req.json();
   const { displayName, role, active } = body;
 
@@ -29,6 +31,16 @@ export async function PATCH(
   }
   if (role !== undefined && role !== "admin" && id === user.id) {
     return NextResponse.json({ error: "cannot_demote_self" }, { status: 400 });
+  }
+  // Granting or removing admin: super-admin only (organizations step 3).
+  if (role !== undefined && role !== target.role && (role === "admin" || target.role === "admin")) {
+    const notSuperAdmin = requireSuperAdmin(user);
+    if (notSuperAdmin) return notSuperAdmin;
+  }
+  // The organization keeps at least one active admin (deactivating or demoting the last one).
+  const losesAdmin = target.role === "admin" && target.active && (active === false || (role !== undefined && role !== "admin"));
+  if (losesAdmin && (await prisma.user.count({ where: { organizationId: target.organizationId, role: "admin", active: true } })) <= 1) {
+    return NextResponse.json({ error: "last_admin" }, { status: 400 });
   }
 
   const updated = await prisma.user.update({

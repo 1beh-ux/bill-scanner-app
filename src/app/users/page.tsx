@@ -26,7 +26,7 @@ const inputClassSm =
   "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 export default function UsersPage() {
-  const { t, role: currentUserRole, roleLoaded } = useTranslations();
+  const { t, role: currentUserRole, roleLoaded, isSuperAdmin } = useTranslations();
   const router = useRouter();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,7 +80,9 @@ export default function UsersPage() {
       setError(
         data.error === "duplicate_email"
           ? t("usersPage.error.duplicate_email")
-          : t("usersPage.errorAddFailed")
+          : data.error === "super_admin_only"
+            ? t("usersPage.error.super_admin_only")
+            : t("usersPage.errorAddFailed")
       );
       return;
     }
@@ -114,7 +116,11 @@ export default function UsersPage() {
       setError(
         data.error === "cannot_demote_self"
           ? t("usersPage.error.cannot_demote_self")
-          : t("usersPage.errorEditFailed")
+          : data.error === "last_admin"
+            ? t("usersPage.error.last_admin")
+            : data.error === "super_admin_only"
+              ? t("usersPage.error.super_admin_only")
+              : t("usersPage.errorEditFailed")
       );
       return;
     }
@@ -134,7 +140,9 @@ export default function UsersPage() {
       setError(
         data.error === "cannot_deactivate_self"
           ? t("usersPage.error.cannot_deactivate_self")
-          : t("usersPage.errorEditFailed")
+          : data.error === "last_admin"
+            ? t("usersPage.error.last_admin")
+            : t("usersPage.errorEditFailed")
       );
       return;
     }
@@ -169,7 +177,8 @@ export default function UsersPage() {
         >
           <option value="user">{t("usersPage.roleUser")}</option>
           <option value="accountant">{t("usersPage.roleAccountant")}</option>
-          <option value="admin">{t("usersPage.roleAdmin")}</option>
+          {/* Only a super-admin makes admins (organizations step 3). */}
+          {isSuperAdmin && <option value="admin">{t("usersPage.roleAdmin")}</option>}
         </select>
         <button
           type="submit"
@@ -212,15 +221,20 @@ export default function UsersPage() {
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{u.email}</td>
                     <td className="p-2">
-                      <select
-                        value={editRole}
-                        onChange={(e) => setEditRole(e.target.value as Role)}
-                        className={inputClassSm}
-                      >
-                        <option value="user">{t("usersPage.roleUser")}</option>
-                        <option value="accountant">{t("usersPage.roleAccountant")}</option>
-                        <option value="admin">{t("usersPage.roleAdmin")}</option>
-                      </select>
+                      {/* An admin's role is read-only for organization admins; only a super-admin grants or removes admin. */}
+                      {!isSuperAdmin && u.role === "admin" ? (
+                        <span className="text-[14px] text-ink">{t(ROLE_LABEL_KEYS[u.role])}</span>
+                      ) : (
+                        <select
+                          value={editRole}
+                          onChange={(e) => setEditRole(e.target.value as Role)}
+                          className={inputClassSm}
+                        >
+                          <option value="user">{t("usersPage.roleUser")}</option>
+                          <option value="accountant">{t("usersPage.roleAccountant")}</option>
+                          {isSuperAdmin && <option value="admin">{t("usersPage.roleAdmin")}</option>}
+                        </select>
+                      )}
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">
                       {u.active ? t("common.statusActive") : t("authors.statusInactive")}
