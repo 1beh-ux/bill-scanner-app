@@ -69,3 +69,12 @@ export async function authorInOrg(user: ScopeUser, id: string): Promise<boolean>
 export async function childInOrg(user: ScopeUser, id: string): Promise<boolean> {
   return (await prisma.child.count({ where: { id, organizationId: await getActingOrgId(user) } })) > 0;
 }
+
+/** The acting organization's bank account, for its admin -- else 403 / 404 (docs/bank-payments-design.md). */
+export async function requireOrgBankAccount(id: string): Promise<{ error: NextResponse } | { user: User; accountId: string }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  const found = await prisma.bankAccount.count({ where: { id, organizationId: await getActingOrgId(user) } });
+  return found ? { user, accountId: id } : { error: notFound() };
+}
