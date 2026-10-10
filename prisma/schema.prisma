@@ -210,6 +210,13 @@ model User {
   personDocumentsRevoked PersonDocument[]    @relation("PersonDocumentRevokedBy")
   childEmailsSent      ChildEmailLog[]       @relation("ChildEmailSentBy")
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // Sees and manages every organization (organizations step 2+).
+  isSuperAdmin   Boolean @default(false) @map("is_super_admin")
+
+  @@index([organizationId])
   @@map("users")
 }
 
@@ -390,6 +397,11 @@ model Event {
   planActivities       PlanActivity[]
   publicHosts          PublicHost[]
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("events")
 }
 
@@ -398,6 +410,15 @@ model CategoryTemplate {
   name        String  @unique
   description String?
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // The template this one was copied from (organizations step 4); unused for now.
+  sourceTemplateId String? @map("source_template_id")
+  sourceTemplate   CategoryTemplate? @relation("CategoryTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  copies           CategoryTemplate[] @relation("CategoryTemplateSource")
+
+  @@index([organizationId])
   @@map("category_templates")
 }
 
@@ -433,6 +454,11 @@ model Author {
   bills       Bill[]
   bankAudits  AuthorBankAudit[]
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("authors")
 }
 
@@ -578,6 +604,11 @@ model MerchantAlias {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("merchant_aliases")
 }
 
@@ -680,6 +711,11 @@ model Child {
   emailLogs    ChildEmailLog[]
   documents    PersonDocument[]
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([familyId])
   @@map("children")
 }
@@ -724,6 +760,11 @@ model Family {
 
   members Child[]
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("families")
 }
 
@@ -903,6 +944,15 @@ model ParticipantFieldTemplate {
   audience        FieldAudience             @default(both)
   level           FieldLevel                @default(basic)
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // The template this one was copied from (organizations step 4); unused for now.
+  sourceTemplateId String? @map("source_template_id")
+  sourceTemplate   ParticipantFieldTemplate? @relation("ParticipantFieldTemplateSource", fields: [sourceTemplateId], references: [key], onDelete: SetNull)
+  copies           ParticipantFieldTemplate[] @relation("ParticipantFieldTemplateSource")
+
+  @@index([organizationId])
   @@map("participant_field_templates")
 }
 
@@ -1007,6 +1057,15 @@ model ListTemplate {
   active    Boolean          @default(true)
   data      Json?
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // The template this one was copied from (organizations step 4); unused for now.
+  sourceTemplateId String? @map("source_template_id")
+  sourceTemplate   ListTemplate? @relation("ListTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  copies           ListTemplate[] @relation("ListTemplateSource")
+
+  @@index([organizationId])
   @@map("list_templates")
 }
 
@@ -1077,6 +1136,15 @@ model EmailTemplate {
   body       String
   active     Boolean @default(true)
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  // The template this one was copied from (organizations step 4); unused for now.
+  sourceTemplateId String? @map("source_template_id")
+  sourceTemplate   EmailTemplate? @relation("EmailTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  copies           EmailTemplate[] @relation("EmailTemplateSource")
+
+  @@index([organizationId])
   @@map("email_templates")
 }
 
@@ -1109,6 +1177,11 @@ model MailSenderAccount {
 
   connectedByUser User @relation("MailAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("mail_sender_accounts")
 }
 
@@ -1130,6 +1203,11 @@ model DriveAccount {
 
   connectedByUser User @relation("DriveAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@map("drive_accounts")
 }
 
@@ -1392,6 +1470,38 @@ model PublicHost {
 
   event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
+  // Owner (docs/organizations-change-notes.md).
+  organizationId String? @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId])
   @@index([eventId])
   @@map("public_hosts")
+}
+
+// One scout group / organisation. Every org-level table points here
+// (docs/organizations-change-notes.md); existing data belongs to "Pionýrská skupina Záře".
+model Organization {
+  id           String   @id @default(uuid())
+  name         String
+  shortName    String   @map("short_name")
+  contactEmail String?  @map("contact_email")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  users                     User[]
+  events                    Event[]
+  authors                   Author[]
+  children                  Child[]
+  families                  Family[]
+  driveAccounts             DriveAccount[]
+  mailSenderAccounts        MailSenderAccount[]
+  publicHosts               PublicHost[]
+  merchantAliases           MerchantAlias[]
+  categoryTemplates         CategoryTemplate[]
+  listTemplates             ListTemplate[]
+  emailTemplates            EmailTemplate[]
+  participantFieldTemplates ParticipantFieldTemplate[]
+
+  @@map("organizations")
 }
