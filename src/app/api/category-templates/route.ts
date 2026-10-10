@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
+import { orgWhere } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -9,7 +10,9 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // The acting organization's templates (app-level NULL rows: step 4).
   const templates = await prisma.categoryTemplate.findMany({
+    where: await orgWhere(user),
     orderBy: { name: "asc" },
   });
 

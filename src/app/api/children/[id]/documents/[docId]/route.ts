@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { billsBucket } from "@/lib/gcs";
 import { requireAnyModuleAccess } from "@/lib/module-access";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { childInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 // One person document (docs/registration-slice6-spec.md 3-5): GET the file
 // (?inline=1 to view, else a download); POST { action: "revoke" } = "Neplatí"
@@ -18,7 +18,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const doc = await prisma.personDocument.findUnique({ where: { id: docId } });
   if (!doc || doc.childId !== id) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const eventId = new URL(req.url).searchParams.get("event");
-  if (!isOrgAdmin(user)) {
+  if (isOrgAdmin(user)) {
+    if (!(await childInOrg(user, id))) return notFound();
+  } else {
     const denied = eventId ? await requireAnyModuleAccess(user, eventId, ["health", "mail"]) : NextResponse.json({ error: "admin_only" }, { status: 403 });
     if (denied) return denied;
     if (!(await prisma.participant.findFirst({ where: { eventId: eventId!, childId: id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -42,6 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const { id, docId } = await params;
+  if (!(await childInOrg(user, id))) return notFound();
   const body = await req.json().catch(() => ({}));
   if (body.action !== "revoke") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   const doc = await prisma.personDocument.findUnique({ where: { id: docId } });

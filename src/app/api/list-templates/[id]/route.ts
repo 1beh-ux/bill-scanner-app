@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -17,6 +17,8 @@ export async function PATCH(
   }
 
   const { id } = await params;
+  // Another organization's template doesn't exist here.
+  if (!(await prisma.listTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
   const body = await req.json();
   const { name, key, sortOrder, active, data } = body;
 
@@ -51,6 +53,8 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  // Another organization's template doesn't exist here.
+  if (!(await prisma.listTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
   try {
     await prisma.listTemplate.delete({ where: { id } });
     return NextResponse.json({ ok: true });

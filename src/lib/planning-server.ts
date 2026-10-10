@@ -62,7 +62,8 @@ export async function loadPlanPayload(eventId: string): Promise<PlanPayload> {
       select: { id: true, kind: true, name: true, data: true },
     }),
     prisma.listTemplate.findMany({
-      where: { kind: "plan_activity", active: true },
+      // The event's organization's activity library.
+      where: { kind: "plan_activity", active: true, organization: { events: { some: { id: eventId } } } },
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
       select: { id: true, name: true, data: true },
     }),

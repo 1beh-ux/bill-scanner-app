@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { PORTAL_ACCESS_LEVELS } from "@/lib/portal-rules";
 import { FIELD_AUDIENCES, FIELD_LEVELS } from "@/lib/registration-fields";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -19,6 +19,7 @@ export async function PATCH(
 
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
+  if (!(await prisma.participantFieldTemplate.count({ where: { key: decodedKey, ...(await orgWhere(user)) } }))) return notFound();
   const body = await req.json();
   const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration, audience, level } = body;
   if (requiredInRegistration !== undefined && typeof requiredInRegistration !== "boolean") {
@@ -84,6 +85,8 @@ export async function DELETE(
   }
 
   const { key } = await params;
+  // Another organization's template doesn't exist here.
+  if (!(await prisma.participantFieldTemplate.count({ where: { key: decodeURIComponent(key), ...(await orgWhere(user)) } }))) return notFound();
   await prisma.participantFieldTemplate.delete({ where: { key: decodeURIComponent(key) } });
 
   return NextResponse.json({ ok: true });

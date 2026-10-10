@@ -9,9 +9,9 @@ import { RECEIVED_WHERE, backfillPicks, canBecomePersonDocument, profileDocRows 
 // and the event document types with its key. Pure rules live in
 // src/lib/registration-status.ts; this is the DB / GCS side.
 
-/** Keys of the org document templates marked "platí trvale". */
-export async function permanentDocKeys(): Promise<Set<string>> {
-  const rows = await prisma.listTemplate.findMany({ where: { kind: "document", key: { not: null } }, select: { key: true, data: true } });
+/** Keys of the document templates marked "platí trvale" of the event's organization. */
+export async function permanentDocKeys(eventId: string): Promise<Set<string>> {
+  const rows = await prisma.listTemplate.findMany({ where: { kind: "document", key: { not: null }, organization: { events: { some: { id: eventId } } } }, select: { key: true, data: true } });
   return new Set(rows.filter((r) => (r.data as { permanent?: boolean } | null)?.permanent).map((r) => r.key!));
 }
 
@@ -32,7 +32,8 @@ export async function profileDocuments(participants: { id: string; eventId: stri
   const out = new Map<string, ProfileDoc[]>();
   const linked = participants.filter((p) => p.childId);
   if (!linked.length) return out;
-  const keys = await permanentDocKeys();
+  // One organization: the participants' events are all of the same one (one event, or one person's events).
+  const keys = await permanentDocKeys(linked[0].eventId);
   if (!keys.size) return out;
   const [types, docs] = await Promise.all([
     prisma.eventListItem.findMany({ where: { eventId: { in: [...new Set(linked.map((p) => p.eventId))] }, kind: "document", key: { in: [...keys] } } }),
@@ -92,7 +93,7 @@ export async function promoteToPersonDocument(participantDocumentId: string, use
       include: { participant: { select: { childId: true, eventId: true } }, eventListItem: { select: { key: true } } },
     });
     const key = d?.eventListItem.key;
-    if (!d || !key || !d.participant.childId || !canBecomePersonDocument(d) || !(await permanentDocKeys()).has(key)) return false;
+    if (!d || !key || !d.participant.childId || !canBecomePersonDocument(d) || !(await permanentDocKeys(d.participant.eventId)).has(key)) return false;
     if (await prisma.personDocument.findFirst({ where: { sourceParticipantDocumentId: d.id }, select: { id: true } })) return false;
     await savePersonDocument({
       childId: d.participant.childId,

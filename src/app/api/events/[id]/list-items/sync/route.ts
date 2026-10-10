@@ -32,7 +32,8 @@ export async function POST(
   if (denied) return denied;
 
   const [templates, existing] = await Promise.all([
-    prisma.listTemplate.findMany({ where: { kind, active: true } }),
+    // The event's organization's templates.
+    prisma.listTemplate.findMany({ where: { kind, active: true, organization: { events: { some: { id: eventId } } } } }),
     prisma.eventListItem.findMany({ where: { eventId, kind }, select: { name: true } }),
   ]);
   const existingNames = new Set(existing.map((e) => e.name));

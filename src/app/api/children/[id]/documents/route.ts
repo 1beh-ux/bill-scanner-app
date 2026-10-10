@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { readUploadedFile } from "@/lib/participant-document-store";
 import { savePersonDocument } from "@/lib/person-documents";
 import { currentPersonDoc } from "@/lib/registration-status";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { childInOrg, getActingOrgId, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 // The person's permanent documents (docs/registration-slice6-spec.md 3, 5), admin only.
 // GET: per "platí trvale" document type (plus any key the person still has
@@ -19,11 +19,12 @@ async function admin() {
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await admin();
+  const { error, user } = await admin();
   if (error) return error;
   const { id } = await params;
+  if (!(await childInOrg(user, id))) return notFound();
   const [templates, docs] = await Promise.all([
-    prisma.listTemplate.findMany({ where: { kind: "document", key: { not: null } }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.listTemplate.findMany({ where: { kind: "document", key: { not: null }, organizationId: await getActingOrgId(user) }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.personDocument.findMany({ where: { childId: id }, orderBy: { createdAt: "desc" }, include: { sourceEvent: { select: { name: true } } } }),
   ]);
   const permanent = templates.filter((t) => (t.data as { permanent?: boolean } | null)?.permanent);
@@ -48,11 +49,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { user, error } = await admin();
   if (error) return error;
   const { id } = await params;
+  if (!(await childInOrg(user, id))) return notFound();
   const form = await req.formData().catch(() => null);
   const key = String(form?.get("key") ?? "");
   const [child, template] = await Promise.all([
     prisma.child.findUnique({ where: { id }, select: { id: true } }),
-    key ? prisma.listTemplate.findFirst({ where: { kind: "document", key } }) : null,
+    key ? prisma.listTemplate.findFirst({ where: { kind: "document", key, organizationId: await getActingOrgId(user) } }) : null,
   ]);
   if (!child || !(template?.data as { permanent?: boolean } | null)?.permanent) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const upload = await readUploadedFile(form?.get("file"));

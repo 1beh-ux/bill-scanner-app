@@ -110,7 +110,8 @@ async function existingActivityKeys(eventId: string) {
  */
 export async function importBaseActivities(eventId: string, templateIds?: string[]) {
   const templates = await prisma.listTemplate.findMany({
-    where: { kind: "plan_activity", active: true, ...(templateIds && { id: { in: templateIds } }) },
+    // The event's organization's library only.
+    where: { kind: "plan_activity", active: true, organization: { events: { some: { id: eventId } } }, ...(templateIds && { id: { in: templateIds } }) },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
   const [resolve, existing] = await Promise.all([eventItemIdsByName(eventId), existingActivityKeys(eventId)]);
@@ -225,7 +226,7 @@ export type TemplateStatus = "template" | "modified" | "local";
 export async function templateStatuses(eventId: string, activities: ActivityRow[]): Promise<Map<string, TemplateStatus>> {
   const [templates, categoryNames] = await Promise.all([
     prisma.listTemplate.findMany({
-      where: { kind: "plan_activity", id: { in: activities.map((a) => a.sourceTemplateId).filter((x): x is string => !!x) } },
+      where: { kind: "plan_activity", organization: { events: { some: { id: eventId } } }, id: { in: activities.map((a) => a.sourceTemplateId).filter((x): x is string => !!x) } },
     }),
     eventCategoryNames(eventId),
   ]);
@@ -261,7 +262,7 @@ export async function saveActivitiesAsTemplates(eventId: string, activityIds: st
   for (const a of activities) {
     const { name, data } = activityTemplateData(a, categoryNames);
     const existing = a.sourceTemplateId
-      ? await prisma.listTemplate.findFirst({ where: { id: a.sourceTemplateId, kind: "plan_activity" } })
+      ? await prisma.listTemplate.findFirst({ where: { id: a.sourceTemplateId, kind: "plan_activity", organizationId } })
       : null;
     if (existing) {
       await prisma.listTemplate.update({ where: { id: existing.id }, data: { name, data, active: true } });

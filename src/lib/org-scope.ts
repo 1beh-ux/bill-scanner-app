@@ -64,3 +64,8 @@ export async function requireOrgAdminEvent(eventId: string): Promise<{ error: Ne
 export async function authorInOrg(user: ScopeUser, id: string): Promise<boolean> {
   return (await prisma.author.count({ where: { id, organizationId: await getActingOrgId(user) } })) > 0;
 }
+
+/** Is this person (Child) the acting organization's? */
+export async function childInOrg(user: ScopeUser, id: string): Promise<boolean> {
+  return (await prisma.child.count({ where: { id, organizationId: await getActingOrgId(user) } })) > 0;
+}

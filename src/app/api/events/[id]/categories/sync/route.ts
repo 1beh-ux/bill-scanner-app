@@ -21,7 +21,8 @@ export async function POST(
   if (denied) return denied;
 
   const [templates, existing] = await Promise.all([
-    prisma.categoryTemplate.findMany(),
+    // The event's organization's templates.
+    prisma.categoryTemplate.findMany({ where: { organization: { events: { some: { id: eventId } } } } }),
     prisma.eventCategory.findMany({ where: { eventId }, select: { name: true, categoryTemplateId: true } }),
   ]);
   // Already here: linked to the template (possibly renamed for this event), or same name.

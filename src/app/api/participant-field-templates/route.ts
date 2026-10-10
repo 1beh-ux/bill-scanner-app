@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -10,7 +10,9 @@ export async function GET() {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // The acting organization's templates.
   const templates = await prisma.participantFieldTemplate.findMany({
+    where: await orgWhere(user),
     orderBy: { key: "asc" },
   });
   // "Include in documents" is just the `documents` surface -- no separate

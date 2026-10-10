@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { PLAN_ORG_LIST_KINDS } from "@/lib/planning";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS];
 
@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
   }
 
   const items = await prisma.listTemplate.findMany({
-    where: { kind },
+    // The acting organization's templates.
+    where: { kind, ...(await orgWhere(user)) },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 

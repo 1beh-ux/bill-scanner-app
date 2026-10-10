@@ -27,7 +27,7 @@ async function load(params: Promise<{ id: string; itemId: string }>) {
   if ("error" in access) return { error: access.error };
   const { user } = access;
   const item = await prisma.eventListItem.findUnique({ where: { id: itemId } });
-  if (!item || item.eventId !== eventId || item.kind !== "document" || !item.key || !(await permanentDocKeys()).has(item.key)) {
+  if (!item || item.eventId !== eventId || item.kind !== "document" || !item.key || !(await permanentDocKeys(eventId)).has(item.key)) {
     return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   }
   return { user, eventId, key: item.key };
