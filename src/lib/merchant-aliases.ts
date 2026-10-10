@@ -36,9 +36,8 @@ export async function recordMerchantCorrection(
   // casing change) — nothing useful to learn from that.
   if (normalizeMerchantText(canonical) === key) return;
 
-  await prisma.merchantAlias.upsert({
-    where: { rawText: key },
-    create: { rawText: key, canonicalName: canonical, organizationId },
-    update: { canonicalName: canonical },
-  });
+  // Find + update/create, not upsert (ON CONFLICT on a unique organizations_required replaces).
+  const existing = await prisma.merchantAlias.findFirst({ where: { rawText: key } });
+  if (existing) await prisma.merchantAlias.update({ where: { id: existing.id }, data: { canonicalName: canonical } });
+  else await prisma.merchantAlias.create({ data: { rawText: key, canonicalName: canonical, organizationId } });
 }
