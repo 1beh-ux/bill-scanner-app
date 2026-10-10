@@ -47,7 +47,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const files = await listFilesInSubfolder(eventId, folderId).catch(driveErrorResponse);
   if (files instanceof NextResponse) return files;
   const [people, participants, hashes, identity] = await Promise.all([
-    prisma.child.findMany({ orderBy: [{ lastName: "asc" }, { name: "asc" }], select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } }),
+    // File names are matched to the event's organization's people only.
+    prisma.child.findMany({ where: { organization: { events: { some: { id: eventId } } } }, orderBy: [{ lastName: "asc" }, { name: "asc" }], select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true } }),
     prisma.participant.findMany({ where: { eventId, childId: { not: null } }, select: { childId: true } }),
     prisma.personDocument.findMany({ where: { docKey: key }, select: { contentHash: true } }),
     getDriveIdentity(eventId),

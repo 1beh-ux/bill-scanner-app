@@ -35,6 +35,12 @@ export async function POST(
   const { id: eventId, participantId, docTypeId } = await params;
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
+  // Both must be this event's -- never another event's (or organization's) participant.
+  const [inEvent, typeInEvent] = await Promise.all([
+    prisma.participant.count({ where: { id: participantId, eventId } }),
+    prisma.eventListItem.count({ where: { id: docTypeId, eventId } }),
+  ]);
+  if (!inEvent || !typeInEvent) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const rows = await prisma.participantDocument.findMany({
     where: { participantId, eventListItemId: docTypeId },
@@ -80,6 +86,12 @@ export async function DELETE(
   const { id: eventId, participantId, docTypeId } = await params;
   const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
+  // Both must be this event's -- never another event's (or organization's) participant.
+  const [inEvent, typeInEvent] = await Promise.all([
+    prisma.participant.count({ where: { id: participantId, eventId } }),
+    prisma.eventListItem.count({ where: { id: docTypeId, eventId } }),
+  ]);
+  if (!inEvent || !typeInEvent) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   // Uploads still in review / rejected stay for the review list.
   const deleted = await prisma.participantDocument.deleteMany({

@@ -64,6 +64,11 @@ export async function POST(
   if (!participantId) {
     return NextResponse.json({ error: "participant_id_required" }, { status: 400 });
   }
+  // Every participant this writes to must be this event's (so never another event's / organization's).
+  const touched = [...new Set([participantId, ...attachmentActions.map((a) => a.participantId)])];
+  if ((await prisma.participant.count({ where: { id: { in: touched }, eventId } })) !== touched.length) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   let senderEmail: string;
   try {

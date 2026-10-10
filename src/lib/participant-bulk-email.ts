@@ -296,7 +296,8 @@ export async function sendBulkParticipantEmail(opts: {
 
   for (const participantId of opts.participantIds) {
     const participant = await loadParticipant(participantId);
-    if (!participant) continue;
+    // Only this event's participants (ids come from the request).
+    if (!participant || participant.eventId !== opts.eventId) continue;
 
     // Built before `vars` -- {{attachments_list}} depends on what actually got
     // attached (Part 11-I), not a static guess made before generation runs.

@@ -90,7 +90,8 @@ export async function sendBulkStatusUpdates(
       where: { id: participantId },
       include: { guardians: { where: { receivesCommunications: true } } },
     });
-    if (!participant || participant.guardians.length === 0) continue;
+    // Only this event's participants (ids come from the request).
+    if (!participant || participant.eventId !== eventId || participant.guardians.length === 0) continue;
 
     const vars = await bulkStatusVars(participant, event, sender, documentTypes, usesPortalLink(templateSubject, templateBody));
     const subject = substituteVariables(templateSubject, vars);

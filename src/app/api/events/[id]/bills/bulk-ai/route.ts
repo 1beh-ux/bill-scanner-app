@@ -39,7 +39,9 @@ export async function POST(
   }
 
   const body = await req.json().catch(() => ({}));
-  const billIds: string[] = Array.isArray(body.billIds) ? body.billIds : [];
+  // Only this event's bills (never another event's / organization's ids from the body).
+  const requested: string[] = Array.isArray(body.billIds) ? body.billIds.filter((x: unknown): x is string => typeof x === "string") : [];
+  const billIds = (await prisma.bill.findMany({ where: { id: { in: requested }, eventId }, select: { id: true } })).map((b) => b.id);
 
   if (billIds.length === 0) {
     return NextResponse.json({ error: "no_bills_selected" }, { status: 400 });
