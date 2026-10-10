@@ -6,10 +6,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ORG_TABLES = /prisma\.(user|event|author|child|family|driveAccount|mailSenderAccount|publicHost|merchantAlias|categoryTemplate|listTemplate|emailTemplate|participantFieldTemplate|personDocument|childGuardian)\./;
+const ORG_TABLES = /prisma\.(user|event|author|child|family|driveAccount|mailSenderAccount|publicHost|merchantAlias|categoryTemplate|listTemplate|emailTemplate|participantFieldTemplate|personDocument|childGuardian|bankAccount|bankMovement)\./;
 const EVENT_ID = /\/events\/\[id\]\/|\beventId\b/;
 const GUARDS =
-  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser|templateScope)\b/;
+  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser|templateScope|requireOrgBankAccount|requireEventBank)\b/;
 
 // Genuinely global (or guarded by something other than a login) -- with the reason.
 const ALLOW: Record<string, string> = {
@@ -23,6 +23,7 @@ const ALLOW: Record<string, string> = {
   "src/app/api/cron/mail-drive-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/mail-sheets-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/participant-sync/route.ts": "cron (CRON_SECRET): one event at a time; linking via the org-safe linkChildren",
+  "src/app/api/cron/bank-check/route.ts": "cron (CRON_SECRET): one bank account at a time, its own organization's events",
   "src/app/api/cron/requeue-stuck-bills/route.ts": "cron (CRON_SECRET): re-queues stuck bills, no cross-event data",
   "src/app/api/tasks/process-bill-ai/[id]/route.ts": "Cloud Tasks (TASKS_SECRET): one bill; merchant aliases per its event's organization",
   "src/app/api/mail-oauth/authorize/route.ts": "starts Google OAuth for an event the user has module access to (checked again in the callback)",
@@ -35,6 +36,15 @@ function walk(dir: string, out: string[] = []): string[] {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) walk(p, out);
     else if (name === "route.ts" || ((name === "page.tsx" || name === "not-found.tsx" || name === "layout.tsx") && /prisma|"use server"/.test(readFileSync(p, "utf8")))) out.push(p);
+  }
+  return out;
+}
+
+function walkAll(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkAll(p, out);
+    else if (/\.tsx?$/.test(name)) out.push(p);
   }
   return out;
 }
@@ -54,6 +64,18 @@ for (const f of files) {
   hits++;
   console.log(`FLAG   ${f}`);
 }
+// Bank code (docs/bank-payments-design.md): the Fio URL carries the token, so no console.* call in
+// src/lib/bank or a bank route may mention a URL, the token or fioapi.
+const bankFiles = [...walkAll("src/lib/bank"), ...walkAll("src/app").filter((f) => /bank/.test(f))];
+for (const f of bankFiles) {
+  readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+    if (/console\.\w+\(/.test(line) && /url|token|fioapi/i.test(line)) {
+      hits++;
+      console.log(`FLAG   ${f}:${i + 1}  logs a URL/token`);
+    }
+  });
+}
+
 const stale = Object.keys(ALLOW).filter((f) => !files.includes(f));
 for (const f of stale) console.log(`STALE  allow-list entry for a missing file: ${f}`);
 console.log(`\n${files.length} files checked, ${allowed} allow-listed, ${hits} unexplained${stale.length ? `, ${stale.length} stale allow-list entries` : ""}`);
