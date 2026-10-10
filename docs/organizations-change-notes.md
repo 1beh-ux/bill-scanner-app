@@ -239,3 +239,14 @@ Mutation check: with the user list's organization filter removed, the test fails
   the case before, so it is unchanged here.
 - `participant_field_templates.key` is still global (step 4).
 - The from-events candidates skip keys used by any organization.
+
+## Deploy (step 2)
+
+| Attempt | Build ID | Result | Revision |
+|---|---|---|---|
+| before | | | `bill-scanner-app-00094-blt` (rollback target) |
+| 1 | 5e3599ef-1754-4d96-9a38-b5c8330ae108 | FAILURE: Node heap OOM in Next's type check (Docker build) | no change |
+| 2 (+ Dockerfile: `NODE_OPTIONS=--max-old-space-size=4096` for `npm run build`) | bd5db4f5-94aa-4031-a44a-a2cc004ff7e0 | SUCCESS | 00095-sgj |
+
+Checks after the deploy: tabornik.online/login 200; prihlasky /r/clenstvi-2027 200; rodice / 200;
+tabornik /r → 308 prihlasky; rodice /r → 404; no errors logged.
