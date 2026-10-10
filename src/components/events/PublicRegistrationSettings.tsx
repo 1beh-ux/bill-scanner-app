@@ -62,6 +62,13 @@ export default function PublicRegistrationSettings({
             {url}
           </a>
         )}
+        {/* The link's domain comes from Organizace -> Připojení -> Veřejné adresy (only admins see this component). */}
+        <span className="mt-1 block text-[11.5px]">
+          {t("publicSettings.hostHint")}{" "}
+          <a href="/connections" className="text-ember hover:underline">
+            {t("publicSettings.hostHintLink")}
+          </a>
+        </span>
       </label>
       <label className="text-[13px] text-ink-secondary">
         {t("publicSettings.landing")}

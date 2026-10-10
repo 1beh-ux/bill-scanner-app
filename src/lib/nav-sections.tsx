@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug } from "lucide-react";
 
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
@@ -29,6 +29,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
+      // Public hostnames for the registration page / parent portal (docs/custom-domain.md).
+      { path: "/connections", labelKey: "nav.connections", icon: Plug, adminOnly: true },
       // For everyone (event organisers too), not just admins.
       { path: "/napoveda", labelKey: "nav.help", icon: LifeBuoy },
     ],
