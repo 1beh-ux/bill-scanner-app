@@ -23,6 +23,8 @@ export type ConfirmOptions = {
   cancelLabel?: string;
   /** Destructive action: red confirm button, initial focus on Cancel. */
   danger?: boolean;
+  /** An extra checkbox (e.g. "Smazat i uložené platby"); its value goes to onOption on confirm. */
+  option?: { label: string; onOption: (checked: boolean) => void };
 };
 
 type Pending = ConfirmOptions & { alertOnly: boolean; resolve: (ok: boolean) => void };
@@ -59,7 +61,8 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
-  function close(result: boolean) {
+  function close(result: boolean, checked = false) {
+    if (result) pending?.option?.onOption(checked);
     pending?.resolve(result);
     setPending(null);
   }
@@ -74,8 +77,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
 const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-function DialogView({ pending, onClose }: { pending: Pending; onClose: (ok: boolean) => void }) {
+function DialogView({ pending, onClose: close }: { pending: Pending; onClose: (ok: boolean, checked?: boolean) => void }) {
   const { t } = useTranslations();
+  const [checked, setChecked] = useState(false);
+  const onClose = (ok: boolean) => close(ok, checked);
   const dialogRef = useRef<HTMLDivElement>(null);
   const safeButtonRef = useRef<HTMLButtonElement>(null);
   const danger = pending.danger === true && !pending.alertOnly;
@@ -134,6 +139,12 @@ function DialogView({ pending, onClose }: { pending: Pending; onClose: (ok: bool
         <p id="confirm-dialog-message" className="mb-5 whitespace-pre-line text-[14px] text-ink-secondary">
           {pending.message}
         </p>
+        {pending.option && (
+          <label className="-mt-2 mb-5 flex items-center gap-2 text-[14px] text-ink">
+            <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="h-4 w-4 accent-ember" />
+            {pending.option.label}
+          </label>
+        )}
         <div className="flex justify-end gap-2">
           {!pending.alertOnly && (
             <button
