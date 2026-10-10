@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getOrCreateOrgEmailTemplate } from "@/lib/email-template";
-import { orgIdOfUser } from "@/lib/org-owner";
+import { prisma } from "@/lib/prisma";
 import { PORTAL_INVITATION_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
-import { loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { FAMILY_TARGET_PREFIX, loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
+import { getActingOrgId, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 // The "send portal link" compose page (/children/compose), admin only.
 // childIds: child ids and/or "family:<id>" (a family's link, slice 3 B).
@@ -20,10 +20,20 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const childIds: string[] = Array.isArray(body.childIds) ? body.childIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 2000) : [];
   const purposeKey = body.purposeKey === PORTAL_INVITATION_PURPOSE_KEY ? PORTAL_INVITATION_PURPOSE_KEY : PORTAL_LINK_PURPOSE_KEY;
+  // Every target (person or "family:<id>") must be the acting organization's.
+  const organizationId = await getActingOrgId(user);
+  const targets = [...new Set([...childIds, ...(typeof body.childId === "string" ? [body.childId] : [])])];
+  const familyTargets = targets.filter((t) => t.startsWith(FAMILY_TARGET_PREFIX)).map((t) => t.slice(FAMILY_TARGET_PREFIX.length));
+  const personTargets = targets.filter((t) => !t.startsWith(FAMILY_TARGET_PREFIX));
+  const [families, people] = await Promise.all([
+    familyTargets.length ? prisma.family.count({ where: { id: { in: familyTargets }, organizationId } }) : 0,
+    personTargets.length ? prisma.child.count({ where: { id: { in: personTargets }, organizationId } }) : 0,
+  ]);
+  if (families !== familyTargets.length || people !== personTargets.length) return notFound();
 
   if (body.action === "info") {
     const [template, senderEmail, targets] = await Promise.all([
-      getOrCreateOrgEmailTemplate(await orgIdOfUser(user), purposeKey),
+      getOrCreateOrgEmailTemplate(organizationId, purposeKey),
       orgSenderEmail(user),
       Promise.all(childIds.map(loadTarget)),
     ]);
