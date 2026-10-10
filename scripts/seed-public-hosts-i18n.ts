@@ -56,6 +56,8 @@ async function main() {
     { key: "publicSettings.hostHint", cs: "Doménu odkazu určuje", en: "The link's domain is set in" },
     { key: "publicSettings.hostHintLink", cs: "Organizace → Připojení", en: "Organization → Connections" },
     { key: "portal.pageTitle", cs: "Rodičovský portál", en: "Parent portal" },
+    { key: "publicNotFound.title", cs: "Stránka nenalezena", en: "Page not found" },
+    { key: "publicNotFound.text", cs: "Odkaz je neplatný nebo už neplatí. Ověřte ho prosím u pořadatele akce.", en: "The link is invalid or no longer valid. Please check it with the event's organiser." },
     { key: "publicLanding.title", cs: "Přihlášky a rodičovský portál", en: "Registrations and parent portal" },
     { key: "publicLanding.text", cs: "Odkaz na přihlášku nebo na rodičovský portál dostanete od pořadatele akce, obvykle e-mailem.", en: "You get the link to the registration or the parent portal from the event's organiser, usually by e-mail." },
   ];
