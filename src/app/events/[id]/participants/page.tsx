@@ -12,10 +12,11 @@ import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
+import BankCheckButton from "@/components/bank/BankCheckButton";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 import { portalComposeHref } from "@/components/children/portal-link";
 
-type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean };
+type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean; bankCheckEnabled: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
 const childOptionLabel = (c: ChildOption) =>
   `${c.name} (${c.dateOfBirth ? new Date(c.dateOfBirth).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—"})`;
@@ -325,6 +326,11 @@ export default function EventParticipantsPage({
       <h1 className="mb-5 mt-2 text-[22px] font-semibold text-ink">
         {event.name} — {t("participantsPage.centralTitle")} ({participants.length})
       </h1>
+      {event.bankCheckEnabled && (
+        <div className="-mt-3 mb-4">
+          <BankCheckButton eventId={id} onSettled={load} t={t} />
+        </div>
+      )}
 
       {notice && (
         <div

@@ -6,11 +6,14 @@ import { participantListName } from "@/lib/participant-name";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import ColumnPicker from "@/components/ColumnPicker";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import BankCheckButton from "@/components/bank/BankCheckButton";
+import { formatCzk } from "@/lib/format";
 
-type EventBasic = { id: string; name: string; documentsListColumns: string[] | null };
+type EventBasic = { id: string; name: string; documentsListColumns: string[] | null; bankCheckEnabled: boolean };
 
 // fromProfile: covered by the person's permanent document (slice 6 #4) -- not a toggle.
-type DocStatus = { eventListItemId: string; name: string; received: boolean; fromProfile?: boolean };
+// bank: confirmed from the bank (docs/bank-payments-design.md) -- booking date + amount.
+type DocStatus = { eventListItemId: string; name: string; received: boolean; fromProfile?: boolean; bank?: { date: string; amount: number } | null };
 
 type Participant = {
   id: string;
@@ -121,9 +124,9 @@ export default function MailParticipantsPage({
           "rounded-full px-2 py-0.5 disabled:opacity-50 " +
           (d.received ? "bg-pine/15 text-pine hover:bg-pine/25" : "bg-mist text-ink-secondary hover:bg-paper")
         }
-        title={t("participantsPage.toggleDocumentHint")}
+        title={d.bank ? t("bankCheck.cellHint", { date: new Date(d.bank.date).toLocaleDateString("cs-CZ", { timeZone: "UTC" }), amount: formatCzk(d.bank.amount) }) : t("participantsPage.toggleDocumentHint")}
       >
-        {d.received ? t("participantsPage.docReceived") : t("participantsPage.docMissing")}
+        {d.received ? (d.bank ? t("bankCheck.cellReceived") : t("participantsPage.docReceived")) : t("participantsPage.docMissing")}
       </button>
     );
 
@@ -137,6 +140,11 @@ export default function MailParticipantsPage({
         {event.name} — {t("participantsPage.mailListTitle")} ({participants.length})
       </h1>
       <p className="mb-4 text-[13px] text-ink-secondary">{t("mailParticipantsPage.intro")}</p>
+      {event.bankCheckEnabled && (
+        <div className="mb-4">
+          <BankCheckButton eventId={id} onSettled={load} t={t} />
+        </div>
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
       <div className="relative max-w-sm flex-1">

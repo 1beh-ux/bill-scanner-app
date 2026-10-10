@@ -83,6 +83,13 @@ export async function GET(
   const documentTypes = await getActiveDocumentTypes(eventId);
   // Received through the person's permanent document (slice 6 #4): shown, not toggled.
   const fromProfile = await profileDocuments(participants.map((p) => ({ id: p.id, eventId, childId: p.childId })));
+  // Payments confirmed from the bank: "Doručeno · banka" + date and amount in the tooltip.
+  const bank = new Map(
+    (await prisma.bankMovement.findMany({
+      where: { status: "settled", participantId: { in: participants.map((p) => p.id) }, participantDocument: { isNot: null } },
+      select: { participantId: true, bookedAt: true, amount: true, participantDocument: { select: { eventListItemId: true } } },
+    })).map((m) => [`${m.participantId}:${m.participantDocument!.eventListItemId}`, { date: m.bookedAt, amount: Number(m.amount) }])
+  );
   const withDocuments = await Promise.all(
     scoped.map(async (p) => {
       const receivedItemIds = await getReceivedItemIds(p.id);
@@ -93,6 +100,7 @@ export async function GET(
           name: documentDisplayName(d),
           received: receivedItemIds.has(d.id),
           fromProfile: !!fromProfile.get(p.id)?.some((c) => c.eventListItemId === d.id),
+          bank: receivedItemIds.has(d.id) ? (bank.get(`${p.id}:${d.id}`) ?? null) : null,
         })),
       };
     })
