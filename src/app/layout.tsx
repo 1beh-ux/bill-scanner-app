@@ -3,8 +3,10 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Bill Scanner V2",
-  description: "Pionýrská skupina Záře — camp organizing helper: bills, health records, mail",
+  title: { default: "tabornik.online", template: "%s · tabornik.online" },
+  applicationName: "tabornik.online",
+  appleWebApp: { title: "tabornik.online" },
+  description: "Pomocník pro pořádání táborů a akcí: účtenky, účastníci, zdraví, pošta, plánování",
 };
 
 // Runs before React hydrates, so the correct theme class is already on <html>

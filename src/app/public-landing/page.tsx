@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 // "/" on a public host (src/proxy.ts rewrites it here): a neutral page with no
 // data. "Ověřit" in Organizace -> Připojení looks for data-public-landing.
-export const metadata: Metadata = { title: "Přihlášky a rodičovský portál", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: { absolute: "Přihlášky a rodičovský portál" }, robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function PublicLandingPage() {

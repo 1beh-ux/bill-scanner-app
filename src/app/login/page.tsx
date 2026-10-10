@@ -101,7 +101,7 @@ export default function LoginPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-ember">
                 <Tent size={17} className="text-night" aria-hidden="true" />
               </div>
-              <span className="text-[15px] font-medium">Bill Scanner</span>
+              <span className="text-[15px] font-medium">tabornik.online</span>
             </div>
 
             <h1 className="text-[34px] font-medium leading-tight sm:text-[44px]">

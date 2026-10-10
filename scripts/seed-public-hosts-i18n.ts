@@ -55,6 +55,7 @@ async function main() {
     { key: "connections.error_admin_only", cs: "Jen pro administrátory.", en: "Admins only." },
     { key: "publicSettings.hostHint", cs: "Doménu odkazu určuje", en: "The link's domain is set in" },
     { key: "publicSettings.hostHintLink", cs: "Organizace → Připojení", en: "Organization → Connections" },
+    { key: "portal.pageTitle", cs: "Rodičovský portál", en: "Parent portal" },
     { key: "publicLanding.title", cs: "Přihlášky a rodičovský portál", en: "Registrations and parent portal" },
     { key: "publicLanding.text", cs: "Odkaz na přihlášku nebo na rodičovský portál dostanete od pořadatele akce, obvykle e-mailem.", en: "You get the link to the registration or the parent portal from the event's organiser, usually by e-mail." },
   ];

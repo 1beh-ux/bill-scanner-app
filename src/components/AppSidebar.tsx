@@ -136,7 +136,7 @@ export default function AppSidebar() {
         <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-ember">
           <Tent size={16} className="text-night" aria-hidden="true" />
         </div>
-        <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+        <span className="text-[14px] font-medium text-paper">tabornik.online</span>
       </div>
 
       {selectableEvents.length > 0 && (
@@ -259,7 +259,7 @@ export default function AppSidebar() {
         </button>
         <div className="flex items-center gap-2">
           <Tent size={16} className="text-ember" aria-hidden="true" />
-          <span className="text-[14px] font-medium text-paper">Bill Scanner</span>
+          <span className="text-[14px] font-medium text-paper">tabornik.online</span>
         </div>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}

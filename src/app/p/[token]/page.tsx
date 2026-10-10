@@ -10,12 +10,16 @@ import PortalApp from "./PortalApp";
 // gate (src/proxy.ts). Unknown token = the plain 404 page. The UI strings come
 // from the translations table here (the app's /api/translations needs a login);
 // Czech only for now.
-export const metadata: Metadata = {
-  title: "Portál rodičů",
-  robots: { index: false, follow: false },
-  // The token is in the URL: never send it on as a referrer.
-  referrer: "no-referrer",
-};
+// Shown on other organisations' domains: never the app's name in the title.
+export async function generateMetadata(): Promise<Metadata> {
+  const row = await prisma.translation.findUnique({ where: { key: "portal.pageTitle" }, select: { cs: true } });
+  return {
+    title: { absolute: row?.cs ?? "Rodičovský portál" },
+    robots: { index: false, follow: false },
+    // The token is in the URL: never send it on as a referrer.
+    referrer: "no-referrer",
+  };
+}
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;

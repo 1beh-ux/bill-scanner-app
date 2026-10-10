@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { hostAllowsRegistration, publicHostFor, resolvePublicHost } from "@/lib/public-host";
@@ -11,11 +12,22 @@ import PublicForm from "./PublicForm";
 // isn't switched on (or the event is closed / past its deadline) = the plain
 // 404 page. UI strings come from the translations table (public.* + portal.*),
 // Czech only for now, like the portal.
-export const metadata: Metadata = { title: "Přihláška", referrer: "no-referrer" };
+// Shown on other organisations' domains: the title is the event's, never the app's name.
+const loadEvent = cache(publicEvent);
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const event = await loadEvent((await params).slug);
+  let title = event?.name ?? "Přihláška";
+  if (event?.kind === "membership") {
+    const row = await prisma.translation.findUnique({ where: { key: "portal.membership" }, select: { cs: true } });
+    title = (row?.cs ?? "Členství {year}").replace("{year}", String(event.membershipYear ?? ""));
+  }
+  return { title: { absolute: title }, referrer: "no-referrer" };
+}
 
 export default async function PublicRegistrationPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const event = await publicEvent(slug);
+  const event = await loadEvent(slug);
   if (!event) notFound();
   // Public host: only its purpose/event. Admin host: old links move to the public host when there is one.
   const scope = await resolvePublicHost(await headers());
