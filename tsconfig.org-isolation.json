@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/lib/auth": ["./scripts/org-isolation/auth-stub.ts"],
+      "next/headers": ["./scripts/org-isolation/headers-stub.ts"],
+      "@/*": ["./src/*"]
+    }
+  }
+}
