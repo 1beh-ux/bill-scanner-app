@@ -286,6 +286,79 @@ async function main() {
     }
     (globalThis as { __orgTestHost?: string }).__orgTestHost = undefined;
     check("landing page: the host's organization's name; inactive organization's host -> 404", landingText.includes(TEST_ORG) && !/Záře/.test(landingText) && landing404, JSON.stringify({ named: landingText.includes(TEST_ORG), landing404 }));
+
+    // ===== bank check (docs/bank-payments-design.md) =====
+    asUser(admin);
+    await prisma.organization.update({ where: { id: org.id }, data: { active: true } });
+    // Another organization's account (+ a movement): the second test org stands in for Záře; Záře's own
+    // accounts are probed too when it has any.
+    const otherAcc = await prisma.bankAccount.create({ data: { organizationId: org2Id, label: "isolation other", accountNumber: `9${String(stamp).slice(-8)}`, bankCode: "2010" } });
+    const otherMov = await prisma.bankMovement.create({ data: { bankAccountId: otherAcc.id, movementId: `iso-other-${stamp}`, bookedAt: new Date(), amount: 1000, currency: "CZK", status: "review", reason: "no_match" } });
+    const zareAcc = await prisma.bankAccount.findFirst({ where: { organizationId: zare.id }, select: { id: true } });
+    const foreign = [otherAcc.id, ...(zareAcc ? [zareAcc.id] : [])];
+    const bankList = await json(await (await import("@/app/api/bank-accounts/route")).GET());
+    check("bank accounts list: none of another organization's", Array.isArray(bankList.body?.accounts) && !ids(bankList.body.accounts).some((x) => foreign.includes(x)), JSON.stringify(ids(bankList.body?.accounts)));
+    check("bank accounts list never carries the token", !JSON.stringify(bankList.body).includes("tokenEncrypted"), "tokenEncrypted in response");
+    const accRoute = await import("@/app/api/bank-accounts/[id]/route");
+    const tokenRoute = await import("@/app/api/bank-accounts/[id]/token/route");
+    const accCheck = await import("@/app/api/bank-accounts/[id]/check/route");
+    const codes: number[] = [];
+    for (const fid of foreign) {
+      codes.push((await accRoute.PATCH(req(`/api/bank-accounts/${fid}`, { method: "PATCH", body: { label: "hijack" } }), params({ id: fid }))).status);
+      codes.push((await accRoute.DELETE(req(`/api/bank-accounts/${fid}`, { method: "DELETE" }), params({ id: fid }))).status);
+      codes.push((await tokenRoute.PUT(req(`/api/bank-accounts/${fid}/token`, { method: "PUT", body: { token: "a".repeat(64) } }), params({ id: fid }))).status);
+      codes.push((await accCheck.POST(req(`/api/bank-accounts/${fid}/check`, { method: "POST" }), params({ id: fid }))).status);
+    }
+    const untouched = await prisma.bankAccount.findUniqueOrThrow({ where: { id: otherAcc.id } });
+    check("another organization's bank account: edit / disconnect / token / check -> 404, unchanged", codes.every((c) => c === 404) && untouched.label === "isolation other" && !untouched.tokenEncrypted, JSON.stringify(codes));
+    const evRoute = await import("@/app/api/events/[id]/route");
+    r = await evRoute.PATCH(req(`/api/events/${eventId}`, { method: "PATCH", body: { bankAccountId: otherAcc.id } }), params({ id: eventId }));
+    check("event settings: another organization's account is refused", r.status === 400 && !(await prisma.event.findUniqueOrThrow({ where: { id: eventId } })).bankAccountId, `HTTP ${r.status}`);
+    const assignRoute = await import("@/app/api/events/[id]/bank-movements/[movementId]/assign/route");
+    const ignoreRoute = await import("@/app/api/events/[id]/bank-movements/[movementId]/ignore/route");
+    const movRoute = await import("@/app/api/events/[id]/bank-movements/route");
+    const ownMovs = await json(await movRoute.GET(req(`/api/events/${eventId}/bank-movements`), params({ id: eventId })));
+    r = await ignoreRoute.POST(req("/x", { method: "POST" }), params({ id: eventId, movementId: otherMov.id }));
+    const r2 = await assignRoute.POST(req("/x", { method: "POST", body: { participantId: "x" } }), params({ id: eventId, movementId: otherMov.id }));
+    check("another organization's movements: not listed, assign / ignore -> 404", !ids(ownMovs.body?.movements).includes(otherMov.id) && r.status === 404 && r2.status === 404 && (await prisma.bankMovement.findUniqueOrThrow({ where: { id: otherMov.id } })).status === "review", JSON.stringify({ list: ids(ownMovs.body?.movements), ignore: r.status, assign: r2.status }));
+    if (z.event) {
+      r = await (await import("@/app/api/events/[id]/bank-check/route")).POST(req("/x", { method: "POST" }), params({ id: z.event.id }));
+      const r3 = await movRoute.GET(req("/x"), params({ id: z.event.id }));
+      check("Záře event: bank-check / bank-movements -> 404", r.status === 404 && r3.status === 404, JSON.stringify([r.status, r3.status]));
+    }
+
+    // Own account without a token: the check claims it once, a second call within 35 s is throttled.
+    const ownAcc = await json(await (await import("@/app/api/bank-accounts/route")).POST(req("/api/bank-accounts", { method: "POST", body: { label: "isolation own", accountNumber: `8${String(stamp).slice(-8)}` } })));
+    const ownAccId = ownAcc.body?.id as string;
+    const payDoc = await prisma.eventListItem.create({ data: { eventId, kind: "document", name: "Platba (isolation)" } });
+    const family = await prisma.family.create({ data: { name: "Isolation family", organizationId: org.id, portalToken: `isolation${stamp}`.padEnd(40, "x") } });
+    const kid = await prisma.child.create({ data: { name: "Bank Kid", organizationId: org.id, familyId: family.id, dateOfBirth: new Date("2015-01-01") } });
+    const payer = await prisma.participant.create({ data: { eventId, name: "Bank Kid", childId: kid.id, registrationStatus: "accepted", acceptedPriceCzk: 1000, acceptedVariableSymbol: "271100001" } });
+    await prisma.event.update({ where: { id: eventId }, data: { paymentDocTypeId: payDoc.id, bankAccountId: ownAccId, bankCheckEnabled: true, registrationBankAccountNumber: `8${String(stamp).slice(-8)}`, registrationBankCode: "2010" } });
+    const { checkBankAccount } = await import("@/lib/bank/check");
+    const first = await checkBankAccount(ownAccId, { reason: "admin" });
+    const second = await checkBankAccount(ownAccId, { reason: "admin" });
+    check("throttle: two checks within 35 s -> the second is throttled (first: no token)", JSON.stringify(first) === JSON.stringify({ status: "error", code: "no_token" }) && second.status === "throttled", JSON.stringify({ first, second }));
+
+    // Assigning a review movement creates the payment document (receivedVia bank).
+    const ownMov = await prisma.bankMovement.create({ data: { bankAccountId: ownAccId, movementId: `iso-own-${stamp}`, bookedAt: new Date(), amount: 1000, currency: "CZK", variableSymbol: "271100001", status: "review", reason: "no_match" } });
+    r = await assignRoute.POST(req("/x", { method: "POST", body: { participantId: payer.id } }), params({ id: eventId, movementId: ownMov.id }));
+    const settledMov = await prisma.bankMovement.findUniqueOrThrow({ where: { id: ownMov.id }, include: { participantDocument: true } });
+    check("Přiřadit účastníkovi: movement settled, payment document via bank", r.status === 200 && settledMov.status === "settled" && settledMov.participantDocument?.receivedVia === "bank" && settledMov.decidedByUserId === admin.id, JSON.stringify({ status: r.status, mov: settledMov.status, via: settledMov.participantDocument?.receivedVia }));
+
+    // Portal bank-check: only paid flags for this family's registrations.
+    process.env.PORTAL_SECRET ??= "isolation-test-portal-secret-0123456789";
+    const { gateCookieName, gateCookieValue } = await import("@/lib/portal-gate");
+    setCookies({ [gateCookieName(`f_${family.id}`)]: gateCookieValue(`f_${family.id}`, family.portalToken!, process.env.PORTAL_SECRET) });
+    const portal = await json(await (await import("@/app/api/portal/[token]/bank-check/route")).POST(req("/x", { method: "POST" }), params({ token: family.portalToken! })));
+    setCookies({});
+    const pay = portal.body?.payments?.[payer.id];
+    const onlyFlags = JSON.stringify(Object.keys(portal.body ?? {})) === '["payments"]' && JSON.stringify(Object.keys(portal.body.payments)) === JSON.stringify([payer.id]) && Object.keys(pay ?? {}).every((k) => ["paid", "paidAt", "via"].includes(k));
+    check("portal bank-check: only { paid, paidAt, via } for the family's registration", portal.status === 200 && onlyFlags && pay?.paid === true && pay?.via === "bank", JSON.stringify(portal));
+
+    // Deleting the bank payment document sets the movement aside.
+    await (await import("@/app/api/events/[id]/participants/[participantId]/documents/[docTypeId]/route")).DELETE(req("/x", { method: "DELETE" }), params({ id: eventId, participantId: payer.id, docTypeId: payDoc.id }));
+    check("deleting a bank payment document -> its movement is ignored", (await prisma.bankMovement.findUniqueOrThrow({ where: { id: ownMov.id } })).status === "ignored", "not ignored");
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;
@@ -327,6 +400,8 @@ async function main() {
       await step("listTemplate", () => prisma.listTemplate.deleteMany({ where: ov }));
       await step("participantFieldTemplate", () => prisma.participantFieldTemplate.deleteMany({ where: ov }));
       await step("publicHost", () => prisma.publicHost.deleteMany({ where: ov }));
+      await step("bankAccount", () => prisma.bankAccount.deleteMany({ where: ov }));
+      await step("portalRateHit", () => prisma.portalRateHit.deleteMany({ where: { key: { startsWith: "bank:" }, createdAt: { gte: new Date(stamp) } } }));
       await step("user", () => prisma.user.deleteMany({ where: ov }));
       await step("organization", () => prisma.organization.delete({ where: { id: oid } }));
     }
