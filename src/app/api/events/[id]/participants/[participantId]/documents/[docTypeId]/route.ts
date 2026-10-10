@@ -93,6 +93,8 @@ export async function DELETE(
   ]);
   if (!inEvent || !typeInEvent) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
+  // A payment confirmed from the bank stays recorded but is never re-used automatically.
+  await prisma.bankMovement.updateMany({ where: { participantDocument: { participantId, eventListItemId: docTypeId } }, data: { status: "ignored" } });
   // Uploads still in review / rejected stay for the review list.
   const deleted = await prisma.participantDocument.deleteMany({
     where: { participantId, eventListItemId: docTypeId, ...NOT_IN_REVIEW },

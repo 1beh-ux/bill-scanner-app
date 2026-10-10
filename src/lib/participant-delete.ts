@@ -15,6 +15,8 @@ export async function deleteParticipantCascade(id: string): Promise<void> {
     await tx.incident.deleteMany({ where: { participantId: id } });
     await tx.participantMedPlan.deleteMany({ where: { participantId: id } });
     await tx.medChecklist.deleteMany({ where: { participantId: id } });
+    // Bank payments stay (unlinked), set aside so they're never matched again automatically.
+    await tx.bankMovement.updateMany({ where: { participantId: id, status: "settled" }, data: { status: "ignored" } });
     await tx.participantDocument.deleteMany({ where: { participantId: id } });
     await tx.mailActionLog.updateMany({ where: { participantId: id }, data: { participantId: null } });
     await tx.participantGuardian.deleteMany({ where: { participantId: id } });
