@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
-import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, usesPortalLink } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
@@ -370,8 +370,12 @@ export async function sendBulkParticipantEmail(opts: {
     // a live price that changed afterwards (e.g. a sibling's household discount).
     if (opts.markAccepted && results.some((r) => r.participantId === participantId && r.status === "sent")) {
       priced ??= await withMembers(event);
-      const amount = effectivePriceCzk({ ...fresh, customFieldValues: fresh.customFieldValues as Record<string, string> | null }, priced);
-      await prisma.participant.update({ where: { id: participantId }, data: { acceptedPriceCzk: amount } });
+      const merge = { ...fresh, customFieldValues: fresh.customFieldValues as Record<string, string> | null };
+      // ...and its variable symbol, which the bank check also matches on (docs/bank-payments-design.md).
+      await prisma.participant.update({
+        where: { id: participantId },
+        data: { acceptedPriceCzk: effectivePriceCzk(merge, priced), acceptedVariableSymbol: buildVariableSymbol(merge, priced) || null },
+      });
     }
   }
 
