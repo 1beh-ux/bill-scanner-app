@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronDown, Upload } from "lucide-react";
 import { MarkdownText } from "@/components/registration/Markdown";
+import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
@@ -91,7 +92,7 @@ const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) 
 // with something missing shows under both "Chybí…" and "Čeká…" (the states themselves are exclusive).
 const inState = (r: { state: RegistrationState; status: string }, st: RegistrationState) => r.state === st || (st === "waiting" && r.status === "pending");
 
-export default function PortalApp({ token, strings }: { token: string; strings: Record<string, string> }) {
+export default function PortalApp({ token, org, strings }: { token: string; org: PublicOrg; strings: Record<string, string> }) {
   const t = useCallback(
     (key: string, vars?: Record<string, string>) => {
       let s = strings[key] ?? key;
@@ -133,6 +134,8 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
   return (
     <div className="mx-auto w-full max-w-6xl p-4 pb-16">
       <ThemeToggle label={t("portal.toggleTheme")} />
+      {/* Also above the birth-date gate: a parent sees whose portal it is before typing anything. */}
+      <OrgName org={org} />
       <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("portal.title")}</p>
       {phase === "loading" && <p className="mt-6 text-[14px] text-ink-secondary">{t("portal.loading")}</p>}
       {phase === "unavailable" && <p className="mt-6 text-[15px] text-ink">{t("portal.unavailable")}</p>}
@@ -235,6 +238,7 @@ export default function PortalApp({ token, strings }: { token: string; strings: 
           </div>
         </>
       )}
+      <OrgFooter org={org} label={t("portal.contact")} />
     </div>
   );
 }

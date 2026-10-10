@@ -72,6 +72,8 @@ async function main() {
     { key: "appSync.colField", cs: "Pole", en: "Field" },
     { key: "appSync.colOrg", cs: "Organizace", en: "Organization" },
     { key: "appSync.colApp", cs: "Aplikace", en: "App" },
+    // Step 5: public pages show their organization.
+    { key: "portal.contact", cs: "Kontakt:", en: "Contact:" },
     { key: "usersPage.error.last_admin", cs: "Organizace musí mít aspoň jednoho aktivního správce.", en: "The organization needs at least one active admin." },
     { key: "usersPage.error.super_admin_only", cs: "Roli správce může přidělit nebo odebrat jen správce aplikace.", en: "Only the application admin can grant or remove the admin role." },
   ];

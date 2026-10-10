@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { MarkdownText } from "@/components/registration/Markdown";
+import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice from "@/components/registration/PersonPrice";
@@ -62,9 +63,11 @@ export default function PublicForm({
   fields,
   rules,
   oddil,
+  org,
   strings,
 }: {
   slug: string;
+  org: PublicOrg;
   event: EventInfo;
   fields: FormField[];
   rules: PriceRules | null;
@@ -139,6 +142,7 @@ export default function PublicForm({
     return (
       <div className="mx-auto w-full max-w-2xl p-4 pb-16">
         <ThemeToggle label={t("portal.toggleTheme")} />
+        <OrgName org={org} />
         <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
         <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{title}</h1>
         <div className={card + " flex flex-col gap-2"}>
@@ -167,6 +171,7 @@ export default function PublicForm({
             <p className="text-[14px] text-ink-secondary">{t("public.doneHint")}</p>
           )}
         </div>
+        <OrgFooter org={org} label={t("portal.contact")} />
       </div>
     );
   }
@@ -174,6 +179,7 @@ export default function PublicForm({
   return (
     <div className="mx-auto w-full max-w-4xl p-4 pb-16">
       <ThemeToggle label={t("portal.toggleTheme")} />
+      <OrgName org={org} />
       <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
       <h1 className="mt-1 text-[24px] font-semibold text-ink">{title}</h1>
       <p className="mb-4 text-[13px] text-ink-secondary">
@@ -323,6 +329,7 @@ export default function PublicForm({
           </button>
         </div>
       </form>
+      <OrgFooter org={org} label={t("portal.contact")} />
     </div>
   );
 }

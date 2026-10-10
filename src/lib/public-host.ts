@@ -2,6 +2,7 @@
 // page and/or the parent portal, and which base a public link gets. The rows
 // live in public_hosts (Organizace -> Připojení -> Veřejné adresy); the proxy
 // only knows "admin host or not" (src/lib/host-rules.ts).
+import { cache as perRequest } from "react";
 import { prisma } from "@/lib/prisma";
 import type { PublicHostPurpose } from "@/generated/prisma";
 import { isAdminHost, requestHost } from "@/lib/host-rules";
@@ -67,3 +68,8 @@ export async function publicUrl(want: Want, eventId: string | null, path: string
   const base = ((want === "portal" && process.env.PORTAL_BASE_URL) || process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "");
   return base ? `${base}${path}` : null;
 }
+
+/** What a public page shows of its organization (organizations step 5): name + contact e-mail. Cached per request. */
+export const publicOrg = perRequest((organizationId: string) =>
+  prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true, contactEmail: true } })
+);
