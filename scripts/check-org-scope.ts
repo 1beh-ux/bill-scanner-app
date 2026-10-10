@@ -9,7 +9,7 @@ import { join } from "node:path";
 const ORG_TABLES = /prisma\.(user|event|author|child|family|driveAccount|mailSenderAccount|publicHost|merchantAlias|categoryTemplate|listTemplate|emailTemplate|participantFieldTemplate|personDocument|childGuardian)\./;
 const EVENT_ID = /\/events\/\[id\]\/|\beventId\b/;
 const GUARDS =
-  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser)\b/;
+  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser|templateScope)\b/;
 
 // Genuinely global (or guarded by something other than a login) -- with the reason.
 const ALLOW: Record<string, string> = {
