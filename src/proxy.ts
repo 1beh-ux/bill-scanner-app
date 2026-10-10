@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
 
 export function proxy(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
@@ -8,7 +9,7 @@ export function proxy(req: NextRequest) {
   // (/api/cron) and Firebase's auth helper (/__/) keep working on run.app;
   // only GET/HEAD, so no form POST loses its body.
   const canonical = process.env.CANONICAL_HOST;
-  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(":")[0];
+  const host = requestHost(req.headers);
   if (
     canonical &&
     host.endsWith(".run.app") &&
@@ -18,6 +19,15 @@ export function proxy(req: NextRequest) {
     !pathname.startsWith("/__/")
   ) {
     return NextResponse.redirect(`https://${canonical}${pathname}${search}`, 308);
+  }
+
+  // Any other hostname is a public host (prihlasky.…, rodice.…): only the
+  // registration page, the portal and their APIs; never /login. Which host may
+  // serve which event / the portal is checked in those routes (src/lib/public-host.ts).
+  if (!isAdminHost(host)) {
+    if (!publicHostAllows(pathname)) return new NextResponse("Not found", { status: 404 });
+    if (pathname === "/") return NextResponse.rewrite(new URL("/public-landing", req.url));
+    return NextResponse.next();
   }
 
   const session = req.cookies.get("session");
