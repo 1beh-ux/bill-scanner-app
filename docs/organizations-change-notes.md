@@ -483,3 +483,8 @@ Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200,
    - Přepnout into the organization: the strip "Pracujete v organizaci …", only its data visible.
    - Its public form shows its name in the header and title.
    - Back with "Zpět do Záře".
+
+Deploy (step 5): build f03c9b70-6245-4805-969b-be03bf923a6a SUCCESS -> `bill-scanner-app-00099-hjz`
+(rollback target `00098-6wz`). Checks: prihlasky /r/clenstvi-2027 title "Členství 2027 · Pionýrská
+skupina Záře", prihlasky / title "Přihlášky a rodičovský portál · Pionýrská skupina Záře",
+rodice / 200, tabornik.online/login 200, no errors logged.
