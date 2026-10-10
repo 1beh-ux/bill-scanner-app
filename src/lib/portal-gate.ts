@@ -32,13 +32,12 @@ export function gateCookieValid(value: string | undefined, childId: string, toke
 }
 
 /**
- * Public portal link. PORTAL_BASE_URL wins (a portal domain of its own);
- * otherwise the origin the admin is using -- from the forwarded headers, since
- * behind Cloud Run the request URL is the container's internal address. Never
- * a hard-coded domain (several organisations / custom domains later).
+ * Public portal link: publicBaseUrl() when configured; otherwise the origin the
+ * admin is using -- from the forwarded headers, since behind Cloud Run the
+ * request URL is the container's internal address.
  */
 export function portalUrl(token: string, req: Request): string {
-  const configured = process.env.PORTAL_BASE_URL?.replace(/\/+$/, "");
+  const configured = publicBaseUrl();
   if (configured) return `${configured}/p/${token}`;
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? new URL(req.url).protocol.replace(":", "");
@@ -47,12 +46,16 @@ export function portalUrl(token: string, req: Request): string {
 }
 
 /**
- * Base URL for portal links outside a request (e-mail / document variables,
- * slice 4 #11): PORTAL_BASE_URL, else APP_BASE_URL (set on Cloud Run). Null = neither.
+ * Base URL for public links (/r/<slug>, /p/<token>): PUBLIC_BASE_URL, else
+ * PORTAL_BASE_URL (a later second domain for parents), else APP_BASE_URL (set
+ * on Cloud Run, see docs/custom-domain.md). Null = none set.
  */
-export function portalBaseUrl(): string | null {
-  return (process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "") || null;
+export function publicBaseUrl(): string | null {
+  return (process.env.PUBLIC_BASE_URL || process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "") || null;
 }
+
+/** Portal links outside a request (e-mail / document variables, slice 4 #11). */
+export const portalBaseUrl = publicBaseUrl;
 
 /** {{portal_link_line}}: the whole sentence, or "" without a link (so the line vanishes). */
 export const portalLinkLine = (link: string | null) =>

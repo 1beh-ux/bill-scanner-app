@@ -17,7 +17,7 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicBaseUrl?: string | null };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -42,7 +42,9 @@ export default function PublicRegistrationSettings({
     if (res.ok) onSaved();
   }
 
-  const url = slug.trim() && typeof window !== "undefined" ? `${window.location.origin}/r/${slug.trim()}` : null;
+  // Server base URL (custom domain), so the shared link is right even when the admin is on run.app.
+  const base = event.publicBaseUrl || (typeof window !== "undefined" ? window.location.origin : null);
+  const url = slug.trim() && base ? `${base}/r/${slug.trim()}` : null;
 
   return (
     <div className="flex max-w-xl flex-col gap-3">

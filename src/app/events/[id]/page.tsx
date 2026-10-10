@@ -54,6 +54,7 @@ type EventDetail = {
   landingContent: string | null;
   autoAccept: "manual" | "accept" | "accept_send";
   autoSendReady?: boolean | null;
+  publicBaseUrl?: string | null;
   location: string | null;
   portalInfo: string | null;
   paymentDocTypeId: string | null;
