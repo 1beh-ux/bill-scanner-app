@@ -311,3 +311,7 @@ checks, plus:
 `check-org-scope`: 188 files, 0 unexplained. Build ok.
 
 Texts: `scripts/seed-organizations-i18n.ts` (cs + en). The deploy flow runs it.
+
+Deploy (step 3): build dc620a3c-649e-429d-b284-9e6626e054b5 SUCCESS -> `bill-scanner-app-00096-zpz`
+(rollback target `00095-sgj`). Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200,
+rodice / 200, /api/organizations and /api/acting-org without a session 401, no errors logged.
