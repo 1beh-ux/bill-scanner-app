@@ -132,6 +132,9 @@ enum MailDocReceivedVia {
   // Uploaded by a parent in the portal instead of e-mailing it (slice 3 F;
   // only for document types with allowPortalUpload). No receiving user.
   portal
+  // Matched from the organization's Fio account (docs/bank-payments-design.md).
+  // No file, no receiving user.
+  bank
 }
 
 enum MailActionType {
@@ -161,60 +164,62 @@ enum UserTheme {
 }
 
 model User {
-  id          String   @id @default(uuid())
-  email       String   @unique
-  displayName String
-  role        UserRole
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id                 String      @id @default(uuid())
+  email              String      @unique
+  displayName        String
+  role               UserRole
+  active             Boolean     @default(true)
+  createdAt          DateTime    @default(now())
   // Personal preferences (src/app/api/me/route.ts, src/lib/i18n.tsx) --
   // localStorage still seeds the instant paint before this loads, then
   // reconciles to these once /api/me resolves.
-  preferredLang   UserLang  @default(cs) @map("preferred_lang")
-  preferredTheme  UserTheme @default(light) @map("preferred_theme")
-  landingPath     String?   @map("landing_path")
+  preferredLang      UserLang    @default(cs) @map("preferred_lang")
+  preferredTheme     UserTheme   @default(light) @map("preferred_theme")
+  landingPath        String?     @map("landing_path")
   // Overrides {{sender_name}} in outgoing emails (src/lib/parent-email-send.ts,
   // src/lib/mail-bulk-status-send.ts, src/lib/participant-bulk-email.ts) --
   // an Outlook-signature-style personal setting, falling back to
   // displayName when unset.
-  emailSignature  String?   @map("email_signature")
+  emailSignature     String?     @map("email_signature")
   // Multi-line signature for the e-mail TEXT, {{signature}} in templates
   // (falls back to the name above) -- see senderIdentity() in src/lib/email-template.ts.
-  emailBodySignature String? @map("email_body_signature")
+  emailBodySignature String?     @map("email_body_signature")
   // Second settings layer: modules a person has chosen to hide from their own
   // sidebar. Admin decides what they *have* (UserEventModuleAccess); this only
   // narrows their own view, never grants anything.
-  hiddenModules   ModuleKey[] @default([]) @map("hidden_modules")
+  hiddenModules      ModuleKey[] @default([]) @map("hidden_modules")
   // Small per-person UI preferences that should follow the user across
   // devices (see src/lib/ui-prefs.ts for the allowed keys).
-  uiPrefs         Json?       @map("ui_prefs")
+  uiPrefs            Json?       @map("ui_prefs")
 
-  moduleAccess       UserEventModuleAccess[]
-  driveAccount           DriveAccount?     @relation("DriveAccountConnectedBy")
-  eventsDriveConfigured  Event[]           @relation("EventDriveConfiguredBy")
-  authorBankAudits       AuthorBankAudit[] @relation("AuthorBankAuditChangedBy")
-  billsCreated       Bill[]           @relation("BillCreatedBy")
-  billsApproved      Bill[]           @relation("BillApprovedBy")
-  billsPaid          Bill[]           @relation("BillPaidBy")
-  auditLogEntries    BillAuditLog[]
-  incidentsCreated   Incident[]       @relation("IncidentCreatedBy")
-  incidentUpdates    IncidentUpdate[] @relation("IncidentUpdatedBy")
-  medChecklistGiven  MedChecklist[]   @relation("MedChecklistGivenBy")
-  parentEmailsSent   ParentEmailLog[] @relation("ParentEmailSentBy")
-  mailAccountsConnected MailSenderAccount[] @relation("MailAccountConnectedBy")
-  documentsReceived    ParticipantDocument[] @relation("ParticipantDocumentReceivedBy")
-  mailActionsPerformed MailActionLog[]       @relation("MailActionLogUser")
-  childChangesDecided  ChildChange[]         @relation("ChildChangeDecidedBy")
-  documentsReviewed    ParticipantDocument[] @relation("ParticipantDocumentReviewedBy")
-  personDocumentsCreated PersonDocument[]    @relation("PersonDocumentCreatedBy")
-  personDocumentsRevoked PersonDocument[]    @relation("PersonDocumentRevokedBy")
-  childEmailsSent      ChildEmailLog[]       @relation("ChildEmailSentBy")
+  moduleAccess           UserEventModuleAccess[]
+  driveAccount           DriveAccount?           @relation("DriveAccountConnectedBy")
+  eventsDriveConfigured  Event[]                 @relation("EventDriveConfiguredBy")
+  authorBankAudits       AuthorBankAudit[]       @relation("AuthorBankAuditChangedBy")
+  billsCreated           Bill[]                  @relation("BillCreatedBy")
+  billsApproved          Bill[]                  @relation("BillApprovedBy")
+  billsPaid              Bill[]                  @relation("BillPaidBy")
+  auditLogEntries        BillAuditLog[]
+  incidentsCreated       Incident[]              @relation("IncidentCreatedBy")
+  incidentUpdates        IncidentUpdate[]        @relation("IncidentUpdatedBy")
+  medChecklistGiven      MedChecklist[]          @relation("MedChecklistGivenBy")
+  parentEmailsSent       ParentEmailLog[]        @relation("ParentEmailSentBy")
+  mailAccountsConnected  MailSenderAccount[]     @relation("MailAccountConnectedBy")
+  documentsReceived      ParticipantDocument[]   @relation("ParticipantDocumentReceivedBy")
+  mailActionsPerformed   MailActionLog[]         @relation("MailActionLogUser")
+  childChangesDecided    ChildChange[]           @relation("ChildChangeDecidedBy")
+  documentsReviewed      ParticipantDocument[]   @relation("ParticipantDocumentReviewedBy")
+  personDocumentsCreated PersonDocument[]        @relation("PersonDocumentCreatedBy")
+  personDocumentsRevoked PersonDocument[]        @relation("PersonDocumentRevokedBy")
+  childEmailsSent        ChildEmailLog[]         @relation("ChildEmailSentBy")
+  bankTokensSet          BankAccount[]           @relation("BankAccountTokenSetBy")
+  bankMovementsDecided   BankMovement[]          @relation("BankMovementDecidedBy")
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
   // Sees and manages every organization (organizations step 2+).
-  isSuperAdmin   Boolean @default(false) @map("is_super_admin")
+  isSuperAdmin   Boolean      @default(false) @map("is_super_admin")
 
   @@index([organizationId])
   @@map("users")
@@ -251,52 +256,52 @@ model UserEventModuleAccess {
 }
 
 model Event {
-  id                  String      @id @default(uuid())
-  name                String
-  startDate           DateTime    @map("start_date") @db.Date
-  endDate             DateTime    @map("end_date") @db.Date
-  status              EventStatus @default(active)
-  driveIngestFolderId String?     @map("drive_ingest_folder_id")
-  driveExportFolderId String?     @map("drive_export_folder_id")
-  driveManifestSpreadsheetId String? @map("drive_manifest_spreadsheet_id")
+  id                            String         @id @default(uuid())
+  name                          String
+  startDate                     DateTime       @map("start_date") @db.Date
+  endDate                       DateTime       @map("end_date") @db.Date
+  status                        EventStatus    @default(active)
+  driveIngestFolderId           String?        @map("drive_ingest_folder_id")
+  driveExportFolderId           String?        @map("drive_export_folder_id")
+  driveManifestSpreadsheetId    String?        @map("drive_manifest_spreadsheet_id")
   // Where per-participant folders (registration documents, received/generated
   // files) live -- separate from the bills export folder above. Null falls
   // back to driveExportFolderId (the old shared behavior).
-  driveParticipantsFolderId String? @map("drive_participants_folder_id")
+  driveParticipantsFolderId     String?        @map("drive_participants_folder_id")
   // The user whose connected Google account does this event's Drive work (see
   // DriveAccount). Set when someone saves the event's Drive folders, when a user
   // connects from the Drive tab and none is set, or via "take over".
-  driveConfiguredByUserId String? @map("drive_configured_by_user_id")
-  senderEmail         String?     @map("sender_email")
-  driveDocSyncEnabled      Boolean   @default(true) @map("drive_doc_sync_enabled")
-  statusExportEnabled      Boolean   @default(true) @map("status_export_enabled")
-  statusExportSheetId      String?   @map("status_export_sheet_id")
-  statusExportLastSyncedAt DateTime? @map("status_export_last_synced_at")
-  mailDoneLabelName        String?   @map("mail_done_label_name")
-  mailQuestionnaireUrl     String?   @map("mail_questionnaire_url")
+  driveConfiguredByUserId       String?        @map("drive_configured_by_user_id")
+  senderEmail                   String?        @map("sender_email")
+  driveDocSyncEnabled           Boolean        @default(true) @map("drive_doc_sync_enabled")
+  statusExportEnabled           Boolean        @default(true) @map("status_export_enabled")
+  statusExportSheetId           String?        @map("status_export_sheet_id")
+  statusExportLastSyncedAt      DateTime?      @map("status_export_last_synced_at")
+  mailDoneLabelName             String?        @map("mail_done_label_name")
+  mailQuestionnaireUrl          String?        @map("mail_questionnaire_url")
   // Optional -- {{registration_deadline}} (Part 11 of the participants/settings
   // prompt). Omitted (not defaulted to a hardcoded date) when null, so the
   // acceptance e-mail/document sentence that uses it is simply left out instead
   // of ever printing a wrong or contradicting date.
-  registrationDeadline     DateTime? @map("registration_deadline") @db.Date
+  registrationDeadline          DateTime?      @map("registration_deadline") @db.Date
   // Persisted registration-sheet connection (Seznam účastníků import
   // settings) -- set once, reused on every future import instead of
   // re-pasting the sheet id and remapping columns each time. Mapping is
   // stored keyed by header name (not column index), since sheet columns can
   // be reordered between imports; unrecognized headers fall back to the
   // same guess-from-header-text heuristic as before.
-  participantsSheetId      String?   @map("participants_sheet_id")
-  participantsColumnMapping Json?    @map("participants_column_mapping")
+  participantsSheetId           String?        @map("participants_sheet_id")
+  participantsColumnMapping     Json?          @map("participants_column_mapping")
   // Participant table connections (src/lib/participant-sync.ts ParticipantSync[]);
   // the two columns above are the old single connection, converted on first read.
-  participantSyncs         Json?     @map("participant_syncs")
+  participantSyncs              Json?          @map("participant_syncs")
   // Camp-fee collection, used by the registration-document merge (price +
   // QR payment code) -- deliberately separate from any bill/reimbursement
   // bank account elsewhere in the app; this is the org's own fee account.
-  memberPriceCzk               Int?    @map("member_price_czk")
-  nonMemberPriceCzk             Int?    @map("non_member_price_czk")
-  registrationBankAccountNumber String? @map("registration_bank_account_number")
-  registrationBankCode          String? @map("registration_bank_code")
+  memberPriceCzk                Int?           @map("member_price_czk")
+  nonMemberPriceCzk             Int?           @map("non_member_price_czk")
+  registrationBankAccountNumber String?        @map("registration_bank_account_number")
+  registrationBankCode          String?        @map("registration_bank_code")
   // Variable-symbol formula config (computed field, see
   // src/lib/document-variables.ts's buildVariableSymbol): year comes from
   // startDate, vsEventType/vsOrderInYear are admin-typed single digits,
@@ -305,100 +310,105 @@ model Event {
   // no membership digit is configured -- always 0.
   // Two-digit year override (e.g. 27 for a registration run in 2026 for
   // next year); null = from startDate.
-  vsYear               Int?     @map("vs_year")
-  vsEventType          Int?     @map("vs_event_type")
-  vsOrderInYear        Int?     @map("vs_order_in_year")
+  vsYear                        Int?           @map("vs_year")
+  vsEventType                   Int?           @map("vs_event_type")
+  vsOrderInYear                 Int?           @map("vs_order_in_year")
   // Values of the membership field that mean "member" (lower-cased); null =
   // DEFAULT_MEMBER_VALUES in src/lib/document-variables.ts.
-  vsMemberValues           Json?     @map("vs_member_values")
-  vsMembershipFieldKey String?  @map("vs_membership_field_key")
+  vsMemberValues                Json?          @map("vs_member_values")
+  vsMembershipFieldKey          String?        @map("vs_membership_field_key")
   // Side length (mm) of the payment QR image inserted into documents. Null
   // means the default (DEFAULT_QR_SIZE_MM in src/lib/document-variables.ts).
-  qrSizeMm             Int?     @map("qr_size_mm")
+  qrSizeMm                      Int?           @map("qr_size_mm")
   // Ordered EventParticipantField keys chosen for the central roster's
   // columns (Name is always first and isn't included here). Null means not
   // configured yet -- falls back to every active field with the `list`
   // surface, in API order (the old, always-on behavior).
-  participantsListColumns Json? @map("participants_list_columns")
+  participantsListColumns       Json?          @map("participants_list_columns")
   // Ordered column keys chosen for the bills list (src/lib/bill-columns.ts). Stored per
   // event, so everyone with access sees the same columns; null = the default set.
   // (A Json array like participantsListColumns -- Prisma has no nullable scalar list.)
-  billsListColumns Json? @map("bills_list_columns")
+  billsListColumns              Json?          @map("bills_list_columns")
   // Ordered participant-field keys shown as columns in the Documents overview
   // (mail_list fields); null = all of them. Saved via /mail/sync-settings.
-  documentsListColumns Json? @map("documents_list_columns")
+  documentsListColumns          Json?          @map("documents_list_columns")
   // Optional field columns of the Zdraví list (ordered keys); null = none.
-  healthListColumns Json? @map("health_list_columns")
+  healthListColumns             Json?          @map("health_list_columns")
   // Planning Helper settings (src/lib/planning.ts PlanningSettings): saved
   // import sheet connections per import target, and the Drive export sheet id.
-  planningSettings Json? @map("planning_settings")
+  planningSettings              Json?          @map("planning_settings")
   // Zdravotní poznámky config (src/lib/health-notes.ts HealthNoteConfig[]):
   // which fields, in what order, where shown, highlighted. null = default.
-  healthNotes Json? @map("health_notes")
+  healthNotes                   Json?          @map("health_notes")
   // Participant detail / Zdraví detail layouts (src/lib/participant-layout.ts
   // ParticipantLayout: { detail?, health? }). null = the built-in layout.
-  participantLayout Json? @map("participant_layout")
+  participantLayout             Json?          @map("participant_layout")
   // Registration & membership (docs/registration-membership.md). All off by
   // default: an unconnected event behaves exactly as before.
-  kind                  EventKind @default(event)
+  kind                          EventKind      @default(event)
   // Only for kind = membership: the calendar year the membership counts for.
-  membershipYear        Int?      @map("membership_year")
+  membershipYear                Int?           @map("membership_year")
   // On: participants get linked to Child profiles, and member pricing reads
   // the child's accepted membership for the event's start year.
-  registrationConnected Boolean   @default(false) @map("registration_connected")
+  registrationConnected         Boolean        @default(false) @map("registration_connected")
   // "Odpojit od Lidé": this event's participants are unlinked from the people
   // list and never linked again (not even by Lidé's "Propojit"), until reconnected.
-  peopleUnlinked        Boolean   @default(false) @map("people_unlinked")
+  peopleUnlinked                Boolean        @default(false) @map("people_unlinked")
   // Slice 8 #3: which participants auto-linking may link -- `all` (today:
   // everyone, creating missing people) or `existing` (only to people already
   // in Lidé, never creating one). src/lib/children.ts linkChildren.
-  peopleLinkMode        PeopleLinkMode @default(all) @map("people_link_mode")
+  peopleLinkMode                PeopleLinkMode @default(all) @map("people_link_mode")
   // Parent portal (docs/registration-portal-spec.md H): "Otevřeno pro přihlášky
   // v portálu" -- only used when the event is connected (or a membership year),
   // hidden after registrationDeadline. eligibility = src/lib/portal-rules.ts
   // Eligibility ({ everyone?, birthYearFrom?, birthYearTo?, groups?,
   // attendedEventIds?, childIds? }); null/empty = nobody.
-  portalOpen            Boolean   @default(false) @map("portal_open")
-  eligibility           Json?
+  portalOpen                    Boolean        @default(false) @map("portal_open")
+  eligibility                   Json?
   // Price rules (docs/registration-slice3-spec.md C, src/lib/price-rules.ts
   // PriceRules: categories, school-year date, household minimum). null =
   // today's pricing exactly (memberPriceCzk / nonMemberPriceCzk by isMember).
-  priceRules            Json?     @map("price_rules")
+  priceRules                    Json?          @map("price_rules")
   // Public registration page /r/<publicSlug> (docs/registration-slice3-spec.md
   // D): landing info (markdown) + the new-family form. Off by default; only
   // used for a membership year or a connected event.
-  publicRegistration    Boolean   @default(false) @map("public_registration")
-  publicSlug            String?   @unique @map("public_slug")
-  landingContent        String?   @map("landing_content")
-  autoAccept            AutoAccept @default(manual) @map("auto_accept")
+  publicRegistration            Boolean        @default(false) @map("public_registration")
+  publicSlug                    String?        @unique @map("public_slug")
+  landingContent                String?        @map("landing_content")
+  autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
-  location              String?
-  portalInfo            String?   @map("portal_info")
+  location                      String?
+  portalInfo                    String?        @map("portal_info")
   // "Dokument platby" (slice 4 #5): the document type (EventListItem id) whose
   // receipt means "paid" in the portal; never uploadable there. null = none.
-  paymentDocTypeId      String?   @map("payment_doc_type_id")
-  createdAt           DateTime    @default(now()) @map("created_at")
-  closedAt            DateTime?   @map("closed_at")
+  paymentDocTypeId              String?        @map("payment_doc_type_id")
+  // Automatic payment check (docs/bank-payments-design.md): settled bank
+  // movements on this account create the paymentDocTypeId document.
+  bankCheckEnabled              Boolean        @default(false) @map("bank_check_enabled")
+  bankAccountId                 String?        @map("bank_account_id")
+  bankAccount                   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  createdAt                     DateTime       @default(now()) @map("created_at")
+  closedAt                      DateTime?      @map("closed_at")
 
-  categories          EventCategory[]
-  modules              EventModule[]
-  moduleAccess          UserEventModuleAccess[]
-  authorAccess         AuthorEventAccess[]
-  authorBankAudits     AuthorBankAudit[]
-  driveConfiguredBy    User?    @relation("EventDriveConfiguredBy", fields: [driveConfiguredByUserId], references: [id])
-  bills                Bill[]
-  participants         Participant[]
-  eventListItems       EventListItem[]
-  personDocuments      PersonDocument[]
-  eventEmailTemplates  EventEmailTemplate[]
-  mailActionLogs       MailActionLog[]
+  categories             EventCategory[]
+  modules                EventModule[]
+  moduleAccess           UserEventModuleAccess[]
+  authorAccess           AuthorEventAccess[]
+  authorBankAudits       AuthorBankAudit[]
+  driveConfiguredBy      User?                   @relation("EventDriveConfiguredBy", fields: [driveConfiguredByUserId], references: [id])
+  bills                  Bill[]
+  participants           Participant[]
+  eventListItems         EventListItem[]
+  personDocuments        PersonDocument[]
+  eventEmailTemplates    EventEmailTemplate[]
+  mailActionLogs         MailActionLog[]
   eventParticipantFields EventParticipantField[]
-  planDays             PlanDay[]
-  planActivities       PlanActivity[]
-  publicHosts          PublicHost[]
+  planDays               PlanDay[]
+  planActivities         PlanActivity[]
+  publicHosts            PublicHost[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -411,11 +421,11 @@ model CategoryTemplate {
   description String?
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId   String?            @map("organization_id")
+  organization     Organization?      @relation(fields: [organizationId], references: [id])
   // The template this one was copied from (organizations step 4); unused for now.
-  sourceTemplateId String? @map("source_template_id")
-  sourceTemplate   CategoryTemplate? @relation("CategoryTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  sourceTemplateId String?            @map("source_template_id")
+  sourceTemplate   CategoryTemplate?  @relation("CategoryTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           CategoryTemplate[] @relation("CategoryTemplateSource")
 
   // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
@@ -425,12 +435,12 @@ model CategoryTemplate {
 }
 
 model EventCategory {
-  id             String  @id @default(uuid())
-  eventId        String  @map("event_id")
-  name           String
-  description    String?
-  budgetAmount   Decimal @map("budget_amount") @db.Decimal(12, 2)
-  isFromTemplate Boolean @default(false) @map("is_from_template")
+  id                 String  @id @default(uuid())
+  eventId            String  @map("event_id")
+  name               String
+  description        String?
+  budgetAmount       Decimal @map("budget_amount") @db.Decimal(12, 2)
+  isFromTemplate     Boolean @default(false) @map("is_from_template")
   // The CategoryTemplate it was copied from -- sync matches by this, so a
   // category renamed for this event isn't copied from the template again.
   categoryTemplateId String? @map("category_template_id")
@@ -457,7 +467,7 @@ model Author {
   bankAudits  AuthorBankAudit[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -475,16 +485,16 @@ enum AuthorBankAuditSource {
 // Every change of a payer's bank account/code (who, when, old -> new, and
 // which event it was made from). Written in the same transaction as the change.
 model AuthorBankAudit {
-  id                     String                  @id @default(uuid())
-  authorId               String                  @map("author_id")
-  changedByUserId        String                  @map("changed_by_user_id")
-  eventId                String?                 @map("event_id")
-  oldBankAccountNumber   String?                 @map("old_bank_account_number")
-  oldBankCode            String?                 @map("old_bank_code")
-  newBankAccountNumber   String?                 @map("new_bank_account_number")
-  newBankCode            String?                 @map("new_bank_code")
-  source                 AuthorBankAuditSource
-  createdAt              DateTime                @default(now()) @map("created_at")
+  id                   String                @id @default(uuid())
+  authorId             String                @map("author_id")
+  changedByUserId      String                @map("changed_by_user_id")
+  eventId              String?               @map("event_id")
+  oldBankAccountNumber String?               @map("old_bank_account_number")
+  oldBankCode          String?               @map("old_bank_code")
+  newBankAccountNumber String?               @map("new_bank_account_number")
+  newBankCode          String?               @map("new_bank_code")
+  source               AuthorBankAuditSource
+  createdAt            DateTime              @default(now()) @map("created_at")
 
   author        Author @relation(fields: [authorId], references: [id])
   changedByUser User   @relation("AuthorBankAuditChangedBy", fields: [changedByUserId], references: [id])
@@ -514,38 +524,38 @@ model Translation {
 }
 
 model Bill {
-  id                String        @id @default(uuid())
-  eventId           String        @map("event_id")
-  gcsObjectPath     String        @map("gcs_object_path")
-  originalGcsObjectPath String?   @map("original_gcs_object_path")
-  originalFilename  String        @map("original_filename")
-  displayFilename   String?       @map("display_filename")
-  driveSourceFileId String?       @map("drive_source_file_id")
-  contentHash       String        @map("content_hash")
-  ingestChannel     IngestChannel @map("ingest_channel")
-  merchantName      String?       @map("merchant_name")
-  billDate          DateTime?     @map("bill_date") @db.Date
-  totalAmount       Decimal?      @map("total_amount") @db.Decimal(12, 2)
-  currency          Currency      @default(CZK)
-  amountCzk         Decimal?      @map("amount_czk") @db.Decimal(12, 2)
-  exchangeRateUsed  Decimal?      @map("exchange_rate_used") @db.Decimal(12, 6)
-  exchangeRateDate  DateTime?     @map("exchange_rate_date") @db.Date
-  payerAuthorId     String?       @map("payer_author_id")
-  pendingCategoryId String?  @map("pending_category_id")
-  paidToAuthor      Boolean       @default(false) @map("paid_to_author")
-  paidAt            DateTime?     @map("paid_at")
-  paidByUserId      String?       @map("paid_by_user_id")
-  status            BillStatus    @default(new)
-  notes             String?
-  aiConfidence      Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
-  aiRawResponse     Json?         @map("ai_raw_response")
-  createdByUserId   String        @map("created_by_user_id")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @default(now()) @updatedAt @map("updated_at")
-  approvedAt        DateTime?     @map("approved_at")
-  approvedByUserId  String?       @map("approved_by_user_id")
-  exportedAt        DateTime?     @map("exported_at")
-  exportFilename    String?       @map("export_filename")
+  id                    String        @id @default(uuid())
+  eventId               String        @map("event_id")
+  gcsObjectPath         String        @map("gcs_object_path")
+  originalGcsObjectPath String?       @map("original_gcs_object_path")
+  originalFilename      String        @map("original_filename")
+  displayFilename       String?       @map("display_filename")
+  driveSourceFileId     String?       @map("drive_source_file_id")
+  contentHash           String        @map("content_hash")
+  ingestChannel         IngestChannel @map("ingest_channel")
+  merchantName          String?       @map("merchant_name")
+  billDate              DateTime?     @map("bill_date") @db.Date
+  totalAmount           Decimal?      @map("total_amount") @db.Decimal(12, 2)
+  currency              Currency      @default(CZK)
+  amountCzk             Decimal?      @map("amount_czk") @db.Decimal(12, 2)
+  exchangeRateUsed      Decimal?      @map("exchange_rate_used") @db.Decimal(12, 6)
+  exchangeRateDate      DateTime?     @map("exchange_rate_date") @db.Date
+  payerAuthorId         String?       @map("payer_author_id")
+  pendingCategoryId     String?       @map("pending_category_id")
+  paidToAuthor          Boolean       @default(false) @map("paid_to_author")
+  paidAt                DateTime?     @map("paid_at")
+  paidByUserId          String?       @map("paid_by_user_id")
+  status                BillStatus    @default(new)
+  notes                 String?
+  aiConfidence          Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
+  aiRawResponse         Json?         @map("ai_raw_response")
+  createdByUserId       String        @map("created_by_user_id")
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @default(now()) @updatedAt @map("updated_at")
+  approvedAt            DateTime?     @map("approved_at")
+  approvedByUserId      String?       @map("approved_by_user_id")
+  exportedAt            DateTime?     @map("exported_at")
+  exportFilename        String?       @map("export_filename")
 
   event       Event          @relation(fields: [eventId], references: [id])
   payerAuthor Author?        @relation(fields: [payerAuthorId], references: [id])
@@ -607,7 +617,7 @@ model MerchantAlias {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([organizationId, rawText])
@@ -620,52 +630,56 @@ model MerchantAlias {
 // ---------------------------------------------------------------------------
 
 model Participant {
-  id            String    @id @default(uuid())
-  eventId       String    @map("event_id")
+  id                     String             @id @default(uuid())
+  eventId                String             @map("event_id")
   // `name` is kept as the maintained full display name ("Jméno Příjmení",
   // written from firstName+lastName on every save) so existing readers
   // (search, sort, exports, {{Name}}) keep working unchanged -- see
   // src/lib/participant-name.ts. firstName/lastName are null for rows not
   // yet migrated (scripts/split-participant-names.ts) or left ambiguous.
-  name          String
-  firstName     String?   @map("first_name")
-  lastName      String?   @map("last_name")
-  groupName     String?   @map("group_name")
-  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
-  active        Boolean   @default(true)
-  registrationStatus RegistrationStatus @default(pending) @map("registration_status")
+  name                   String
+  firstName              String?            @map("first_name")
+  lastName               String?            @map("last_name")
+  groupName              String?            @map("group_name")
+  dateOfBirth            DateTime?          @map("date_of_birth") @db.Date
+  active                 Boolean            @default(true)
+  registrationStatus     RegistrationStatus @default(pending) @map("registration_status")
   // Admin-defined participant fields (address, health insurance, camp-fee
   // membership, etc.) -- Record<fieldKey, string>, keyed by
   // EventParticipantField.key. Not a fixed set of columns: which fields
   // exist, their type, and which screens show them are all admin-editable
   // (see ParticipantFieldTemplate/EventParticipantField below and
   // src/lib/document-variables.ts's participant_custom_field resolver).
-  customFieldValues Json?     @map("custom_field_values")
+  customFieldValues      Json?              @map("custom_field_values")
   // Camp-fee variable symbol -- assigned once, at acceptance (see
   // src/lib/document-variables.ts), stable afterwards. Null until accepted.
-  registrationNumber Int?     @map("registration_number")
+  registrationNumber     Int?               @map("registration_number")
   // The persistent child profile this event's row belongs to (null = not
   // linked; everything works as before). See src/lib/children.ts.
-  childId       String?   @map("child_id")
+  childId                String?            @map("child_id")
   // Optional note a parent typed when registering through the portal.
-  portalNote    String?   @map("portal_note")
+  portalNote             String?            @map("portal_note")
   // Price category key (Event.priceRules); null/unknown = the first category
   // allowed for the person. Unused while the event has no price rules.
-  priceCategory String?   @map("price_category")
+  priceCategory          String?            @map("price_category")
   // The price the last acceptance e-mail carried -- the roster flags a live
   // price that differs from it ("cena se změnila po odeslání").
-  acceptedPriceCzk Int?   @map("accepted_price_czk")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  acceptedPriceCzk       Int?               @map("accepted_price_czk")
+  // The variable symbol the same acceptance e-mail carried -- the bank check
+  // matches on it as well as on the current one.
+  acceptedVariableSymbol String?            @map("accepted_variable_symbol")
+  createdAt              DateTime           @default(now()) @map("created_at")
 
-  event        Event                 @relation(fields: [eventId], references: [id])
-  child        Child?                @relation(fields: [childId], references: [id])
-  guardians    ParticipantGuardian[]
-  incidents    Incident[]
-  medPlans     ParticipantMedPlan[]
-  medChecklist MedChecklist[]
-  emailLogs    ParentEmailLog[]
-  documents    ParticipantDocument[]
+  event          Event                 @relation(fields: [eventId], references: [id])
+  child          Child?                @relation(fields: [childId], references: [id])
+  guardians      ParticipantGuardian[]
+  incidents      Incident[]
+  medPlans       ParticipantMedPlan[]
+  medChecklist   MedChecklist[]
+  emailLogs      ParentEmailLog[]
+  documents      ParticipantDocument[]
   mailActionLogs MailActionLog[]
+  bankMovements  BankMovement[]
 
   @@unique([eventId, registrationNumber])
   @@index([childId])
@@ -677,37 +691,37 @@ model Participant {
 // org-wide field values and guardians, copied once from the latest
 // participation and pushed to upcoming connected events on every change.
 model Child {
-  id          String    @id @default(uuid())
-  name        String
-  firstName   String?   @map("first_name")
-  lastName    String?   @map("last_name")
-  dateOfBirth DateTime? @map("date_of_birth") @db.Date
+  id                    String         @id @default(uuid())
+  name                  String
+  firstName             String?        @map("first_name")
+  lastName              String?        @map("last_name")
+  dateOfBirth           DateTime?      @map("date_of_birth") @db.Date
   // Record<ParticipantFieldTemplate.key, string> -- same keys/values as
   // Participant.customFieldValues.
-  fieldValues Json?     @map("field_values")
+  fieldValues           Json?          @map("field_values")
   // Parent portal link (/p/<token>): random, generated on demand; replacing it
   // kills the old link and every device's birth-date cookie (src/lib/portal-gate.ts).
-  portalToken String?   @unique @map("portal_token")
+  portalToken           String?        @unique @map("portal_token")
   // Wrong birth-date attempts in the current one-hour window (throttle).
-  portalGateFailures    Int       @default(0) @map("portal_gate_failures")
-  portalGateWindowStart DateTime? @map("portal_gate_window_start")
+  portalGateFailures    Int            @default(0) @map("portal_gate_failures")
+  portalGateWindowStart DateTime?      @map("portal_gate_window_start")
   // Slice 3 (docs/registration-slice3-spec.md A): members are people -- an
   // adult member (leader, supporter) is a Child row with isAdult on (the table
   // keeps its name, no destructive rename). An adult's own contact is their
   // first guardian row (same e-mail = same person in the family view).
-  isAdult     Boolean   @default(false) @map("is_adult")
+  isAdult               Boolean        @default(false) @map("is_adult")
   // The household this person belongs to (at most one); null = none. Families
   // are only ever made by an admin's confirm (or the public form, flagged for review).
-  familyId    String?   @map("family_id")
+  familyId              String?        @map("family_id")
   // "Už nebude chodit" (docs/registration-slice8-spec.md #2): inactive since
   // leftAt (null = active), marked in the portal or by an admin. Nothing is
   // deleted; the portal won't register an inactive person and link e-mails skip them.
-  leftAt      DateTime?      @map("left_at")
-  leftNote    String?        @map("left_note")
-  leftVia     PersonLeftVia? @map("left_via")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  leftAt                DateTime?      @map("left_at")
+  leftNote              String?        @map("left_note")
+  leftVia               PersonLeftVia? @map("left_via")
+  createdAt             DateTime       @default(now()) @map("created_at")
 
-  family       Family?  @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  family       Family?          @relation(fields: [familyId], references: [id], onDelete: SetNull)
   participants Participant[]
   guardians    ChildGuardian[]
   changes      ChildChange[]
@@ -715,7 +729,7 @@ model Child {
   documents    PersonDocument[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -764,7 +778,7 @@ model Family {
   members Child[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -883,13 +897,13 @@ enum ParticipantFieldType {
 // to module gating (see allowedParticipantFieldKeys) since a field can be
 // document-mergeable regardless of which module it's otherwise scoped to.
 enum ParticipantFieldSurface {
-  list          // Seznam účastníků (central roster) columns
-  health_list   // Zdraví page columns
+  list // Seznam účastníků (central roster) columns
+  health_list // Zdraví page columns
   health_detail // Zdraví participant detail page fields
-  mail_list     // Mail participants page columns
-  documents     // usable as {{key}} in document merge
-  email         // usable as {{key}} in e-mail templates (split from documents)
-  import        // offered as a target column when importing participants
+  mail_list // Mail participants page columns
+  documents // usable as {{key}} in document merge
+  email // usable as {{key}} in e-mail templates (split from documents)
+  import // offered as a target column when importing participants
 }
 
 // Which participant-connected thing a field actually is. `custom` is the
@@ -927,34 +941,34 @@ enum ComputedFieldType {
 // surface is on, in document templates -- immutable after creation.
 model ParticipantFieldTemplate {
   // Organizations step 4: id is the key; `key` is unique per organization (NULL = app level, one group).
-  id              String                    @id @default(uuid())
-  key             String
-  label           String
-  fieldType       ParticipantFieldType      @map("field_type")
-  options         Json?
+  id                     String                    @id @default(uuid())
+  key                    String
+  label                  String
+  fieldType              ParticipantFieldType      @map("field_type")
+  options                Json?
   // Suggested surfaces applied when this template is synced into an event
   // (manually, at event creation, or when a module the surfaces belong to
   // gets enabled -- see .../participant-fields/sync/route.ts and the
   // modules PATCH route's enable hook).
-  defaultSurfaces ParticipantFieldSurface[] @map("default_surfaces")
-  active          Boolean                   @default(true)
+  defaultSurfaces        ParticipantFieldSurface[] @map("default_surfaces")
+  active                 Boolean                   @default(true)
   // Parent portal rule for this field (child profiles, docs/registration-portal-spec.md C).
-  portalAccess    PortalAccess              @default(hidden) @map("portal_access")
+  portalAccess           PortalAccess              @default(hidden) @map("portal_access")
   // Must be filled in the public registration form (slice 3 D); only for
   // fields the form shows (portalAccess != hidden).
-  requiredInRegistration Boolean            @default(false) @map("required_in_registration")
+  requiredInRegistration Boolean                   @default(false) @map("required_in_registration")
   // Slice 5 (docs/registration-slice5-spec.md 1): who the field applies to
   // (children / adult members / both) and whether the profile asks it up
   // front (basic) or only when an event needs it (detailed).
-  audience        FieldAudience             @default(both)
-  level           FieldLevel                @default(basic)
+  audience               FieldAudience             @default(both)
+  level                  FieldLevel                @default(basic)
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId   String?                    @map("organization_id")
+  organization     Organization?              @relation(fields: [organizationId], references: [id])
   // The app template this one was copied from.
-  sourceTemplateId String? @map("source_template_id")
-  sourceTemplate   ParticipantFieldTemplate? @relation("ParticipantFieldTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  sourceTemplateId String?                    @map("source_template_id")
+  sourceTemplate   ParticipantFieldTemplate?  @relation("ParticipantFieldTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           ParticipantFieldTemplate[] @relation("ParticipantFieldTemplateSource")
 
   // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
@@ -975,25 +989,25 @@ enum FieldLevel {
 }
 
 model EventParticipantField {
-  id             String                    @id @default(uuid())
-  eventId        String                    @map("event_id")
-  key            String
-  label          String
-  fieldType      ParticipantFieldType      @map("field_type")
-  options        Json?
-  surfaces       ParticipantFieldSurface[]
-  sortOrder      Int?                      @map("sort_order")
-  active         Boolean                   @default(true)
-  isFromTemplate Boolean                   @default(false) @map("is_from_template")
+  id                     String                    @id @default(uuid())
+  eventId                String                    @map("event_id")
+  key                    String
+  label                  String
+  fieldType              ParticipantFieldType      @map("field_type")
+  options                Json?
+  surfaces               ParticipantFieldSurface[]
+  sortOrder              Int?                      @map("sort_order")
+  active                 Boolean                   @default(true)
+  isFromTemplate         Boolean                   @default(false) @map("is_from_template")
   // custom rows (the default) are fully admin-managed, same as before.
   // builtin/guardian/computed rows are fixed system rows seeded per event --
   // their key/fieldType/kind/computedType aren't editable, only surfaces/active.
-  kind           ParticipantFieldKind      @default(custom)
-  computedType   ComputedFieldType?        @map("computed_type")
+  kind                   ParticipantFieldKind      @default(custom)
+  computedType           ComputedFieldType?        @map("computed_type")
   // "Vyžadovat při přihlášce" (slice 5 #2): asked in the registration step. A
   // field with an org template only while parents may edit it (edit/approval);
   // an event-only field is an event question, stored on the participant only.
-  requiredOnRegistration Boolean           @default(false) @map("required_on_registration")
+  requiredOnRegistration Boolean                   @default(false) @map("required_on_registration")
 
   event Event @relation(fields: [eventId], references: [id])
 
@@ -1030,21 +1044,21 @@ model Incident {
 }
 
 model IncidentUpdate {
-  id              String              @id @default(uuid())
-  incidentId      String              @map("incident_id")
-  updatedAt       DateTime            @default(now()) @map("updated_at")
-  updatedByUserId String              @map("updated_by_user_id")
-  updateType      IncidentUpdateType  @map("update_type")
-  incidentDate    DateTime            @map("incident_date") @db.Date
-  incidentTime    String?             @map("incident_time")
-  actionSummary   String              @map("action_summary")
-  pillName        String?             @map("pill_name")
+  id              String             @id @default(uuid())
+  incidentId      String             @map("incident_id")
+  updatedAt       DateTime           @default(now()) @map("updated_at")
+  updatedByUserId String             @map("updated_by_user_id")
+  updateType      IncidentUpdateType @map("update_type")
+  incidentDate    DateTime           @map("incident_date") @db.Date
+  incidentTime    String?            @map("incident_time")
+  actionSummary   String             @map("action_summary")
+  pillName        String?            @map("pill_name")
   details         String?
-  photoGcsPath    String?             @map("photo_gcs_path")
-  tempC           Decimal?            @map("temp_c") @db.Decimal(4, 1)
-  bodyView        BodyView?           @map("body_view")
-  bodyXPct        Decimal?            @map("body_x_pct") @db.Decimal(5, 2)
-  bodyYPct        Decimal?            @map("body_y_pct") @db.Decimal(5, 2)
+  photoGcsPath    String?            @map("photo_gcs_path")
+  tempC           Decimal?           @map("temp_c") @db.Decimal(4, 1)
+  bodyView        BodyView?          @map("body_view")
+  bodyXPct        Decimal?           @map("body_x_pct") @db.Decimal(5, 2)
+  bodyYPct        Decimal?           @map("body_y_pct") @db.Decimal(5, 2)
   note            String?
 
   incident  Incident @relation(fields: [incidentId], references: [id])
@@ -1065,11 +1079,11 @@ model ListTemplate {
   data      Json?
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId   String?        @map("organization_id")
+  organization     Organization?  @relation(fields: [organizationId], references: [id])
   // The template this one was copied from (organizations step 4); unused for now.
-  sourceTemplateId String? @map("source_template_id")
-  sourceTemplate   ListTemplate? @relation("ListTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  sourceTemplateId String?        @map("source_template_id")
+  sourceTemplate   ListTemplate?  @relation("ListTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           ListTemplate[] @relation("ListTemplateSource")
 
   @@index([organizationId])
@@ -1087,16 +1101,16 @@ model EventListItem {
   isFromTemplate Boolean          @default(false) @map("is_from_template")
   data           Json?
 
-  event            Event                @relation(fields: [eventId], references: [id])
-  medPlansAsMed    ParticipantMedPlan[] @relation("MedPlanMed")
-  medPlansAsSlot   ParticipantMedPlan[] @relation("MedPlanSlot")
-  checklistAsMed   MedChecklist[]       @relation("MedChecklistMed")
-  checklistAsSlot  MedChecklist[]       @relation("MedChecklistSlot")
-  documents        ParticipantDocument[] @relation("ParticipantDocumentType")
-  planBlocksAsLeader      PlanBlock[]    @relation("PlanBlockLeader")
-  planBlocksAsLocation    PlanBlock[]    @relation("PlanBlockLocation")
-  planActivitiesAsLeader    PlanActivity[] @relation("PlanActivityLeader")
-  planActivitiesAsLocation  PlanActivity[] @relation("PlanActivityLocation")
+  event                    Event                 @relation(fields: [eventId], references: [id])
+  medPlansAsMed            ParticipantMedPlan[]  @relation("MedPlanMed")
+  medPlansAsSlot           ParticipantMedPlan[]  @relation("MedPlanSlot")
+  checklistAsMed           MedChecklist[]        @relation("MedChecklistMed")
+  checklistAsSlot          MedChecklist[]        @relation("MedChecklistSlot")
+  documents                ParticipantDocument[] @relation("ParticipantDocumentType")
+  planBlocksAsLeader       PlanBlock[]           @relation("PlanBlockLeader")
+  planBlocksAsLocation     PlanBlock[]           @relation("PlanBlockLocation")
+  planActivitiesAsLeader   PlanActivity[]        @relation("PlanActivityLeader")
+  planActivitiesAsLocation PlanActivity[]        @relation("PlanActivityLocation")
 
   @@map("event_list_items")
 }
@@ -1144,11 +1158,11 @@ model EmailTemplate {
   active     Boolean @default(true)
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId   String?         @map("organization_id")
+  organization     Organization?   @relation(fields: [organizationId], references: [id])
   // The template this one was copied from (organizations step 4); unused for now.
-  sourceTemplateId String? @map("source_template_id")
-  sourceTemplate   EmailTemplate? @relation("EmailTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  sourceTemplateId String?         @map("source_template_id")
+  sourceTemplate   EmailTemplate?  @relation("EmailTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           EmailTemplate[] @relation("EmailTemplateSource")
 
   // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
@@ -1177,17 +1191,17 @@ model EventEmailTemplate {
 // same connected mailbox can be reused across multiple events without
 // reconnecting; Event.senderEmail just points at one of these by address.
 model MailSenderAccount {
-  id                  String   @id @default(uuid())
-  email               String   @unique
-  refreshTokenEncrypted String @map("refresh_token_encrypted")
-  scope               String?  @map("scope")
-  connectedByUserId   String   @map("connected_by_user_id")
-  connectedAt         DateTime @default(now()) @map("connected_at")
+  id                    String   @id @default(uuid())
+  email                 String   @unique
+  refreshTokenEncrypted String   @map("refresh_token_encrypted")
+  scope                 String?  @map("scope")
+  connectedByUserId     String   @map("connected_by_user_id")
+  connectedAt           DateTime @default(now()) @map("connected_at")
 
   connectedByUser User @relation("MailAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -1213,7 +1227,7 @@ model DriveAccount {
   connectedByUser User @relation("DriveAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -1221,15 +1235,15 @@ model DriveAccount {
 }
 
 model ParentEmailLog {
-  id            String             @id @default(uuid())
-  participantId String             @map("participant_id")
-  guardianId    String             @map("guardian_id")
-  purposeKey    String             @map("purpose_key")
-  sentAt        DateTime           @default(now()) @map("sent_at")
+  id            String            @id @default(uuid())
+  participantId String            @map("participant_id")
+  guardianId    String            @map("guardian_id")
+  purposeKey    String            @map("purpose_key")
+  sentAt        DateTime          @default(now()) @map("sent_at")
   status        ParentEmailStatus
-  errorMessage  String?            @map("error_message")
-  sentByUserId  String             @map("sent_by_user_id")
-  pdfGcsPath    String?            @map("pdf_gcs_path")
+  errorMessage  String?           @map("error_message")
+  sentByUserId  String            @map("sent_by_user_id")
+  pdfGcsPath    String?           @map("pdf_gcs_path")
   // Resolved subject at send time (Part 7 of the participants/settings prompt: the sent-
   // mail log gets a "Předmět" column) -- null for rows sent before this column existed.
   subject       String?
@@ -1273,10 +1287,11 @@ model ParticipantDocument {
   reviewedByUserId     String?            @map("reviewed_by_user_id")
   reviewedAt           DateTime?          @map("reviewed_at")
 
-  participant     Participant   @relation(fields: [participantId], references: [id])
-  eventListItem   EventListItem @relation("ParticipantDocumentType", fields: [eventListItemId], references: [id])
-  receivedByUser  User?         @relation("ParticipantDocumentReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
-  reviewedByUser  User?         @relation("ParticipantDocumentReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  participant    Participant   @relation(fields: [participantId], references: [id])
+  eventListItem  EventListItem @relation("ParticipantDocumentType", fields: [eventListItemId], references: [id])
+  receivedByUser User?         @relation("ParticipantDocumentReceivedBy", fields: [receivedByUserId], references: [id], onDelete: Restrict)
+  reviewedByUser User?         @relation("ParticipantDocumentReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  bankMovement   BankMovement?
 
   @@map("participant_documents")
 }
@@ -1320,16 +1335,16 @@ model PersonDocument {
 // ParentEmailLog with its own purpose keys) -- bulk move/delete, attachment
 // saves. See design doc "Logging -- split across two tables, not one".
 model MailActionLog {
-  id            String            @id @default(uuid())
-  userId        String            @map("user_id")
-  eventId       String            @map("event_id")
+  id            String           @id @default(uuid())
+  userId        String           @map("user_id")
+  eventId       String           @map("event_id")
   action        MailActionType
-  messageId     String?           @map("message_id")
-  participantId String?           @map("participant_id")
+  messageId     String?          @map("message_id")
+  participantId String?          @map("participant_id")
   subject       String?
   status        MailActionStatus
   details       String?
-  createdAt     DateTime          @default(now()) @map("created_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
 
   user        User         @relation("MailActionLogUser", fields: [userId], references: [id])
   event       Event        @relation(fields: [eventId], references: [id])
@@ -1346,8 +1361,8 @@ model MailActionLog {
 
 enum PlanWindowKind {
   flexible // capacity enforced: shows free/overflow
-  partial  // slots allowed, capacity not enforced (e.g. evening program)
-  fixed    // locked, holds no slots (e.g. lunch)
+  partial // slots allowed, capacity not enforced (e.g. evening program)
+  fixed // locked, holds no slots (e.g. lunch)
 }
 
 model PlanDay {
@@ -1402,54 +1417,54 @@ model PlanSlot {
 // snapshot taken from the activity at creation, so later library edits don't
 // rewrite existing plans.
 model PlanBlock {
-  id                  String  @id @default(uuid())
-  slotId              String  @map("slot_id")
-  branchOrder         Int     @map("branch_order")
-  activityId          String? @map("activity_id")
-  customName          String? @map("custom_name")
-  description         String?
+  id          String   @id @default(uuid())
+  slotId      String   @map("slot_id")
+  branchOrder Int      @map("branch_order")
+  activityId  String?  @map("activity_id")
+  customName  String?  @map("custom_name")
+  description String?
   // [{categoryId, minutes|null}] -- main and secondary categories (EventListItem
   // plan_category ids), optional minute split; see categoryMinutes() in
   // planning-engine.ts. JSON rather than a join table: copied wholesale by
   // every move/copy, and unknown ids (a deleted category) are simply ignored.
-  categories          Json    @default("[]")
-  leaderId            String? @map("leader_id")
-  locationId          String? @map("location_id")
-  notes               String?
+  categories  Json     @default("[]")
+  leaderId    String?  @map("leader_id")
+  locationId  String?  @map("location_id")
+  notes       String?
   // Participant groups this branch is for -- values of Participant.groupName
   // (plain names, no group table; see planning design doc, decision 5). Empty =
   // everyone.
-  groupNames          String[] @default([]) @map("group_names")
+  groupNames  String[] @default([]) @map("group_names")
 
-  slot              PlanSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
-  activity          PlanActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
-  leader            EventListItem? @relation("PlanBlockLeader", fields: [leaderId], references: [id], onDelete: SetNull)
-  location          EventListItem? @relation("PlanBlockLocation", fields: [locationId], references: [id], onDelete: SetNull)
+  slot     PlanSlot       @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  activity PlanActivity?  @relation(fields: [activityId], references: [id], onDelete: SetNull)
+  leader   EventListItem? @relation("PlanBlockLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  location EventListItem? @relation("PlanBlockLocation", fields: [locationId], references: [id], onDelete: SetNull)
 
   @@index([slotId])
   @@map("plan_blocks")
 }
 
 model PlanActivity {
-  id                  String  @id @default(uuid())
-  eventId             String  @map("event_id")
-  name                String
-  defaultDurationMin  Int     @map("default_duration_min")
-  description         String?
-  categories          Json    @default("[]") // same shape as PlanBlock.categories
-  defaultLeaderId     String? @map("default_leader_id")
-  defaultLocationId   String? @map("default_location_id")
-  energyLevel         String? @map("energy_level")
-  repeatable          Boolean @default(false)
-  active              Boolean @default(true)
+  id                 String  @id @default(uuid())
+  eventId            String  @map("event_id")
+  name               String
+  defaultDurationMin Int     @map("default_duration_min")
+  description        String?
+  categories         Json    @default("[]") // same shape as PlanBlock.categories
+  defaultLeaderId    String? @map("default_leader_id")
+  defaultLocationId  String? @map("default_location_id")
+  energyLevel        String? @map("energy_level")
+  repeatable         Boolean @default(false)
+  active             Boolean @default(true)
   // Set when created from an org base-library ListTemplate (plan_activity), so
   // dragging the same base item again reuses this row instead of duplicating it.
-  sourceTemplateId    String? @map("source_template_id")
+  sourceTemplateId   String? @map("source_template_id")
 
-  event             Event          @relation(fields: [eventId], references: [id])
-  defaultLeader     EventListItem? @relation("PlanActivityLeader", fields: [defaultLeaderId], references: [id], onDelete: SetNull)
-  defaultLocation   EventListItem? @relation("PlanActivityLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
-  blocks            PlanBlock[]
+  event           Event          @relation(fields: [eventId], references: [id])
+  defaultLeader   EventListItem? @relation("PlanActivityLeader", fields: [defaultLeaderId], references: [id], onDelete: SetNull)
+  defaultLocation EventListItem? @relation("PlanActivityLocation", fields: [defaultLocationId], references: [id], onDelete: SetNull)
+  blocks          PlanBlock[]
 
   @@index([eventId])
   @@map("plan_activities")
@@ -1480,7 +1495,7 @@ model PublicHost {
   event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String @map("organization_id")
+  organizationId String       @map("organization_id")
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -1511,6 +1526,78 @@ model Organization {
   listTemplates             ListTemplate[]
   emailTemplates            EmailTemplate[]
   participantFieldTemplates ParticipantFieldTemplate[]
+  bankAccounts              BankAccount[]
 
   @@map("organizations")
+}
+
+// Fio account watched for incoming payments (docs/bank-payments-design.md).
+// The read-only API token is encrypted (src/lib/bank/token-crypto.ts) and
+// never returned by any API.
+enum BankProvider {
+  fio
+}
+
+model BankAccount {
+  id               String       @id @default(uuid())
+  organizationId   String       @map("organization_id")
+  label            String
+  accountNumber    String       @map("account_number")
+  bankCode         String       @map("bank_code")
+  provider         BankProvider @default(fio)
+  tokenEncrypted   String?      @map("token_encrypted")
+  tokenSetAt       DateTime?    @map("token_set_at")
+  tokenSetByUserId String?      @map("token_set_by_user_id")
+  lastCheckedAt    DateTime?    @map("last_checked_at")
+  lastSuccessAt    DateTime?    @map("last_success_at")
+  // Short code (src/lib/bank/fio-client.ts FioError), never a message or URL.
+  lastError        String?      @map("last_error")
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id])
+  tokenSetBy   User?          @relation("BankAccountTokenSetBy", fields: [tokenSetByUserId], references: [id], onDelete: SetNull)
+  events       Event[]
+  movements    BankMovement[]
+
+  @@unique([organizationId, accountNumber, bankCode])
+  @@map("bank_accounts")
+}
+
+enum BankMovementStatus {
+  settled
+  review
+  ignored
+}
+
+model BankMovement {
+  id                    String             @id @default(uuid())
+  bankAccountId         String             @map("bank_account_id")
+  // Fio's movement id (column22).
+  movementId            String             @map("movement_id")
+  bookedAt              DateTime           @map("booked_at") @db.Date
+  amount                Decimal            @db.Decimal(14, 2)
+  currency              String
+  // Digits only, no leading zeros.
+  variableSymbol        String?            @map("variable_symbol")
+  counterName           String?            @map("counter_name")
+  counterAccount        String?            @map("counter_account")
+  message               String?
+  status                BankMovementStatus
+  // underpaid | overpaid | no_match | ambiguous | duplicate | not_czk
+  reason                String?
+  participantId         String?            @map("participant_id")
+  participantDocumentId String?            @unique @map("participant_document_id")
+  decidedByUserId       String?            @map("decided_by_user_id")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @updatedAt @map("updated_at")
+
+  bankAccount         BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  participant         Participant?         @relation(fields: [participantId], references: [id], onDelete: SetNull)
+  participantDocument ParticipantDocument? @relation(fields: [participantDocumentId], references: [id], onDelete: SetNull)
+  decidedBy           User?                @relation("BankMovementDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([bankAccountId, movementId])
+  @@index([participantId])
+  @@map("bank_movements")
 }
