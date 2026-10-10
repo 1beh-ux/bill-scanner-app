@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { extractBillWithAi } from "@/lib/ai-extraction";
 import { convertToCzk } from "@/lib/exchange-rates";
 import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
+import { orgIdOfEvent } from "@/lib/org-owner";
 
 const VALID_CURRENCIES = ["CZK", "PLN", "EUR"];
 
@@ -68,7 +69,8 @@ export async function processBillWithAi(billId: string): Promise<ProcessBillAiRe
     const pending = eventCategories.find((c) => c.id === bill.pendingCategoryId);
     if (pending) matchedCategory = pending;
   }
-  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name);
+  // Aliases are learned per organization (the bill's event's).
+  const canonicalMerchant = await resolveCanonicalMerchant(data.merchant_name, await orgIdOfEvent(bill.eventId));
 
   const newStatus =
     aiResult.status === "AUTO_APPROVE"

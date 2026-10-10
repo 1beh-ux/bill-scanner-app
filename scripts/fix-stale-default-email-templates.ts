@@ -27,11 +27,12 @@ async function main() {
   for (const { purposeKey, marker } of TARGETS) {
     const { subject, body } = PURPOSE_DEFAULTS[purposeKey];
 
-    const org = await prisma.emailTemplate.findUnique({ where: { purposeKey } });
-    if (org && org.body.includes(marker)) {
+    // One default per organization since organizations step 1.
+    for (const org of await prisma.emailTemplate.findMany({ where: { purposeKey } })) {
+      if (!org.body.includes(marker)) continue;
       total++;
-      console.log(`  ${apply ? "update" : "would update"}: org default (${purposeKey})`);
-      if (apply) await prisma.emailTemplate.update({ where: { purposeKey }, data: { subject, body } });
+      console.log(`  ${apply ? "update" : "would update"}: org default (${purposeKey}, ${org.organizationId ?? "app"})`);
+      if (apply) await prisma.emailTemplate.update({ where: { id: org.id }, data: { subject, body } });
     }
 
     const eventOverrides = await prisma.eventEmailTemplate.findMany({

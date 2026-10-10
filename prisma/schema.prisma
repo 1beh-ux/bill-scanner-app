@@ -211,8 +211,8 @@ model User {
   childEmailsSent      ChildEmailLog[]       @relation("ChildEmailSentBy")
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
   // Sees and manages every organization (organizations step 2+).
   isSuperAdmin   Boolean @default(false) @map("is_super_admin")
 
@@ -398,8 +398,8 @@ model Event {
   publicHosts          PublicHost[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("events")
@@ -407,7 +407,7 @@ model Event {
 
 model CategoryTemplate {
   id          String  @id @default(uuid())
-  name        String  @unique
+  name        String
   description String?
 
   // Owner (docs/organizations-change-notes.md).
@@ -418,6 +418,8 @@ model CategoryTemplate {
   sourceTemplate   CategoryTemplate? @relation("CategoryTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           CategoryTemplate[] @relation("CategoryTemplateSource")
 
+  // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
+  @@unique([organizationId, name])
   @@index([organizationId])
   @@map("category_templates")
 }
@@ -455,8 +457,8 @@ model Author {
   bankAudits  AuthorBankAudit[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("authors")
@@ -599,15 +601,16 @@ model ExchangeRate {
 
 model MerchantAlias {
   id            String   @id @default(uuid())
-  rawText       String   @unique @map("raw_text")
+  rawText       String   @map("raw_text")
   canonicalName String   @map("canonical_name")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
+  @@unique([organizationId, rawText])
   @@index([organizationId])
   @@map("merchant_aliases")
 }
@@ -712,8 +715,8 @@ model Child {
   documents    PersonDocument[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([familyId])
@@ -761,8 +764,8 @@ model Family {
   members Child[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("families")
@@ -1131,7 +1134,7 @@ model MedChecklist {
 
 model EmailTemplate {
   id         String  @id @default(uuid())
-  purposeKey String  @unique @map("purpose_key")
+  purposeKey String  @map("purpose_key")
   subject    String
   body       String
   active     Boolean @default(true)
@@ -1144,6 +1147,8 @@ model EmailTemplate {
   sourceTemplate   EmailTemplate? @relation("EmailTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
   copies           EmailTemplate[] @relation("EmailTemplateSource")
 
+  // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
+  @@unique([organizationId, purposeKey])
   @@index([organizationId])
   @@map("email_templates")
 }
@@ -1178,8 +1183,8 @@ model MailSenderAccount {
   connectedByUser User @relation("MailAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("mail_sender_accounts")
@@ -1204,8 +1209,8 @@ model DriveAccount {
   connectedByUser User @relation("DriveAccountConnectedBy", fields: [connectedByUserId], references: [id])
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@map("drive_accounts")
@@ -1471,8 +1476,8 @@ model PublicHost {
   event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String? @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([eventId])

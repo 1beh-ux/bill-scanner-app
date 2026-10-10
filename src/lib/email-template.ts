@@ -159,12 +159,13 @@ export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
 }
 
 /** The organization's default row for this purpose, created on first read if missing. */
-export async function getOrCreateOrgEmailTemplate(organizationId: string | null, purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
+export async function getOrCreateOrgEmailTemplate(organizationId: string, purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
   const { subject, body } = defaultsFor(purposeKey);
-  // Find + create, not upsert: Prisma's upsert is INSERT ... ON CONFLICT (purpose_key),
-  // which fails once organizations_required replaces that unique (deploy window).
-  const existing = await prisma.emailTemplate.findFirst({ where: { purposeKey } });
-  return existing ?? prisma.emailTemplate.create({ data: { purposeKey, subject, body, organizationId } });
+  return prisma.emailTemplate.upsert({
+    where: { organizationId_purposeKey: { organizationId, purposeKey } },
+    update: {},
+    create: { purposeKey, subject, body, organizationId },
+  });
 }
 
 /** Event override if one exists, otherwise the org default -- used at send time. */

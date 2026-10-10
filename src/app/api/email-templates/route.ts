@@ -30,11 +30,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "subject_and_body_required" }, { status: 400 });
   }
 
-  // Find + update/create, not upsert (ON CONFLICT on a unique organizations_required replaces).
-  const existing = await prisma.emailTemplate.findFirst({ where: { purposeKey: key } });
-  const updated = existing
-    ? await prisma.emailTemplate.update({ where: { id: existing.id }, data: { subject, body } })
-    : await prisma.emailTemplate.create({ data: { purposeKey: key, subject, body, organizationId: orgIdOfUser(user) } });
+  const updated = await prisma.emailTemplate.upsert({
+    where: { organizationId_purposeKey: { organizationId: orgIdOfUser(user), purposeKey: key } },
+    update: { subject, body },
+    create: { purposeKey: key, subject, body, organizationId: orgIdOfUser(user) },
+  });
 
   return NextResponse.json(updated);
 }

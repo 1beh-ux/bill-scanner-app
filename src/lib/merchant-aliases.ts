@@ -9,11 +9,11 @@ function normalizeMerchantText(text: string): string {
  * correction has been recorded before. Returns null when there's no known
  * mapping — the caller should just use the raw text as-is in that case.
  */
-export async function resolveCanonicalMerchant(rawMerchantName: string | null): Promise<string | null> {
+export async function resolveCanonicalMerchant(rawMerchantName: string | null, organizationId: string): Promise<string | null> {
   if (!rawMerchantName) return null;
   const key = normalizeMerchantText(rawMerchantName);
   if (!key) return null;
-  const alias = await prisma.merchantAlias.findUnique({ where: { rawText: key } });
+  const alias = await prisma.merchantAlias.findUnique({ where: { organizationId_rawText: { organizationId, rawText: key } } });
   return alias?.canonicalName ?? null;
 }
 
@@ -27,7 +27,7 @@ export async function recordMerchantCorrection(
   rawMerchantName: string,
   correctedName: string,
   /** The bill's event's organization: the alias is learned for it. */
-  organizationId: string | null
+  organizationId: string
 ): Promise<void> {
   const key = normalizeMerchantText(rawMerchantName);
   const canonical = correctedName.trim();
@@ -36,8 +36,9 @@ export async function recordMerchantCorrection(
   // casing change) — nothing useful to learn from that.
   if (normalizeMerchantText(canonical) === key) return;
 
-  // Find + update/create, not upsert (ON CONFLICT on a unique organizations_required replaces).
-  const existing = await prisma.merchantAlias.findFirst({ where: { rawText: key } });
-  if (existing) await prisma.merchantAlias.update({ where: { id: existing.id }, data: { canonicalName: canonical } });
-  else await prisma.merchantAlias.create({ data: { rawText: key, canonicalName: canonical, organizationId } });
+  await prisma.merchantAlias.upsert({
+    where: { organizationId_rawText: { organizationId, rawText: key } },
+    create: { rawText: key, canonicalName: canonical, organizationId },
+    update: { canonicalName: canonical },
+  });
 }
