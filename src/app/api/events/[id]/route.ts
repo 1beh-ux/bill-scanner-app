@@ -11,7 +11,7 @@ import { readEligibility } from "@/lib/portal-rules";
 import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
 import { eventSender } from "@/lib/auto-accept";
-import { publicBaseUrl } from "@/lib/portal-gate";
+import { publicUrl } from "@/lib/public-host";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -35,7 +35,7 @@ export async function GET(
   }
   // Auto-send needs a connected sending account; without one it only accepts (settings warn).
   const autoSendReady = event.autoAccept === "accept_send" ? !!(await eventSender(event)) : null;
-  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: publicBaseUrl() });
+  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "") });
 }
 
 export async function PATCH(

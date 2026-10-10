@@ -28,5 +28,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
   await autoAcceptRegistrations(event.id, ids, "public");
   // accept_send events show the family's portal link on the confirmation screen (slice 4 #10).
-  return NextResponse.json({ ok: true, portalLink: portalToken ? portalUrl(portalToken, req) : null }, { status: 201 });
+  return NextResponse.json({ ok: true, portalLink: portalToken ? await portalUrl(portalToken, req) : null }, { status: 201 });
 }

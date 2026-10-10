@@ -48,7 +48,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     values: profileValues(child),
     fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, active: t.active, portalAccess: t.portalAccess, audience: t.audience, level: t.level })),
     pendingChanges: changes.map((c) => ({ ...c, childName: child.name, fieldLabel: labels[c.fieldKey] ?? c.fieldKey })),
-    portalUrl: portalToken ? portalUrl(portalToken, req) : null,
+    portalUrl: portalToken ? await portalUrl(portalToken, req) : null,
   });
 }
 
@@ -99,7 +99,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       token = newPortalToken();
       await prisma.child.update({ where: { id }, data: { portalToken: token, portalGateFailures: 0, portalGateWindowStart: null } });
     }
-    return NextResponse.json({ url: portalUrl(token, req) });
+    return NextResponse.json({ url: await portalUrl(token, req) });
   }
 
   if (body.action === "decide") {

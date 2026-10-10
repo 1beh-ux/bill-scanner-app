@@ -4,6 +4,7 @@
 // HMAC of child id + the current token -- so a new token also logs out every
 // device. Tokens are secrets: never log them (or a URL containing one).
 import crypto from "crypto";
+import { publicUrl } from "@/lib/public-host";
 
 /** 32 random bytes, base64url (43 chars). */
 export function newPortalToken(): string {
@@ -32,30 +33,18 @@ export function gateCookieValid(value: string | undefined, childId: string, toke
 }
 
 /**
- * Public portal link: publicBaseUrl() when configured; otherwise the origin the
- * admin is using -- from the forwarded headers, since behind Cloud Run the
- * request URL is the container's internal address.
+ * Public portal link: publicUrl() (portal host, then the env bases); with none
+ * of those, the origin the admin is using -- from the forwarded headers, since
+ * behind Cloud Run the request URL is the container's internal address.
  */
-export function portalUrl(token: string, req: Request): string {
-  const configured = publicBaseUrl();
-  if (configured) return `${configured}/p/${token}`;
+export async function portalUrl(token: string, req: Request): Promise<string> {
+  const configured = await publicUrl("portal", null, `/p/${token}`);
+  if (configured) return configured;
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? new URL(req.url).protocol.replace(":", "");
   const origin = host ? `${proto}://${host}` : new URL(req.url).origin;
   return `${origin}/p/${token}`;
 }
-
-/**
- * Base URL for public links (/r/<slug>, /p/<token>): PUBLIC_BASE_URL, else
- * PORTAL_BASE_URL (a later second domain for parents), else APP_BASE_URL (set
- * on Cloud Run, see docs/custom-domain.md). Null = none set.
- */
-export function publicBaseUrl(): string | null {
-  return (process.env.PUBLIC_BASE_URL || process.env.PORTAL_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "") || null;
-}
-
-/** Portal links outside a request (e-mail / document variables, slice 4 #11). */
-export const portalBaseUrl = publicBaseUrl;
 
 /** {{portal_link_line}}: the whole sentence, or "" without a link (so the line vanishes). */
 export const portalLinkLine = (link: string | null) =>

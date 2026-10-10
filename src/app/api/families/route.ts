@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       token = newPortalToken();
       await prisma.family.update({ where: { id: family.id }, data: { portalToken: token, portalGateFailures: 0, portalGateWindowStart: null } });
     }
-    return NextResponse.json({ url: portalUrl(token, req) });
+    return NextResponse.json({ url: await portalUrl(token, req) });
   }
 
   return NextResponse.json({ error: "bad_request" }, { status: 400 });

@@ -6,7 +6,8 @@ import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields
 import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 import { readPriceRules, rulePrice } from "@/lib/price-rules";
-import { newPortalToken, portalBaseUrl, portalLinkLine } from "@/lib/portal-gate";
+import { newPortalToken, portalLinkLine } from "@/lib/portal-gate";
+import { publicUrl } from "@/lib/public-host";
 
 export type ParticipantForMerge = {
   name: string;
@@ -198,7 +199,7 @@ export async function portalLinkVars(
   event: { registrationConnected?: boolean; kind?: string },
   create: boolean
 ): Promise<{ portal_link: string; portal_link_line: string }> {
-  const base = portalBaseUrl();
+  const base = await publicUrl("portal", null, "");
   const none = { portal_link: "", portal_link_line: "" };
   if (!base || !participant.childId || !(event.registrationConnected || event.kind === "membership")) return none;
   const child = await prisma.child.findUnique({ where: { id: participant.childId }, select: { id: true, portalToken: true, family: { select: { id: true, portalToken: true } } } });
