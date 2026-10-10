@@ -1,7 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
+
+  // Old run.app host -> custom domain (docs/custom-domain.md), only when
+  // CANONICAL_HOST is set. Cloud Tasks (/api/tasks), Cloud Scheduler
+  // (/api/cron) and Firebase's auth helper (/__/) keep working on run.app;
+  // only GET/HEAD, so no form POST loses its body.
+  const canonical = process.env.CANONICAL_HOST;
+  const host = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").split(":")[0];
+  if (
+    canonical &&
+    host.endsWith(".run.app") &&
+    (req.method === "GET" || req.method === "HEAD") &&
+    !pathname.startsWith("/api/tasks") &&
+    !pathname.startsWith("/api/cron") &&
+    !pathname.startsWith("/__/")
+  ) {
+    return NextResponse.redirect(`https://${canonical}${pathname}${search}`, 308);
+  }
+
   const session = req.cookies.get("session");
 
   // /__/auth/* is Firebase's sign-in helper, proxied onto our own domain
