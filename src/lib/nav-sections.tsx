@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe } from "lucide-react";
 
 // superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
@@ -12,10 +12,10 @@ export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
 // Event-scoped pages (import/bills/health/mail/...) intentionally stay
 // out of this list: a landing path can't bake in an eventId that would
 // go stale once that event closes or access changes.
-export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
+export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDef> = {
   bills: {
     sectionLabelKey: "nav.sectionBills",
-    items: [{ path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true, superAdminOnly: true }],
+    items: [],
   },
   organization: {
     sectionLabelKey: "nav.organization",
@@ -29,11 +29,20 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       // as a user, so a global/all-events list belongs with the other org-wide admin pages, not Bills.
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
-      { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },
       // Public hostnames for the registration page / parent portal (docs/custom-domain.md).
       { path: "/connections", labelKey: "nav.connections", icon: Plug, adminOnly: true },
       // For everyone (event organisers too), not just admins.
       { path: "/napoveda", labelKey: "nav.help", icon: LifeBuoy },
+    ],
+  },
+  // APLIKACE (organizations step 3): app-wide, super-admin only -- not one organization's.
+  app: {
+    sectionLabelKey: "nav.sectionApp",
+    items: [
+      { path: "/admin/organizations", labelKey: "nav.organizations", icon: Building2, adminOnly: true, superAdminOnly: true },
+      { path: "/admin/public-hosts", labelKey: "nav.publicHosts", icon: Globe, adminOnly: true, superAdminOnly: true },
+      { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },
+      { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true, superAdminOnly: true },
     ],
   },
 };

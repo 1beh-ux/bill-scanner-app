@@ -4,7 +4,7 @@ import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
-export type MenuSection = "bills" | "participants" | "health" | "mail" | "planning" | "event" | "organization";
+export type MenuSection = "bills" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
 // roster = the central participant list, reachable with health OR mail.
 export type MenuModule = "health" | "mail" | "planning" | "roster";
 export type MenuItem = {
@@ -28,6 +28,7 @@ export const MENU_SECTIONS: { id: MenuSection; labelKey: string | null }[] = [
   { id: "planning", labelKey: "nav.sectionPlanning" },
   { id: "event", labelKey: null },
   { id: "organization", labelKey: "nav.organization" },
+  { id: "app", labelKey: "nav.sectionApp" },
 ];
 
 export const MENU_ITEMS: MenuItem[] = [
@@ -46,4 +47,5 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "activities", section: "planning", labelKey: "planActivities.title", icon: Library, href: ev("/planning/activities"), module: "planning" },
   { id: "event-settings", section: "event", labelKey: "nav.eventSetup", icon: Settings, href: (id) => (id ? `/events/${id}` : "/events") },
   ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
+  ...NAV_SECTIONS.app.items.map((i) => ({ id: i.path, section: "app" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
 ];

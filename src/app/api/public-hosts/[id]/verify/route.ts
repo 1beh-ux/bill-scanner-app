@@ -11,7 +11,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const { id } = await params;
   // Read-only check, so organization admins may run it -- on their own organization's hosts.
-  const host = await prisma.publicHost.findFirst({ where: { id, organizationId: await getActingOrgId(user) }, select: { hostname: true } });
+  // Organization admins: their own organization's hosts; a super-admin (Aplikace -> Veřejné adresy): any.
+  const host = await prisma.publicHost.findFirst({ where: { id, ...(user.isSuperAdmin ? {} : { organizationId: await getActingOrgId(user) }) }, select: { hostname: true } });
   if (!host) return notFound();
   return NextResponse.json(await verifyHost(host.hostname));
 }

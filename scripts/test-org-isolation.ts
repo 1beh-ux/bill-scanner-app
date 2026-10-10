@@ -84,7 +84,7 @@ async function main() {
     check("participant field templates: empty", ids(fields.body).length === 0, JSON.stringify(ids(fields.body)));
     const mail = await json(await (await import("@/app/api/mail-accounts/route")).GET());
     check("mailboxes: empty", Array.isArray(mail.body) && mail.body.length === 0, JSON.stringify(mail.body));
-    const hosts = await json(await (await import("@/app/api/public-hosts/route")).GET());
+    const hosts = await json(await (await import("@/app/api/public-hosts/route")).GET(req("/api/public-hosts")));
     check("public hosts: empty", (hosts.body?.hosts?.length ?? -1) === 0, JSON.stringify(hosts.body?.hosts));
     const overview = await json(await (await import("@/app/api/admin/overview/route")).GET());
     const ovEvents = ids(overview.body?.events);

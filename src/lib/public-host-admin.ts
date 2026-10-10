@@ -59,3 +59,10 @@ export async function verifyHost(hostname: string): Promise<{ result: VerifyResu
     return { result: "page", detail: code || (err as Error).name };
   }
 }
+
+/** body.organizationId if it names an active organization, else the fallback; null = a bad id. */
+export async function hostOrganization(body: unknown, fallback: string): Promise<string | null> {
+  const wanted = (body as { organizationId?: unknown } | null)?.organizationId;
+  if (typeof wanted !== "string" || !wanted) return fallback;
+  return (await prisma.organization.findFirst({ where: { id: wanted, active: true }, select: { id: true } }))?.id ?? null;
+}
