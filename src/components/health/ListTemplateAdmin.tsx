@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { useLevelUrl, useTemplateLevel } from "@/lib/template-level";
 import { useConfirm } from "@/components/ConfirmDialog";
 import DriveDocImport from "@/components/health/DriveDocImport";
 import PlanListDataFields, { type PlanKind } from "@/components/planning/PlanListDataFields";
@@ -63,9 +64,12 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const isDocument = kind === "document";
   const isPlan = kind.startsWith("plan_");
 
+  // Org scope: the organization's templates, or the app's on Aplikace -> Šablony aplikace (?level=app).
+  const lvl = useLevelUrl();
+  const appLevel = useTemplateLevel() === "app";
   const basePath = scope === "org" ? "/api/list-templates" : `/api/events/${eventId}/list-items`;
-  const listUrl = scope === "org" ? `${basePath}?kind=${kind}` : `${basePath}?kind=${kind}&all=true`;
-  const itemUrl = (id: string) => `${basePath}/${id}`;
+  const listUrl = scope === "org" ? lvl(`${basePath}?kind=${kind}`) : `${basePath}?kind=${kind}&all=true`;
+  const itemUrl = (id: string) => (scope === "org" ? lvl(`${basePath}/${id}`) : `${basePath}/${id}`);
 
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -243,7 +247,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: name.trim(), data }),
         })
-      : await fetch(basePath, {
+      : await fetch(scope === "org" ? lvl(basePath) : basePath, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -336,7 +340,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                 )}
               </span>
               <div className="flex items-center gap-3">
-                {scope === "org" && isDocument && (
+                {/* "Platí trvale" is the organization's (people's documents); not on app templates. */}
+                {scope === "org" && !appLevel && isDocument && (
                   <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary" title={t("personDocs.permanentHint")}>
                     <input type="checkbox" checked={!!(item.data as DocumentData | null)?.permanent} onChange={(e) => togglePermanent(item, e.target.checked)} />
                     {t("personDocs.permanent")}

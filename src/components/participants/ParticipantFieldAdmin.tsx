@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
+import { useLevelUrl, useTemplateLevel } from "@/lib/template-level";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
 import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel } from "@/lib/portal-rules";
@@ -77,9 +78,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const confirm = useConfirm();
   const isEvent = scope === "event";
 
+  // Org scope: the organization's templates, or the app's on Aplikace -> Šablony aplikace (?level=app).
+  const lvl = useLevelUrl();
+  const appLevel = useTemplateLevel() === "app";
   const basePath = isEvent ? `/api/events/${eventId}/participant-fields` : "/api/participant-field-templates";
-  const listUrl = isEvent ? `${basePath}?all=true` : basePath;
-  const itemUrl = (idOrKey: string) => `${basePath}/${encodeURIComponent(idOrKey)}`;
+  const listUrl = isEvent ? `${basePath}?all=true` : lvl(basePath);
+  const itemUrl = (idOrKey: string) => (isEvent ? `${basePath}/${encodeURIComponent(idOrKey)}` : lvl(`${basePath}/${encodeURIComponent(idOrKey)}`));
 
   const [fields, setFields] = useState<Field[]>([]);
   // Event scope: the org templates, for the "Rodiče v portálu" column (slice 4 #9) --
@@ -322,7 +326,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   async function setPortalAccess(field: Field, patch: TemplateMeta) {
     if (isEvent) setTemplates((prev) => new Map(prev).set(field.key, { ...prev.get(field.key), ...patch }));
     else setFields((prev) => prev.map((f) => (f.key === field.key ? { ...f, ...patch } : f)));
-    const res = await fetch(`/api/participant-field-templates/${encodeURIComponent(field.key)}`, {
+    // From an event this edits the organization's template (never an app one).
+    const res = await fetch(isEvent ? `/api/participant-field-templates/${encodeURIComponent(field.key)}` : lvl(`/api/participant-field-templates/${encodeURIComponent(field.key)}`), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
@@ -341,7 +346,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     if (isEvent) body.surfaces = surfaces;
     else body.defaultSurfaces = surfaces;
 
-    const res = await fetch(basePath, {
+    const res = await fetch(isEvent ? basePath : lvl(basePath), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -978,7 +983,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
               {syncing ? t("common.loading") : t("listTemplateAdmin.syncFromTemplates")}
             </button>
           )}
-          {!isEvent && (
+          {/* "Z akcí" reads the organization's events: not on the app level. */}
+          {!isEvent && !appLevel && (
             <button onClick={takeFromEvents} disabled={syncing} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
               {syncing ? t("common.loading") : t("participantFieldAdmin.fromEvents")}
             </button>

@@ -41,6 +41,7 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
     items: [
       { path: "/admin/organizations", labelKey: "nav.organizations", icon: Building2, adminOnly: true, superAdminOnly: true },
       { path: "/admin/public-hosts", labelKey: "nav.publicHosts", icon: Globe, adminOnly: true, superAdminOnly: true },
+      { path: "/admin/app-templates", labelKey: "nav.appTemplates", icon: LayoutTemplate, adminOnly: true, superAdminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },
       { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true, superAdminOnly: true },
     ],

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLevelUrl } from "@/lib/template-level";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email-template-preview";
@@ -29,8 +30,10 @@ export default function EmailTemplateAdmin({
   bodyOnly = false,
 }: EmailTemplateAdminProps) {
   const { t } = useTranslations();
+  // Org scope: the organization's template, or the app's on Aplikace -> Šablony aplikace (?level=app).
+  const lvl = useLevelUrl();
   const baseUrl = scope === "org" ? "/api/email-templates" : `/api/events/${eventId}/email-template`;
-  const url = `${baseUrl}?purposeKey=${encodeURIComponent(purposeKey)}`;
+  const url = scope === "org" ? lvl(`${baseUrl}?purposeKey=${encodeURIComponent(purposeKey)}`) : `${baseUrl}?purposeKey=${encodeURIComponent(purposeKey)}`;
   const purposeVariables = templateVariablesFor(purposeKey);
 
   // Every participant field flagged for documents/mail merge (custom,
