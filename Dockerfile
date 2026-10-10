@@ -18,7 +18,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npx prisma generate
-RUN npm run build
+# Next's type check outgrew Node's default ~2 GB heap (OOM in Cloud Build, Oct 2026); the build machine has 8 GB.
+RUN NODE_OPTIONS=--max-old-space-size=4096 npm run build
 
 FROM base AS runner
 ENV NODE_ENV=production
