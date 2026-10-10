@@ -256,6 +256,36 @@ async function main() {
       r = await appSync.POST(req("/api/app-templates", { method: "POST", body: { action: "restore", table: "category", id: zareCat.id } }));
       check("Obnovit on another organization's item -> 404", r.status === 404, `HTTP ${r.status}`);
     }
+
+    // ===== step 5: public pages show their organization =====
+    asUser(admin);
+    const slug = `isolation-${stamp}`;
+    await prisma.event.update({ where: { id: eventId }, data: { publicRegistration: true, publicSlug: slug, registrationConnected: true } });
+    const rPage = await import("@/app/(public)/r/[slug]/page");
+    const formEl = (await rPage.default({ params: Promise.resolve({ slug }) })) as { props: Record<string, unknown> };
+    const formText = JSON.stringify(formEl.props);
+    const meta = await rPage.generateMetadata({ params: Promise.resolve({ slug }) });
+    const metaTitle = JSON.stringify(meta.title);
+    check(
+      "registration form of the test org: its name in header + title, no Záře text",
+      (formEl.props.org as { name?: string })?.name === TEST_ORG && metaTitle.includes(TEST_ORG) && !/Záře|Pionýr/.test(formText + metaTitle),
+      JSON.stringify({ org: formEl.props.org, title: meta.title, zare: /Záře|Pionýr/.test(formText + metaTitle) })
+    );
+    // Landing page: the host's organization while active; 404 once the organization is deactivated.
+    const landing = await import("@/app/(public)/public-landing/page");
+    (globalThis as { __orgTestHost?: string }).__orgTestHost = hostname;
+    invalidatePublicHosts();
+    const landingText = JSON.stringify(await landing.default());
+    await prisma.organization.update({ where: { id: org.id }, data: { active: false } });
+    invalidatePublicHosts();
+    let landing404 = false;
+    try {
+      await landing.default();
+    } catch (err) {
+      landing404 = String((err as { digest?: string }).digest ?? err).includes("404") || String(err).includes("NEXT_NOT_FOUND") || String((err as { message?: string }).message).includes("NEXT_HTTP_ERROR_FALLBACK");
+    }
+    (globalThis as { __orgTestHost?: string }).__orgTestHost = undefined;
+    check("landing page: the host's organization's name; inactive organization's host -> 404", landingText.includes(TEST_ORG) && !/Záře/.test(landingText) && landing404, JSON.stringify({ named: landingText.includes(TEST_ORG), landing404 }));
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;

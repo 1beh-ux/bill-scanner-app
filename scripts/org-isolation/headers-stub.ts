@@ -1,5 +1,5 @@
 // Test stand-in for next/headers outside a Next request (scripts/test-org-isolation.ts):
-// cookies come from globalThis.__orgTestCookies (e.g. acting_org), the host is the admin host.
+// cookies come from globalThis.__orgTestCookies (e.g. acting_org), the host from __orgTestHost.
 const jar = () => (globalThis as { __orgTestCookies?: Record<string, string> }).__orgTestCookies ?? {};
 
 export async function cookies() {
@@ -11,5 +11,6 @@ export async function cookies() {
 }
 
 export async function headers() {
-  return new Headers({ host: "tabornik.online" });
+  // globalThis.__orgTestHost lets a check pose as a public host (default: the admin host).
+  return new Headers({ host: (globalThis as { __orgTestHost?: string }).__orgTestHost ?? "tabornik.online" });
 }
