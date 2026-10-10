@@ -315,3 +315,85 @@ Texts: `scripts/seed-organizations-i18n.ts` (cs + en). The deploy flow runs it.
 Deploy (step 3): build dc620a3c-649e-429d-b284-9e6626e054b5 SUCCESS -> `bill-scanner-app-00096-zpz`
 (rollback target `00095-sgj`). Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200,
 rodice / 200, /api/organizations and /api/acting-org without a session 401, no errors logged.
+
+# Step 4: app templates (branch orgs-4)
+
+Templates on three levels: app (organization_id NULL) → organization → event.
+
+## Open items from step 2, fixed
+- **participant_field_templates**: `id` is the primary key. `key` is unique per organization; NULL
+  (app level) counts as one group (`NULLS NOT DISTINCT`). `source_template_id` now references `id`.
+  - `20261014090000_field_template_id_additive`: `id` with the DB default `gen_random_uuid()` (older
+    code inserting during the deploy window still gets one); unique index; the unused self-FK on
+    `key` dropped.
+  - `scripts/migrate-field-template-ids.ts`: checks/fixes ids, converts source ids, finds duplicates.
+    Production: 16 rows, 0 without id, 0 to convert, 0 duplicates.
+  - `20261014100000_field_template_id_tighten`: primary key → `id`; unique (organization_id, key)
+    NULLS NOT DISTINCT (hand-edited SQL); FK source_template_id → id ON DELETE SET NULL.
+  - **References changed:**
+    - `participant-field-templates/[key]`: finds by (organization, key), updates and deletes by id;
+      the "key taken" check is per organization.
+    - `from-events`: only the organization's own keys count as taken.
+    - scripts `normalize-participant-field-surfaces`, `deactivate-duplicate-name-field`,
+      `fix-tshirt-size-casing` (update by id), `rename-medsnotes-label` (every organization's row),
+      `seed-participant-field-templates` (find + create/update instead of upsert by key).
+  - Event fields and profile values match by key *value*. Since step 2 those lookups are filtered
+    by organization, so they are unchanged.
+- **category-templates** POST/PATCH/DELETE require `isOrgAdmin`; before, any signed-in user could
+  call them. The other template routes already checked.
+
+## App level (Aplikace → Šablony aplikace, `/admin/app-templates`)
+- `TemplatesEditor`, the same component as Organizace → Šablony, inside
+  `TemplateLevelProvider value="app"`. The editors add `?level=app`.
+- `src/lib/template-scope.ts` `templateScope(req, user, write)`: with `level=app`, the app rows,
+  super-admin only (reads too); otherwise the acting organization's rows (writes: its admins).
+  Category, list, field and e-mail template routes use it.
+- On the app level, "platí trvale" and "Z akcí" are hidden: they are organization concepts.
+- Organization lists and event copies filter `organization_id = X` or go through the event's
+  organization, so they never see app rows.
+
+## Starter set: `scripts/create-app-templates.ts`
+- Copies every Záře template to the app level and sets the Záře rows' `sourceTemplateId` to the
+  copy.
+- App copies drop Google Doc ids and bank fields from `data`/`options`. There were none.
+- It is idempotent: already linked rows are skipped, and an existing app item with the same identity
+  is linked instead of copied.
+- Production (after the tighten migration):
+  - copied: 14 category, 32 list, 6 e-mail, 16 field templates
+  - flagged (dry run and after apply): **`[field] Je členem organizace -- key clenstvi_zare`**
+  - texts: no names, e-mails, URLs, IBANs, account numbers or phone numbers (checked again
+    independently with SQL)
+
+## Sync organization ← app (`src/lib/app-templates.ts`, `/api/app-templates`, `AppSyncPanel`)
+- Under each section of Organizace → Šablony: badges **Výchozí** (equal to the app source),
+  **Upraveno**, **Vlastní** (no app source).
+- **Porovnat**: the fields that differ, organization vs app.
+- **Obnovit z aplikace**: one item, with ConfirmDialog.
+- **Načíst nové z aplikace**: copies the app items the organization doesn't have yet (not copied
+  before and no own item with the same name / kind+name / purpose / key). It shows "Načteno N
+  položek" or "Nic nového".
+- Nothing is pushed: editing an app template changes no organization.
+- A new organization (Aplikace → Organizace) gets copies of every active app template, with
+  `sourceTemplateId`, in the same transaction (timeout 60 s). The "no templates" hint is replaced.
+
+## Order (deviation from the prompt)
+`create-app-templates` ran *after* the tighten migration, not between the two migrations. While
+`key` was the global primary key, an app copy of a Záře field (same key, organization NULL) would
+have violated it. The run order was:
+1. Deploy A (additive)
+2. id script
+3. tighten migration alone (the Deploy A code works with it)
+4. create-app-templates
+5. isolation test
+6. Deploy B
+
+## Tests
+`test-org-isolation --run` (production): **41/41 passed**, cleanup ok. On top of step 3, it covers:
+- An organization admin gets 403 on app-template writes and reads.
+- One organization's own templates are invisible to the other, both ways.
+- A new organization gets copies of all active app templates.
+- Obnovit turns Upraveno back into Výchozí.
+- Načíst nové copies 1, then 0.
+- Obnovit on another organization's item → 404.
+
+`check-org-scope`: 189 files, 0 unexplained; `templateScope` was added to its guard list. Build ok.
