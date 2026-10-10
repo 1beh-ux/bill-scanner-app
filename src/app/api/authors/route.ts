@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
 
 // Global payer list (all payers, all events) -- admin only. Event users work
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
 
   const author = await prisma.$transaction(async (tx) => {
-    const created = await tx.author.create({ data: { canonicalName: name } });
+    const created = await tx.author.create({ data: { canonicalName: name, organizationId: orgIdOfUser(user) } });
     if (bank.account !== null) {
       await setAuthorBank(tx, { authorId: created.id, bank, userId: user.id, eventId: null, source: "create" });
     }

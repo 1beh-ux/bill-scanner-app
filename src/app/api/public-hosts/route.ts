@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { checkHostInput } from "@/lib/public-host-admin";
 import { invalidatePublicHosts } from "@/lib/public-host";
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const checked = await checkHostInput(await req.json().catch(() => null), null);
   if ("error" in checked) return NextResponse.json({ error: checked.error }, { status: 400 });
-  const host = await prisma.publicHost.create({ data: { ...checked.data, createdByUserId: user.id } });
+  const host = await prisma.publicHost.create({ data: { ...checked.data, createdByUserId: user.id, organizationId: orgIdOfUser(user) } });
   invalidatePublicHosts();
   return NextResponse.json(host, { status: 201 });
 }

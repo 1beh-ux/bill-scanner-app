@@ -43,9 +43,11 @@ async function call(handler: Handler, opts: { url: string; method?: string; body
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
+  const { orgIdForSeeds } = await import("../src/lib/org-owner");
+  const organizationId = await orgIdForSeeds();
   const { convertToCzk } = await import("../src/lib/exchange-rates");
   const run = Date.now().toString(36);
-  const user = await prisma.user.upsert({ where: { email: "b-user@test.local" }, update: { active: true }, create: { email: "b-user@test.local", displayName: "b-user", role: "user" } });
+  const user = await prisma.user.upsert({ where: { email: "b-user@test.local" }, update: { active: true }, create: { organizationId, email: "b-user@test.local", displayName: "b-user", role: "user" } });
 
   console.log("== Part 9: foreign-currency preview uses the same conversion as saving");
   const lookup = (await import("../src/app/api/exchange-rates/lookup/route")).GET as unknown as Handler;
@@ -111,9 +113,9 @@ async function main() {
   check("normalize: empty/invalid input -> the default set", JSON.stringify(cols.normalizeBillColumns(null)) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS) && JSON.stringify(cols.normalizeBillColumns([])) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS) && JSON.stringify(cols.normalizeBillColumns("x")) === JSON.stringify(cols.DEFAULT_BILL_COLUMNS));
   check("the default set contains paid status and the required columns", cols.DEFAULT_BILL_COLUMNS.includes("paid") && cols.REQUIRED_BILL_COLUMNS.every((k) => cols.DEFAULT_BILL_COLUMNS.includes(k)));
   const eventRoute = await import("../src/app/api/events/[id]/route");
-  const u2 = await prisma.user.upsert({ where: { email: "b-user2@test.local" }, update: { active: true }, create: { email: "b-user2@test.local", displayName: "b-user2", role: "user" } });
-  const outsider = await prisma.user.upsert({ where: { email: "b-outsider@test.local" }, update: { active: true }, create: { email: "b-outsider@test.local", displayName: "b-outsider", role: "user" } });
-  const ev = await prisma.event.create({ data: { name: `Cols ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const u2 = await prisma.user.upsert({ where: { email: "b-user2@test.local" }, update: { active: true }, create: { organizationId, email: "b-user2@test.local", displayName: "b-user2", role: "user" } });
+  const outsider = await prisma.user.upsert({ where: { email: "b-outsider@test.local" }, update: { active: true }, create: { organizationId, email: "b-outsider@test.local", displayName: "b-outsider", role: "user" } });
+  const ev = await prisma.event.create({ data: { organizationId, name: `Cols ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
   await prisma.userEventModuleAccess.createMany({ data: [user, u2].map((u) => ({ userId: u.id, eventId: ev.id, moduleKey: "bills" as const })), skipDuplicates: true });
   const patch = (u: FakeUser, body: unknown) => call(eventRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: ev.id }, user: u, body });
   const getEv = (u: FakeUser) => call(eventRoute.GET as unknown as Handler, { url: "/x", params: { id: ev.id }, user: u });
@@ -146,11 +148,11 @@ async function main() {
   const eventsRoute = await import("../src/app/api/events/route");
   const moveRoute = await import("../src/app/api/bills/[id]/move/route");
   const bulkRoute = await import("../src/app/api/events/[id]/bills/bulk/route");
-  const mvA = await prisma.event.create({ data: { name: `MvA ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
-  const mvOpen = await prisma.event.create({ data: { name: `MvOpen ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
-  const mvClosed = await prisma.event.create({ data: { name: `MvClosed ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10"), status: "closed" } });
-  const mvNoAccess = await prisma.event.create({ data: { name: `MvNoAccess ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
-  const mvHealthOnly = await prisma.event.create({ data: { name: `MvHealth ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvA = await prisma.event.create({ data: { organizationId, name: `MvA ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvOpen = await prisma.event.create({ data: { organizationId, name: `MvOpen ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvClosed = await prisma.event.create({ data: { organizationId, name: `MvClosed ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10"), status: "closed" } });
+  const mvNoAccess = await prisma.event.create({ data: { organizationId, name: `MvNoAccess ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const mvHealthOnly = await prisma.event.create({ data: { organizationId, name: `MvHealth ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
   await prisma.userEventModuleAccess.createMany({
     data: [
       { userId: user.id, eventId: mvA.id, moduleKey: "bills" as const },

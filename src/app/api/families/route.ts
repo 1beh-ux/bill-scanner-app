@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { familyContacts, suggestFamilies } from "@/lib/portal-rules";
 import { childKey } from "@/lib/children";
@@ -85,7 +86,7 @@ async function dropEmpty(familyIds: (string | null)[]) {
 // "delete" { familyId } (members stay, just without a family), "token" { familyId, regenerate? },
 // "reviewed" { familyId } (a public-form family checked: off the "Ke kontrole" list).
 export async function POST(req: NextRequest) {
-  const { error } = await requireAdmin();
+  const { error, user } = await requireAdmin();
   if (error) return error;
   const body = await req.json().catch(() => ({}));
 
@@ -94,7 +95,7 @@ export async function POST(req: NextRequest) {
     const childIds = ids(body.childIds);
     if (!name || childIds.length === 0) return NextResponse.json({ error: "bad_request" }, { status: 400 });
     const family = await prisma.$transaction(async (tx) => {
-      const f = await tx.family.create({ data: { name } });
+      const f = await tx.family.create({ data: { name, organizationId: orgIdOfUser(user) } });
       // Only people not in a family yet: a person is in at most one.
       await tx.child.updateMany({ where: { id: { in: childIds }, familyId: null }, data: { familyId: f.id } });
       return f;

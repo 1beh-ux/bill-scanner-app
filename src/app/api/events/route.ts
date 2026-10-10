@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 
 // ?module=bills -> only events where the user may work with bills (what a
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
         name,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
+        organizationId: orgIdOfUser(user),
       },
     });
 

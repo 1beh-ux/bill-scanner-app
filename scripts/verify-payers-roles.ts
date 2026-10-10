@@ -45,6 +45,8 @@ async function call(handler: Handler, opts: { url: string; method?: string; body
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
+  const { orgIdForSeeds } = await import("../src/lib/org-owner");
+  const organizationId = await orgIdForSeeds();
   const { hasModuleAccess } = await import("../src/lib/module-access");
   const payersRoute = await import("../src/app/api/events/[id]/payers/route");
   const searchRoute = await import("../src/app/api/events/[id]/payers/search/route");
@@ -58,12 +60,12 @@ async function main() {
   // -- fixtures (idempotent by name/email) --------------------------------
   const run = Date.now().toString(36);
   const mk = (email: string, role: "admin" | "accountant" | "user") =>
-    prisma.user.upsert({ where: { email }, update: { role, active: true }, create: { email, displayName: email.split("@")[0], role } });
+    prisma.user.upsert({ where: { email }, update: { role, active: true }, create: { organizationId, email, displayName: email.split("@")[0], role } });
   const admin = await mk("v-admin@test.local", "admin");
   const user1 = await mk("v-user1@test.local", "user");
   const exAcct = await mk("v-acct@test.local", "accountant");
-  const evA = await prisma.event.create({ data: { name: `V-A ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
-  const evB = await prisma.event.create({ data: { name: `V-B ${run}`, startDate: new Date("2026-09-01"), endDate: new Date("2026-09-10") } });
+  const evA = await prisma.event.create({ data: { organizationId, name: `V-A ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const evB = await prisma.event.create({ data: { organizationId, name: `V-B ${run}`, startDate: new Date("2026-09-01"), endDate: new Date("2026-09-10") } });
   await prisma.userEventModuleAccess.createMany({
     data: [
       { userId: user1.id, eventId: evA.id, moduleKey: "bills" },
@@ -87,7 +89,7 @@ async function main() {
   check("event list for admin includes A and B", r.json.some((e: { id: string }) => e.id === evA.id) && r.json.some((e: { id: string }) => e.id === evB.id));
 
   console.log("\n== global payer endpoints are admin only");
-  const anyAuthor = await prisma.author.create({ data: { canonicalName: `Global ${run}` } });
+  const anyAuthor = await prisma.author.create({ data: { organizationId, canonicalName: `Global ${run}` } });
   for (const [label, h, opts] of [
     ["GET /api/authors", authorsRoute.GET, { url: "/api/authors" }],
     ["POST /api/authors", authorsRoute.POST, { url: "/api/authors", method: "POST", body: { canonicalName: "x" } }],
@@ -133,7 +135,7 @@ async function main() {
   check("saving an unchanged bank account writes no new audit row", r.status === 200 && audits2 === 2, String(audits2));
 
   // a payer that lives only in event B is invisible/untouchable from A
-  const bPayer = await prisma.author.create({ data: { canonicalName: `Only-B ${run}` } });
+  const bPayer = await prisma.author.create({ data: { organizationId, canonicalName: `Only-B ${run}` } });
   await prisma.authorEventAccess.create({ data: { authorId: bPayer.id, eventId: evB.id } });
   r = await call(payerRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { ...A, payerId: bPayer.id }, user: user1, body: { canonicalName: "hijack" } });
   check("event user cannot edit a payer that is not attached to their event", r.status === 404, String(r.status));
@@ -166,7 +168,7 @@ async function main() {
   r = await call(authorRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: janaId }, user: admin, body: { bankAccountNumber: "35-1234567", bankCode: "0100" } });
   const adminAudit = await prisma.authorBankAudit.findFirst({ where: { authorId: janaId, source: "admin_edit" } });
   check("admin edit writes an admin_edit audit row without an event", r.status === 200 && adminAudit?.eventId === null);
-  const mergeTarget = await prisma.author.create({ data: { canonicalName: `Merge target ${run}` } });
+  const mergeTarget = await prisma.author.create({ data: { organizationId, canonicalName: `Merge target ${run}` } });
   r = await call(mergeRoute.POST as unknown as Handler, { url: "/x", method: "POST", params: { id: janaId }, user: admin, body: { targetAuthorId: mergeTarget.id, bankAccountNumber: "35-1234567", bankCode: "0100" } });
   const mergeAudit = await prisma.authorBankAudit.findFirst({ where: { authorId: mergeTarget.id, source: "merge" } });
   check("merge with bank details on the survivor writes a merge audit row", r.status === 200 && !!mergeAudit);
@@ -180,19 +182,19 @@ async function main() {
   const bill2 = await prisma.bill.create({
     data: { eventId: evA.id, gcsObjectPath: `test/${run}-2.pdf`, originalFilename: "t2.pdf", contentHash: `h2-${run}`, ingestChannel: "upload", createdByUserId: user1.id },
   });
-  const inB = await prisma.author.create({ data: { canonicalName: `Payer of B only ${run}` } });
+  const inB = await prisma.author.create({ data: { organizationId, canonicalName: `Payer of B only ${run}` } });
   await prisma.authorEventAccess.create({ data: { authorId: inB.id, eventId: evB.id } });
   r = await call(billsRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: bill2.id }, user: user1, body: { payerAuthorId: inB.id } });
   check("assigning a payer from another event is rejected (payer_not_in_event)", r.status === 400 && r.json?.error === "payer_not_in_event", JSON.stringify(r.json));
-  const inA = await prisma.author.create({ data: { canonicalName: `Payer of A ${run}` } });
+  const inA = await prisma.author.create({ data: { organizationId, canonicalName: `Payer of A ${run}` } });
   await prisma.authorEventAccess.create({ data: { authorId: inA.id, eventId: evA.id } });
   r = await call(billsRoute.PATCH as unknown as Handler, { url: "/x", method: "PATCH", params: { id: bill2.id }, user: user1, body: { payerAuthorId: inA.id } });
   check("assigning a payer attached to the event works", r.status === 200, JSON.stringify(r.json));
 
   console.log("\n== payments page data is scoped to the selected event");
   const unpaidRoute = await import("../src/app/api/events/[id]/unpaid-summary/route");
-  const payerA = await prisma.author.create({ data: { canonicalName: `Pay A ${run}` } });
-  const payerB = await prisma.author.create({ data: { canonicalName: `Pay B ${run}` } });
+  const payerA = await prisma.author.create({ data: { organizationId, canonicalName: `Pay A ${run}` } });
+  const payerB = await prisma.author.create({ data: { organizationId, canonicalName: `Pay B ${run}` } });
   await prisma.authorEventAccess.createMany({ data: [{ authorId: payerA.id, eventId: evA.id }, { authorId: payerB.id, eventId: evB.id }] });
   const mkBill = (eventId: string, payerId: string, tag: string, paid: boolean, status: "approved" | "new" = "approved") =>
     prisma.bill.create({

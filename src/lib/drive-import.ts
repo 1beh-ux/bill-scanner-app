@@ -1,3 +1,4 @@
+import { orgIdOfEvent } from "@/lib/org-owner";
 import type { Author } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import {
@@ -45,7 +46,8 @@ export interface ImportSummary {
  * differences shouldn't spawn duplicate author records.
  */
 export async function findOrCreateAuthorForSubfolder(
-  name: string
+  name: string,
+  eventId: string
 ): Promise<{ author: Author; created: boolean }> {
   const trimmed = name.trim();
 
@@ -57,8 +59,9 @@ export async function findOrCreateAuthorForSubfolder(
   });
   if (existing) return { author: existing, created: false };
 
+  // A new payer belongs to the importing event's organization.
   const author = await prisma.author.create({
-    data: { canonicalName: trimmed },
+    data: { canonicalName: trimmed, organizationId: await orgIdOfEvent(eventId) },
   });
   return { author, created: true };
 }
@@ -100,7 +103,7 @@ export async function importBillsFromDrive(
   }
 
   for (const subfolder of subfolders) {
-    const { author, created } = await findOrCreateAuthorForSubfolder(subfolder.name);
+    const { author, created } = await findOrCreateAuthorForSubfolder(subfolder.name, eventId);
     await ensureAuthorEventAccess(author.id, eventId);
     authorsResolved.push({
       subfolderName: subfolder.name,

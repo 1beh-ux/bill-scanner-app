@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { copyProfileFromLatest, linkChildren, nameKey, fillMissingGuardians } from "@/lib/children";
 import { profileFieldLabels } from "@/lib/child-profile";
 import { participantDisplayName } from "@/lib/participant-name";
@@ -152,6 +153,7 @@ export async function POST(req: NextRequest) {
           firstName: participant.firstName,
           lastName: participant.lastName,
           dateOfBirth: participant.dateOfBirth,
+          organizationId: await orgIdOfEvent(participant.eventId),
         },
       });
       childId = child.id;

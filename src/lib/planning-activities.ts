@@ -1,3 +1,4 @@
+import { orgIdOfEvent } from "@/lib/org-owner";
 import type { ListTemplateKind, Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { MIN_SLOT_MINUTES, baseActivityCategories, readCategoryShares, type PlanBaseActivityData, type PlanCategoryShare } from "@/lib/planning";
@@ -253,6 +254,8 @@ export async function saveActivitiesAsTemplates(eventId: string, activityIds: st
     prisma.planActivity.findMany({ where: { eventId, id: { in: activityIds } } }),
     eventCategoryNames(eventId),
   ]);
+  // Saved into the library of the event's organization.
+  const organizationId = await orgIdOfEvent(eventId);
   let created = 0;
   let updated = 0;
   for (const a of activities) {
@@ -264,7 +267,7 @@ export async function saveActivitiesAsTemplates(eventId: string, activityIds: st
       await prisma.listTemplate.update({ where: { id: existing.id }, data: { name, data, active: true } });
       updated++;
     } else {
-      const t = await prisma.listTemplate.create({ data: { kind: "plan_activity", name, data } });
+      const t = await prisma.listTemplate.create({ data: { kind: "plan_activity", name, data, organizationId } });
       await prisma.planActivity.update({ where: { id: a.id }, data: { sourceTemplateId: t.id } });
       created++;
     }

@@ -566,6 +566,8 @@ export async function addFamilyMember(scope: PortalScope, body: unknown): Promis
   const checked = validateSubmission({ persons: [o.person], guardians: o.guardians }, { fields: memberFormFields(await visibleTemplates()), rules: null, oddil: null, today: new Date() });
   if (!checked.ok) return { error: "invalid", fields: checked.errors };
   const p = checked.data.persons[0];
+  // The new person belongs where the family does.
+  const family = await prisma.family.findUniqueOrThrow({ where: { id: scope.id }, select: { organizationId: true } });
   const child = await prisma.child.create({
     data: {
       name: fullNameFrom(p.firstName, p.lastName),
@@ -574,6 +576,7 @@ export async function addFamilyMember(scope: PortalScope, body: unknown): Promis
       dateOfBirth: new Date(p.birthDate),
       isAdult: p.isAdult,
       familyId: scope.id,
+      organizationId: family.organizationId,
       fieldValues: p.values,
       guardians: { create: p.guardians.map((g) => ({ ...g, receivesCommunications: true })) },
     },

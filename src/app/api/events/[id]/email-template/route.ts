@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY, modulesForEmailPurpose } from "@/lib/email-template";
 
 export async function GET(
@@ -24,7 +25,7 @@ export async function GET(
     return NextResponse.json({ subject: override.subject, body: override.body, hasOverride: true });
   }
 
-  const org = await getOrCreateOrgEmailTemplate(purposeKey);
+  const org = await getOrCreateOrgEmailTemplate(await orgIdOfEvent(eventId), purposeKey);
   return NextResponse.json({ subject: org.subject, body: org.body, hasOverride: false });
 }
 
@@ -72,6 +73,6 @@ export async function DELETE(
     where: { eventId, purposeKey },
   });
 
-  const org = await getOrCreateOrgEmailTemplate(purposeKey);
+  const org = await getOrCreateOrgEmailTemplate(await orgIdOfEvent(eventId), purposeKey);
   return NextResponse.json({ subject: org.subject, body: org.body, hasOverride: false });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getOrCreateOrgEmailTemplate } from "@/lib/email-template";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { PORTAL_INVITATION_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   if (body.action === "info") {
     const [template, senderEmail, targets] = await Promise.all([
-      getOrCreateOrgEmailTemplate(purposeKey),
+      getOrCreateOrgEmailTemplate(orgIdOfUser(user), purposeKey),
       orgSenderEmail(user),
       Promise.all(childIds.map(loadTarget)),
     ]);

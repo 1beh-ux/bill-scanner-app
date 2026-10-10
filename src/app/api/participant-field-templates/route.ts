@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   }
 
   const template = await prisma.participantFieldTemplate.create({
-    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [] },
+    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [], organizationId: orgIdOfUser(user) },
   });
 
   return NextResponse.json(template, { status: 201 });

@@ -25,7 +25,9 @@ export async function resolveCanonicalMerchant(rawMerchantName: string | null): 
  */
 export async function recordMerchantCorrection(
   rawMerchantName: string,
-  correctedName: string
+  correctedName: string,
+  /** The bill's event's organization: the alias is learned for it. */
+  organizationId: string | null
 ): Promise<void> {
   const key = normalizeMerchantText(rawMerchantName);
   const canonical = correctedName.trim();
@@ -36,7 +38,7 @@ export async function recordMerchantCorrection(
 
   await prisma.merchantAlias.upsert({
     where: { rawText: key },
-    create: { rawText: key, canonicalName: canonical },
+    create: { rawText: key, canonicalName: canonical, organizationId },
     update: { canonicalName: canonical },
   });
 }

@@ -1,3 +1,4 @@
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { prisma } from "@/lib/prisma";
 import type { ModuleKey } from "@/generated/prisma";
 import {
@@ -157,13 +158,13 @@ export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
   return ["health"];
 }
 
-/** The single org-default row for this purpose, created on first read if missing. */
-export async function getOrCreateOrgEmailTemplate(purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
+/** The organization's default row for this purpose, created on first read if missing. */
+export async function getOrCreateOrgEmailTemplate(organizationId: string | null, purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
   const { subject, body } = defaultsFor(purposeKey);
   return prisma.emailTemplate.upsert({
     where: { purposeKey },
     update: {},
-    create: { purposeKey, subject, body },
+    create: { purposeKey, subject, body, organizationId },
   });
 }
 
@@ -177,7 +178,7 @@ export async function resolveEmailTemplate(
   });
   if (override) return { subject: override.subject, body: override.body };
 
-  const org = await getOrCreateOrgEmailTemplate(purposeKey);
+  const org = await getOrCreateOrgEmailTemplate(await orgIdOfEvent(eventId), purposeKey);
   return { subject: org.subject, body: org.body };
 }
 

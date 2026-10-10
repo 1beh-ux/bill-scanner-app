@@ -1,16 +1,19 @@
 import { PrismaClient } from "../src/generated/prisma";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { orgIdForSeeds } from "../src/lib/org-owner";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
+  // Everything seeded belongs to SEED_ORGANIZATION (default Pionýrská skupina Záře).
+  const organizationId = await orgIdForSeeds(prisma);
   await prisma.user.createMany({
     data: [
-      { email: "jana@zare.cz", displayName: "Jana Nováková", role: "admin" },
-      { email: "ucetni@zare.cz", displayName: "Účetní", role: "accountant" },
-      { email: "1beh@zare.cz", displayName: "1beh", role: "admin" },
-    ],
+      { email: "jana@zare.cz", displayName: "Jana Nováková", role: "admin" as const },
+      { email: "ucetni@zare.cz", displayName: "Účetní", role: "accountant" as const },
+      { email: "1beh@zare.cz", displayName: "1beh", role: "admin" as const },
+    ].map((u) => ({ ...u, organizationId })),
     skipDuplicates: true,
   });
 
@@ -30,7 +33,7 @@ async function main() {
       { name: "spotřeba EE, plynu a vody ( paušál PS )", description: "Elektřina, plyn, voda — paušál za energie." },
       { name: "jiné výdaje", description: "Použijte, když je výdaj v pořádku, ale nehodí se do jiné kategorie, nebo když žádná povolená kategorie nesedí." },
       { name: "rezerva", description: "Použijte pouze pokud se účtenka jasně týká rezervního fondu." },
-    ],
+    ].map((c) => ({ ...c, organizationId })),
     skipDuplicates: true,
   });
 
@@ -736,7 +739,7 @@ async function main() {
     });
     if (!existing) {
       await prisma.listTemplate.create({
-        data: { kind: "slot", name: slot.name, sortOrder: slot.sortOrder },
+        data: { kind: "slot", name: slot.name, sortOrder: slot.sortOrder, organizationId },
       });
     }
   }

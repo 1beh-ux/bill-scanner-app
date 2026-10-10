@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { PLAN_ORG_LIST_KINDS } from "@/lib/planning";
 
 const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS];
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
       key: key || null,
       sortOrder: sortOrder ?? null,
       data: data ?? undefined,
+      organizationId: orgIdOfUser(user),
     },
   });
 

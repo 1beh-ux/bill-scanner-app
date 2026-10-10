@@ -12,6 +12,7 @@ config({ path: ".env.local", override: true });
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
+  const { orgIdForSeeds } = await import("../src/lib/org-owner");
 
   const rows: { key: string; label: string; fieldType: string }[] = [
     { key: "adresa", label: "Adresa trvalého bydliště", fieldType: "text" },
@@ -21,11 +22,12 @@ async function main() {
     { key: "vydani_osoby", label: "Dítě může být vydáno těmto osobám", fieldType: "text" },
   ];
 
+  const organizationId = await orgIdForSeeds();
   for (const row of rows) {
     await prisma.participantFieldTemplate.upsert({
       where: { key: row.key },
       update: { label: row.label, fieldType: row.fieldType as never },
-      create: { ...row, fieldType: row.fieldType as never, defaultSurfaces: [] },
+      create: { ...row, fieldType: row.fieldType as never, defaultSurfaces: [], organizationId },
     });
     console.log(`  ok: ${row.key}`);
   }

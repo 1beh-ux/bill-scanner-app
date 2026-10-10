@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 
 // Šablony → Účastníci "Převzít pole z akcí": custom fields that exist only in
 // events (no org template with that key) become org templates -- the parent
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
       options: row.options ?? undefined,
       defaultSurfaces: row.surfaces,
       active: row.active,
+      organizationId: orgIdOfUser(user),
     })),
     skipDuplicates: true,
   });

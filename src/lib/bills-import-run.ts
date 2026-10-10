@@ -131,7 +131,7 @@ export async function runBillImport(
     categoryByName.set(key, c.id);
   }
   for (const [key, name] of missingPayers) {
-    const { author } = await findOrCreateAuthorForSubfolder(name);
+    const { author } = await findOrCreateAuthorForSubfolder(name, eventId);
     authorByName.set(key, author.id);
   }
 

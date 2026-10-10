@@ -12,6 +12,7 @@ if (!/@(127\.0\.0\.1|localhost)[:/]/.test(process.env.DATABASE_URL ?? "")) {
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { prisma } from "../src/lib/prisma";
+import { orgIdForSeeds } from "../src/lib/org-owner";
 import { copyPlanDay, loadPlanPayload, loadPlanState, persistPlanDiff, validateRestoreState } from "../src/lib/planning-server";
 import { scheduleDays, scheduleRows } from "../src/lib/planning-export";
 import { scheduleHtml } from "../src/lib/planning-pdf";
@@ -28,13 +29,14 @@ const norm = (s: PlanState) => ({
 });
 
 async function main() {
-  const mk = (name: string) => prisma.event.create({ data: { name, startDate: new Date("2026-07-10"), endDate: new Date("2026-07-20") } });
+  const organizationId = await orgIdForSeeds();
+  const mk = (name: string) => prisma.event.create({ data: { organizationId, name, startDate: new Date("2026-07-10"), endDate: new Date("2026-07-20") } });
   const ev = await mk("Tábor");
   const ev2 = await mk("Tábor 2");
   const cat = await prisma.eventListItem.create({ data: { eventId: ev.id, kind: "plan_category", name: "Hra", data: { group: "primary", color: "#f00" } } });
   const leader = await prisma.eventListItem.create({ data: { eventId: ev.id, kind: "plan_leader", name: "Tom" } });
   const foreignLeader = await prisma.eventListItem.create({ data: { eventId: ev2.id, kind: "plan_leader", name: "Tom" } });
-  const tpl = await prisma.listTemplate.create({ data: { kind: "plan_activity", name: "Honička", data: { defaultDurationMin: 45, primaryCategoryName: "hra" } } });
+  const tpl = await prisma.listTemplate.create({ data: { organizationId, kind: "plan_activity", name: "Honička", data: { defaultDurationMin: 45, primaryCategoryName: "hra" } } });
 
   // Base import resolves category by name (case-insensitive), is idempotent, returns ids.
   const imp = await importBaseActivities(ev.id, [tpl.id]);
@@ -252,7 +254,7 @@ async function main() {
 
   // ---- Bill table import (no Drive here: dry run + applying row data) --------
   {
-    const user = await prisma.user.create({ data: { email: `t${Date.now()}@x.cz`, displayName: "Test", role: "user" } });
+    const user = await prisma.user.create({ data: { organizationId, email: `t${Date.now()}@x.cz`, displayName: "Test", role: "user" } });
     const ev4 = await mk("Účtenky");
     const jidlo = await prisma.eventCategory.create({ data: { eventId: ev4.id, name: "Jídlo", budgetAmount: 0 } });
     const ID = (n: number) => `1AbCdEfGhIjKlMnOpQrStUvWx${n}yz01234`;

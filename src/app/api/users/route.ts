@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -35,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const created = await prisma.user.create({
-      data: { email: email.trim().toLowerCase(), displayName: displayName.trim(), role },
+      data: { email: email.trim().toLowerCase(), displayName: displayName.trim(), role, organizationId: orgIdOfUser(user) },
     });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

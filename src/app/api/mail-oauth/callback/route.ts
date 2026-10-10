@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { requireAnyModuleAccess, requireModuleAccess } from "@/lib/module-access";
 import { encryptMailToken } from "@/lib/mail-token-crypto";
 import { invalidateDriveIdentity } from "@/lib/drive";
@@ -98,7 +99,7 @@ export async function GET(req: NextRequest) {
         await prisma.driveAccount.upsert({
           where: { connectedByUserId: user.id },
           update: data,
-          create: { ...data, connectedByUserId: user.id },
+          create: { ...data, connectedByUserId: user.id, organizationId: orgIdOfUser(user) },
         });
       } catch (err) {
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -126,6 +127,7 @@ export async function GET(req: NextRequest) {
         refreshTokenEncrypted: encryptMailToken(tokens.refresh_token),
         connectedByUserId: user.id,
         scope: tokens.scope ?? null,
+        organizationId: orgIdOfUser(user),
       },
     });
     await prisma.event.update({ where: { id: eventId }, data: { senderEmail: email } });

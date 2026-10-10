@@ -3,6 +3,7 @@
 // row to it. Everything here is opt-in: nothing reads childId unless the event
 // has registrationConnected on, so unconnected events behave exactly as before.
 // Profile editing + push to events: src/lib/child-profile.ts.
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
@@ -96,7 +97,7 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { 
       const ps = step.participantIds.map((id) => byId.get(id)!);
       const src = ps.find((p) => p.lastName) ?? ps[0];
       const child = await prisma.child.create({
-        data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth },
+        data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth, organizationId: await orgIdOfEvent(src.eventId) },
       });
       childId = child.id;
       created++;

@@ -78,6 +78,8 @@ function check(name: string, ok: boolean, detail = "") {
 
 async function main() {
   const { prisma } = await import("../src/lib/prisma");
+  const { orgIdForSeeds } = await import("../src/lib/org-owner");
+  const organizationId = await orgIdForSeeds();
   const { encryptMailToken } = await import("../src/lib/mail-token-crypto");
   const drive = await import("../src/lib/drive");
   const errors = await import("../src/lib/drive-errors");
@@ -113,20 +115,20 @@ async function main() {
   console.log("\n== identity: each user has their own Google account");
   const run = Date.now().toString(36);
   const mkUser = (email: string, active = true) =>
-    prisma.user.upsert({ where: { email }, update: { active }, create: { email, displayName: email.split("@")[0], role: "user", active } });
+    prisma.user.upsert({ where: { email }, update: { active }, create: { organizationId, email, displayName: email.split("@")[0], role: "user", active } });
   const u1 = await mkUser(`d-u1-${run}@test.local`);
   const u2 = await mkUser(`d-u2-${run}@test.local`);
-  const ev = await prisma.event.create({ data: { name: `Drive ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10"), driveConfiguredByUserId: u1.id } });
-  const ev2 = await prisma.event.create({ data: { name: `Drive2 ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
+  const ev = await prisma.event.create({ data: { organizationId, name: `Drive ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10"), driveConfiguredByUserId: u1.id } });
+  const ev2 = await prisma.event.create({ data: { organizationId, name: `Drive2 ${run}`, startDate: new Date("2026-08-01"), endDate: new Date("2026-08-10") } });
 
   let id = await drive.getDriveIdentity(ev.id);
   check("event configured by a user without a connection -> service account, warning no_connection", id.kind === "service_account" && id.warning === "no_connection" && id.email === "sa@test.iam.gserviceaccount.com");
-  const acc1 = await prisma.driveAccount.create({ data: { email: `g1-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-1"), connectedByUserId: u1.id } });
+  const acc1 = await prisma.driveAccount.create({ data: { organizationId, email: `g1-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-1"), connectedByUserId: u1.id } });
   drive.invalidateDriveIdentity();
   id = await drive.getDriveIdentity(ev.id);
   check("after user 1 connects -> identity is user 1's Google account", id.kind === "user" && id.email === acc1.email && id.configuredBy?.id === u1.id);
 
-  const acc2 = await prisma.driveAccount.create({ data: { email: `g2-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-2"), connectedByUserId: u2.id } });
+  const acc2 = await prisma.driveAccount.create({ data: { organizationId, email: `g2-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-2"), connectedByUserId: u2.id } });
   drive.invalidateDriveIdentity();
   id = await drive.getDriveIdentity(ev.id);
   check("user 2 connecting theirs does NOT change an event configured by user 1", id.kind === "user" && id.email === acc1.email);
@@ -138,7 +140,7 @@ async function main() {
   check("an event configured by user 2 uses user 2's account", (await drive.getDriveIdentity(ev2.id)).email === acc2.email && auth2.credentials.refresh_token === "REFRESH-2");
   let dup = false;
   try {
-    await prisma.driveAccount.create({ data: { email: `other-${run}@gmail.test`, refreshTokenEncrypted: "x", connectedByUserId: u1.id } });
+    await prisma.driveAccount.create({ data: { organizationId, email: `other-${run}@gmail.test`, refreshTokenEncrypted: "x", connectedByUserId: u1.id } });
   } catch {
     dup = true;
   }
@@ -165,7 +167,7 @@ async function main() {
   check("event with no configuring user -> service account", (await drive.getDriveIdentity(ev.id)).kind === "service_account");
 
   console.log("\n== dead token detected at runtime is remembered");
-  const acc3 = await prisma.driveAccount.create({ data: { email: `g3-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-3"), connectedByUserId: u1.id } });
+  const acc3 = await prisma.driveAccount.create({ data: { organizationId, email: `g3-${run}@gmail.test`, refreshTokenEncrypted: encryptMailToken("REFRESH-3"), connectedByUserId: u1.id } });
   await prisma.event.update({ where: { id: ev.id }, data: { driveConfiguredByUserId: u1.id } });
   drive.invalidateDriveIdentity();
   const res = await drive.testFolder(ev.id, "DEAD_TOKEN_ID", "read", "ingest");

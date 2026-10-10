@@ -6,12 +6,14 @@ if (!/@(127\.0\.0\.1|localhost)[:/]/.test(process.env.DATABASE_URL ?? "")) {
 }
 import assert from "node:assert/strict";
 import { prisma } from "../src/lib/prisma";
+import { orgIdForSeeds } from "../src/lib/org-owner";
 import { applyPlan, loadSyncs, planFor, updateSyncs } from "../src/lib/participant-sync-run";
 import { type FieldInfo, type SyncSettings } from "../src/lib/participant-sync";
 
 async function main() {
+  const organizationId = await orgIdForSeeds();
   const event = await prisma.event.create({
-    data: { name: "sync test", startDate: new Date("2026-07-01"), endDate: new Date("2026-07-10"), participantsSheetId: "OLD", participantsColumnMapping: { Jméno: "Name", X: "ignore" } },
+    data: { organizationId, name: "sync test", startDate: new Date("2026-07-01"), endDate: new Date("2026-07-10"), participantsSheetId: "OLD", participantsColumnMapping: { Jméno: "Name", X: "ignore" } },
   });
   const eventId = event.id;
   // old single connection -> first connection, once

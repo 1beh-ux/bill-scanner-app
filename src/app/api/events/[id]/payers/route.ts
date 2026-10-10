@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { requireModuleAccess } from "@/lib/module-access";
 import { cleanBank, validateBank, findSimilarAuthors, setAuthorBank } from "@/lib/payers";
 
@@ -103,8 +104,9 @@ export async function POST(
     if (similar.length > 0) return NextResponse.json({ error: "similar_payer_exists", similar }, { status: 409 });
   }
 
+  const organizationId = await orgIdOfEvent(eventId);
   const created = await prisma.$transaction(async (tx) => {
-    const author = await tx.author.create({ data: { canonicalName: name } });
+    const author = await tx.author.create({ data: { canonicalName: name, organizationId } });
     await tx.authorEventAccess.create({ data: { authorId: author.id, eventId } });
     if (bank.account !== null) {
       await setAuthorBank(tx, { authorId: author.id, bank, userId: user.id, eventId, source: "create" });

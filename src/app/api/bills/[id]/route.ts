@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { billsBucket } from "@/lib/gcs";
 import { convertToCzk } from "@/lib/exchange-rates";
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { recordMerchantCorrection } from "@/lib/merchant-aliases";
 import { applyPendingCategoryIfNeeded } from "@/lib/pending-category";
 
@@ -137,7 +138,7 @@ if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAut
   ) {
     const rawExtracted = getAiExtractedMerchantName(existing.aiRawResponse);
     if (rawExtracted) {
-      await recordMerchantCorrection(rawExtracted, data.merchantName);
+      await recordMerchantCorrection(rawExtracted, data.merchantName, await orgIdOfEvent(existing.eventId));
     }
   }
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { orgIdOfUser } from "@/lib/org-owner";
 import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 
 export async function GET(req: NextRequest) {
@@ -10,7 +11,7 @@ export async function GET(req: NextRequest) {
   }
 
   const purposeKey = req.nextUrl.searchParams.get("purposeKey") || PARENT_SUMMARY_PURPOSE_KEY;
-  const template = await getOrCreateOrgEmailTemplate(purposeKey);
+  const template = await getOrCreateOrgEmailTemplate(orgIdOfUser(user), purposeKey);
   return NextResponse.json(template);
 }
 
@@ -32,7 +33,7 @@ export async function PATCH(req: NextRequest) {
   const updated = await prisma.emailTemplate.upsert({
     where: { purposeKey: key },
     update: { subject, body },
-    create: { purposeKey: key, subject, body },
+    create: { purposeKey: key, subject, body, organizationId: orgIdOfUser(user) },
   });
 
   return NextResponse.json(updated);

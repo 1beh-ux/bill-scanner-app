@@ -58,7 +58,7 @@ export async function createPublicRegistration(event: PublicEvent, data: CleanSu
   const eventOnly = new Set(fields.filter((f) => f.eventOnly).map((f) => f.key));
   const first = data.persons[0];
   const portalToken = event.autoAccept === "accept_send" ? newPortalToken() : null;
-  const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true, portalToken } });
+  const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true, portalToken, organizationId: event.organizationId } });
   const ids: string[] = [];
   for (const p of data.persons) {
     const child = await prisma.child.create({
@@ -69,6 +69,7 @@ export async function createPublicRegistration(event: PublicEvent, data: CleanSu
         dateOfBirth: new Date(p.birthDate),
         isAdult: p.isAdult,
         familyId: family.id,
+        organizationId: event.organizationId,
         fieldValues: Object.fromEntries(Object.entries(p.values).filter(([k]) => !eventOnly.has(k))),
         guardians: { create: p.guardians.map((g) => ({ ...g, receivesCommunications: true })) },
       },
