@@ -439,6 +439,36 @@ Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200,
   - Its host's landing page shows its name, and 404 once the organization is deactivated.
 - `check-org-scope` 0 unexplained, `check-proxy-hosts` all passed, build ok.
 
+# Bank payment check (branch bank-check)
+
+Spec: docs/bank-payments-design.md. A participant's payment is confirmed when the money arrives on
+the organization's Fio account: a settled movement creates the event's payment document
+(Event.paymentDocTypeId) with receivedVia `bank`, so lists, counters and the portal work unchanged.
+
+- **New organization-owned table `bank_accounts`** (organizationId required). Guard:
+  `requireOrgBankAccount` in src/lib/org-scope.ts (org admin + the acting organization's account,
+  else 403/404). Listed in check-org-scope's ORG_TABLES (with `bank_movements`, which hangs off an
+  account) and covered by test-org-isolation. check-org-scope also flags any `console.*` in
+  src/lib/bank or a bank route that mentions a URL, token or fioapi.
+- **`bank_movements`** belong to an account; event routes (`requireEventBank`: roster module access)
+  only reach the event's own account and participants.
+- Migration `20261015090000_bank_check` (additive): the two tables, Event.bankCheckEnabled /
+  bankAccountId, Participant.acceptedVariableSymbol (set at acceptance send next to
+  acceptedPriceCzk), MailDocReceivedVia `bank`.
+- The Fio token is encrypted with BANK_TOKEN_ENC_KEY (secret `bank-token-enc-key`), never returned,
+  logged or put in an error; the Fio call uses node:https, so Next's fetch logging never sees the URL.
+- Cron: Cloud Scheduler job `bank-check` (europe-west3, every 30 min, Europe/Prague) ->
+  POST https://tabornik.online/api/cron/bank-check with x-cron-secret.
+- Onboarding: optional step after 5 -- the admin connects the organization's Fio account in
+  Organizace -> Připojení -> Banka and switches "Automaticky ověřovat platby z banky" on per event
+  (Nastavení akce, next to Dokument platby; the event's payment account must equal it).
+
+Deploy (bank check): migration applied before the tests; build 2db72fb6-c435-435b-89b1-bcc750ae320b
+SUCCESS -> `bill-scanner-app-00100-jdp` (rollback target `00099-hjz`). Checks: tsc, eslint (no new
+errors), build, check-bank-matching 17/17, check-org-scope 0 unexplained, test-org-isolation 53/53;
+tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200, no errors logged; scheduler
+run -> 200 `{"ok":true,"accounts":0,"results":{}}`.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
