@@ -397,3 +397,18 @@ have violated it. The run order was:
 - Obnovit on another organization's item → 404.
 
 `check-org-scope`: 189 files, 0 unexplained; `templateScope` was added to its guard list. Build ok.
+
+## Deploys (step 4)
+
+| Step | Build | Revision |
+|---|---|---|
+| before | | `bill-scanner-app-00096-zpz` (rollback target) |
+| A: additive migration + category admin check (commit 67fdbb8) | 96723ea4-a03d-4661-96cd-8768fe936089 SUCCESS | 00097-jxg |
+| B: tighten (applied ahead, see Order) + all step 4 code (master 694fc9e) | 0f879d08-0ecc-487e-a046-df00a67f386a SUCCESS | 00098-6wz |
+
+Deploy A's build succeeded, but gcloud's Cloud Shell login (metadata credentials) expired while it
+waited, so it looked like a failure. gcloud was logged in again with `gcloud auth login`. The Cloud
+SQL proxy now runs with `--gcloud-auth`.
+
+Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200,
+/api/app-templates and ?level=app without a session 401, no errors logged.
