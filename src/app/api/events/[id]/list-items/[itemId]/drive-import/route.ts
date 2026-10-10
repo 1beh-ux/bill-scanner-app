@@ -1,7 +1,6 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
 import { downloadFileBuffer, exportFileAsPdf, getDriveFileMeta, getDriveIdentity, isGoogleNativeFile, isPdfExportable, listFilesInSubfolder } from "@/lib/drive";
 import { DriveError, httpStatusForDriveError, parseFolderId } from "@/lib/drive-errors";
 import { matchPeople } from "@/lib/doc-import-match";

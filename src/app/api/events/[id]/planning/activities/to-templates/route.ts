@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
 import { saveActivitiesAsTemplates } from "@/lib/planning-activities";
 import { requireOrgAdminEvent } from "@/lib/org-scope";
 

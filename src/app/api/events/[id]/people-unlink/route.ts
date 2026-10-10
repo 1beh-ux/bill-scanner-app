@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
 import { requireOrgAdminEvent } from "@/lib/org-scope";
 
 // Event settings → Portál rodičů → "Odpojit od Lidé" (admin only).

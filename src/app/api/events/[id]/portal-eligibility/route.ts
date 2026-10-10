@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth";
 import { eligibilityFacts } from "@/lib/child-profile";
 import { isEligible, readEligibility } from "@/lib/portal-rules";
 import { requireOrgAdminEvent } from "@/lib/org-scope";
