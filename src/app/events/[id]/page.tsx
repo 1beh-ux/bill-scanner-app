@@ -58,6 +58,8 @@ type EventDetail = {
   location: string | null;
   portalInfo: string | null;
   paymentDocTypeId: string | null;
+  bankCheckEnabled: boolean;
+  bankAccountId: string | null;
 };
 
 type Category = {
