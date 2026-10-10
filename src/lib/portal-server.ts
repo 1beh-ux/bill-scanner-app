@@ -401,6 +401,7 @@ async function registrationCard(
   // The registration's own documents plus the ones its person's profile covers.
   const docs = [...p.documents, ...fromProfile];
   const paid = paymentDocTypeId ? docState(docs, paymentDocTypeId).state === "received" : null;
+  const paidDoc = paymentDocTypeId ? p.documents.find((d) => d.eventListItemId === paymentDocTypeId && countsAsReceived(d)) : undefined;
 
   let payment = null;
   if (accepted && (p.registrationNumber != null || paymentDocTypeId)) {
@@ -414,6 +415,9 @@ async function registrationCard(
       qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
       // null = no payment document type set (no paid / waiting line, as before).
       paid,
+      // Automatic bank check (docs/bank-payments-design.md): the card polls /bank-check while unpaid.
+      bankCheck: !!paymentDocTypeId && e.bankCheckEnabled && !!e.bankAccountId,
+      paidViaBank: paidDoc?.receivedVia === "bank" ? paidDoc.receivedAt : null,
     };
   }
 

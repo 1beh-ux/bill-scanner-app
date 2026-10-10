@@ -57,7 +57,7 @@ export default function BankAccountsAdmin() {
     const res = await fetch(`/api/bank-accounts/${id}/token`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) }).catch(() => null);
     const status = res ? ((await res.json().catch(() => ({}))) as { status?: string }).status : "unreachable";
     setMessage(status === "ok" ? t("bankAccounts.tokenOk") : t("bankCheck.result.error", { problem: problem(status ?? "unreachable") }));
-    return status === "ok" || status !== "invalid_format";
+    return status !== "invalid_format";
   }
 
   async function connect() {

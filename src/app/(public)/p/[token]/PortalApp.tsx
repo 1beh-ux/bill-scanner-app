@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Upload } from "lucide-react";
 import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
@@ -35,7 +35,8 @@ type Registration = {
   note: string | null;
   category: string | null;
   // paid: null = the event has no payment document type (slice 4 #5).
-  payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null } | null;
+  // bankCheck: the event confirms payments from its Fio account; paidViaBank = when (docs/bank-payments-design.md).
+  payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null; bankCheck?: boolean; paidViaBank?: string | null } | null;
   // fromProfile: received through the person's permanent document (slice 6 #4).
   documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
@@ -874,7 +875,9 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
           return (
             <p key={i} className="flex items-center gap-2 text-[14px] text-ink">
               {t("portal.payment")}
-              <span className="rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">{t("portal.paid")}</span>
+              <span className="rounded-full bg-pine/15 px-2.5 py-0.5 text-[13px] text-pine">
+                {r.payment.paidViaBank ? t("portal.bankPaid", { date: new Date(r.payment.paidViaBank).toLocaleDateString("cs-CZ") }) : t("portal.paid")}
+              </span>
             </p>
           );
         return r.payment ? (
@@ -893,6 +896,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
               // eslint-disable-next-line @next/next/no-img-element -- a generated data: URL, nothing to optimise
               <img src={r.payment.qrDataUrl} alt={t("portal.qrAlt")} className="mt-2 h-44 w-44 self-start rounded bg-white p-1" />
             )}
+            {r.payment.paid === false && r.payment.bankCheck && <BankCheck api={api} participantId={r.participantId} t={t} onPaid={onChanged} />}
           </div>
         ) : null;
       case "fields":
@@ -984,6 +988,55 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
 }
 
 // The event's info on a card, folded to ~3 lines with "Zobrazit více / méně" (slice 4 #4).
+// "Zkontrolovat platbu": asks the bank on open, then every 10 s for 2 minutes while the page
+// is visible (the QR is on screen); stops once paid. The answer is only paid / not paid.
+function BankCheck({ api, participantId, t, onPaid }: { api: string; participantId: string; t: T; onPaid: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const paidRef = useRef(onPaid);
+  useEffect(() => {
+    paidRef.current = onPaid;
+  });
+
+  const check = useCallback(async () => {
+    if (document.hidden) return false;
+    setBusy(true);
+    const r = await fetch(`${api}/bank-check`, { method: "POST" }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
+    setBusy(false);
+    setChecked(true);
+    if (r?.payments?.[participantId]?.paid) {
+      paidRef.current();
+      return true;
+    }
+    return false;
+  }, [api, participantId]);
+
+  useEffect(() => {
+    let stop = false;
+    const started = Date.now();
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = async () => {
+      if (stop || (await check()) || Date.now() - started > 120_000) return;
+      timer = setTimeout(tick, 10_000);
+    };
+    tick();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+  }, [check]);
+
+  return (
+    <div className="mt-2 flex flex-col gap-1">
+      <button type="button" onClick={check} disabled={busy} className="self-start rounded-lg border border-mist px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50">
+        {t("portal.bankCheckButton")}
+      </button>
+      <p className="text-[12.5px] text-ink-secondary">{t("portal.bankCheckNote")}</p>
+      {checked && !busy && <p className="text-[12.5px] text-ink-secondary">{t("portal.bankNotYet")}</p>}
+    </div>
+  );
+}
+
 function EventInfo({ text, t }: { text: string; t: T }) {
   const [open, setOpen] = useState(false);
   const long = text.length > 220 || text.split("\n").length > 3;
