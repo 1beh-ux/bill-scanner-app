@@ -5,7 +5,8 @@
 // e-mails/documents also carried (payment details appear once the acceptance
 // assigned a variable symbol).
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
+import { hostAllowsPortal, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { gateCookieName, gateCookieValid, portalSecret } from "@/lib/portal-gate";
 import {
@@ -76,6 +77,8 @@ export async function loadScope(token: string): Promise<PortalScope | null> {
  * cookie for the CURRENT token (every data endpoint does).
  */
 export async function portalScope(token: string, gated: boolean): Promise<{ scope: PortalScope; error?: undefined } | { scope?: undefined; error: NextResponse }> {
+  // Every /api/portal route comes through here: a non-portal public host (or an unknown one) gets 404.
+  if (!hostAllowsPortal(await resolvePublicHost(await headers()))) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   const secret = portalSecret();
   if (!secret) return { error: NextResponse.json({ error: "portal_not_configured" }, { status: 503 }) };
   const scope = await loadScope(token);

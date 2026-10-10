@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, permanentRedirect } from "next/navigation";
+import { hostAllowsRegistration, publicHostFor, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { publicEvent, publicFormContext } from "@/lib/public-registration-server";
 import PublicForm from "./PublicForm";
@@ -15,6 +17,13 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
   const { slug } = await params;
   const event = await publicEvent(slug);
   if (!event) notFound();
+  // Public host: only its purpose/event. Admin host: old links move to the public host when there is one.
+  const scope = await resolvePublicHost(await headers());
+  if (!hostAllowsRegistration(scope, event.id)) notFound();
+  if (scope.kind === "admin") {
+    const host = await publicHostFor("registration", event.id);
+    if (host) permanentRedirect(`https://${host}/r/${slug}`);
+  }
   const [ctx, rows] = await Promise.all([
     publicFormContext(event),
     prisma.translation.findMany({ where: { OR: [{ key: { startsWith: "public." } }, { key: { startsWith: "portal." } }] }, select: { key: true, cs: true } }),

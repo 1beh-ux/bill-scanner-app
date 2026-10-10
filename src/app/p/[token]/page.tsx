@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, permanentRedirect } from "next/navigation";
+import { hostAllowsPortal, publicHostFor, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { loadScope } from "@/lib/portal-server";
 import PortalApp from "./PortalApp";
@@ -17,6 +19,13 @@ export const metadata: Metadata = {
 
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
+  // Public host: only a portal one. Admin host: old e-mail links move to the portal host when there is one.
+  const scope = await resolvePublicHost(await headers());
+  if (!hostAllowsPortal(scope)) notFound();
+  if (scope.kind === "admin") {
+    const host = await publicHostFor("portal", null);
+    if (host) permanentRedirect(`https://${host}/p/${token}`);
+  }
   if (!(await loadScope(token))) notFound();
   const rows = await prisma.translation.findMany({ where: { key: { startsWith: "portal." } }, select: { key: true, cs: true } });
   return <PortalApp token={token} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />;

@@ -4,6 +4,7 @@ import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission } from "@/lib/public-
 import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
 import { autoAcceptRegistrations } from "@/lib/auto-accept";
 import { portalUrl } from "@/lib/portal-gate";
+import { hostAllowsRegistration, resolvePublicHost } from "@/lib/public-host";
 
 // Public new-family registration (docs/registration-slice3-spec.md D) --
 // outside the login gate (src/proxy.ts). Unknown/closed slug = bare 404.
@@ -13,7 +14,7 @@ import { portalUrl } from "@/lib/portal-gate";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const event = await publicEvent(slug);
-  if (!event) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!event || !hostAllowsRegistration(await resolvePublicHost(req), event.id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);
   if (isSpam(body)) return NextResponse.json({ ok: true }, { status: 201 });
