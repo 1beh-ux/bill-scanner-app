@@ -11,6 +11,7 @@ import { appliesTo, askedFields, askedMissing } from "@/lib/registration-fields"
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
+import { orgIdOfEvent } from "@/lib/org-owner";
 import { isOrgAdmin } from "@/lib/org-scope";
 
 type GuardianInput = {
@@ -120,11 +121,13 @@ export async function GET(
   const childIds = participants.flatMap((p) => (p.childId ? [p.childId] : []));
   // Slice 5 #5: also the fields this event requires ("Vyžadovat při přihlášce"), per
   // person's audience (unlinked = only fields for both); templates' required flag per audience too.
+  // The event's organization's templates.
+  const organizationId = await orgIdOfEvent(eventId);
   const [required, people, changes, rules] = await Promise.all([
-    prisma.participantFieldTemplate.findMany({ where: { active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true, audience: true } }),
+    prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true, requiredInRegistration: true, portalAccess: { not: "hidden" } }, select: { key: true, audience: true } }),
     childIds.length ? prisma.child.findMany({ where: { id: { in: childIds } }, select: { id: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, isAdult: true, leftAt: true, leftVia: true } }) : [],
     childIds.length ? prisma.childChange.findMany({ where: { childId: { in: childIds }, status: "pending" }, select: { childId: true } }) : [],
-    templateRules(),
+    templateRules(organizationId),
   ]);
   const profiles = new Map(people.map((c) => [c.id, { values: profileValues(c), isAdult: c.isAdult, left: c.leftAt ? { at: c.leftAt, via: c.leftVia } : null }]));
   const changed = new Set(changes.map((c) => c.childId));
@@ -195,7 +198,8 @@ export async function POST(
   const acceptImmediately = body.acceptImmediately === true;
   // Picked existing child (add form, registration-connected events) -- admin only.
   const childId: string | null = typeof body.childId === "string" && isOrgAdmin(user) ? body.childId : null;
-  if (childId && !(await prisma.child.findUnique({ where: { id: childId }, select: { id: true } }))) {
+  // Only a person of the event's organization.
+  if (childId && !(await prisma.child.findFirst({ where: { id: childId, organizationId: await orgIdOfEvent(eventId) }, select: { id: true } }))) {
     return NextResponse.json({ error: "child_not_found" }, { status: 400 });
   }
 

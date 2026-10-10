@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -13,7 +13,8 @@ export async function GET() {
   if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const users = await prisma.user.findMany({ orderBy: { displayName: "asc" } });
+  // The acting organization's users only.
+  const users = await prisma.user.findMany({ where: await orgWhere(user), orderBy: { displayName: "asc" } });
   return NextResponse.json(users);
 }
 

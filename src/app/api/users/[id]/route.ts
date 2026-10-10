@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -16,6 +16,8 @@ export async function PATCH(
   }
 
   const { id } = await params;
+  // Only a user of the acting organization; anyone else doesn't exist here.
+  if (!(await prisma.user.findFirst({ where: { id, ...(await orgWhere(user)) }, select: { id: true } }))) return notFound();
   const body = await req.json();
   const { displayName, role, active } = body;
 

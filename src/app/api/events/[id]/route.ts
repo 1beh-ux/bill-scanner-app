@@ -12,7 +12,7 @@ import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
 import { eventSender } from "@/lib/auto-accept";
 import { publicUrl } from "@/lib/public-host";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -252,6 +252,8 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const inOrg = await requireEventInOrg(user, id);
+  if ("error" in inOrg) return inOrg.error;
 
   // Checked explicitly, not just inferred from a caught constraint error —
   // this is almost always the actual reason deletion is blocked in

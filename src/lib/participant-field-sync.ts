@@ -22,7 +22,8 @@ const MODULE_SURFACES: Record<ModuleKey, ParticipantFieldSurface[]> = {
  */
 export async function syncParticipantFieldsForEvent(eventId: string, moduleFilter?: ModuleKey): Promise<number> {
   const [templates, existing] = await Promise.all([
-    prisma.participantFieldTemplate.findMany({ where: { active: true } }),
+    // The event's organization's templates.
+    prisma.participantFieldTemplate.findMany({ where: { active: true, organization: { events: { some: { id: eventId } } } } }),
     prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true } }),
   ]);
   const existingKeys = new Set(existing.map((e) => e.key));

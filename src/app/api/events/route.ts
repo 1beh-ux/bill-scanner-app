@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 // ?module=bills -> only events where the user may work with bills (what a
 // "move to another event" picker needs); without it, every event the user holds
@@ -18,11 +18,13 @@ export async function GET(req: NextRequest) {
   // module grant on (the event switcher and pickers are built from this).
   const requested = new URL(req.url).searchParams.get("module");
   const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" || requested === "planning" ? requested : undefined;
+  // Always within the acting organization (switcher, "move bill to event" targets, pickers).
+  const scope = await orgWhere(user);
   const events = await prisma.event.findMany({
     where:
       isOrgAdmin(user)
-        ? {}
-        : { moduleAccess: { some: { userId: user.id, ...(moduleFilter && { moduleKey: moduleFilter }) } } },
+        ? scope
+        : { ...scope, moduleAccess: { some: { userId: user.id, ...(moduleFilter && { moduleKey: moduleFilter }) } } },
     orderBy: { startDate: "desc" },
   });
 
@@ -59,7 +61,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const templates = await tx.categoryTemplate.findMany();
+    // The organization's category templates (app-level NULL rows: later, step 4).
+    const templates = await tx.categoryTemplate.findMany({ where: { organizationId: created.organizationId } });
 
     if (templates.length > 0) {
       await tx.eventCategory.createMany({

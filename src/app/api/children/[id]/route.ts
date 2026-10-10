@@ -4,21 +4,24 @@ import { getCurrentUser } from "@/lib/auth";
 import { decideChange, profileFieldLabels, readGuardians, setGuardians, updateProfile } from "@/lib/child-profile";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { leftData, profileValues } from "@/lib/portal-rules";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { getActingOrgId, isOrgAdmin, notFound } from "@/lib/org-scope";
 
-async function requireAdmin(): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; error?: undefined } | { user?: undefined; error: NextResponse }> {
+// Admin of the acting organization, and the person is in it (anyone else's person: 404).
+async function requireAdmin(id: string): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; organizationId: string; error?: undefined } | { user?: undefined; organizationId?: undefined; error: NextResponse }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
-  return { user };
+  const organizationId = await getActingOrgId(user);
+  if (!(await prisma.child.findFirst({ where: { id, organizationId }, select: { id: true } }))) return { error: notFound() };
+  return { user, organizationId };
 }
 
 // Admin child detail (/children/[id]): the whole profile (every org field, any
 // portal access), guardians, linked events, pending changes, portal link.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireAdmin();
-  if (error) return error;
   const { id } = await params;
+  const { error, organizationId } = await requireAdmin(id);
+  if (error) return error;
   const child = await prisma.child.findUnique({
     where: { id },
     include: {
@@ -40,8 +43,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   });
   if (!child) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const [templates, labels] = await Promise.all([
-    prisma.participantFieldTemplate.findMany({ orderBy: { label: "asc" } }),
-    profileFieldLabels(),
+    prisma.participantFieldTemplate.findMany({ where: { organizationId }, orderBy: { label: "asc" } }),
+    profileFieldLabels(organizationId),
   ]);
   const { portalToken, changes, ...rest } = child;
   return NextResponse.json({
@@ -57,9 +60,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // -- built-ins + org fields (changed values are pushed); isAdult = adult member
 // (slice 3 A); inactive = the admin's "Neaktivní" toggle (slice 8 #2, leftVia = admin).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { error } = await requireAdmin();
-  if (error) return error;
   const { id } = await params;
+  const { error } = await requireAdmin(id);
+  if (error) return error;
   const body = await req.json();
   if (
     (body.values !== undefined && (!body.values || typeof body.values !== "object")) ||
@@ -80,9 +83,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // regenerate -- the old link and every device's cookie die at once), or
 // "decide" { changeId, accept } (a pending parent change).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { user, error } = await requireAdmin();
-  if (error) return error;
   const { id } = await params;
+  const { user, error } = await requireAdmin(id);
+  if (error) return error;
   const body = await req.json();
   const child = await prisma.child.findUnique({ where: { id }, select: { id: true, portalToken: true } });
   if (!child) return NextResponse.json({ error: "not_found" }, { status: 404 });

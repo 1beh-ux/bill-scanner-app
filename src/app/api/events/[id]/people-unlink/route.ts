@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { requireOrgAdminEvent } from "@/lib/org-scope";
 
 // Event settings → Portál rodičů → "Odpojit od Lidé" (admin only).
 // GET = how many of the event's participants are linked now.
@@ -10,25 +10,18 @@ import { isOrgAdmin } from "@/lib/org-scope";
 // Lidé's "Propojit") -- participants and people both stay, nothing is sent.
 // POST { action: "allow" }: linking allowed again (nothing is relinked here;
 // switching "propojeno" on or Lidé's "Propojit" does that).
-async function admin() {
-  const user = await getCurrentUser();
-  if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  return null;
-}
-
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await admin();
-  if (denied) return denied;
   const { id } = await params;
+  const access = await requireOrgAdminEvent(id);
+  if ("error" in access) return access.error;
   const linked = await prisma.participant.count({ where: { eventId: id, childId: { not: null } } });
   return NextResponse.json({ linked });
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const denied = await admin();
-  if (denied) return denied;
   const { id } = await params;
+  const access = await requireOrgAdminEvent(id);
+  if ("error" in access) return access.error;
   const { action } = await req.json().catch(() => ({}));
   const event = await prisma.event.findUnique({ where: { id }, select: { kind: true } });
   if (!event) return NextResponse.json({ error: "not_found" }, { status: 404 });

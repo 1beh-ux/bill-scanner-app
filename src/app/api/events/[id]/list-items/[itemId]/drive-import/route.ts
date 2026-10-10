@@ -8,7 +8,7 @@ import { matchPeople } from "@/lib/doc-import-match";
 import { readUploadedFile } from "@/lib/participant-document-store";
 import { permanentDocKeys, savePersonDocument } from "@/lib/person-documents";
 import { UPLOAD_MAX_BYTES } from "@/lib/portal-rules";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { requireOrgAdminEvent } from "@/lib/org-scope";
 
 // "Importovat z Drive" (docs/registration-slice7-spec.md), admin only: signed
 // forms of a "platí trvale" document type from one Drive folder into the
@@ -22,10 +22,10 @@ const BATCH = 10;
 const FILE_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
 
 async function load(params: Promise<{ id: string; itemId: string }>) {
-  const user = await getCurrentUser();
-  if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
   const { id: eventId, itemId } = await params;
+  const access = await requireOrgAdminEvent(eventId);
+  if ("error" in access) return { error: access.error };
+  const { user } = access;
   const item = await prisma.eventListItem.findUnique({ where: { id: itemId } });
   if (!item || item.eventId !== eventId || item.kind !== "document" || !item.key || !(await permanentDocKeys()).has(item.key)) {
     return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };

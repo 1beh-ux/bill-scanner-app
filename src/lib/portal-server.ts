@@ -107,21 +107,21 @@ export async function saveGateThrottle(scope: PortalScope, failures: number, win
 }
 
 /** Org fields a parent may see, with their access level (hidden + inactive ones never leave the server). */
-export async function visibleTemplates() {
-  const templates = await prisma.participantFieldTemplate.findMany({ where: { active: true, portalAccess: { not: "hidden" } }, orderBy: { label: "asc" } });
+export async function visibleTemplates(organizationId: string) {
+  const templates = await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true, portalAccess: { not: "hidden" } }, orderBy: { label: "asc" } });
   return templates;
 }
 
 /** Access level per profile key a parent may touch (built-ins + visible org fields). */
-export async function portalAccessMap(): Promise<Map<string, PortalAccessLevel>> {
+export async function portalAccessMap(organizationId: string): Promise<Map<string, PortalAccessLevel>> {
   const map = new Map<string, PortalAccessLevel>(Object.keys(PROFILE_BUILTINS).map((k) => [k, BUILTIN_PORTAL_ACCESS]));
-  for (const t of await visibleTemplates()) map.set(t.key, t.portalAccess);
+  for (const t of await visibleTemplates(organizationId)) map.set(t.key, t.portalAccess);
   return map;
 }
 
 /** Active org templates by key -- what an event field marked "Vyžadovat při přihlášce" resolves against (slice 5 #2). */
-export async function templateRules(): Promise<Map<string, TemplateRule>> {
-  return new Map((await prisma.participantFieldTemplate.findMany({ where: { active: true } })).map((t) => [t.key, t]));
+export async function templateRules(organizationId: string): Promise<Map<string, TemplateRule>> {
+  return new Map((await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true } })).map((t) => [t.key, t]));
 }
 
 /** The events' fields marked "Vyžadovat při přihlášce", in the event's field order. */
@@ -153,10 +153,12 @@ const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
  * a membership year), before the deadline -- each with the members who may
  * still register (eligible, not registered yet). Events nobody can take are left out.
  */
-export async function availableEvents(memberIds: string[]) {
+export async function availableEvents(organizationId: string, memberIds: string[]) {
   const [events, facts, registered] = await Promise.all([
     prisma.event.findMany({
       where: {
+        // The family's own organization's events only.
+        organizationId,
         portalOpen: true,
         status: "active",
         OR: [{ registrationConnected: true }, { kind: "membership" }],
@@ -164,7 +166,7 @@ export async function availableEvents(memberIds: string[]) {
       },
       orderBy: { startDate: "asc" },
     }),
-    eligibilityFacts(memberIds),
+    eligibilityFacts(organizationId, memberIds),
     prisma.participant.findMany({ where: { childId: { in: memberIds } }, select: { eventId: true, childId: true } }),
   ]);
   const taken = new Set(registered.map((r) => `${r.eventId}:${r.childId}`));
@@ -177,16 +179,16 @@ export async function availableEvents(memberIds: string[]) {
 export async function portalData(scope: PortalScope) {
   const memberIds = scope.members.map((m) => m.id);
   const [templates, labels, pending, available, participations, rules] = await Promise.all([
-    visibleTemplates(),
-    profileFieldLabels(),
+    visibleTemplates(scope.organizationId),
+    profileFieldLabels(scope.organizationId),
     prisma.childChange.findMany({ where: { childId: { in: memberIds }, status: "pending" } }),
-    availableEvents(memberIds),
+    availableEvents(scope.organizationId, memberIds),
     prisma.participant.findMany({
       where: { childId: { in: memberIds } },
       include: { event: true, guardians: true, documents: { orderBy: { receivedAt: "desc" } } },
       orderBy: { event: { startDate: "desc" } },
     }),
-    templateRules(),
+    templateRules(scope.organizationId),
   ]);
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
@@ -520,11 +522,11 @@ export async function registerFromPortal(
   picks: RegistrationPick[],
   note: string
 ): Promise<{ ids: string[] } | { error: "not_available" } | { error: "invalid"; fields: string[] }> {
-  const open = (await availableEvents(scope.members.map((m) => m.id))).find((a) => a.event.id === eventId);
+  const open = (await availableEvents(scope.organizationId, scope.members.map((m) => m.id))).find((a) => a.event.id === eventId);
   if (!open) return { error: "not_available" };
   const [eventFields, rules, pending] = await Promise.all([
     requiredEventFields([eventId]),
-    templateRules(),
+    templateRules(scope.organizationId),
     prisma.childChange.findMany({ where: { childId: { in: open.memberIds }, status: "pending" } }),
   ]);
   const chosen = [];
@@ -566,7 +568,7 @@ export const ADD_MEMBER_PER_DAY = 10;
  */
 export async function addFamilyMember(scope: PortalScope, body: unknown): Promise<{ id: string } | { error: "invalid"; fields: string[] }> {
   const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
-  const checked = validateSubmission({ persons: [o.person], guardians: o.guardians }, { fields: memberFormFields(await visibleTemplates()), rules: null, oddil: null, today: new Date() });
+  const checked = validateSubmission({ persons: [o.person], guardians: o.guardians }, { fields: memberFormFields(await visibleTemplates(scope.organizationId)), rules: null, oddil: null, today: new Date() });
   if (!checked.ok) return { error: "invalid", fields: checked.errors };
   const p = checked.data.persons[0];
   // The new person belongs where the family does.

@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getDriveIdentity } from "@/lib/drive";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 // Read-only overview of every event for admins: who has access, whose Google
 // account runs its Drive (and whether that fell back to the service account),
@@ -14,7 +14,9 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
-  const events = await prisma.event.findMany({ orderBy: { startDate: "desc" } });
+  // The acting organization's events and Google accounts only.
+  const scope = await orgWhere(user);
+  const events = await prisma.event.findMany({ where: scope, orderBy: { startDate: "desc" } });
 
   const rows = await Promise.all(
     events.map(async (e) => {
@@ -52,6 +54,7 @@ export async function GET() {
   );
 
   const accounts = await prisma.driveAccount.findMany({
+    where: scope,
     include: { connectedByUser: { select: { displayName: true, email: true, active: true } } },
     orderBy: { connectedAt: "desc" },
   });

@@ -3,7 +3,6 @@
 // row to it. Everything here is opt-in: nothing reads childId unless the event
 // has registrationConnected on, so unconnected events behave exactly as before.
 // Profile editing + push to events: src/lib/child-profile.ts.
-import { orgIdOfEvent } from "@/lib/org-owner";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
@@ -75,40 +74,47 @@ export function planLinks(participants: LinkCandidate[], children: LinkChild[]):
 export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { createMissing?: boolean } = {}): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
     where: { ...where, childId: null, dateOfBirth: { not: null } },
-    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true } } },
+    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true, organizationId: true } } },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };
 
-  const children = await prisma.child.findMany({ select: { id: true, name: true, dateOfBirth: true, participants: { select: { eventId: true } } } });
-  const plan = planLinks(
-    participants.map((p) => ({ ...p, name: participantDisplayName(p), unlinked: p.event.peopleUnlinked, createMissing: opts.createMissing ?? p.event.peopleLinkMode === "all" })),
-    children.map((c) => ({ ...c, eventIds: c.participants.map((x) => x.eventId) }))
-  );
-  const byId = new Map(participants.map((p) => [p.id, p]));
+  // Organizations step 2: a participant only ever matches (or creates) a person
+  // of its event's organization -- never another organization's same name + birth date.
+  const byOrg = new Map<string, typeof participants>();
+  for (const p of participants) byOrg.set(p.event.organizationId, [...(byOrg.get(p.event.organizationId) ?? []), p]);
 
   let linked = 0;
   let created = 0;
   const touched: string[] = [];
-  for (const step of plan) {
-    let childId = step.childId;
-    const isNew = !childId;
-    if (!childId) {
-      // Prefer a row that has the first/last split for the profile's own name.
-      const ps = step.participantIds.map((id) => byId.get(id)!);
-      const src = ps.find((p) => p.lastName) ?? ps[0];
-      const child = await prisma.child.create({
-        data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth, organizationId: await orgIdOfEvent(src.eventId) },
-      });
-      childId = child.id;
-      created++;
+  for (const [organizationId, orgParticipants] of byOrg) {
+    const children = await prisma.child.findMany({ where: { organizationId }, select: { id: true, name: true, dateOfBirth: true, participants: { select: { eventId: true } } } });
+    const plan = planLinks(
+      orgParticipants.map((p) => ({ ...p, name: participantDisplayName(p), unlinked: p.event.peopleUnlinked, createMissing: opts.createMissing ?? p.event.peopleLinkMode === "all" })),
+      children.map((c) => ({ ...c, eventIds: c.participants.map((x) => x.eventId) }))
+    );
+    const byId = new Map(orgParticipants.map((p) => [p.id, p]));
+
+    for (const step of plan) {
+      let childId = step.childId;
+      const isNew = !childId;
+      if (!childId) {
+        // Prefer a row that has the first/last split for the profile's own name.
+        const ps = step.participantIds.map((id) => byId.get(id)!);
+        const src = ps.find((p) => p.lastName) ?? ps[0];
+        const child = await prisma.child.create({
+          data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth, organizationId },
+        });
+        childId = child.id;
+        created++;
+      }
+      const res = await prisma.participant.updateMany({ where: { id: { in: step.participantIds }, childId: null }, data: { childId } });
+      linked += res.count;
+      if (res.count > 0) touched.push(childId);
+      // A new child's profile starts as a copy of its latest participation.
+      if (isNew) await copyProfileFromLatest(childId);
     }
-    const res = await prisma.participant.updateMany({ where: { id: { in: step.participantIds }, childId: null }, data: { childId } });
-    linked += res.count;
-    if (res.count > 0) touched.push(childId);
-    // A new child's profile starts as a copy of its latest participation.
-    if (isNew) await copyProfileFromLatest(childId);
   }
-  if (touched.length > 0) await fillMissingGuardians(touched);
+  if (touched.length > 0) await fillMissingGuardians({ childIds: touched });
   return { linked, created };
 }
 
@@ -126,7 +132,8 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
       orderBy: [{ event: { startDate: "desc" } }, { createdAt: "desc" }],
       include: { guardians: true },
     }),
-    prisma.participantFieldTemplate.findMany({ select: { key: true } }),
+    // The person's organization's templates.
+    prisma.participantFieldTemplate.findMany({ where: { organization: { children: { some: { id: childId } } } }, select: { key: true } }),
   ]);
   if (!child || !latest || child._count.guardians > 0) return false;
   if (child.fieldValues && Object.keys(child.fieldValues as object).length > 0) return false;
@@ -157,9 +164,10 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
  * very latest event even if it had none). Existing guardians are never touched.
  * `childIds` undefined = everyone. Returns how many people got guardians.
  */
-export async function fillMissingGuardians(childIds?: string[]): Promise<number> {
+/** `scope`: the given people, or every person of an organization (the Lidé page's "Doplnit profily"). */
+export async function fillMissingGuardians(scope: { childIds: string[] } | { organizationId: string }): Promise<number> {
   const people = await prisma.child.findMany({
-    where: { guardians: { none: {} }, ...(childIds && { id: { in: childIds } }) },
+    where: { guardians: { none: {} }, ...("childIds" in scope ? { id: { in: scope.childIds } } : { organizationId: scope.organizationId }) },
     select: {
       id: true,
       participants: {

@@ -171,9 +171,9 @@ export async function decideChange(changeId: string, accept: boolean, userId: st
   return true;
 }
 
-/** Labels of every profile field: built-ins (fixed rows) + org-wide templates. */
-export async function profileFieldLabels(): Promise<Record<string, string>> {
-  const templates = await prisma.participantFieldTemplate.findMany({ select: { key: true, label: true } });
+/** Labels of every profile field: built-ins (fixed rows) + the organization's templates. */
+export async function profileFieldLabels(organizationId: string): Promise<Record<string, string>> {
+  const templates = await prisma.participantFieldTemplate.findMany({ where: { organizationId }, select: { key: true, label: true } });
   return {
     ...Object.fromEntries(FIXED_PARTICIPANT_FIELDS.filter((f) => isProfileBuiltin(f.key)).map((f) => [f.key, f.label])),
     ...Object.fromEntries(templates.map((t) => [t.key, t.label])),
@@ -181,10 +181,10 @@ export async function profileFieldLabels(): Promise<Record<string, string>> {
   };
 }
 
-/** Eligibility facts (spec H) of the given children (all when omitted). Inactive people (slice 8 #2) are never eligible. */
-export async function eligibilityFacts(childIds?: string[]): Promise<(EligibilityFacts & { name: string; dateOfBirth: Date | null })[]> {
+/** Eligibility facts (spec H) of the organization's given children (all when omitted). Inactive people (slice 8 #2) are never eligible. */
+export async function eligibilityFacts(organizationId: string, childIds?: string[]): Promise<(EligibilityFacts & { name: string; dateOfBirth: Date | null })[]> {
   const children = await prisma.child.findMany({
-    where: childIds ? { id: { in: childIds } } : undefined,
+    where: { organizationId, ...(childIds && { id: { in: childIds } }) },
     select: {
       id: true,
       name: true,

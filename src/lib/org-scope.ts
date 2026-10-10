@@ -5,8 +5,9 @@
 // (404), never "forbidden" -- its existence isn't revealed.
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import type { User } from "@/generated/prisma";
+import type { Event, User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
+import { getCurrentUser } from "@/lib/auth";
 
 export const ACTING_ORG_COOKIE = "acting_org";
 
@@ -23,7 +24,7 @@ export async function getActingOrgId(user: ScopeUser): Promise<string> {
 export const notFound = () => NextResponse.json({ error: "not_found" }, { status: 404 });
 
 /** The event if it's in the acting organization, else a 404 response. */
-export async function requireEventInOrg(user: ScopeUser, eventId: string) {
+export async function requireEventInOrg(user: ScopeUser, eventId: string): Promise<{ error: NextResponse } | { event: Event }> {
   const event = typeof eventId === "string" && eventId ? await prisma.event.findUnique({ where: { id: eventId } }) : null;
   if (!event || event.organizationId !== (await getActingOrgId(user))) return { error: notFound() };
   return { event };
@@ -47,4 +48,14 @@ export const requireSuperAdmin = (user: Pick<User, "isSuperAdmin">): NextRespons
 /** `where` fragment for org-owned tables: the acting organization's rows. */
 export async function orgWhere(user: ScopeUser) {
   return { organizationId: await getActingOrgId(user) };
+}
+
+/** Signed-in admin of the acting organization, and the event is in it -- for admin-only event routes. */
+export async function requireOrgAdminEvent(eventId: string): Promise<{ error: NextResponse } | { user: User; event: Event }> {
+  const user = await getCurrentUser();
+  if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  const inOrg = await requireEventInOrg(user, eventId);
+  if ("error" in inOrg) return inOrg;
+  return { user, event: inOrg.event };
 }

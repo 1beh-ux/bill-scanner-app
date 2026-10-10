@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ to
 
   if (body.values !== undefined) {
     if (!body.values || typeof body.values !== "object") return NextResponse.json({ error: "bad_request" }, { status: 400 });
-    const access = await portalAccessMap();
+    const access = await portalAccessMap(scope.organizationId);
     const current = profileValues(child);
     const direct: Record<string, string> = {};
     for (const [key, raw] of Object.entries(body.values as Record<string, unknown>)) {

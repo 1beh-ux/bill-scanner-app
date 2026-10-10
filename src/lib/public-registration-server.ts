@@ -36,7 +36,7 @@ export type PublicEvent = NonNullable<Awaited<ReturnType<typeof publicEvent>>>;
  */
 export async function publicFormContext(event: PublicEvent) {
   const rules = readPriceRules(event.priceRules);
-  const [templates, eventFields, tplRules] = await Promise.all([visibleTemplates(), requiredEventFields([event.id]), templateRules()]);
+  const [templates, eventFields, tplRules] = await Promise.all([visibleTemplates(event.organizationId), requiredEventFields([event.id]), templateRules(event.organizationId)]);
   const asked = askedFields(eventFields, tplRules);
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
   const fields: FormField[] = [
