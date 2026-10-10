@@ -250,3 +250,64 @@ Mutation check: with the user list's organization filter removed, the test fails
 
 Checks after the deploy: tabornik.online/login 200; prihlasky /r/clenstvi-2027 200; rodice / 200;
 tabornik /r → 308 prihlasky; rodice /r → 404; no errors logged.
+
+# Step 3: super-admin screens (branch orgs-3)
+
+## Acting organization
+- `POST /api/acting-org {organizationId | null}` (super-admin): sets or clears the `acting_org`
+  cookie. The cookie is httpOnly, host-only, SameSite=Lax, path /. Only active organizations are
+  accepted. Choosing the home organization clears the cookie.
+- The client forgets the remembered event and reloads `/`. The event switcher then falls back to
+  the first event of the new organization.
+- `/api/me` returns `organization` (acting) and `homeOrganization`.
+- Sidebar (desktop + mobile drawer), above the event switcher, super-admin only:
+  "Organizace: <zkratka>".
+- While the acting organization is not the home one: a sticky ember strip "Pracujete v organizaci
+  <název>" with "Zpět do <zkratka>" (`src/components/ActingOrg.tsx`).
+
+## APLIKACE (super-admin only, hidden for everyone else)
+- **Organizace** (`/admin/organizations`, `GET/POST /api/organizations`, `PATCH /api/organizations/[id]`):
+  - Table: name, short name, contact e-mail, admins, user/event/host counts, active.
+  - "Nová organizace" creates the organization and its first admin in one transaction. An e-mail
+    that already has an account is refused: "Tento e-mail už má účet v organizaci X".
+  - No templates are copied; the hint under the form says so (step 4).
+  - Edit, Přepnout, Deaktivovat/Aktivovat (ConfirmDialog). The home organization can't be
+    deactivated.
+- **Veřejné adresy** (`/admin/public-hosts`, `GET /api/public-hosts?all=1`): every organization's
+  hosts, with an Organizace column and select.
+  - POST and PATCH take an `organizationId`.
+  - An event-tied host must belong to the event's organization (`checkHostInput`, otherwise
+    `bad_event`).
+  - Ověřit works on any host for a super-admin.
+- **Překlady** and **Kurzy** moved here from ORGANIZACE.
+- ORGANIZACE → Připojení: the organization's own hosts, read-only, with Ověřit. Both pages share
+  `src/components/PublicHostsAdmin.tsx`.
+
+## Deactivated organization
+- Its users can't log in (step 2).
+- Its public hosts are no longer resolved: `activeHosts` requires `organization.active`, so they
+  answer 404 and are never used in links.
+- Deactivating it while acting in it clears `acting_org`.
+
+## Admin role
+- Granting or removing `admin` (users POST + PATCH): `requireSuperAdmin`.
+- Uživatelé page: the "admin" option only for a super-admin. Organization admins see an admin's
+  role read-only.
+- The last active admin of an organization can't be deactivated or demoted (`last_admin`).
+- `isSuperAdmin` is not settable through any API: users PATCH takes only displayName, role and
+  active.
+
+## Tests
+`scripts/test-org-isolation.ts --run` (production): **34/34 passed**, cleanup ok. The 23 step-2
+checks, plus:
+- An organization admin gets 403 on GET/POST /api/organizations, POST /api/acting-org, making
+  someone admin, and creating an admin.
+- `acting_org` is ignored for a non-super-admin.
+- A super-admin acting in the test organization sees only its events and users.
+- The last active admin can't be deactivated.
+- A deactivated organization's host resolves as unknown (404).
+- The home organization can't be deactivated.
+
+`check-org-scope`: 188 files, 0 unexplained. Build ok.
+
+Texts: `scripts/seed-organizations-i18n.ts` (cs + en). The deploy flow runs it.
