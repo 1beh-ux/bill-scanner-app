@@ -102,7 +102,7 @@ export default function OrganizationsPage() {
               <input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className={inputClass + " mt-1"} type={k === "adminEmail" ? "email" : "text"} />
             </label>
           ))}
-          <p className="text-[12px] text-ink-secondary">{t("orgs.noTemplatesHint")}</p>
+          <p className="text-[12px] text-ink-secondary">{t("orgs.templatesCopiedHint")}</p>
           {error && <p className="text-[13px] text-red-600">{error}</p>}
           <div className="flex justify-end gap-3">
             <button type="button" onClick={() => setForm(null)} className="text-[14px] text-ink-secondary hover:underline">{t("common.cancel")}</button>

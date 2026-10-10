@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireSuperAdmin } from "@/lib/org-scope";
+import { copyAppTemplatesToOrganization } from "@/lib/app-templates";
 
 // Aplikace -> Organizace (super-admin only, organizations step 3).
 export async function GET() {
@@ -56,7 +57,9 @@ export async function POST(req: NextRequest) {
   const org = await prisma.$transaction(async (tx) => {
     const created = await tx.organization.create({ data: { name, shortName, contactEmail } });
     await tx.user.create({ data: { email: adminEmail, displayName: adminName, role: "admin", organizationId: created.id } });
+    // It starts with copies of every active app template (Aplikace -> Šablony aplikace).
+    await copyAppTemplatesToOrganization(tx, created.id);
     return created;
-  });
+  }, { timeout: 60_000 });
   return NextResponse.json(org, { status: 201 });
 }

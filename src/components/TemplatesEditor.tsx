@@ -5,7 +5,8 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
-import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY, PORTAL_INVITATION_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY, PORTAL_INVITATION_PURPOSE_KEY, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { Synced } from "@/components/AppSyncPanel";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useLevelUrl } from "@/lib/template-level";
 
@@ -70,18 +71,23 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
 
         <div className="min-w-0 flex-1">
       {tab === "health" && <HealthTemplatesTab />}
-      {tab === "mail" && <ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} />}
-      {tab === "bills" && <BillsTemplatesTab />}
-      {tab === "participants" && <ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} />}
+      {tab === "mail" && <Synced table="list" filter="document"><ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} /></Synced>}
+      {tab === "bills" && <Synced table="category"><BillsTemplatesTab /></Synced>}
+      {tab === "participants" && <Synced table="field"><ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} /></Synced>}
       {tab === "planning" && (
         <div className="flex flex-col gap-6">
           <p className="text-[14px] text-ink-secondary">{t("planLists.templatesSubtitle")}</p>
-          <ListTemplateAdmin kind="plan_activity" scope="org" label={t("planLists.baseLibraryLabel")} />
-          <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="primary" label={t("planLists.primaryCategoriesLabel")} />
-          <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="secondary" label={t("planLists.secondaryCategoriesLabel")} />
-          <ListTemplateAdmin kind="plan_day_template" scope="org" label={t("planLists.dayTemplatesLabel")} />
-          <ListTemplateAdmin kind="plan_location" scope="org" label={t("planLists.locationsLabel")} />
-          <ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} />
+          <Synced table="list" filter="plan_activity"><ListTemplateAdmin kind="plan_activity" scope="org" label={t("planLists.baseLibraryLabel")} /></Synced>
+          {/* Both category groups are kind plan_category: one panel for the two. */}
+          <Synced table="list" filter="plan_category">
+            <div className="flex flex-col gap-6">
+              <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="primary" label={t("planLists.primaryCategoriesLabel")} />
+              <ListTemplateAdmin kind="plan_category" scope="org" categoryGroup="secondary" label={t("planLists.secondaryCategoriesLabel")} />
+            </div>
+          </Synced>
+          <Synced table="list" filter="plan_day_template"><ListTemplateAdmin kind="plan_day_template" scope="org" label={t("planLists.dayTemplatesLabel")} /></Synced>
+          <Synced table="list" filter="plan_location"><ListTemplateAdmin kind="plan_location" scope="org" label={t("planLists.locationsLabel")} /></Synced>
+          <Synced table="list" filter="plan_leader"><ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} /></Synced>
         </div>
       )}
         </div>
@@ -128,20 +134,22 @@ function HealthTemplatesTab() {
         </button>
       </div>
 
-      {subTab === "med" && <ListTemplateAdmin kind="med" scope="org" label={t("healthTemplatesPage.tabMeds")} />}
+      {subTab === "med" && <Synced table="list" filter="med"><ListTemplateAdmin kind="med" scope="org" label={t("healthTemplatesPage.tabMeds")} /></Synced>}
       {subTab === "situation" && (
-        <ListTemplateAdmin kind="situation" scope="org" label={t("healthTemplatesPage.tabSituations")} />
+        <Synced table="list" filter="situation"><ListTemplateAdmin kind="situation" scope="org" label={t("healthTemplatesPage.tabSituations")} /></Synced>
       )}
       {subTab === "email" && (
         <div className="flex flex-col gap-6">
-          <EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} />
-          <EmailTemplateAdmin
-            scope="org"
-            purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
-            label={t("healthTemplatesPage.tabRegistrationEmail")}
-          />
-          <EmailTemplateAdmin scope="org" purposeKey={PORTAL_LINK_PURPOSE_KEY} label={t("childProfile.portalLinkTemplate")} />
-          <EmailTemplateAdmin scope="org" purposeKey={PORTAL_INVITATION_PURPOSE_KEY} label={t("portalCompose.purpose.portal_invitation")} />
+          <Synced table="email" filter={PARENT_SUMMARY_PURPOSE_KEY}><EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} /></Synced>
+          <Synced table="email" filter={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}>
+            <EmailTemplateAdmin
+              scope="org"
+              purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
+              label={t("healthTemplatesPage.tabRegistrationEmail")}
+            />
+          </Synced>
+          <Synced table="email" filter={PORTAL_LINK_PURPOSE_KEY}><EmailTemplateAdmin scope="org" purposeKey={PORTAL_LINK_PURPOSE_KEY} label={t("childProfile.portalLinkTemplate")} /></Synced>
+          <Synced table="email" filter={PORTAL_INVITATION_PURPOSE_KEY}><EmailTemplateAdmin scope="org" purposeKey={PORTAL_INVITATION_PURPOSE_KEY} label={t("portalCompose.purpose.portal_invitation")} /></Synced>
         </div>
       )}
     </div>
