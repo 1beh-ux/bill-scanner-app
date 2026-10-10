@@ -926,10 +926,9 @@ enum ComputedFieldType {
 // stable {{key}} used both in customFieldValues and, once its `documents`
 // surface is on, in document templates -- immutable after creation.
 model ParticipantFieldTemplate {
-  key             String                    @id
-  // The coming primary key (organizations step 4: key becomes unique per organization).
-  // DB default gen_random_uuid() so rows inserted by older code also get one.
-  id              String                    @unique @default(uuid())
+  // Organizations step 4: id is the key; `key` is unique per organization (NULL = app level, one group).
+  id              String                    @id @default(uuid())
+  key             String
   label           String
   fieldType       ParticipantFieldType      @map("field_type")
   options         Json?
@@ -953,9 +952,13 @@ model ParticipantFieldTemplate {
   // Owner (docs/organizations-change-notes.md).
   organizationId String? @map("organization_id")
   organization   Organization? @relation(fields: [organizationId], references: [id])
-  // The app template this one was copied from: its `id` (FK added in organizations_field_template_id).
+  // The app template this one was copied from.
   sourceTemplateId String? @map("source_template_id")
+  sourceTemplate   ParticipantFieldTemplate? @relation("ParticipantFieldTemplateSource", fields: [sourceTemplateId], references: [id], onDelete: SetNull)
+  copies           ParticipantFieldTemplate[] @relation("ParticipantFieldTemplateSource")
 
+  // Per organization; NULL (app level) counts as one group: NULLS NOT DISTINCT in the migration SQL.
+  @@unique([organizationId, key])
   @@index([organizationId])
   @@map("participant_field_templates")
 }

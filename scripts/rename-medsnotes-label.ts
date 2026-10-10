@@ -18,10 +18,11 @@ async function main() {
   const apply = process.argv.includes("--apply");
   const { prisma } = await import("../src/lib/prisma");
 
-  const template = await prisma.participantFieldTemplate.findUnique({ where: { key: "medsNotes" } });
-  if (template && template.label === OLD_LABEL) {
-    console.log(`  ${apply ? "update" : "would update"}: org template`);
-    if (apply) await prisma.participantFieldTemplate.update({ where: { key: "medsNotes" }, data: { label: NEW_LABEL } });
+  // One per organization since organizations step 4.
+  const templates = await prisma.participantFieldTemplate.findMany({ where: { key: "medsNotes", label: OLD_LABEL } });
+  for (const template of templates) {
+    console.log(`  ${apply ? "update" : "would update"}: template (${template.organizationId ?? "app"})`);
+    if (apply) await prisma.participantFieldTemplate.update({ where: { id: template.id }, data: { label: NEW_LABEL } });
   }
 
   const eventFields = await prisma.eventParticipantField.findMany({
@@ -33,7 +34,7 @@ async function main() {
     if (apply) await prisma.eventParticipantField.update({ where: { id: f.id }, data: { label: NEW_LABEL } });
   }
 
-  console.log(`${apply ? "Updated" : "Would update"}: ${(template?.label === OLD_LABEL ? 1 : 0) + eventFields.length} row(s).${apply ? "" : " Re-run with --apply."}`);
+  console.log(`${apply ? "Updated" : "Would update"}: ${templates.length + eventFields.length} row(s).${apply ? "" : " Re-run with --apply."}`);
 }
 
 main()

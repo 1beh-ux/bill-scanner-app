@@ -11,8 +11,8 @@ import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 // left as they are. GET = what would be created, POST = create them (all, or `keys`).
 async function candidates(organizationId: string) {
   const [templates, rows] = await Promise.all([
-    // Every key, of any organization: the key is still the global primary key (organizations step 4).
-    prisma.participantFieldTemplate.findMany({ select: { key: true } }),
+    // The organization's own keys (unique per organization since organizations step 4).
+    prisma.participantFieldTemplate.findMany({ where: { organizationId }, select: { key: true } }),
     prisma.eventParticipantField.findMany({
       // The organization's own events only.
       where: { kind: "custom", event: { organizationId } },

@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { PORTAL_ACCESS_LEVELS } from "@/lib/portal-rules";
 import { FIELD_AUDIENCES, FIELD_LEVELS } from "@/lib/registration-fields";
-import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
+import { notFound } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -13,13 +14,15 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // The acting organization's template, or with ?level=app an app template (super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { key } = await params;
   const decodedKey = decodeURIComponent(key);
-  if (!(await prisma.participantFieldTemplate.count({ where: { key: decodedKey, ...(await orgWhere(user)) } }))) return notFound();
+  // Keys are unique per organization (organizations step 4); another organization's template doesn't exist here.
+  const current = await prisma.participantFieldTemplate.findFirst({ where: { key: decodedKey, organizationId: scope.organizationId }, select: { id: true } });
+  if (!current) return notFound();
   const body = await req.json();
   const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration, audience, level } = body;
   if (requiredInRegistration !== undefined && typeof requiredInRegistration !== "boolean") {
@@ -42,14 +45,14 @@ export async function PATCH(
     if (typeof newKey !== "string" || !/^[a-zA-Z][a-zA-Z0-9_]*$/.test(newKey)) {
       return NextResponse.json({ error: "invalid_key" }, { status: 400 });
     }
-    const conflict = await prisma.participantFieldTemplate.findUnique({ where: { key: newKey } });
+    const conflict = await prisma.participantFieldTemplate.findFirst({ where: { key: newKey, organizationId: scope.organizationId }, select: { id: true } });
     if (conflict) {
       return NextResponse.json({ error: "key_taken" }, { status: 409 });
     }
   }
 
   const template = await prisma.participantFieldTemplate.update({
-    where: { key: decodedKey },
+    where: { id: current.id },
     data: {
       ...(newKey !== undefined && newKey !== decodedKey && { key: newKey }),
       ...(label !== undefined && { label }),
@@ -80,14 +83,15 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // The acting organization's template, or with ?level=app an app template (super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { key } = await params;
   // Another organization's template doesn't exist here.
-  if (!(await prisma.participantFieldTemplate.count({ where: { key: decodeURIComponent(key), ...(await orgWhere(user)) } }))) return notFound();
-  await prisma.participantFieldTemplate.delete({ where: { key: decodeURIComponent(key) } });
+  const current = await prisma.participantFieldTemplate.findFirst({ where: { key: decodeURIComponent(key), organizationId: scope.organizationId }, select: { id: true } });
+  if (!current) return notFound();
+  await prisma.participantFieldTemplate.delete({ where: { id: current.id } });
 
   return NextResponse.json({ ok: true });
 }

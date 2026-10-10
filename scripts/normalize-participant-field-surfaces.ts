@@ -34,7 +34,7 @@ async function main() {
     if (apply) await prisma.eventParticipantField.update({ where: { id: f.id }, data: { surfaces: normalized } });
   }
 
-  const templates = await prisma.participantFieldTemplate.findMany({ select: { key: true, defaultSurfaces: true } });
+  const templates = await prisma.participantFieldTemplate.findMany({ select: { id: true, key: true, defaultSurfaces: true } });
   let templateChanged = 0;
   for (const t of templates) {
     const category = fieldCategory("custom", t.defaultSurfaces);
@@ -43,7 +43,7 @@ async function main() {
     if (same) continue;
     templateChanged++;
     console.log(`  ${apply ? "update" : "would update"}: template "${t.key}" -- ${t.defaultSurfaces.join(",")} -> ${normalized.join(",")}`);
-    if (apply) await prisma.participantFieldTemplate.update({ where: { key: t.key }, data: { defaultSurfaces: normalized } });
+    if (apply) await prisma.participantFieldTemplate.update({ where: { id: t.id }, data: { defaultSurfaces: normalized } });
   }
 
   console.log(`${apply ? "Updated" : "Would update"}: ${eventChanged} event field(s), ${templateChanged} template(s) (of ${eventFields.length} / ${templates.length}).${apply ? "" : " Re-run with --apply."}`);

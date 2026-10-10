@@ -30,7 +30,7 @@ async function main() {
   const templates = await prisma.participantFieldTemplate.findMany({ where: { label: LABEL, active: true } });
   for (const t of templates) {
     console.log(`  ${apply ? "deactivate" : "would deactivate"}: org template "${t.key}"`);
-    if (apply) await prisma.participantFieldTemplate.update({ where: { key: t.key }, data: { active: false } });
+    if (apply) await prisma.participantFieldTemplate.update({ where: { id: t.id }, data: { active: false } });
   }
 
   console.log(`${apply ? "Deactivated" : "Would deactivate"}: ${eventRows.length} event field(s), ${templates.length} template(s).${apply ? "" : " Re-run with --apply."}`);

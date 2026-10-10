@@ -48,7 +48,7 @@ async function main() {
 
   const templates = await prisma.participantFieldTemplate.findMany({
     where: { fieldType: "select", label: { contains: "tričk", mode: "insensitive" } },
-    select: { key: true, options: true },
+    select: { id: true, key: true, options: true },
   });
   let templateChanged = 0;
   for (const t of templates) {
@@ -57,7 +57,7 @@ async function main() {
     if (!changed) continue;
     templateChanged++;
     console.log(`  ${apply ? "update" : "would update"}: template "${t.key}" -- [${current.join(", ")}] -> [${options.join(", ")}]`);
-    if (apply) await prisma.participantFieldTemplate.update({ where: { key: t.key }, data: { options } });
+    if (apply) await prisma.participantFieldTemplate.update({ where: { id: t.id }, data: { options } });
   }
 
   console.log(`${apply ? "Updated" : "Would update"}: ${eventChanged} event field(s), ${templateChanged} template(s).${apply ? "" : " Re-run with --apply."}`);
