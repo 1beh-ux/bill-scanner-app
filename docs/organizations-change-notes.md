@@ -412,3 +412,74 @@ SQL proxy now runs with `--gcloud-auth`.
 
 Checks: tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200,
 /api/app-templates and ?level=app without a session 401, no errors logged.
+
+# Step 5: public pages show their organization (branch orgs-5)
+
+- **Registration form** (`/r/<slug>`, form and "thank you" screen) and **parent portal**
+  (`/p/<token>`, including the birth-date gate):
+  - the organization's name above the header
+  - title `<event or form> · <organization>` / `Rodičovský portál · <organization>`
+  - footer "Kontakt: <contact e-mail>" when the organization has one
+  - The organization is the event's (form) or the family's / person's (portal). Never
+    tabornik.online, never another organization's name.
+  - `src/components/registration/OrgBrand.tsx`; `publicOrg()` in `src/lib/public-host.ts`
+    (cached per request).
+- **Landing page** of a public host: the host's organization (name, title, contact). An unknown
+  host or a deactivated organization's host → 404 (the neutral 404 page).
+- **E-mails:** there were no hard-coded organization names in code or templates. The only hits for
+  "Záře" are the seed defaults in `org-owner.ts` / `prisma/seed.ts`, which are correct. The sender
+  fallbacks ("Tábor", "Zdravotník", "Pošta tábora") are generic.
+  - New variable **`{{organization_name}}`** in every e-mail and document variable set:
+    `resolveVariables` (participant e-mails, acceptance, generated documents) and the portal-link /
+    invitation e-mails. It is also in the variable palette of every purpose (preview value
+    "Turistický oddíl Sluníčko").
+- **Tests:** `test-org-isolation --run` 43/43.
+  - The test organization's form shows "Test org (isolation)" in the header and title, with no
+    Záře/Pionýr text.
+  - Its host's landing page shows its name, and 404 once the organization is deactivated.
+- `check-org-scope` 0 unexplained, `check-proxy-hosts` all passed, build ok.
+
+# How to onboard a new organization
+
+1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
+   name, short name, contact e-mail (shown in the public pages' footer), and the first admin's
+   e-mail + name.
+   - The e-mail must not have an account yet; the form says which organization has it.
+   - The organization gets copies of all active app templates.
+   - The admin signs in at https://tabornik.online with that Google account.
+2. **Templates:** the organization's admin reviews Organizace → Šablony (e-mails, documents,
+   categories, participant fields, health, planning). They adjust their own copies (badge
+   "Upraveno"), "Načíst nové z aplikace" brings later app additions, and "Obnovit z aplikace" undoes
+   one item.
+   - Before onboarding, check Aplikace → Šablony aplikace for anything organization-specific (the
+     flagged list from `create-app-templates`).
+3. **Users:** the admin adds users (Organizace → Uživatelé) and grants module access per event.
+   Only a super-admin can make someone an admin.
+4. **Google account (Drive):** each user connects their own Google account from an event's
+   "Připojení" tab: Drive folders, import, export. The connection belongs to the organization.
+5. **Mailbox:** the admin connects the sending Gmail from an event's Připojení tab. That mailbox
+   is the organization's; other events of the same organization can reuse it, and other
+   organizations never see it.
+6. **Public domains** (optional; without them the public pages run on the APP_BASE_URL host):
+   - a. **Certificate** (super-admin, Google Cloud). Aplikace → Veřejné adresy → "Příkazy" on the
+     row gives these with the hostname filled in:
+     ```
+     gcloud certificate-manager dns-authorizations create <n>-auth --domain=<host>
+     gcloud certificate-manager dns-authorizations describe <n>-auth   # -> CNAME _acme-challenge… to add at the domain's DNS
+     gcloud certificate-manager certificates create <n>-cert --domains=<host> --dns-authorizations=<n>-auth
+     gcloud certificate-manager maps entries create <n>-entry --map=tabornik-map --certificates=<n>-cert --hostname=<host>
+     ```
+   - b. **Row:** Aplikace → Veřejné adresy → add the hostname with organization = the new one,
+     purpose (Přihlášky / Rodičovský portál / Obojí), optionally an event, default.
+   - c. **DNS** at the organization's provider: `CNAME <host> -> public.tabornik.online`.
+   - d. **Ověřit** on the row (DNS → certificate → landing page; the landing page now shows the
+     organization's name).
+   - e. Old links on tabornik.online then 308 to that host. New links in e-mails and documents use
+     it.
+7. **First event:** the admin creates it (Organizace → Akce). It copies the organization's category,
+   list and field templates. Turn on the modules, "Připojeno k registraci", and the public form
+   (slug) if needed. Then test the public form on the organization's domain.
+8. **Check as super-admin:**
+   - Přepnout into the organization: the strip "Pracujete v organizaci …", only its data visible.
+   - Its public form shows its name in the header and title.
+   - Back with "Zpět do Záře".
