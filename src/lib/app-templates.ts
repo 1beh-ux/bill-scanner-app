@@ -117,7 +117,8 @@ export function flagOrgSpecific(text: string): string[] {
   add("e-mail", /[\w.+-]+@[\w-]+\.[\w.-]+/g);
   add("URL", /https?:\/\/[^\s"')]+/g);
   add("phone", /(?:\+420\s?)?\b\d{3}\s?\d{3}\s?\d{3}\b/g);
-  add("name", /\b(?:Záře|Zář[ei]|Pionýr\w*|Meziměstí)\b/gi);
+  // Also inside keys/ASCII spellings (clenstvi_zare): no word boundaries -- a review list, not a filter.
+  add("name", /(?:záře|zář[ei]|zare|pionýr\w*|pionyr\w*|meziměstí|mezimesti)/gi);
   return [...new Set(hits)];
 }
 
