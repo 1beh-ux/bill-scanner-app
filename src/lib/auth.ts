@@ -14,10 +14,13 @@ export async function getCurrentUser() {
     const decoded = await getAuth().verifySessionCookie(session, true);
     if (!decoded.email) return null;
 
-    const user = await prisma.user.findUnique({ where: { email: decoded.email } });
-    if (!user || !user.active) return null;
+    const user = await prisma.user.findUnique({ where: { email: decoded.email }, include: { organization: { select: { active: true } } } });
+    // A deactivated organization's users are treated like inactive users.
+    if (!user || !user.active || !user.organization.active) return null;
 
-    return user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { organization, ...plain } = user;
+    return plain;
   } catch {
     return null;
   }

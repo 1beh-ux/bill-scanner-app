@@ -14,8 +14,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No email" }, { status: 401 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.active) {
+  const user = await prisma.user.findUnique({ where: { email }, include: { organization: { select: { active: true } } } });
+  // A deactivated organization's users get the same answer as inactive users.
+  if (!user || !user.active || !user.organization.active) {
     return NextResponse.json({ error: "Not allowlisted" }, { status: 403 });
   }
 

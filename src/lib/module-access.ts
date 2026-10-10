@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { ListTemplateKind, ModuleKey, User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
+import { eventInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
-// admin acts as an unrestricted superuser across every module and event
-// (same as the rest of this app -- user management, category templates,
-// exchange rates). Everyone else -- `user` and `accountant` alike; the latter
+// An event outside the acting organization is never accessible (organizations
+// step 2, src/lib/org-scope.ts). Inside it, the organization's admin acts as
+// an unrestricted superuser across every module and event (same as the rest
+// of this app -- user management, category templates). Everyone else -- `user` and `accountant` alike; the latter
 // is only a label now, it carries no implicit privileges -- needs an explicit
 // UserEventModuleAccess grant per event and module. See
 // docs/bill-scanner-v2-health-module-design.md ("Module registry & access")
@@ -14,7 +16,8 @@ export async function hasModuleAccess(
   eventId: string,
   moduleKey: ModuleKey
 ): Promise<boolean> {
-  if (user.role === "admin") return true;
+  if (!(await eventInOrg(user, eventId))) return false;
+  if (isOrgAdmin(user)) return true;
 
   const grant = await prisma.userEventModuleAccess.findUnique({
     where: { userId_eventId_moduleKey: { userId: user.id, eventId, moduleKey } },
@@ -27,6 +30,8 @@ export async function requireModuleAccess(
   eventId: string,
   moduleKey: ModuleKey
 ): Promise<NextResponse | null> {
+  // Outside the acting organization: 404, as if the event didn't exist.
+  if (!(await eventInOrg(user, eventId))) return notFound();
   const ok = await hasModuleAccess(user, eventId, moduleKey);
   if (!ok) {
     return NextResponse.json({ error: "module_access_denied" }, { status: 403 });
@@ -43,6 +48,7 @@ export async function requireAnyModuleAccess(
   eventId: string,
   moduleKeys: ModuleKey[]
 ): Promise<NextResponse | null> {
+  if (!(await eventInOrg(user, eventId))) return notFound();
   for (const moduleKey of moduleKeys) {
     if (await hasModuleAccess(user, eventId, moduleKey)) return null;
   }
