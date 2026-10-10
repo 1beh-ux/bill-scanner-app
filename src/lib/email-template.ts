@@ -158,9 +158,17 @@ export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
   return ["health"];
 }
 
-/** The organization's default row for this purpose, created on first read if missing. */
-export async function getOrCreateOrgEmailTemplate(organizationId: string, purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
+/**
+ * The organization's default row for this purpose (organizationId null: the app template,
+ * Aplikace -> Šablony aplikace), created on first read if missing.
+ */
+export async function getOrCreateOrgEmailTemplate(organizationId: string | null, purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY) {
   const { subject, body } = defaultsFor(purposeKey);
+  // A compound unique lookup can't take NULL: the app level goes by findFirst + create.
+  if (organizationId === null) {
+    const app = await prisma.emailTemplate.findFirst({ where: { organizationId: null, purposeKey } });
+    return app ?? prisma.emailTemplate.create({ data: { purposeKey, subject, body, organizationId: null } });
+  }
   return prisma.emailTemplate.upsert({
     where: { organizationId_purposeKey: { organizationId, purposeKey } },
     update: {},

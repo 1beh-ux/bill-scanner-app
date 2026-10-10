@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ListTemplateKind } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { orgIdOfUser } from "@/lib/org-owner";
 import { PLAN_ORG_LIST_KINDS } from "@/lib/planning";
-import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
 const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS];
 
@@ -13,6 +12,8 @@ export async function GET(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const scope = await templateScope(req, user, false);
+  if ("error" in scope) return scope.error;
   const { searchParams } = new URL(req.url);
   const kind = searchParams.get("kind") as ListTemplateKind | null;
   if (!kind || !ADMIN_KINDS.includes(kind)) {
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const items = await prisma.listTemplate.findMany({
     // The acting organization's templates.
-    where: { kind, ...(await orgWhere(user)) },
+    where: { kind, organizationId: scope.organizationId },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
@@ -33,9 +34,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
+  // Writes: the organization's admin (?level=app: an app template, super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const body = await req.json();
   const kind: ListTemplateKind | undefined = body.kind;
@@ -54,7 +55,7 @@ export async function POST(req: NextRequest) {
       key: key || null,
       sortOrder: sortOrder ?? null,
       data: data ?? undefined,
-      organizationId: await orgIdOfUser(user),
+      organizationId: scope.organizationId,
     },
   });
 

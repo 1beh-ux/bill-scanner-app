@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
-export async function GET() {
+// Bill category templates: the acting organization's, or with ?level=app the app's (super-admin).
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const scope = await templateScope(req, user, false);
+  if ("error" in scope) return scope.error;
 
-  // The acting organization's templates (app-level NULL rows: step 4).
   const templates = await prisma.categoryTemplate.findMany({
-    where: await orgWhere(user),
+    where: { organizationId: scope.organizationId },
     orderBy: { name: "asc" },
   });
 
@@ -24,14 +25,15 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  // Templates are the organization admin's (anyone else could edit them before step 4).
-  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  // Writes: the organization's admin (app level: super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { name } = await req.json();
   if (!name) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const template = await prisma.categoryTemplate.create({ data: { name, organizationId: await orgIdOfUser(user) } });
+  const template = await prisma.categoryTemplate.create({ data: { name, organizationId: scope.organizationId } });
   return NextResponse.json(template, { status: 201 });
 }

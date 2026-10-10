@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
+import { notFound } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -12,13 +13,13 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
+  // Writes: the organization's admin (?level=app: an app template, super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { id } = await params;
   // Another organization's template doesn't exist here.
-  if (!(await prisma.listTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
+  if (!(await prisma.listTemplate.count({ where: { id, organizationId: scope.organizationId } }))) return notFound();
   const body = await req.json();
   const { name, key, sortOrder, active, data } = body;
 
@@ -48,13 +49,13 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
+  // Writes: the organization's admin (?level=app: an app template, super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { id } = await params;
   // Another organization's template doesn't exist here.
-  if (!(await prisma.listTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
+  if (!(await prisma.listTemplate.count({ where: { id, organizationId: scope.organizationId } }))) return notFound();
   try {
     await prisma.listTemplate.delete({ where: { id } });
     return NextResponse.json({ ok: true });

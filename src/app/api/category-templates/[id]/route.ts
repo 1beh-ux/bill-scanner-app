@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin, notFound, orgWhere } from "@/lib/org-scope";
+import { notFound } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
+// One category template of the acting organization (or ?level=app: an app template, super-admin).
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -11,12 +13,12 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  // Templates are the organization admin's (anyone else could edit them before step 4).
-  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { id } = await params;
-  // Another organization's template doesn't exist here.
-  if (!(await prisma.categoryTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
+  // Another organization's (or level's) template doesn't exist here.
+  if (!(await prisma.categoryTemplate.count({ where: { id, organizationId: scope.organizationId } }))) return notFound();
   const { name, description } = await req.json();
 
   const template = await prisma.categoryTemplate.update({
@@ -38,12 +40,11 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  // Templates are the organization admin's (anyone else could edit them before step 4).
-  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { id } = await params;
-  // Another organization's template doesn't exist here.
-  if (!(await prisma.categoryTemplate.count({ where: { id, ...(await orgWhere(user)) } }))) return notFound();
+  if (!(await prisma.categoryTemplate.count({ where: { id, organizationId: scope.organizationId } }))) return notFound();
   await prisma.categoryTemplate.delete({ where: { id } });
 
   return NextResponse.json({ ok: true });

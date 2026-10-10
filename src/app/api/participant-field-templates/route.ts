@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
+import { templateScope } from "@/lib/template-scope";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  const scope = await templateScope(req, user, false);
+  if ("error" in scope) return scope.error;
 
   // The acting organization's templates.
   const templates = await prisma.participantFieldTemplate.findMany({
-    where: await orgWhere(user),
+    where: { organizationId: scope.organizationId },
     orderBy: { key: "asc" },
   });
   // "Include in documents" is just the `documents` surface -- no separate
@@ -27,9 +28,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (!isOrgAdmin(user)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Writes: the organization's admin (?level=app: an app template, super-admin).
+  const scope = await templateScope(req, user, true);
+  if ("error" in scope) return scope.error;
 
   const { key, label, fieldType, options, defaultSurfaces } = await req.json();
   if (!key || !label || !fieldType) {
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   const template = await prisma.participantFieldTemplate.create({
-    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [], organizationId: await orgIdOfUser(user) },
+    data: { key, label, fieldType, options: options ?? undefined, defaultSurfaces: defaultSurfaces ?? [], organizationId: scope.organizationId },
   });
 
   return NextResponse.json(template, { status: 201 });

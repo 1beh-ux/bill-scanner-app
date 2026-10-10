@@ -74,13 +74,13 @@ async function main() {
     check("people picker: empty", ids(picker.body).length === 0, JSON.stringify(ids(picker.body)));
     const fam = await json(await (await import("@/app/api/families/route")).GET());
     check("families list: empty", (fam.body?.families?.length ?? -1) === 0, JSON.stringify(fam.body)?.slice(0, 200));
-    const cats = await json(await (await import("@/app/api/category-templates/route")).GET());
+    const cats = await json(await (await import("@/app/api/category-templates/route")).GET(req("/api/category-templates")));
     check("category templates: empty", ids(cats.body).length === 0, JSON.stringify(ids(cats.body)));
     const listTpl = await import("@/app/api/list-templates/route");
     let listLeak = 0;
     for (const kind of ["med", "situation", "document", "plan_activity"]) listLeak += ids((await json(await listTpl.GET(req(`/api/list-templates?kind=${kind}`)))).body).length;
     check("list templates (med/situation/document/plan_activity): empty", listLeak === 0, `${listLeak} rows`);
-    const fields = await json(await (await import("@/app/api/participant-field-templates/route")).GET());
+    const fields = await json(await (await import("@/app/api/participant-field-templates/route")).GET(req("/api/participant-field-templates")));
     check("participant field templates: empty", ids(fields.body).length === 0, JSON.stringify(ids(fields.body)));
     const mail = await json(await (await import("@/app/api/mail-accounts/route")).GET());
     check("mailboxes: empty", Array.isArray(mail.body) && mail.body.length === 0, JSON.stringify(mail.body));
