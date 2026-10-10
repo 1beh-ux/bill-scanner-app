@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 import { prisma } from "@/lib/prisma";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 
@@ -9,8 +9,17 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  // The organization this request acts in, and (super-admin) home -- the switcher and the "Pracujete v organizaci" strip.
+  const actingId = await getActingOrgId(user);
+  const orgSelect = { id: true, name: true, shortName: true } as const;
+  const [organization, homeOrganization] = await Promise.all([
+    prisma.organization.findUniqueOrThrow({ where: { id: actingId }, select: orgSelect }),
+    prisma.organization.findUniqueOrThrow({ where: { id: user.organizationId }, select: orgSelect }),
+  ]);
   return NextResponse.json({
     id: user.id,
+    organization,
+    homeOrganization,
     email: user.email,
     displayName: user.displayName,
     // Effective role in the acting organization (a super-admin is admin there); the UI keys off this.
