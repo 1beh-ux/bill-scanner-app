@@ -31,9 +31,9 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
   if (!event) notFound();
   // Public host: only its purpose/event. Admin host: old links move to the public host when there is one.
   const scope = await resolvePublicHost(await headers());
-  if (!hostAllowsRegistration(scope, event.id)) notFound();
+  if (!hostAllowsRegistration(scope, event)) notFound();
   if (scope.kind === "admin") {
-    const host = await publicHostFor("registration", event.id);
+    const host = await publicHostFor("registration", event.id, event.organizationId);
     if (host) permanentRedirect(`https://${host}/r/${slug}`);
   }
   const [ctx, rows] = await Promise.all([

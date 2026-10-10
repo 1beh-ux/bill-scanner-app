@@ -38,6 +38,8 @@ export default function ConnectionsPage() {
   const [busy, setBusy] = useState(false);
   const [verify, setVerify] = useState<Record<string, Verify | "running">>({});
   const [commandsFor, setCommandsFor] = useState<string | null>(null);
+  // Only a super-admin adds/edits addresses; organization admins see their own read-only.
+  const [canEdit, setCanEdit] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const load = () =>
@@ -47,6 +49,7 @@ export default function ConnectionsPage() {
         if (!data) return;
         setHosts(data.hosts);
         setEvents(data.events);
+        setCanEdit(data.canEdit === true);
       })
       .catch(() => {});
 
@@ -95,7 +98,7 @@ export default function ConnectionsPage() {
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-[16px] font-semibold text-ink">{t("connections.hostsTitle")}</h2>
-          {!form && (
+          {!form && canEdit && (
             <button type="button" onClick={() => { setError(null); setForm(EMPTY); }} className={linkBtn}>
               + {t("connections.add")}
             </button>
@@ -187,8 +190,12 @@ export default function ConnectionsPage() {
                       <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 whitespace-nowrap">
                         <button type="button" className={linkBtn} disabled={v === "running"} onClick={() => runVerify(h.id)}>{t("connections.verify")}</button>
                         <button type="button" className={linkBtn} onClick={() => setCommandsFor(commandsFor === h.id ? null : h.id)}>{t("connections.commands")}</button>
-                        <button type="button" className={linkBtn} onClick={() => { setError(null); setForm(toForm(h)); }}>{t("connections.edit")}</button>
-                        <button type="button" className={linkBtn} onClick={() => toggleActive(h)}>{h.active ? t("connections.deactivate") : t("connections.activate")}</button>
+                        {canEdit && (
+                          <>
+                            <button type="button" className={linkBtn} onClick={() => { setError(null); setForm(toForm(h)); }}>{t("connections.edit")}</button>
+                            <button type="button" className={linkBtn} onClick={() => toggleActive(h)}>{h.active ? t("connections.deactivate") : t("connections.activate")}</button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

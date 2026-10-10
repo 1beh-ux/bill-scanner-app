@@ -1,7 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug } from "lucide-react";
 
-export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean };
+// superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
+export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
 
 // Single source of truth for event-independent destinations, shared by
@@ -14,7 +15,7 @@ export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
 export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
   bills: {
     sectionLabelKey: "nav.sectionBills",
-    items: [{ path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true }],
+    items: [{ path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true, superAdminOnly: true }],
   },
   organization: {
     sectionLabelKey: "nav.organization",
@@ -28,7 +29,7 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
       // as a user, so a global/all-events list belongs with the other org-wide admin pages, not Bills.
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
-      { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true },
+      { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },
       // Public hostnames for the registration page / parent portal (docs/custom-domain.md).
       { path: "/connections", labelKey: "nav.connections", icon: Plug, adminOnly: true },
       // For everyone (event organisers too), not just admins.
@@ -37,8 +38,11 @@ export const NAV_SECTIONS: Record<"bills" | "organization", NavSectionDef> = {
   },
 };
 
-export function visibleNavSections(role: string | null): NavSectionDef[] {
+export const navItemVisible = (i: { adminOnly?: boolean; superAdminOnly?: boolean }, role: string | null, isSuperAdmin: boolean) =>
+  (!i.adminOnly || role === "admin") && (!i.superAdminOnly || isSuperAdmin);
+
+export function visibleNavSections(role: string | null, isSuperAdmin: boolean): NavSectionDef[] {
   return Object.values(NAV_SECTIONS)
-    .map((s) => ({ ...s, items: s.items.filter((i) => !i.adminOnly || role === "admin") }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => navItemVisible(i, role, isSuperAdmin)) }))
     .filter((s) => s.items.length > 0);
 }

@@ -199,11 +199,13 @@ export async function portalLinkVars(
   event: { registrationConnected?: boolean; kind?: string },
   create: boolean
 ): Promise<{ portal_link: string; portal_link_line: string }> {
-  const base = await publicUrl("portal", null, "");
   const none = { portal_link: "", portal_link_line: "" };
-  if (!base || !participant.childId || !(event.registrationConnected || event.kind === "membership")) return none;
-  const child = await prisma.child.findUnique({ where: { id: participant.childId }, select: { id: true, portalToken: true, family: { select: { id: true, portalToken: true } } } });
+  if (!participant.childId || !(event.registrationConnected || event.kind === "membership")) return none;
+  const child = await prisma.child.findUnique({ where: { id: participant.childId }, select: { id: true, organizationId: true, portalToken: true, family: { select: { id: true, portalToken: true } } } });
   if (!child) return none;
+  // The person's organization's portal host.
+  const base = await publicUrl("portal", null, "", child.organizationId);
+  if (!base) return none;
   let token = child.family ? child.family.portalToken : child.portalToken;
   if (!token && create) {
     token = newPortalToken();

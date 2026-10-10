@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -20,9 +21,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  // Super-admin only (organizations step 2).
+  const notSuperAdmin = requireSuperAdmin(user);
+  if (notSuperAdmin) return notSuperAdmin;
 
   const { key, cs, en } = await req.json();
   if (!key || !cs || !en) {

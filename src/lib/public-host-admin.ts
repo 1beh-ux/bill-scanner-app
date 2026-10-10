@@ -15,7 +15,8 @@ export const normalizeHostname = (raw: string) =>
 export type HostInput = { hostname: string; purpose: PublicHostPurpose; eventId: string | null; isDefault: boolean; active: boolean };
 
 /** Validated row data, or an error code for the UI. */
-export async function checkHostInput(body: unknown, id: string | null): Promise<{ data: HostInput } | { error: string }> {
+/** organizationId: the acting organization -- the event and the default rule are within it. */
+export async function checkHostInput(body: unknown, id: string | null, organizationId: string): Promise<{ data: HostInput } | { error: string }> {
   const b = (body ?? {}) as Record<string, unknown>;
   const hostname = normalizeHostname(String(b.hostname ?? ""));
   const purpose = b.purpose as PublicHostPurpose;
@@ -24,15 +25,16 @@ export async function checkHostInput(body: unknown, id: string | null): Promise<
   if (!PURPOSES.includes(purpose)) return { error: "bad_purpose" };
   // The portal is a family link across events: only registration hosts can be tied to one event.
   const eventId = purpose === "registration" && typeof b.eventId === "string" && b.eventId ? b.eventId : null;
-  if (eventId && !(await prisma.event.findUnique({ where: { id: eventId }, select: { id: true } }))) return { error: "bad_event" };
+  if (eventId && !(await prisma.event.findFirst({ where: { id: eventId, organizationId }, select: { id: true } }))) return { error: "bad_event" };
   const active = b.active !== false;
-  // A default serves every event, so it can't be tied to one.
+  // A default serves every event of its organization, so it can't be tied to one.
   const isDefault = b.isDefault === true && !eventId;
+  // Hostnames are global: one hostname, one organization.
   if (await prisma.publicHost.findFirst({ where: { hostname, NOT: id ? { id } : undefined } })) return { error: "hostname_taken" };
   if (isDefault && active) {
-    // At most one active default per purpose; "both" counts for both.
+    // At most one active default per purpose in an organization; "both" counts for both.
     const overlapping: PublicHostPurpose[] = purpose === "both" ? PURPOSES : [purpose, "both"];
-    const other = await prisma.publicHost.findFirst({ where: { isDefault: true, active: true, purpose: { in: overlapping }, NOT: id ? { id } : undefined } });
+    const other = await prisma.publicHost.findFirst({ where: { organizationId, isDefault: true, active: true, purpose: { in: overlapping }, NOT: id ? { id } : undefined } });
     if (other) return { error: "default_taken" };
   }
   return { data: { hostname, purpose, eventId, isDefault, active } };

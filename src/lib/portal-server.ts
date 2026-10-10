@@ -43,6 +43,8 @@ export type PortalScope = {
   // Cookie name + HMAC subject: the child id (as in slice 2), or "f_<familyId>".
   subject: string;
   name: string;
+  // The family's / person's organization: the portal shows only its events and fields.
+  organizationId: string;
   members: PortalChild[];
   gateFailures: number;
   gateWindowStart: Date | null;
@@ -53,7 +55,7 @@ export async function loadScope(token: string): Promise<PortalScope | null> {
   if (token.length < 32) return null;
   const child = await loadChild(token);
   if (child) {
-    return { kind: "child", id: child.id, subject: child.id, name: child.name, members: [child], gateFailures: child.portalGateFailures, gateWindowStart: child.portalGateWindowStart };
+    return { kind: "child", id: child.id, subject: child.id, name: child.name, organizationId: child.organizationId, members: [child], gateFailures: child.portalGateFailures, gateWindowStart: child.portalGateWindowStart };
   }
   const family = await prisma.family.findUnique({
     where: { portalToken: token },
@@ -65,6 +67,7 @@ export async function loadScope(token: string): Promise<PortalScope | null> {
     id: family.id,
     subject: `f_${family.id}`,
     name: family.name,
+    organizationId: family.organizationId,
     members: family.members,
     gateFailures: family.portalGateFailures,
     gateWindowStart: family.portalGateWindowStart,
@@ -77,12 +80,12 @@ export async function loadScope(token: string): Promise<PortalScope | null> {
  * cookie for the CURRENT token (every data endpoint does).
  */
 export async function portalScope(token: string, gated: boolean): Promise<{ scope: PortalScope; error?: undefined } | { scope?: undefined; error: NextResponse }> {
-  // Every /api/portal route comes through here: a non-portal public host (or an unknown one) gets 404.
-  if (!hostAllowsPortal(await resolvePublicHost(await headers()))) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   const secret = portalSecret();
   if (!secret) return { error: NextResponse.json({ error: "portal_not_configured" }, { status: 503 }) };
   const scope = await loadScope(token);
-  if (!scope) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
+  // Every /api/portal route comes through here: on a public host that isn't a portal host of this
+  // family's organization (or an unknown host) the token doesn't exist.
+  if (!scope || !hostAllowsPortal(await resolvePublicHost(await headers()), scope.organizationId)) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   if (gated) {
     const value = (await cookies()).get(gateCookieName(scope.subject))?.value;
     if (!gateCookieValid(value, scope.subject, token, secret)) return { error: NextResponse.json({ error: "gate" }, { status: 401 }) };

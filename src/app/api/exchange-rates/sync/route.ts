@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/org-scope";
 import { syncRatesForDate, backfillRates } from "@/lib/exchange-rates";
 
 export const maxDuration = 300;
@@ -9,9 +10,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
+  // Super-admin only (organizations step 2).
+  const notSuperAdmin = requireSuperAdmin(user);
+  if (notSuperAdmin) return notSuperAdmin;
 
   const body = await req.json().catch(() => ({}));
 

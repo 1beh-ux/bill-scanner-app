@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/org-scope";
 import { convertToCzk } from "@/lib/exchange-rates";
 
 export const maxDuration = 300;
@@ -11,9 +12,9 @@ export async function POST() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
-    return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  }
+  // Super-admin only (organizations step 2).
+  const notSuperAdmin = requireSuperAdmin(user);
+  if (notSuperAdmin) return notSuperAdmin;
 
   // Approved bills are deliberately excluded: their stored rate is denormalized
   // so historical records don't shift when rates are added or corrected later.

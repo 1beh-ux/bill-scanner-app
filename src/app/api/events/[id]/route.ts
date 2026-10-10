@@ -35,7 +35,7 @@ export async function GET(
   }
   // Auto-send needs a connected sending account; without one it only accepts (settings warn).
   const autoSendReady = event.autoAccept === "accept_send" ? !!(await eventSender(event)) : null;
-  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "") });
+  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "", event.organizationId) });
 }
 
 export async function PATCH(

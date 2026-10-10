@@ -5,6 +5,7 @@
 // device. Tokens are secrets: never log them (or a URL containing one).
 import crypto from "crypto";
 import { publicUrl } from "@/lib/public-host";
+import { prisma } from "@/lib/prisma";
 
 /** 32 random bytes, base64url (43 chars). */
 export function newPortalToken(): string {
@@ -38,7 +39,11 @@ export function gateCookieValid(value: string | undefined, childId: string, toke
  * behind Cloud Run the request URL is the container's internal address.
  */
 export async function portalUrl(token: string, req: Request): Promise<string> {
-  const configured = await publicUrl("portal", null, `/p/${token}`);
+  // The portal host of the token owner's organization (a person's or a family's token).
+  const owner =
+    (await prisma.child.findUnique({ where: { portalToken: token }, select: { organizationId: true } })) ??
+    (await prisma.family.findUnique({ where: { portalToken: token }, select: { organizationId: true } }));
+  const configured = owner ? await publicUrl("portal", null, `/p/${token}`, owner.organizationId) : null;
   if (configured) return configured;
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? new URL(req.url).protocol.replace(":", "");

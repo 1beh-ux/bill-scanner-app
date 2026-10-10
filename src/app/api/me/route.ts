@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { isOrgAdmin } from "@/lib/org-scope";
 import { prisma } from "@/lib/prisma";
 import { sanitizeUiPrefs } from "@/lib/ui-prefs";
 
@@ -12,7 +13,9 @@ export async function GET() {
     id: user.id,
     email: user.email,
     displayName: user.displayName,
-    role: user.role,
+    // Effective role in the acting organization (a super-admin is admin there); the UI keys off this.
+    role: isOrgAdmin(user) ? "admin" : user.role,
+    isSuperAdmin: user.isSuperAdmin,
     preferredLang: user.preferredLang,
     preferredTheme: user.preferredTheme,
     landingPath: user.landingPath,

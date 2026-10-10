@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
-import { visibleNavSections } from "@/lib/nav-sections";
+import { navItemVisible, visibleNavSections } from "@/lib/nav-sections";
 import { MENU_ITEMS, MENU_SECTIONS } from "@/lib/menu-items";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -21,7 +21,7 @@ type GoogleAccount = {
 };
 
 export default function SettingsPage() {
-  const { t, roleLoaded, role, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules } = useTranslations();
+  const { t, roleLoaded, role, isSuperAdmin, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules } = useTranslations();
   const confirm = useConfirm();
   const [google, setGoogle] = useState<GoogleAccount | null>(null);
   // ?driveConnect=connected|error|in_use after coming back from Google's consent screen
@@ -152,7 +152,7 @@ export default function SettingsPage() {
           <p className="mb-1">{t("settingsPage.favoritesLabel")}</p>
           <div className="flex flex-col gap-1.5">
             {MENU_SECTIONS.map((section) => {
-              const items = MENU_ITEMS.filter((i) => i.section === section.id && (!i.adminOnly || role === "admin"));
+              const items = MENU_ITEMS.filter((i) => i.section === section.id && navItemVisible(i, role, isSuperAdmin));
               if (items.length === 0) return null;
               return (
                 <div key={section.id} className="flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -222,7 +222,7 @@ export default function SettingsPage() {
             className={inputClass + " mt-1"}
           >
             <option value="">{t("settingsPage.landingPathDefault")}</option>
-            {visibleNavSections(role).map((section) => (
+            {visibleNavSections(role, isSuperAdmin).map((section) => (
               <optgroup key={section.sectionLabelKey} label={t(section.sectionLabelKey)}>
                 {section.items.map((item) => (
                   <option key={item.path} value={item.path}>

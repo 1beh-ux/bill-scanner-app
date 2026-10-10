@@ -17,6 +17,8 @@ interface I18nContextValue {
   t: (key: string, vars?: Record<string, string>) => string;
   role: Role | null;
   roleLoaded: boolean;
+  // Překlady, Kurzy, editing Veřejné adresy (organizations step 2). UI only; the server checks.
+  isSuperAdmin: boolean;
   hiddenModules: string[];
   setHiddenModules: (m: string[]) => void;
 }
@@ -88,6 +90,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);
   const [role, setRole] = useState<Role | null>(readCachedRole);
   const [roleLoaded, setRoleLoaded] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
   // script in layout.tsx already set the real class on <html> before this
@@ -136,8 +139,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
+      .then((data: { role: Role; isSuperAdmin?: boolean; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
         setRole(data?.role ?? null);
+        setIsSuperAdmin(data?.isSuperAdmin === true);
         try {
           if (data?.role) localStorage.setItem("role", data.role);
           else localStorage.removeItem("role");
@@ -183,7 +187,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return (
     <I18nContext.Provider
-      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, hiddenModules, setHiddenModules }}
+      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, hiddenModules, setHiddenModules }}
     >
       {children}
     </I18nContext.Provider>

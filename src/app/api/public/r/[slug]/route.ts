@@ -14,7 +14,7 @@ import { hostAllowsRegistration, resolvePublicHost } from "@/lib/public-host";
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const event = await publicEvent(slug);
-  if (!event || !hostAllowsRegistration(await resolvePublicHost(req), event.id)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!event || !hostAllowsRegistration(await resolvePublicHost(req), event)) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);
   if (isSpam(body)) return NextResponse.json({ ok: true }, { status: 201 });

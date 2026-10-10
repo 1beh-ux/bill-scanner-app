@@ -15,6 +15,7 @@ export type MenuItem = {
   href: (eventId: string | null) => string;
   module?: MenuModule;
   adminOnly?: boolean;
+  superAdminOnly?: boolean;
 };
 
 const ev = (path: string) => (eventId: string | null) => (eventId ? `/events/${eventId}${path}` : "/events");
@@ -34,7 +35,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "budget", section: "bills", labelKey: "nav.budget", icon: BarChart3, href: ev("/budget") },
   { id: "payments", section: "bills", labelKey: "nav.payments", icon: QrCode, href: ev("/payments") },
   { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
-  ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly })),
+  ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
   { id: "participants", section: "participants", labelKey: "participantsPage.centralTitle", icon: Users, href: ev("/participants"), module: "roster" },
   { id: "participants-import", section: "participants", labelKey: "nav.participantsImport", icon: Upload, href: ev("/participants/import"), module: "roster" },
   { id: "health", section: "health", labelKey: "nav.health", icon: HeartPulse, href: ev("/health"), module: "health" },
@@ -44,5 +45,5 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "planning", section: "planning", labelKey: "nav.planning", icon: CalendarClock, href: ev("/planning"), module: "planning" },
   { id: "activities", section: "planning", labelKey: "planActivities.title", icon: Library, href: ev("/planning/activities"), module: "planning" },
   { id: "event-settings", section: "event", labelKey: "nav.eventSetup", icon: Settings, href: (id) => (id ? `/events/${id}` : "/events") },
-  ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly })),
+  ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
 ];

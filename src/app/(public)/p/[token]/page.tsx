@@ -24,13 +24,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   // Public host: only a portal one. Admin host: old e-mail links move to the portal host when there is one.
+  const portal = await loadScope(token);
+  if (!portal) notFound();
   const scope = await resolvePublicHost(await headers());
-  if (!hostAllowsPortal(scope)) notFound();
+  if (!hostAllowsPortal(scope, portal.organizationId)) notFound();
   if (scope.kind === "admin") {
-    const host = await publicHostFor("portal", null);
+    const host = await publicHostFor("portal", null, portal.organizationId);
     if (host) permanentRedirect(`https://${host}/p/${token}`);
   }
-  if (!(await loadScope(token))) notFound();
   const rows = await prisma.translation.findMany({ where: { key: { startsWith: "portal." } }, select: { key: true, cs: true } });
   return <PortalApp token={token} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />;
 }

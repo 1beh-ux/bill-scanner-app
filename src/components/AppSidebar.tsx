@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { Settings, Menu, X, Sun, Moon, Tent, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
+import { navItemVisible } from "@/lib/nav-sections";
 import { MENU_ITEMS, MENU_SECTIONS, type MenuSection } from "@/lib/menu-items";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { pickCurrentEvent, selectableEvents as pickSelectable } from "@/lib/current-event";
@@ -17,7 +18,7 @@ type EventOption = { id: string; name: string; status: string };
 const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", participants: "ucastnici", health: "zdravi", mail: "posta" };
 
 export default function AppSidebar() {
-  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, hiddenModules } =
+  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, isSuperAdmin, hiddenModules } =
     useTranslations();
   const pathname = usePathname();
   const router = useRouter();
@@ -93,7 +94,7 @@ export default function AppSidebar() {
   const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
   const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showHealth || showMail };
 
-  const visibleItems = MENU_ITEMS.filter((i) => (!i.adminOnly || role === "admin") && (!i.module || moduleShown[i.module])).map((i) => ({
+  const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin) && (!i.module || moduleShown[i.module])).map((i) => ({
     ...i,
     href: i.href(eventId),
     label: t(i.labelKey),
