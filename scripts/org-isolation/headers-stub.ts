@@ -1,7 +1,13 @@
 // Test stand-in for next/headers outside a Next request (scripts/test-org-isolation.ts):
-// no cookies (so no acting_org), and the admin host.
+// cookies come from globalThis.__orgTestCookies (e.g. acting_org), the host is the admin host.
+const jar = () => (globalThis as { __orgTestCookies?: Record<string, string> }).__orgTestCookies ?? {};
+
 export async function cookies() {
-  return { get: (name: string) => (name ? undefined : undefined), getAll: () => [], has: () => false };
+  return {
+    get: (name: string) => (name in jar() ? { name, value: jar()[name] } : undefined),
+    getAll: () => Object.entries(jar()).map(([name, value]) => ({ name, value })),
+    has: (name: string) => name in jar(),
+  };
 }
 
 export async function headers() {
