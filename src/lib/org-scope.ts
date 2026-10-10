@@ -59,3 +59,8 @@ export async function requireOrgAdminEvent(eventId: string): Promise<{ error: Ne
   if ("error" in inOrg) return inOrg;
   return { user, event: inOrg.event };
 }
+
+/** Is this payer (Author) the acting organization's? */
+export async function authorInOrg(user: ScopeUser, id: string): Promise<boolean> {
+  return (await prisma.author.count({ where: { id, organizationId: await getActingOrgId(user) } })) > 0;
+}

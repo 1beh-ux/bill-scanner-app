@@ -76,7 +76,8 @@ export async function POST(
   const body = await req.json().catch(() => ({}));
 
   if (body.authorId) {
-    const author = await prisma.author.findUnique({ where: { id: String(body.authorId) } });
+    // Only a payer of the event's organization can be attached.
+    const author = await prisma.author.findFirst({ where: { id: String(body.authorId), organizationId: await orgIdOfEvent(eventId) } });
     if (!author || !author.active || author.mergedIntoAuthorId) {
       return NextResponse.json({ error: "payer_not_found" }, { status: 404 });
     }
@@ -100,7 +101,7 @@ export async function POST(
   if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
 
   if (body.confirmSimilar !== true) {
-    const similar = await findSimilarAuthors(name);
+    const similar = await findSimilarAuthors(name, await orgIdOfEvent(eventId));
     if (similar.length > 0) return NextResponse.json({ error: "similar_payer_exists", similar }, { status: 409 });
   }
 

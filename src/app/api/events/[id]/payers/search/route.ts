@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { normalizeName } from "@/lib/payers";
 
-// Find payers from the global pool that are NOT yet attached to this event, so
+// Find payers from the organization's pool that are NOT yet attached to this event, so
 // one can be attached instead of creating a duplicate. Names only -- bank
 // details are revealed only after attaching.
 export async function GET(
@@ -21,7 +21,7 @@ export async function GET(
   if (q.length < 2) return NextResponse.json([]);
 
   const candidates = await prisma.author.findMany({
-    where: { active: true, mergedIntoAuthorId: null, eventAccess: { none: { eventId } } },
+    where: { active: true, mergedIntoAuthorId: null, eventAccess: { none: { eventId } }, organization: { events: { some: { id: eventId } } } },
     select: { id: true, canonicalName: true },
     orderBy: { canonicalName: "asc" },
   });

@@ -104,7 +104,8 @@ export async function runBillImport(
   const eventCategories = await prisma.eventCategory.findMany({ where: { eventId }, select: { id: true, name: true } });
   const categoryByName = new Map(eventCategories.map((c) => [fold(c.name), c.id]));
   const missingCategories = new Map<string, string>();
-  const authors = await prisma.author.findMany({ where: { active: true }, select: { id: true, canonicalName: true } });
+  // The event's organization's payers only.
+  const authors = await prisma.author.findMany({ where: { active: true, organization: { events: { some: { id: eventId } } } }, select: { id: true, canonicalName: true } });
   const authorByName = new Map(authors.map((a) => [fold(a.canonicalName), a.id]));
   const missingPayers = new Map<string, string>();
   for (const p of todo) {

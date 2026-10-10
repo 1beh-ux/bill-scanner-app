@@ -52,11 +52,12 @@ function tokenKey(s: string): string {
  * same words in another order ("Novák Jan" / "Jan Novák"), or one contains the
  * other. Names only -- callers must not reveal bank details from this.
  */
-export async function findSimilarAuthors(name: string): Promise<{ id: string; canonicalName: string }[]> {
+export async function findSimilarAuthors(name: string, organizationId: string): Promise<{ id: string; canonicalName: string }[]> {
   const n = normalizeName(name);
   if (!n) return [];
   const key = tokenKey(name);
-  const all = await prisma.author.findMany({ where: { active: true }, select: { id: true, canonicalName: true } });
+  // Within one organization only.
+  const all = await prisma.author.findMany({ where: { active: true, organizationId }, select: { id: true, canonicalName: true } });
   return all.filter((a) => {
     const an = normalizeName(a.canonicalName);
     if (an === n || tokenKey(a.canonicalName) === key) return true;

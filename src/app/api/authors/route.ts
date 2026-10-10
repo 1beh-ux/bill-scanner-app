@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
 
 // Global payer list (all payers, all events) -- admin only. Event users work
 // through /api/events/[id]/payers instead.
@@ -13,6 +13,7 @@ export async function GET() {
   if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const authors = await prisma.author.findMany({
+    where: await orgWhere(user),
     orderBy: { canonicalName: "asc" },
     include: {
       mergedInto: { select: { canonicalName: true } },

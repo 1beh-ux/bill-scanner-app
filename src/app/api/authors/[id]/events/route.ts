@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { authorInOrg, eventInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 export async function GET(
   req: NextRequest,
@@ -16,6 +16,8 @@ export async function GET(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const access = await prisma.authorEventAccess.findMany({
     where: { authorId: id },
     include: { event: true },
@@ -37,11 +39,14 @@ export async function POST(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const { eventId } = await req.json();
 
   if (!eventId) {
     return NextResponse.json({ error: "eventId is required" }, { status: 400 });
   }
+  if (!(await eventInOrg(user, eventId))) return notFound();
 
   await prisma.authorEventAccess.create({
     data: { authorId: id, eventId },
@@ -63,6 +68,8 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const { eventId } = await req.json();
 
   if (!eventId) {

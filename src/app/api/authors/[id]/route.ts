@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { authorInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 export async function GET(
   req: NextRequest,
@@ -18,6 +18,8 @@ export async function GET(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const author = await prisma.author.findUnique({ where: { id } });
 
   if (!author) {
@@ -40,6 +42,8 @@ export async function PATCH(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const body = await req.json();
   const { canonicalName, active } = body;
 
@@ -83,6 +87,8 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
 
   try {
     await prisma.author.delete({ where: { id } });

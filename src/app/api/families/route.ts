@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { orgIdOfUser } from "@/lib/org-owner";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { familyContacts, suggestFamilies } from "@/lib/portal-rules";
 import { childKey } from "@/lib/children";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { getActingOrgId, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 // Families / households on the Lidé page (docs/registration-slice3-spec.md B),
 // admin only. Never created automatically: "Navržené rodiny" are proposals
@@ -29,11 +28,13 @@ const memberSelect = {
 const person = (m: { id: string; name: string; isAdult: boolean; dateOfBirth: Date | null }) => ({ id: m.id, name: m.name, isAdult: m.isAdult, dateOfBirth: m.dateOfBirth });
 
 export async function GET() {
-  const { error } = await requireAdmin();
+  const { error, user } = await requireAdmin();
   if (error) return error;
+  // The acting organization's families and people only.
+  const organizationId = await getActingOrgId(user);
   const [families, loose] = await Promise.all([
-    prisma.family.findMany({ orderBy: { name: "asc" }, include: { members: { select: memberSelect, orderBy: [{ isAdult: "desc" }, { dateOfBirth: "asc" }] } } }),
-    prisma.child.findMany({ where: { familyId: null }, select: memberSelect }),
+    prisma.family.findMany({ where: { organizationId }, orderBy: { name: "asc" }, include: { members: { select: memberSelect, orderBy: [{ isAdult: "desc" }, { dateOfBirth: "asc" }] } } }),
+    prisma.child.findMany({ where: { familyId: null, organizationId }, select: memberSelect }),
   ]);
   const byId = new Map(loose.map((c) => [c.id, c]));
 
@@ -90,13 +91,19 @@ export async function POST(req: NextRequest) {
   const { error, user } = await requireAdmin();
   if (error) return error;
   const body = await req.json().catch(() => ({}));
+  // Every family / person id in any action must be the acting organization's; otherwise "not found".
+  const organizationId = await getActingOrgId(user);
+  const familyIds = [...new Set([body.familyId, body.keepId, ...ids(body.mergeIds)].filter((x): x is string => typeof x === "string"))];
+  const personIds = [...new Set([body.childId, ...ids(body.childIds)].filter((x): x is string => typeof x === "string"))];
+  if (familyIds.length && (await prisma.family.count({ where: { id: { in: familyIds }, organizationId } })) !== familyIds.length) return notFound();
+  if (personIds.length && (await prisma.child.count({ where: { id: { in: personIds }, organizationId } })) !== personIds.length) return notFound();
 
   if (body.action === "create") {
     const name = cleanName(body.name);
     const childIds = ids(body.childIds);
     if (!name || childIds.length === 0) return NextResponse.json({ error: "bad_request" }, { status: 400 });
     const family = await prisma.$transaction(async (tx) => {
-      const f = await tx.family.create({ data: { name, organizationId: await orgIdOfUser(user) } });
+      const f = await tx.family.create({ data: { name, organizationId } });
       // Only people not in a family yet: a person is in at most one.
       await tx.child.updateMany({ where: { id: { in: childIds }, familyId: null }, data: { familyId: f.id } });
       return f;

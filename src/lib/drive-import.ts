@@ -50,10 +50,13 @@ export async function findOrCreateAuthorForSubfolder(
   eventId: string
 ): Promise<{ author: Author; created: boolean }> {
   const trimmed = name.trim();
+  // Matched (and created) within the importing event's organization only.
+  const organizationId = await orgIdOfEvent(eventId);
 
   const existing = await prisma.author.findFirst({
     where: {
       active: true,
+      organizationId,
       canonicalName: { equals: trimmed, mode: "insensitive" },
     },
   });
@@ -61,7 +64,7 @@ export async function findOrCreateAuthorForSubfolder(
 
   // A new payer belongs to the importing event's organization.
   const author = await prisma.author.create({
-    data: { canonicalName: trimmed, organizationId: await orgIdOfEvent(eventId) },
+    data: { canonicalName: trimmed, organizationId },
   });
   return { author, created: true };
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { authorInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 // Full bank-detail change history of one payer -- admin only.
 export async function GET(
@@ -13,6 +13,8 @@ export async function GET(
   if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const { id } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, id))) return notFound();
   const rows = await prisma.authorBankAudit.findMany({
     where: { authorId: id },
     orderBy: { createdAt: "desc" },

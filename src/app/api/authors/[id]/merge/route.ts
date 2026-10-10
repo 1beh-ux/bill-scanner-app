@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
-import { isOrgAdmin } from "@/lib/org-scope";
+import { authorInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
 
 export async function POST(
   req: NextRequest,
@@ -17,6 +17,8 @@ export async function POST(
   }
 
   const { id: sourceId } = await params;
+  // Another organization's payer doesn't exist here.
+  if (!(await authorInOrg(user, sourceId))) return notFound();
   const body = await req.json().catch(() => ({}));
   const targetId: string | undefined = body.targetAuthorId;
   // Optional: the surviving payer takes these bank details (audited as `merge`).
@@ -40,7 +42,7 @@ export async function POST(
   ]);
 
   if (!source) return NextResponse.json({ error: "source_not_found" }, { status: 404 });
-  if (!target) return NextResponse.json({ error: "target_not_found" }, { status: 404 });
+  if (!target || target.organizationId !== source.organizationId) return NextResponse.json({ error: "target_not_found" }, { status: 404 });
   if (!source.active) return NextResponse.json({ error: "already_merged" }, { status: 400 });
   if (!target.active) return NextResponse.json({ error: "target_inactive" }, { status: 400 });
 
