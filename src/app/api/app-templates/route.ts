@@ -9,16 +9,16 @@ import { prisma } from "@/lib/prisma";
 // Vlastní) + what differs ("Porovnat"). POST { action: "restore", table, id }
 // ("Obnovit z aplikace") or { action: "pull", table, filter? } ("Načíst nové z aplikace").
 // Nothing here ever changes the app templates.
-async function access(req: NextRequest) {
+async function access(): Promise<{ error: NextResponse } | { organizationId: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
-  return { organizationId: await getActingOrgId(user), req };
+  return { organizationId: await getActingOrgId(user) };
 }
 const tableOf = (v: unknown): TemplateTable | null => (TEMPLATE_TABLES.includes(v as TemplateTable) ? (v as TemplateTable) : null);
 
 export async function GET(req: NextRequest) {
-  const a = await access(req);
+  const a = await access();
   if ("error" in a) return a.error;
   const params = new URL(req.url).searchParams;
   const table = tableOf(params.get("table"));
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const a = await access(req);
+  const a = await access();
   if ("error" in a) return a.error;
   const body = await req.json().catch(() => ({}));
   const table = tableOf(body.table);

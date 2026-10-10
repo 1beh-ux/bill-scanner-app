@@ -7,6 +7,7 @@ import { NextRequest } from "next/server";
 import type { User } from "@/generated/prisma";
 
 const TEST_ORG = "Test org (isolation)";
+const TEST_ORG_2 = "Test org (isolation) 2";
 const ZARE = "Pionýrská skupina Záře";
 
 type R = { ok: boolean; name: string; detail?: string };
@@ -48,6 +49,7 @@ async function main() {
   const org = await prisma.organization.create({ data: { name: TEST_ORG, shortName: "Test", contactEmail: null } });
   let admin: User | null = null;
   let eventId: string | null = null;
+  let org2Id: string | null = null;
   try {
     admin = await prisma.user.create({ data: { email: `org-isolation-${stamp}@test.invalid`, displayName: "Isolation test", role: "admin", organizationId: org.id } });
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = admin;
@@ -197,6 +199,63 @@ async function main() {
     r = await (await import("@/app/api/organizations/[id]/route")).PATCH(req(`/api/organizations/${superAdmin.organizationId}`, { method: "PATCH", body: { active: false } }), params({ id: superAdmin.organizationId }));
     check("super-admin can't deactivate their home organization", r.status === 400 && (await prisma.organization.findUniqueOrThrow({ where: { id: superAdmin.organizationId } })).active, `HTTP ${r.status}`);
     setCookies({});
+
+    // ===== step 4: app templates =====
+    const catRoute = await import("@/app/api/category-templates/route");
+    const appSync = await import("@/app/api/app-templates/route");
+    asUser(admin);
+    r = await catRoute.POST(req("/api/category-templates?level=app", { method: "POST", body: { name: `isolation ${stamp}` } }));
+    check("org admin: writing an app template -> 403", r.status === 403, `HTTP ${r.status}`);
+    r = await catRoute.GET(req("/api/category-templates?level=app"));
+    check("org admin: reading app templates -> 403", r.status === 403, `HTTP ${r.status}`);
+    // The test org's own template is invisible to Záře, and Záře's to the test org.
+    await prisma.organization.update({ where: { id: org.id }, data: { active: true } });
+    r = await catRoute.POST(req("/api/category-templates", { method: "POST", body: { name: `isolation-own ${stamp}` } }));
+    const ownCat = await json(r);
+    const testCats = ids((await json(await catRoute.GET(req("/api/category-templates")))).body);
+    asUser(superAdmin); // no acting_org -> Záře
+    const zareCats = ids((await json(await catRoute.GET(req("/api/category-templates")))).body);
+    check("test org's template invisible to Záře and vice versa", ownCat.status === 201 && JSON.stringify(testCats) === JSON.stringify([ownCat.body?.id]) && !zareCats.includes(ownCat.body?.id), JSON.stringify({ status: ownCat.status, testCats: testCats.length, inZare: zareCats.includes(ownCat.body?.id) }));
+
+    // A new organization gets copies of the active app templates.
+    const appCounts = {
+      category: await prisma.categoryTemplate.count({ where: { organizationId: null } }),
+      list: await prisma.listTemplate.count({ where: { organizationId: null, active: true } }),
+      email: await prisma.emailTemplate.count({ where: { organizationId: null } }),
+      field: await prisma.participantFieldTemplate.count({ where: { organizationId: null, active: true } }),
+    };
+    const created2 = await json(await orgsRoute.POST(req("/api/organizations", { method: "POST", body: { name: TEST_ORG_2, shortName: "Test2", adminEmail: `org-isolation-2-${stamp}@test.invalid`, adminName: "Isolation 2" } })));
+    org2Id = created2.body?.id ?? null;
+    if (!org2Id) throw new Error(`second test org not created: ${JSON.stringify(created2)}`);
+    const got = {
+      category: await prisma.categoryTemplate.count({ where: { organizationId: org2Id, sourceTemplateId: { not: null } } }),
+      list: await prisma.listTemplate.count({ where: { organizationId: org2Id, sourceTemplateId: { not: null } } }),
+      email: await prisma.emailTemplate.count({ where: { organizationId: org2Id, sourceTemplateId: { not: null } } }),
+      field: await prisma.participantFieldTemplate.count({ where: { organizationId: org2Id, sourceTemplateId: { not: null } } }),
+    };
+    check("new organization gets copies of the active app templates", JSON.stringify(got) === JSON.stringify(appCounts) && appCounts.category > 0, JSON.stringify({ app: appCounts, got }));
+
+    // Obnovit z aplikace restores one item; Načíst nové copies only what's missing.
+    const admin2 = await prisma.user.findFirstOrThrow({ where: { organizationId: org2Id } });
+    asUser(admin2);
+    const cat = await prisma.categoryTemplate.findFirstOrThrow({ where: { organizationId: org2Id }, include: { sourceTemplate: true } });
+    await prisma.categoryTemplate.update({ where: { id: cat.id }, data: { description: "isolation edit" } });
+    const statusOf = async () => ((await json(await appSync.GET(req("/api/app-templates?table=category")))).body as { id: string; status: string }[]).find((x) => x.id === cat.id)?.status;
+    const modified = await statusOf();
+    r = await appSync.POST(req("/api/app-templates", { method: "POST", body: { action: "restore", table: "category", id: cat.id } }));
+    const restored = await prisma.categoryTemplate.findUniqueOrThrow({ where: { id: cat.id } });
+    check("Obnovit z aplikace restores the item (Upraveno -> Výchozí)", modified === "modified" && r.status === 200 && restored.description === cat.sourceTemplate?.description && (await statusOf()) === "default", JSON.stringify({ modified, status: r.status, now: await statusOf() }));
+    const gone = await prisma.categoryTemplate.findFirstOrThrow({ where: { organizationId: org2Id, id: { not: cat.id } } });
+    await prisma.categoryTemplate.delete({ where: { id: gone.id } });
+    const pull1 = await json(await appSync.POST(req("/api/app-templates", { method: "POST", body: { action: "pull", table: "category" } })));
+    const pull2 = await json(await appSync.POST(req("/api/app-templates", { method: "POST", body: { action: "pull", table: "category" } })));
+    check("Načíst nové z aplikace copies only the missing item (1, then 0)", pull1.body?.created === 1 && pull2.body?.created === 0, JSON.stringify({ pull1: pull1.body, pull2: pull2.body }));
+    // The org admin's restore/pull never reaches another organization's rows.
+    const zareCat = await prisma.categoryTemplate.findFirst({ where: { organization: { name: ZARE } } });
+    if (zareCat) {
+      r = await appSync.POST(req("/api/app-templates", { method: "POST", body: { action: "restore", table: "category", id: zareCat.id } }));
+      check("Obnovit on another organization's item -> 404", r.status === 404, `HTTP ${r.status}`);
+    }
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;
@@ -227,19 +286,21 @@ async function main() {
       await step("planDay", () => prisma.planDay.deleteMany({ where: ev }));
       await step("event", () => prisma.event.deleteMany({ where: { id: eventId! } }));
     }
-    const ov = { organizationId: org.id };
-    await step("childGuardian", () => prisma.childGuardian.deleteMany({ where: { child: ov } }));
-    await step("child", () => prisma.child.deleteMany({ where: ov }));
-    await step("family", () => prisma.family.deleteMany({ where: ov }));
-    await step("author", () => prisma.author.deleteMany({ where: ov }));
-    await step("emailTemplate", () => prisma.emailTemplate.deleteMany({ where: ov }));
-    await step("categoryTemplate", () => prisma.categoryTemplate.deleteMany({ where: ov }));
-    await step("listTemplate", () => prisma.listTemplate.deleteMany({ where: ov }));
-    await step("participantFieldTemplate", () => prisma.participantFieldTemplate.deleteMany({ where: ov }));
-    await step("publicHost", () => prisma.publicHost.deleteMany({ where: ov }));
-    await step("user", () => prisma.user.deleteMany({ where: ov }));
-    await step("organization", () => prisma.organization.delete({ where: { id: org.id } }));
-    const left = await prisma.organization.count({ where: { name: TEST_ORG } });
+    for (const oid of [org.id, org2Id].filter((x): x is string => !!x)) {
+      const ov = { organizationId: oid };
+      await step("childGuardian", () => prisma.childGuardian.deleteMany({ where: { child: ov } }));
+      await step("child", () => prisma.child.deleteMany({ where: ov }));
+      await step("family", () => prisma.family.deleteMany({ where: ov }));
+      await step("author", () => prisma.author.deleteMany({ where: ov }));
+      await step("emailTemplate", () => prisma.emailTemplate.deleteMany({ where: ov }));
+      await step("categoryTemplate", () => prisma.categoryTemplate.deleteMany({ where: ov }));
+      await step("listTemplate", () => prisma.listTemplate.deleteMany({ where: ov }));
+      await step("participantFieldTemplate", () => prisma.participantFieldTemplate.deleteMany({ where: ov }));
+      await step("publicHost", () => prisma.publicHost.deleteMany({ where: ov }));
+      await step("user", () => prisma.user.deleteMany({ where: ov }));
+      await step("organization", () => prisma.organization.delete({ where: { id: oid } }));
+    }
+    const left = await prisma.organization.count({ where: { name: { in: [TEST_ORG, TEST_ORG_2] } } });
     console.log(`\ncleanup: ${errors.length ? `ERRORS -- ${errors.join("; ")}` : "ok"}; "${TEST_ORG}" rows left: ${left}`);
     if (errors.length || left) process.exitCode = 1;
   }
