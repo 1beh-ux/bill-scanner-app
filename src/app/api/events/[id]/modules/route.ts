@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { syncParticipantFieldsForEvent } from "@/lib/participant-field-sync";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning"];
 
@@ -38,7 +39,7 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
   const { id: eventId } = await params;

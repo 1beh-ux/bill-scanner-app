@@ -3,6 +3,7 @@ import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { backfillCandidates, promoteToPersonDocument } from "@/lib/person-documents";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // "Platí trvale" on an org document-type template (docs/registration-slice6-spec.md 1):
 // stored as ListTemplate.data.permanent; event document types copied from the
@@ -13,7 +14,7 @@ import { backfillCandidates, promoteToPersonDocument } from "@/lib/person-docume
 async function load(params: Promise<{ id: string }>) {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  if (user.role !== "admin") return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
   const template = await prisma.listTemplate.findUnique({ where: { id: (await params).id } });
   if (!template || template.kind !== "document") return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   return { user, template };

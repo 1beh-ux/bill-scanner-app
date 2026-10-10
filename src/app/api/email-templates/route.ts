@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
@@ -20,7 +21,7 @@ export async function PATCH(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 export async function POST(
   req: NextRequest,
@@ -11,7 +12,7 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 

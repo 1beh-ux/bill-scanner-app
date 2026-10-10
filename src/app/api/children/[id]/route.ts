@@ -4,11 +4,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { decideChange, profileFieldLabels, readGuardians, setGuardians, updateProfile } from "@/lib/child-profile";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { leftData, profileValues } from "@/lib/portal-rules";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 async function requireAdmin(): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; error?: undefined } | { user?: undefined; error: NextResponse }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  if (user.role !== "admin") return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
   return { user };
 }
 

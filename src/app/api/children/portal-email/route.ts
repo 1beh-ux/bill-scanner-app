@@ -4,6 +4,7 @@ import { getOrCreateOrgEmailTemplate } from "@/lib/email-template";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { PORTAL_INVITATION_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from "@/lib/portal-email";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // The "send portal link" compose page (/children/compose), admin only.
 // childIds: child ids and/or "family:<id>" (a family's link, slice 3 B).
@@ -15,7 +16,7 @@ import { loadTarget, orgSenderEmail, previewPortalEmail, sendPortalLinks } from 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const body = await req.json();
   const childIds: string[] = Array.isArray(body.childIds) ? body.childIds.filter((x: unknown): x is string => typeof x === "string").slice(0, 2000) : [];
   const purposeKey = body.purposeKey === PORTAL_INVITATION_PURPOSE_KEY ? PORTAL_INVITATION_PURPOSE_KEY : PORTAL_LINK_PURPOSE_KEY;

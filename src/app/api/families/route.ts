@@ -5,6 +5,7 @@ import { orgIdOfUser } from "@/lib/org-owner";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { familyContacts, suggestFamilies } from "@/lib/portal-rules";
 import { childKey } from "@/lib/children";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Families / households on the Lidé page (docs/registration-slice3-spec.md B),
 // admin only. Never created automatically: "Navržené rodiny" are proposals
@@ -12,7 +13,7 @@ import { childKey } from "@/lib/children";
 async function requireAdmin() {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  if (user.role !== "admin") return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
   return { user };
 }
 

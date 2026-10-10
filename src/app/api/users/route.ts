@@ -3,13 +3,14 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   const users = await prisma.user.findMany({ orderBy: { displayName: "asc" } });
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

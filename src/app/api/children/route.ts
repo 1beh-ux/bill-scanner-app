@@ -5,13 +5,14 @@ import { orgIdOfEvent } from "@/lib/org-owner";
 import { copyProfileFromLatest, linkChildren, nameKey, fillMissingGuardians } from "@/lib/children";
 import { profileFieldLabels } from "@/lib/child-profile";
 import { participantDisplayName } from "@/lib/participant-name";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Děti (child profiles) admin page: children with their events, unlinked
 // participants, and possible duplicates (same name, different/missing birth date).
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   // ?list=1: just the children, for the add-participant picker.
   if (new URL(req.url).searchParams.get("list")) {
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   const body = await req.json();
 
   if (body.action === "seed") {

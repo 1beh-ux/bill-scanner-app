@@ -12,6 +12,7 @@ import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
 import { eventSender } from "@/lib/auto-accept";
 import { publicUrl } from "@/lib/public-host";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -116,7 +117,7 @@ export async function PATCH(
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  if (touchesRegistration && user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (touchesRegistration && !isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
     return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
@@ -246,7 +247,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 

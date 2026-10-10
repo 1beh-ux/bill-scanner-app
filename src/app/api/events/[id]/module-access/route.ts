@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { ModuleKey } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning"];
 
@@ -15,7 +16,7 @@ export async function GET(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
   const { id: eventId } = await params;
@@ -48,7 +49,7 @@ export async function POST(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
   const { id: eventId } = await params;
@@ -77,7 +78,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
   const { id: eventId } = await params;

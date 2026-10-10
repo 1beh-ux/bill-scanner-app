@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // ?module=bills -> only events where the user may work with bills (what a
 // "move to another event" picker needs); without it, every event the user holds
@@ -19,7 +20,7 @@ export async function GET(req: NextRequest) {
   const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" || requested === "planning" ? requested : undefined;
   const events = await prisma.event.findMany({
     where:
-      user.role === "admin"
+      isOrgAdmin(user)
         ? {}
         : { moduleAccess: { some: { userId: user.id, ...(moduleFilter && { moduleKey: moduleFilter }) } } },
     orderBy: { startDate: "desc" },
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { PLAN_ORG_LIST_KINDS } from "@/lib/planning";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS];
 
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "admin_only" }, { status: 403 });
   }
 

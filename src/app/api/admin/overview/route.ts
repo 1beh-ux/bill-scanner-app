@@ -3,6 +3,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getDriveIdentity } from "@/lib/drive";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Read-only overview of every event for admins: who has access, whose Google
 // account runs its Drive (and whether that fell back to the service account),
@@ -11,7 +12,7 @@ import { getDriveIdentity } from "@/lib/drive";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const events = await prisma.event.findMany({ orderBy: { startDate: "desc" } });
 

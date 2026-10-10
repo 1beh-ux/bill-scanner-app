@@ -11,6 +11,7 @@ import { appliesTo, askedFields, askedMissing } from "@/lib/registration-fields"
 import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 type GuardianInput = {
   name?: string;
@@ -193,7 +194,7 @@ export async function POST(
   // generation), same as the existing accept flow (see ensureRegistrationNumber).
   const acceptImmediately = body.acceptImmediately === true;
   // Picked existing child (add form, registration-connected events) -- admin only.
-  const childId: string | null = typeof body.childId === "string" && user.role === "admin" ? body.childId : null;
+  const childId: string | null = typeof body.childId === "string" && isOrgAdmin(user) ? body.childId : null;
   if (childId && !(await prisma.child.findUnique({ where: { id: childId }, select: { id: true } }))) {
     return NextResponse.json({ error: "child_not_found" }, { status: 400 });
   }

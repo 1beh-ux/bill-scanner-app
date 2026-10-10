@@ -3,13 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Global payer list (all payers, all events) -- admin only. Event users work
 // through /api/events/[id]/payers instead.
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const authors = await prisma.author.findMany({
     orderBy: { canonicalName: "asc" },
@@ -25,7 +26,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const body = await req.json();
   const name = typeof body.canonicalName === "string" ? body.canonicalName.trim().replace(/\s+/g, " ") : "";

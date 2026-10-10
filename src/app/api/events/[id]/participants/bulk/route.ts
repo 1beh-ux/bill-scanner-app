@@ -5,6 +5,7 @@ import { requireAnyModuleAccess } from "@/lib/module-access";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 import { linkChildren } from "@/lib/children";
 import { FAMILY_TARGET_PREFIX } from "@/lib/portal-email";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 interface FailureDetail {
   participantId: string;
@@ -42,7 +43,7 @@ export async function POST(
   // targets of everyone selected who is linked now (family link when in a
   // family) for the compose page -- nothing is sent here.
   if (action === "link") {
-    if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+    if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
     const event = await prisma.event.findUnique({ where: { id: eventId }, select: { peopleUnlinked: true } });
     if (!event || event.peopleUnlinked) return NextResponse.json({ error: "people_unlinked" }, { status: 409 });
     const where = { id: { in: participantIds.filter((x) => typeof x === "string") }, eventId };

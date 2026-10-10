@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Šablony → Účastníci "Převzít pole z akcí": custom fields that exist only in
 // events (no org template with that key) become org templates -- the parent
@@ -31,14 +32,14 @@ async function candidates() {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   return NextResponse.json((await candidates()).map(({ row, events }) => ({ key: row.key, label: row.label, fieldType: row.fieldType, events })));
 }
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   // Optional `keys`: only the fields ticked in the picker.
   const { keys } = await req.json().catch(() => ({}));
   const only = Array.isArray(keys) ? new Set(keys.filter((k: unknown): k is string => typeof k === "string")) : null;

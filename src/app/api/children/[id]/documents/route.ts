@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { readUploadedFile } from "@/lib/participant-document-store";
 import { savePersonDocument } from "@/lib/person-documents";
 import { currentPersonDoc } from "@/lib/registration-status";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // The person's permanent documents (docs/registration-slice6-spec.md 3, 5), admin only.
 // GET: per "platí trvale" document type (plus any key the person still has
@@ -13,7 +14,7 @@ import { currentPersonDoc } from "@/lib/registration-status";
 async function admin() {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  if (user.role !== "admin") return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
+  if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };
   return { user };
 }
 

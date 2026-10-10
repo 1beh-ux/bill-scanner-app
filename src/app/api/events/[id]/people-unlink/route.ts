@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Event settings → Portál rodičů → "Odpojit od Lidé" (admin only).
 // GET = how many of the event's participants are linked now.
@@ -12,7 +13,7 @@ import { getCurrentUser } from "@/lib/auth";
 async function admin() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   return null;
 }
 

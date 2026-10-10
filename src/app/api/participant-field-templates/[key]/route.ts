@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { PORTAL_ACCESS_LEVELS } from "@/lib/portal-rules";
 import { FIELD_AUDIENCES, FIELD_LEVELS } from "@/lib/registration-fields";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 export async function PATCH(
   req: NextRequest,
@@ -12,7 +13,7 @@ export async function PATCH(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -78,7 +79,7 @@ export async function DELETE(
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  if (user.role !== "admin") {
+  if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

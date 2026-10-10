@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { eligibilityFacts } from "@/lib/child-profile";
 import { isEligible, readEligibility } from "@/lib/portal-rules";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 // Event settings -> "Registrace a členství" -> who may register in the portal
 // (docs/registration-portal-spec.md H). Admin only.
@@ -12,7 +13,7 @@ import { isEligible, readEligibility } from "@/lib/portal-rules";
 async function admin() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  if (user.role !== "admin") return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   return null;
 }
 
