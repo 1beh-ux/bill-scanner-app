@@ -5,7 +5,8 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { hostAllowsPortal, publicHostFor, publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { loadScope } from "@/lib/portal-server";
-import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
+import PublicFrame from "@/components/embed/PublicFrame";
+import { embedParams } from "@/components/embed/embed-params";
 import PortalApp from "./PortalApp";
 
 // Parent portal (docs/registration-portal-spec.md G) -- public, outside the login

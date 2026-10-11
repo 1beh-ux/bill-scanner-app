@@ -5,7 +5,8 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { hostAllowsRegistration, publicHostFor, publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { publicEvent, publicFormContext } from "@/lib/public-registration-server";
-import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
+import PublicFrame from "@/components/embed/PublicFrame";
+import { embedParams } from "@/components/embed/embed-params";
 import PublicForm from "./PublicForm";
 
 // Public registration page (docs/registration-slice3-spec.md D) -- outside the

@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { OrgFooter } from "@/components/registration/OrgBrand";
-import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
+import PublicFrame from "@/components/embed/PublicFrame";
+import { embedParams } from "@/components/embed/embed-params";
 
 // "/" on a public host (src/proxy.ts rewrites it here): whose host it is, nothing
 // else. An unknown host -- or one of a deactivated organization -- is a 404
