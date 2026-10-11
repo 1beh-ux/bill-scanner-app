@@ -49,7 +49,7 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
     publicOrg(portal.organizationId),
   ]);
   return (
-    <PublicFrame embed={embed} theme={theme}>
+    <PublicFrame embed={embed} theme={theme} appearance={org}>
       <PortalApp token={token} org={org} embed={embed} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />
     </PublicFrame>
   );

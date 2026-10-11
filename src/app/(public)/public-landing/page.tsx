@@ -33,7 +33,7 @@ export default async function PublicLandingPage({ searchParams }: { searchParams
   const { embed, theme } = embedParams((await searchParams) ?? {});
   // Embedded (the portal snippet without a token in the address): say how to get in.
   return (
-    <PublicFrame embed={embed} theme={theme}>
+    <PublicFrame embed={embed} theme={theme} appearance={org}>
       <main data-public-landing className={"flex items-center justify-center p-6 " + (embed ? "" : "min-h-screen bg-paper")}>
         <div className="max-w-md text-center">
           <p className="mb-1 text-[14px] font-semibold text-ink">{org.name}</p>

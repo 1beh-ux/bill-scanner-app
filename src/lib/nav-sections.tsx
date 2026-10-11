@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette } from "lucide-react";
 
 // superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
@@ -31,6 +31,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
       // Public hostnames for the registration page / parent portal (docs/custom-domain.md).
       { path: "/connections", labelKey: "nav.connections", icon: Plug, adminOnly: true },
+      // Font / sizes of the public pages (docs/custom-domain.md "Appearance").
+      { path: "/appearance", labelKey: "nav.appearance", icon: Palette, adminOnly: true },
       // For everyone (event organisers too), not just admins.
       { path: "/napoveda", labelKey: "nav.help", icon: LifeBuoy },
     ],

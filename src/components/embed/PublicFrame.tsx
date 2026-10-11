@@ -2,6 +2,8 @@
 
 import { createContext, useContext, useEffect, useRef } from "react";
 import { gateHeaders } from "@/components/embed/embed-client";
+import { publicFontVariables } from "@/components/embed/public-fonts";
+import { appearanceCss, type Appearance } from "@/lib/public-appearance";
 
 // Wraps every public page (/r, /p, landing). Embed mode (?embed=1, docs/custom-domain.md
 // "Embedding"): no theme toggle / footer (useEmbed), transparent background, compact
@@ -11,7 +13,9 @@ import { gateHeaders } from "@/components/embed/embed-client";
 const EmbedContext = createContext(false);
 export const useEmbed = () => useContext(EmbedContext);
 
-export default function PublicFrame({ embed, theme, children }: { embed: boolean; theme: "light" | "dark" | null; children: React.ReactNode }) {
+// appearance: the organization's font / size / line height (src/lib/public-appearance.ts), embedded or not.
+export default function PublicFrame({ embed, theme, appearance, children }: { embed: boolean; theme: "light" | "dark" | null; appearance?: Partial<Appearance> | null; children: React.ReactNode }) {
+  const css = appearanceCss(appearance ?? null, ".pub");
   const ref = useRef<HTMLDivElement>(null);
   // Before first paint (the root layout's script only knows the stored choice).
   const themeScript = theme
@@ -81,8 +85,9 @@ export default function PublicFrame({ embed, theme, children }: { embed: boolean
     <EmbedContext.Provider value={embed}>
       {themeScript && <script dangerouslySetInnerHTML={{ __html: themeScript }} />}
       {embed && <style>{"html,body{background:transparent!important}[data-embed] .pb-16{padding-bottom:1rem!important}"}</style>}
+      {css && <style>{css}</style>}
       <div ref={ref} data-embed={embed ? "" : undefined} className="flow-root">
-        {children}
+        <div className={`pub ${publicFontVariables}`}>{children}</div>
       </div>
     </EmbedContext.Provider>
   );

@@ -88,5 +88,8 @@ export async function portalLinkFor(organizationId: string, token: string): Prom
 
 /** What a public page shows of its organization (organizations step 5): name + contact e-mail. Cached per request. */
 export const publicOrg = perRequest((organizationId: string) =>
-  prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true, contactEmail: true } })
+  prisma.organization.findUniqueOrThrow({
+    where: { id: organizationId },
+    select: { name: true, contactEmail: true, publicFontFamily: true, publicHeadingFontFamily: true, publicBaseFontSize: true, publicHeadingScale: true, publicLineHeight: true },
+  })
 );

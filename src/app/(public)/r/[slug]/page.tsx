@@ -47,7 +47,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
     publicOrg(event.organizationId),
   ]);
   return (
-    <PublicFrame embed={embed} theme={theme}>
+    <PublicFrame embed={embed} theme={theme} appearance={org}>
     <PublicForm
       slug={slug}
       event={{
