@@ -101,3 +101,49 @@ Requirements:
 - `tabornik.online` is listed among Firebase's authorized domains.
 
 Dev hosts (localhost, Cloud Shell) keep firebaseapp.com outside Apple browsers.
+
+## Embedding
+
+The registration form (`/r/<slug>`) and the parent portal (`/p/<token>`) can sit inside the
+organization's own website in an iframe (spec: docs/embed-design.md).
+
+- **Who may frame what** (`src/proxy.ts` + `src/lib/host-rules.ts` `framingHeaders`):
+  - admin hosts (tabornik.online, www, run.app): every page `Content-Security-Policy: frame-ancestors 'none'`
+    + `X-Frame-Options: DENY`;
+  - public hosts: `/r/*` and `/p/*` get `frame-ancestors 'self' <PublicHost.embedOrigins>` and no
+    X-Frame-Options (empty list = `'none'` + DENY); the landing page only as `/?embed=1` (the portal
+    snippet's fallback without a token); everything else `'none'` + DENY;
+  - `/api/*`: only `X-Frame-Options: DENY` -- Next keeps the proxy's header over a route's own, and the
+    document downloads must keep their `Content-Security-Policy: sandbox`;
+  - `/__/*` (Firebase's sign-in helper, framed by our own pages): untouched.
+  The host's list comes from the 60 s per-instance cache in `src/lib/public-host.ts`.
+- **Settings** (Aplikace → Veřejné adresy, super-admin; read-only in Organizace → Připojení):
+  "Weby, které smějí stránku vložit" (`embedOrigins`, normalized `https://host[:port]`, http only for
+  localhost) and, for portal hosts, "Stránka portálu na webu organizace" (`embedPageUrl`, its origin
+  must be allowed). With `embedPageUrl` on the organization's default portal host every generated portal
+  link is `<embedPageUrl>#t=<token>` (`portalLinkFor`) -- the token after `#` never reaches the website's
+  server. Links already sent (`https://<portal host>/p/<token>`) keep working.
+- **Embed mode** `?embed=1` (`src/components/embed/PublicFrame.tsx`): no theme toggle / footer,
+  transparent background, compact margins, `?theme=light|dark` (else the system's), the height posted
+  as `{ type: "tabornik:height", height }` and `{ type: "tabornik:scrollTop" }` after submit / errors /
+  portal page changes; outside links open in a new tab, links within keep `embed=1`.
+- **Portal gate in a frame**: third-party cookies are blocked, so the gate call also returns the signed
+  value; embedded, the portal keeps it in sessionStorage (per token) and sends `x-portal-gate`
+  (`portalScope` accepts cookie or header). Portal downloads are fetched with that header.
+- **Snippets**: "Vložit na web" (event → Registrace a členství → public page) and "Vložit portál na web"
+  (Připojení, portal host row) -- `src/components/embed/EmbedSnippetDialog.tsx`.
+- **Checks**: `npx tsx scripts/check-proxy-hosts.ts` (rules), `bash scripts/embed-check.sh [none|zare]`
+  (live headers + no Google Fonts), `scripts/set-zare-embed.ts` (one-off: Záře's websites; the portal
+  page address only once that page exists).
+
+## Appearance
+
+Organizace → Vzhled veřejných stránek (`/appearance`, organization admin; `Organization.public*`):
+body font, heading font, base size (14–18 px), heading size (menší / běžná / větší), line height. Null =
+today's look. Applied to /r, /p and the landing (embedded or not) by `PublicFrame` through
+`appearanceCss` (`src/lib/public-appearance.ts`); the admin app is unchanged. All fonts are self-hosted
+by next/font at build time (`src/components/embed/public-fonts.ts`, preload off, so a browser downloads
+only the font a page uses); the app's IBM Plex is self-hosted too -- no request to Google Fonts.
+zare.cz (Drupal + Bootstrap 5): body = the system font stack ("Systémové písmo"), 16 px, line height
+1.5; headings and menu "Trebuchet MS" (not a Google font) -> "Podobné jako na zare.cz (Trebuchet MS)" =
+Trebuchet MS where installed, else Fira Sans; Bootstrap headings 40/32/28 px -> "Větší".
