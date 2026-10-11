@@ -11,7 +11,7 @@ import { readEligibility } from "@/lib/portal-rules";
 import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
 import { eventSender } from "@/lib/auto-accept";
-import { publicUrl } from "@/lib/public-host";
+import { embedOriginsOf, publicHostFor, publicUrl } from "@/lib/public-host";
 import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
 
 // GET is readable by any module grant -- the row carries no module-specific
@@ -36,7 +36,10 @@ export async function GET(
   }
   // Auto-send needs a connected sending account; without one it only accepts (settings warn).
   const autoSendReady = event.autoAccept === "accept_send" ? !!(await eventSender(event)) : null;
-  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "", event.organizationId) });
+  // "Vložit na web": which websites may frame this event's registration host.
+  const regHost = await publicHostFor("registration", id, event.organizationId);
+  const publicEmbedOrigins = regHost ? ((await embedOriginsOf(regHost)) ?? []) : [];
+  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "", event.organizationId), publicEmbedOrigins });
 }
 
 export async function PATCH(

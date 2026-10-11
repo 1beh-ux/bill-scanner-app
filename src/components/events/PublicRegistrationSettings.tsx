@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import EmbedSnippetDialog, { formSnippet } from "@/components/embed/EmbedSnippetDialog";
 import { MarkdownEditor } from "@/components/registration/Markdown";
 
 // Event settings -> "Registrace a členství" -> public page /r/<slug>
@@ -17,12 +18,13 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicBaseUrl?: string | null };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
   const [on, setOn] = useState(event.publicRegistration);
   const [slug, setSlug] = useState(event.publicSlug ?? "");
+  const [embedOpen, setEmbedOpen] = useState(false);
   const [content, setContent] = useState(event.landingContent ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -61,6 +63,21 @@ export default function PublicRegistrationSettings({
           <a href={url} target="_blank" rel="noreferrer" className="mt-1 block break-all text-[12px] text-ember hover:underline">
             {url}
           </a>
+        )}
+        {url && event.publicRegistration && event.publicSlug === slug.trim() && base && (
+          <button type="button" onClick={() => setEmbedOpen(true)} className="mt-1 block text-[12.5px] text-ember hover:underline">
+            {t("embed.formButton")}
+          </button>
+        )}
+        {embedOpen && base && (
+          <EmbedSnippetDialog
+            title={t("embed.formButton")}
+            snippet={formSnippet(base, slug.trim())}
+            previewUrl={`${base}/r/${slug.trim()}?embed=1`}
+            origins={event.publicEmbedOrigins ?? []}
+            onClose={() => setEmbedOpen(false)}
+            t={t}
+          />
         )}
         {/* The link's domain comes from Organizace -> Připojení -> Veřejné adresy (only admins see this component). */}
         <span className="mt-1 block text-[11.5px]">
