@@ -3,14 +3,16 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import EmbedSnippetDialog, { portalSnippet } from "@/components/embed/EmbedSnippetDialog";
 
 // "Veřejné adresy": hostnames that serve only the public registration page and/or
 // the parent portal (docs/custom-domain.md). Two places (organizations step 3):
 // app = Aplikace -> Veřejné adresy (super-admin): every organization's, add/edit;
 // otherwise Organizace -> Připojení: the organization's own, read-only (+ Ověřit).
 type Purpose = "registration" | "portal" | "both";
-type Host = { id: string; hostname: string; purpose: Purpose; eventId: string | null; isDefault: boolean; active: boolean; organizationId: string; event: { name: string } | null; organization?: { shortName: string } };
-type Form = { id: string | null; hostname: string; purpose: Purpose; eventId: string; isDefault: boolean; active: boolean; organizationId: string };
+type Host = { id: string; hostname: string; purpose: Purpose; eventId: string | null; isDefault: boolean; active: boolean; organizationId: string; embedOrigins: string[]; embedPageUrl: string | null; event: { name: string } | null; organization?: { shortName: string } };
+// embedOrigins: one origin per line in the form.
+type Form = { id: string | null; hostname: string; purpose: Purpose; eventId: string; isDefault: boolean; active: boolean; organizationId: string; embedOrigins: string; embedPageUrl: string };
 type OrgOption = { id: string; shortName: string };
 type Verify = { result: "ok" | "dns" | "tls" | "page" | "no_lb_ip"; detail?: string };
 
@@ -44,6 +46,7 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
   // Only on the app page, and only when the server agrees (super-admin).
   const [canEdit, setCanEdit] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [snippetFor, setSnippetFor] = useState<Host | null>(null);
 
   const load = () =>
     fetch(app ? "/api/public-hosts?all=1" : "/api/public-hosts")
@@ -80,8 +83,8 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
     return true;
   }
 
-  const toForm = (h: Host): Form => ({ id: h.id, hostname: h.hostname, purpose: h.purpose, eventId: h.eventId ?? "", isDefault: h.isDefault, active: h.active, organizationId: h.organizationId });
-  const empty = (): Form => ({ id: null, hostname: "", purpose: "registration", eventId: "", isDefault: false, active: true, organizationId: organization?.id ?? orgs[0]?.id ?? "" });
+  const toForm = (h: Host): Form => ({ id: h.id, hostname: h.hostname, purpose: h.purpose, eventId: h.eventId ?? "", isDefault: h.isDefault, active: h.active, organizationId: h.organizationId, embedOrigins: h.embedOrigins.join("\n"), embedPageUrl: h.embedPageUrl ?? "" });
+  const empty = (): Form => ({ id: null, hostname: "", purpose: "registration", eventId: "", isDefault: false, active: true, organizationId: organization?.id ?? orgs[0]?.id ?? "", embedOrigins: "", embedPageUrl: "" });
 
   async function toggleActive(h: Host) {
     const message = h.active ? t("connections.deactivateConfirm", { host: h.hostname }) : t("connections.activateConfirm", { host: h.hostname });
@@ -149,6 +152,18 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
               {t("connections.default")}
             </label>
             <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("connections.defaultHint")}</span>
+            <label className="text-[13px] text-ink-secondary">
+              {t("embed.originsLabel")}
+              <textarea rows={3} value={form.embedOrigins} onChange={(e) => setForm({ ...form, embedOrigins: e.target.value })} placeholder="https://www.example.cz" className={inputClass + " mt-1 font-mono"} />
+              <span className="mt-1 block text-[11.5px]">{t("embed.originsHelp")}</span>
+            </label>
+            {form.purpose !== "registration" && (
+              <label className="text-[13px] text-ink-secondary">
+                {t("embed.pageLabel")}
+                <input value={form.embedPageUrl} onChange={(e) => setForm({ ...form, embedPageUrl: e.target.value })} placeholder="https://www.example.cz/rodicovsky-portal" className={inputClass + " mt-1"} />
+                <span className="mt-1 block text-[11.5px]">{t("embed.pageHelp")}</span>
+              </label>
+            )}
             {error && <p className="text-[13px] text-red-600">{error}</p>}
             <div className="flex justify-end gap-3">
               <button type="button" onClick={() => setForm(null)} className="text-[14px] text-ink-secondary hover:underline">{t("common.cancel")}</button>
@@ -185,6 +200,10 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
                           {v === "running" ? t("connections.verifyRunning") : t(`connections.verify_${v.result}`) + (v.detail ? ` (${v.detail})` : "")}
                         </div>
                       )}
+                      <div className="mt-1 text-[12px] text-ink-secondary [overflow-wrap:anywhere]">
+                        {t("embed.originsShort")}: {h.embedOrigins.length ? h.embedOrigins.join(", ") : t("embed.nobody")}
+                        {h.purpose !== "registration" && h.embedPageUrl && <><br />{t("embed.pageShort")}: {h.embedPageUrl}</>}
+                      </div>
                       {commandsFor === h.id && (
                         <div className="mt-2">
                           <pre className="overflow-x-auto rounded bg-paper-2 p-2 text-[11.5px] text-ink">{gcloudCommands(h.hostname)}</pre>
@@ -202,6 +221,7 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
                     <td className="px-3 py-2">
                       <div className="flex flex-wrap justify-end gap-x-3 gap-y-1 whitespace-nowrap">
                         <button type="button" className={linkBtn} disabled={v === "running"} onClick={() => runVerify(h.id)}>{t("connections.verify")}</button>
+                        {h.purpose !== "registration" && h.active && <button type="button" className={linkBtn} onClick={() => setSnippetFor(h)}>{t("embed.portalButton")}</button>}
                         {canEdit && (
                           <>
                             <button type="button" className={linkBtn} onClick={() => setCommandsFor(commandsFor === h.id ? null : h.id)}>{t("connections.commands")}</button>
@@ -217,6 +237,16 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
             </tbody>
           </table>
         </div>
+        {snippetFor && (
+          <EmbedSnippetDialog
+            title={t("embed.portalButton")}
+            snippet={portalSnippet(`https://${snippetFor.hostname}`)}
+            previewUrl={`https://${snippetFor.hostname}/?embed=1`}
+            origins={snippetFor.embedOrigins}
+            onClose={() => setSnippetFor(null)}
+            t={t}
+          />
+        )}
         {!form && error && <p className="text-[13px] text-red-600">{error}</p>}
         <p className="text-[13px] text-ink-secondary">{t(app ? "connections.help" : "connections.helpReadOnly")}</p>
       </section>
