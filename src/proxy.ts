@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
+import { framingHeaders, isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
+import { embedOriginsOf } from "@/lib/public-host";
 
-export function proxy(req: NextRequest) {
+// Every response gets its framing headers (src/lib/host-rules.ts framingHeaders).
+export async function proxy(req: NextRequest) {
+  const res = route(req);
+  const host = requestHost(req.headers);
+  const admin = isAdminHost(host);
+  const { pathname } = req.nextUrl;
+  const embeddable = !admin && (pathname.startsWith("/r/") || pathname.startsWith("/p/"));
+  const origins = embeddable ? await embedOriginsOf(host).catch(() => null) : null;
+  for (const [k, v] of Object.entries(framingHeaders(admin, pathname, origins))) res.headers.set(k, v);
+  return res;
+}
+
+function route(req: NextRequest): NextResponse {
   const { pathname, search } = req.nextUrl;
 
   // Old run.app host -> custom domain (docs/custom-domain.md), only when

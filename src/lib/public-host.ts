@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 import type { PublicHostPurpose } from "@/generated/prisma";
 import { isAdminHost, requestHost } from "@/lib/host-rules";
 
-type HostRow = { hostname: string; purpose: PublicHostPurpose; eventId: string | null; isDefault: boolean; organizationId: string };
+type HostRow = { hostname: string; purpose: PublicHostPurpose; eventId: string | null; isDefault: boolean; organizationId: string; embedOrigins: string[]; embedPageUrl: string | null };
 type Want = "registration" | "portal";
 
 // ponytail: per-instance cache, so another instance sees an admin's change within TTL_MS.
@@ -17,9 +17,14 @@ let cache: { rows: HostRow[]; at: number } | null = null;
 async function activeHosts(): Promise<HostRow[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.rows;
   // A deactivated organization's hosts serve nothing (404) and are never used in links.
-  const rows = await prisma.publicHost.findMany({ where: { active: true, organization: { active: true } }, select: { hostname: true, purpose: true, eventId: true, isDefault: true, organizationId: true } });
+  const rows = await prisma.publicHost.findMany({ where: { active: true, organization: { active: true } }, select: { hostname: true, purpose: true, eventId: true, isDefault: true, organizationId: true, embedOrigins: true, embedPageUrl: true } });
   cache = { rows, at: Date.now() };
   return rows;
+}
+
+/** Websites allowed to frame /r and /p of this public host (null = not an active public host). Proxy, 60 s cache. */
+export async function embedOriginsOf(hostname: string): Promise<string[] | null> {
+  return (await activeHosts()).find((r) => r.hostname === hostname)?.embedOrigins ?? null;
 }
 
 /** After an admin change: this instance sees it at once. */

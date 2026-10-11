@@ -27,3 +27,35 @@ const PUBLIC_HOST_PREFIXES = ["/r/", "/p/", "/api/public/", "/api/portal/", "/_n
 export function publicHostAllows(pathname: string): boolean {
   return pathname === "/" || pathname === "/favicon.ico" || PUBLIC_HOST_PREFIXES.some((p) => pathname.startsWith(p));
 }
+
+/**
+ * Framing headers (docs/custom-domain.md "Embedding"). Pages on admin hosts and everything on
+ * public hosts except /r and /p: never framed. /r and /p on a public host: framed by that host's
+ * embedOrigins (null = unknown host -> never). /api: X-Frame-Options only -- a route's own CSP
+ * (the `sandbox` on document downloads) must survive, and Next keeps the proxy's header over the
+ * route's. /__/: Firebase's sign-in helper, framed by our own pages -- left alone.
+ */
+export function framingHeaders(admin: boolean, pathname: string, embedOrigins: string[] | null): Record<string, string> {
+  if (pathname.startsWith("/__/")) return {};
+  const deny = { "Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY" };
+  if (pathname.startsWith("/api/")) return { "X-Frame-Options": "DENY" };
+  if (admin || !(pathname.startsWith("/r/") || pathname.startsWith("/p/")) || !embedOrigins?.length) return deny;
+  return { "Content-Security-Policy": `frame-ancestors 'self' ${embedOrigins.join(" ")}` };
+}
+
+/**
+ * An allowed embedder as stored: "https://host[:port]" (http only for localhost), lowercase,
+ * no path / query / wildcard. Null = not a valid origin.
+ */
+export function normalizeOrigin(input: string): string | null {
+  let u: URL;
+  try {
+    u = new URL(input.trim());
+  } catch {
+    return null;
+  }
+  const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  if (!(u.protocol === "https:" || (u.protocol === "http:" && local))) return null;
+  if (u.username || u.password || (u.pathname !== "/" && u.pathname !== "") || u.search || u.hash || u.hostname.includes("*")) return null;
+  return u.origin.toLowerCase();
+}
