@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { framingHeaders, isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
+import { embeddablePath, framingHeaders, isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
 import { embedOriginsOf } from "@/lib/public-host";
 
 // Every response gets its framing headers (src/lib/host-rules.ts framingHeaders).
@@ -8,9 +8,9 @@ export async function proxy(req: NextRequest) {
   const host = requestHost(req.headers);
   const admin = isAdminHost(host);
   const { pathname } = req.nextUrl;
-  const embeddable = !admin && (pathname.startsWith("/r/") || pathname.startsWith("/p/"));
-  const origins = embeddable ? await embedOriginsOf(host).catch(() => null) : null;
-  for (const [k, v] of Object.entries(framingHeaders(admin, pathname, origins))) res.headers.set(k, v);
+  const embedQuery = req.nextUrl.searchParams.get("embed") === "1";
+  const origins = !admin && embeddablePath(pathname, embedQuery) ? await embedOriginsOf(host).catch(() => null) : null;
+  for (const [k, v] of Object.entries(framingHeaders(admin, pathname, origins, embedQuery))) res.headers.set(k, v);
   return res;
 }
 

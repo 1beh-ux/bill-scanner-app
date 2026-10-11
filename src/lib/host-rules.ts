@@ -35,13 +35,19 @@ export function publicHostAllows(pathname: string): boolean {
  * (the `sandbox` on document downloads) must survive, and Next keeps the proxy's header over the
  * route's. /__/: Firebase's sign-in helper, framed by our own pages -- left alone.
  */
-export function framingHeaders(admin: boolean, pathname: string, embedOrigins: string[] | null): Record<string, string> {
+export function framingHeaders(admin: boolean, pathname: string, embedOrigins: string[] | null, embedQuery = false): Record<string, string> {
   if (pathname.startsWith("/__/")) return {};
   const deny = { "Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY" };
   if (pathname.startsWith("/api/")) return { "X-Frame-Options": "DENY" };
-  if (admin || !(pathname.startsWith("/r/") || pathname.startsWith("/p/")) || !embedOrigins?.length) return deny;
+  if (admin || !embeddablePath(pathname, embedQuery) || !embedOrigins?.length) return deny;
   return { "Content-Security-Policy": `frame-ancestors 'self' ${embedOrigins.join(" ")}` };
 }
+
+/**
+ * /r and /p; the landing page only as ?embed=1 -- the portal snippet's fallback without a
+ * token ("open it through the link from the e-mail"), static text only.
+ */
+export const embeddablePath = (pathname: string, embedQuery: boolean) => pathname.startsWith("/r/") || pathname.startsWith("/p/") || (pathname === "/" && embedQuery);
 
 /**
  * An allowed embedder as stored: "https://host[:port]" (http only for localhost), lowercase,

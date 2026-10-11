@@ -25,6 +25,8 @@ for url in "https://prihlasky.kasicka.eu/r/$SLUG" "https://rodice.kasicka.eu/p/$
 done
 check "rodice landing CSP" "$(hdr https://rodice.kasicka.eu/ content-security-policy)" "frame-ancestors 'none'"
 check "rodice landing X-Frame-Options" "$(hdr https://rodice.kasicka.eu/ x-frame-options)" "DENY"
+# The portal snippet's fallback without a token: the landing as ?embed=1 may be framed by the same websites.
+[ "$EXPECT" = "zare" ] && check "rodice landing ?embed=1 CSP" "$(hdr "https://rodice.kasicka.eu/?embed=1" content-security-policy)" "$ZARE"
 for url in "https://prihlasky.kasicka.eu/r/$SLUG" "https://rodice.kasicka.eu/" "https://prihlasky.kasicka.eu/r/$SLUG?embed=1"; do
   n=$(curl -s "$url" | grep -cE "fonts\.(googleapis|gstatic)\.com")
   check "$url: no Google Fonts request" "$n" "0"

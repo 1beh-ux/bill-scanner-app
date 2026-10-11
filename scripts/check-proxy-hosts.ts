@@ -52,6 +52,8 @@ const FRAMING: [string, string, string][] = [
   ["public /r, no embedders", fh(false, "/r/x", []), NONE],
   ["public /p, unknown host", fh(false, "/p/x", null), NONE],
   ["public landing", fh(false, "/", ["https://www.zare.cz"]), NONE],
+  ["public landing ?embed=1 (portal snippet fallback)", JSON.stringify(framingHeaders(false, "/", ["https://www.zare.cz"], true)), JSON.stringify({ "Content-Security-Policy": "frame-ancestors 'self' https://www.zare.cz" })],
+  ["admin landing ?embed=1", JSON.stringify(framingHeaders(true, "/", ["https://www.zare.cz"], true)), NONE],
   ["public /r with embedders", fh(false, "/r/x", ["https://www.zare.cz", "https://zare.cz"]), JSON.stringify({ "Content-Security-Policy": "frame-ancestors 'self' https://www.zare.cz https://zare.cz" })],
   ["origin normalized", String(normalizeOrigin(" https://WWW.Zare.cz/ ")), "https://www.zare.cz"],
   ["origin with port", String(normalizeOrigin("https://zare.cz:8443")), "https://zare.cz:8443"],
