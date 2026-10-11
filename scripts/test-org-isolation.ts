@@ -349,6 +349,7 @@ async function main() {
     // Portal bank-check: only paid flags for this family's registrations.
     process.env.PORTAL_SECRET ??= "isolation-test-portal-secret-0123456789";
     const { gateCookieName, gateCookieValue } = await import("@/lib/portal-gate");
+    // (also used by the embedding checks below)
     setCookies({ [gateCookieName(`f_${family.id}`)]: gateCookieValue(`f_${family.id}`, family.portalToken!, process.env.PORTAL_SECRET) });
     const portal = await json(await (await import("@/app/api/portal/[token]/bank-check/route")).POST(req("/x", { method: "POST" }), params({ token: family.portalToken! })));
     setCookies({});
@@ -377,6 +378,49 @@ async function main() {
       const c = await (await import("@/app/api/events/[id]/documents/sync/route")).POST(req("/x", { method: "POST" }), params({ id: z.event.id }));
       check("Záře event: document sync / own e-mails -> 404", [a.status, b.status, c.status].every((x) => x === 404), JSON.stringify([a.status, b.status, c.status]));
     }
+
+    // ===== embedding + appearance (docs/embed-design.md) =====
+    asUser(admin);
+    setCookies({});
+    // Portal gate via the x-portal-gate header (embedded portal, no cookie).
+    const portalGet = (await import("@/app/api/portal/[token]/route")).GET;
+    const gateValue = gateCookieValue(`f_${family.id}`, family.portalToken!, process.env.PORTAL_SECRET!);
+    const hdrReq = (v?: string) => new NextRequest(`https://tabornik.online/api/portal/${family.portalToken}`, { headers: v ? { "x-portal-gate": v } : {} });
+    (globalThis as { __orgTestHeaders?: Record<string, string> }).__orgTestHeaders = { "x-portal-gate": gateValue };
+    const withHeader = (await portalGet(hdrReq(gateValue), params({ token: family.portalToken! }))).status;
+    (globalThis as { __orgTestHeaders?: Record<string, string> }).__orgTestHeaders = {};
+    const withNothing = (await portalGet(hdrReq(), params({ token: family.portalToken! }))).status;
+    (globalThis as { __orgTestHeaders?: Record<string, string> }).__orgTestHeaders = { "x-portal-gate": gateValue.slice(0, -2) + "xx" };
+    const forged = (await portalGet(hdrReq("forged"), params({ token: family.portalToken! }))).status;
+    (globalThis as { __orgTestHeaders?: Record<string, string> }).__orgTestHeaders = {};
+    check("portal gate: x-portal-gate header without cookie -> 200; neither -> 401; forged -> 401", withHeader === 200 && withNothing === 401 && forged === 401, JSON.stringify({ withHeader, withNothing, forged }));
+
+    // Embedding settings are the super-admin's.
+    const ownHost = await prisma.publicHost.findFirstOrThrow({ where: { organizationId: org.id } });
+    r = await (await import("@/app/api/public-hosts/[id]/route")).PATCH(req(`/api/public-hosts/${ownHost.id}`, { method: "PATCH", body: { hostname: ownHost.hostname, purpose: ownHost.purpose, embedOrigins: "https://evil.example" } }), params({ id: ownHost.id }));
+    check("organization admin can't change embedOrigins / embedPageUrl -> 403", r.status === 403 && (await prisma.publicHost.findUniqueOrThrow({ where: { id: ownHost.id } })).embedOrigins.length === 0, `HTTP ${r.status}`);
+
+    // Appearance stays in its organization (acting_org of a non-super-admin is ignored).
+    const zareLook = await prisma.organization.findUniqueOrThrow({ where: { id: zare.id }, select: { publicFontFamily: true, publicBaseFontSize: true } });
+    setCookies({ acting_org: zare.id });
+    const look = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { publicFontFamily: "lato", publicBaseFontSize: 16, publicHeadingScale: "large" } }));
+    setCookies({});
+    const { publicOrg: pOrg } = await import("@/lib/public-host");
+    const testLook = await prisma.organization.findUniqueOrThrow({ where: { id: org.id }, select: { publicFontFamily: true } });
+    const zareAfter = await prisma.organization.findUniqueOrThrow({ where: { id: zare.id }, select: { publicFontFamily: true, publicBaseFontSize: true } });
+    check("appearance: organization A's settings don't touch organization B", look.status === 200 && testLook.publicFontFamily === "lato" && JSON.stringify(zareAfter) === JSON.stringify(zareLook) && typeof pOrg === "function", JSON.stringify({ status: look.status, test: testLook, zareBefore: zareLook, zareAfter }));
+    const badLook = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { publicFontFamily: "comic-sans" } }));
+    check("appearance: a value outside the options -> 400", badLook.status === 400, `HTTP ${badLook.status}`);
+
+    // Portal links go to the organization's embedding page (#t=), never into the query string.
+    const portalHost = await prisma.publicHost.create({ data: { hostname: `portal-${stamp}.test.invalid`, purpose: "portal", isDefault: true, organizationId: org.id, embedOrigins: ["https://www.example.cz"], embedPageUrl: "https://www.example.cz/portal" } });
+    const { invalidatePublicHosts: inval, portalLinkFor } = await import("@/lib/public-host");
+    inval();
+    const link = await portalLinkFor(org.id, "TOKEN123");
+    await prisma.publicHost.update({ where: { id: portalHost.id }, data: { embedPageUrl: null } });
+    inval();
+    const plain = await portalLinkFor(org.id, "TOKEN123");
+    check("portal link: <embedPageUrl>#t=<token> with an embedding page, else https://<portal host>/p/<token>", link === "https://www.example.cz/portal#t=TOKEN123" && plain === `https://portal-${stamp}.test.invalid/p/TOKEN123`, JSON.stringify({ link, plain }));
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;

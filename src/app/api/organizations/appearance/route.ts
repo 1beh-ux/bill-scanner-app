@@ -8,7 +8,7 @@ import { cleanAppearance } from "@/lib/public-appearance";
 // (docs/custom-domain.md "Appearance"). Organization admin (a super-admin: where acting).
 const SELECT = { publicFontFamily: true, publicHeadingFontFamily: true, publicBaseFontSize: true, publicHeadingScale: true, publicLineHeight: true } as const;
 
-async function guard() {
+async function guard(): Promise<{ error: NextResponse } | { organizationId: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   if (!isOrgAdmin(user)) return { error: NextResponse.json({ error: "admin_only" }, { status: 403 }) };

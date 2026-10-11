@@ -12,5 +12,6 @@ export async function cookies() {
 
 export async function headers() {
   // globalThis.__orgTestHost lets a check pose as a public host (default: the admin host).
-  return new Headers({ host: (globalThis as { __orgTestHost?: string }).__orgTestHost ?? "tabornik.online" });
+  // __orgTestHeaders: extra request headers (e.g. x-portal-gate for the embedded portal).
+  return new Headers({ host: (globalThis as { __orgTestHost?: string }).__orgTestHost ?? "tabornik.online", ...(globalThis as { __orgTestHeaders?: Record<string, string> }).__orgTestHeaders });
 }
