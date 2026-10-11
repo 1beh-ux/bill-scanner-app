@@ -454,7 +454,7 @@ export default function EventDetailPage({
             <div className="flex flex-col gap-6">
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               <div>
-                <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
+                <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventDetail.registrationInfoTitle")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
                 <form onSubmit={handleSaveFeeSettings} className="flex max-w-md flex-col gap-2">
                   <label className="text-[13px] text-ink-secondary">
