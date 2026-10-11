@@ -121,19 +121,9 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [sortBy, setSortBy] = useState<"order" | "label" | "key">("order");
   const [saving, setSaving] = useState(false);
 
-  const [eventStartDate, setEventStartDate] = useState<string | null>(null);
-  const [vsEventType, setVsEventType] = useState("0");
-  const [vsOrderInYear, setVsOrderInYear] = useState("0");
-  const [vsYear, setVsYear] = useState(""); // "" = from start date
-  const [vsMembershipFieldKey, setVsMembershipFieldKey] = useState("");
-  const [vsSaving, setVsSaving] = useState(false);
-  const [qrSizeMm, setQrSizeMm] = useState("35");
-  const [qrSaving, setQrSaving] = useState(false);
-
   // Org scope has no module/event concept, no computed rows, no formula
   // config -- it only ever manages custom-field templates.
   const orgFields = isEvent ? fields : fields.filter((f) => f.kind === "custom");
-  const customFields = fields.filter((f) => f.kind === "custom");
   const q = search.trim().toLowerCase();
   const visibleFields = orgFields
     .filter((f) => !q || f.label.toLowerCase().includes(q) || f.key.toLowerCase().includes(q))
@@ -148,9 +138,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
   const computedFields = visibleFields.filter((f) => f.kind === "computed");
   const nonComputedFields = visibleFields.filter((f) => f.kind !== "computed");
-  // Membership = an Ano/Ne field; which values mean Ano is set on that field.
-  const booleanFieldOptions = customFields.filter((f) => f.fieldType === "boolean");
-
 
   async function load() {
     setLoading(true);
@@ -162,17 +149,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           .catch(() => ({}))
       );
       requests.push(
-        fetch(`/api/events/${eventId}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-      );
-      requests.push(
         fetch("/api/participant-field-templates")
           .then((r) => (r.ok ? r.json() : []))
           .catch(() => [])
       );
     }
-    const [fieldsData, moduleAccess, eventData, templateData] = await Promise.all(requests);
+    const [fieldsData, moduleAccess, templateData] = await Promise.all(requests);
     if (isEvent) setTemplates(new Map((templateData as Field[]).filter((f) => f.active).map((f) => [f.key, f])));
     // Org templates carry no `kind` -- they're all custom fields; without it every
     // `kind === "custom"` check below hid them (empty Šablony → Účastníci list).
@@ -180,23 +162,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     if (isEvent) {
       const access = moduleAccess as Record<string, boolean>;
       setEnabledModules(new Set((Object.keys(access) as ModuleKey[]).filter((k) => access[k])));
-      const ev = eventData as {
-        startDate: string | null;
-        vsYear: number | null;
-        vsEventType: number | null;
-        vsOrderInYear: number | null;
-        vsMembershipFieldKey: string | null;
-        vsMemberValues: string[] | null;
-        qrSizeMm: number | null;
-      } | null;
-      if (ev) {
-        setEventStartDate(ev.startDate);
-        setVsEventType(String(ev.vsEventType ?? 0));
-        setVsOrderInYear(String(ev.vsOrderInYear ?? 0));
-        setVsYear(ev.vsYear == null ? "" : String(ev.vsYear).padStart(2, "0"));
-        setVsMembershipFieldKey(ev.vsMembershipFieldKey ?? "");
-        setQrSizeMm(String(ev.qrSizeMm ?? 35));
-      }
     }
     setLoading(false);
   }
@@ -421,33 +386,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     load();
   }
 
-  async function saveVsConfig() {
-    setVsSaving(true);
-    await fetch(`/api/events/${eventId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vsYear: vsYear.trim() === "" ? null : Number(vsYear) || 0,
-        vsEventType: Number(vsEventType) || 0,
-        vsOrderInYear: Number(vsOrderInYear) || 0,
-        vsMembershipFieldKey: vsMembershipFieldKey || null,
-      }),
-    });
-    setVsSaving(false);
-    setExpandedId(null);
-  }
-
-  async function saveQrSize() {
-    setQrSaving(true);
-    await fetch(`/api/events/${eventId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ qrSizeMm: Number(qrSizeMm) || 35 }),
-    });
-    setQrSaving(false);
-    setExpandedId(null);
-  }
-
   // Where the field shows up -- one pill per place, click to switch. "E-maily"
   // (`email`): the {{variable}} is offered in every e-mail template editor and
   // filled in e-mails; "Dokumenty" (`documents`): filled in generated documents.
@@ -614,46 +552,6 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     );
   }
 
-  // Live example of the composed variable symbol as vsEventType/
-  // vsOrderInYear change -- year comes from the real event start date,
-  // sequence is a placeholder (a real participant's is assigned at
-  // acceptance), membership is shown both ways since it varies per person.
-  function vsPreview() {
-    const year = vsYear.trim() !== ""
-      ? String((Number(vsYear) || 0) % 100).padStart(2, "0")
-      : eventStartDate ? String(new Date(eventStartDate).getUTCFullYear() % 100).padStart(2, "0") : "··";
-    const type = String(Number(vsEventType) || 0).slice(-1);
-    const order = String(Number(vsOrderInYear) || 0).slice(-1);
-    const seq = "0001";
-    const digits: { value: string; label: string; color: string }[] = [
-      { value: year, label: t("participantFieldAdmin.vsPreviewYear"), color: "#1B1F27" },
-      { value: type, label: t("participantFieldAdmin.vsPreviewType"), color: "#6B675F" },
-      { value: order, label: t("participantFieldAdmin.vsPreviewOrder"), color: "#6B675F" },
-      { value: "0/1", label: t("participantFieldAdmin.vsPreviewMembership"), color: "#C2652E" },
-      { value: seq, label: t("participantFieldAdmin.vsPreviewSequence"), color: "#6B5CA5" },
-    ];
-    return (
-      <div className="rounded-lg bg-paper p-4">
-        <div className="flex items-start justify-center gap-3">
-          {digits.map((d, i) => (
-            <div key={i} className="flex w-[76px] flex-col items-center">
-              <div
-                className="w-full rounded-md py-1.5 text-center font-mono text-[15px] font-semibold text-white"
-                style={{ background: d.color }}
-              >
-                {d.value}
-              </div>
-              <div className="mt-1 text-center text-[10px] leading-tight text-ink-secondary">{d.label}</div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-3 text-center font-mono text-[13px] text-ink-secondary">
-          {t("participantFieldAdmin.vsPreviewNonMember")} {year}{type}{order}0{seq} · {t("participantFieldAdmin.vsPreviewMember")} {year}{type}{order}1{seq}
-        </p>
-      </div>
-    );
-  }
-
   function editPanel(field: Field) {
     const isCustom = field.kind === "custom";
     return (
@@ -720,100 +618,11 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.priceConfigHint")}</p>
           )}
 
-          {field.kind === "computed" && field.computedType === "payment_qr_image" && (
-            <div className="flex flex-col gap-3">
-              <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.qrConfigHint")}</p>
-              {isEvent && (
-                <>
-                  <label className="max-w-[220px] text-[12px] text-ink-secondary">
-                    {t("participantFieldAdmin.qrSizeLabel")}
-                    <input
-                      type="number"
-                      min={10}
-                      max={150}
-                      value={qrSizeMm}
-                      onChange={(e) => setQrSizeMm(e.target.value)}
-                      className={inputClass + " mt-1"}
-                    />
-                  </label>
-                  <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.qrSizeHint")}</p>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">
-                      {t("common.cancel")}
-                    </button>
-                    <button type="button" onClick={saveQrSize} disabled={qrSaving} className={btnPrimary}>
-                      {qrSaving ? t("common.loading") : t("participantFieldAdmin.vsSaveButton")}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {isEvent && field.kind === "computed" && field.computedType === "variable_symbol" && (
-            <div className="flex flex-col gap-3">
-              <div className="grid grid-cols-3 gap-2">
-                <label className="text-[12px] text-ink-secondary">
-                  {t("participantFieldAdmin.vsYearLabel")}
-                  <input
-                    type="number"
-                    min={0}
-                    max={99}
-                    value={vsYear}
-                    placeholder={eventStartDate ? String(new Date(eventStartDate).getUTCFullYear() % 100).padStart(2, "0") : ""}
-                    onChange={(e) => setVsYear(e.target.value)}
-                    className={inputClass + " mt-1"}
-                  />
-                </label>
-                <label className="text-[12px] text-ink-secondary">
-                  {t("participantFieldAdmin.vsEventTypeLabel")}
-                  <input
-                    type="number"
-                    min={0}
-                    max={9}
-                    value={vsEventType}
-                    onChange={(e) => setVsEventType(e.target.value)}
-                    className={inputClass + " mt-1"}
-                  />
-                </label>
-                <label className="text-[12px] text-ink-secondary">
-                  {t("participantFieldAdmin.vsOrderInYearLabel")}
-                  <input
-                    type="number"
-                    min={0}
-                    max={9}
-                    value={vsOrderInYear}
-                    onChange={(e) => setVsOrderInYear(e.target.value)}
-                    className={inputClass + " mt-1"}
-                  />
-                </label>
-              </div>
-              <label className="text-[12px] text-ink-secondary">
-                {t("participantFieldAdmin.vsMembershipFieldLabel")}
-                <select
-                  value={vsMembershipFieldKey}
-                  onChange={(e) => setVsMembershipFieldKey(e.target.value)}
-                  className={inputClass + " mt-1"}
-                >
-                  <option value="">{t("common.none")}</option>
-                  {booleanFieldOptions.map((f) => (
-                    <option key={f.key} value={f.key}>
-                      {f.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="text-[12px] text-ink-secondary">{t("participantFieldAdmin.vsMembershipValuesHint")}</p>
-              {vsPreview()}
-              <div className="flex justify-end gap-2">
-                <button type="button" onClick={() => setExpandedId(null)} className="text-[13px] text-ink-secondary hover:underline">
-                  {t("common.cancel")}
-                </button>
-                <button type="button" onClick={saveVsConfig} disabled={vsSaving} className={btnPrimary}>
-                  {vsSaving ? t("common.loading") : t("participantFieldAdmin.vsSaveButton")}
-                </button>
-              </div>
-            </div>
+          {isEvent && field.kind === "computed" && (field.computedType === "payment_qr_image" || field.computedType === "variable_symbol") && (
+            <p className="text-[12px] text-ink-secondary">
+              {t("paymentSettings.movedHint")}{" "}
+              <a href={`/events/${eventId}?tab=platba`} className="text-ember hover:underline">{t("eventSettings.tabPayment")}</a>
+            </p>
           )}
         </td>
       </tr>

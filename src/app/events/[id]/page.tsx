@@ -11,7 +11,7 @@ import HealthNotesSettings from "@/components/health/HealthNotesSettings";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import PortalSettings from "@/components/events/PortalSettings";
-import PriceSettings from "@/components/events/PriceSettings";
+import PaymentSettings from "@/components/events/PaymentSettings";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
 import PortalCardLayout from "@/components/events/PortalCardLayout";
 import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
@@ -95,8 +95,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
-const SECTION_KEYS: Tab[] = ["akce", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
+type Tab = "akce" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
+const SECTION_KEYS: Tab[] = ["akce", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -139,10 +139,6 @@ export default function EventDetailPage({
   const [syncingCategories, setSyncingCategories] = useState(false);
 
 
-  const [memberPriceCzk, setMemberPriceCzk] = useState("");
-  const [nonMemberPriceCzk, setNonMemberPriceCzk] = useState("");
-  const [registrationBankAccountNumber, setRegistrationBankAccountNumber] = useState("");
-  const [registrationBankCode, setRegistrationBankCode] = useState("");
   const [registrationDeadline, setRegistrationDeadline] = useState("");
   const [feeError, setFeeError] = useState<string | null>(null);
   const [feeSaving, setFeeSaving] = useState(false);
@@ -198,17 +194,13 @@ export default function EventDetailPage({
   useEffect(() => {
     if (tab === "zdravi" && !moduleAccess.health) setTab("akce");
     if (tab === "posta" && !moduleAccess.mail && !moduleAccess.health) setTab("akce");
-    if (tab === "dokumenty" && !moduleAccess.mail) setTab("akce");
+    if (tab === "dokumenty" && !moduleAccess.mail && !moduleAccess.health) setTab("akce");
     if (tab === "planovani" && !moduleAccess.planning) setTab("akce");
     if (tab === "ucastnici" && !moduleAccess.health && !moduleAccess.mail) setTab("akce");
   }, [tab, moduleAccess]);
 
   useEffect(() => {
     if (event) {
-      setMemberPriceCzk(event.memberPriceCzk != null ? String(event.memberPriceCzk) : "");
-      setNonMemberPriceCzk(event.nonMemberPriceCzk != null ? String(event.nonMemberPriceCzk) : "");
-      setRegistrationBankAccountNumber(event.registrationBankAccountNumber ?? "");
-      setRegistrationBankCode(event.registrationBankCode ?? "");
       setMailQuestionnaireUrl(event.mailQuestionnaireUrl ?? "");
       setRegistrationDeadline(event.registrationDeadline ? event.registrationDeadline.slice(0, 10) : "");
     }
@@ -223,10 +215,6 @@ export default function EventDetailPage({
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        memberPriceCzk: memberPriceCzk.trim() === "" ? null : Number(memberPriceCzk),
-        nonMemberPriceCzk: nonMemberPriceCzk.trim() === "" ? null : Number(nonMemberPriceCzk),
-        registrationBankAccountNumber: registrationBankAccountNumber.trim() || null,
-        registrationBankCode: registrationBankCode.trim() || null,
         registrationDeadline: registrationDeadline || null,
         mailQuestionnaireUrl: mailQuestionnaireUrl.trim() || null,
       }),
@@ -350,6 +338,7 @@ export default function EventDetailPage({
   // help = Nápověda topic for the tab (none for Plánování yet).
   const visibleSections: { key: Tab; labelKey: string; help?: string }[] = [
     { key: "akce", labelKey: "eventSettings.tabAkce", help: "uvod" },
+    { key: "platba", labelKey: "eventSettings.tabPayment" },
     ...(isAdmin ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
     { key: "verejna", labelKey: "eventSettings.tabPublic" },
     ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
@@ -358,7 +347,7 @@ export default function EventDetailPage({
     ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth", help: "nastaveni-zdravi" }] : []),
     ...(moduleAccess.mail || moduleAccess.health ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
-    ...(moduleAccess.mail ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(moduleAccess.mail || moduleAccess.health ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
   ];
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
@@ -467,34 +456,6 @@ export default function EventDetailPage({
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("feeSettings.title")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
                 <form onSubmit={handleSaveFeeSettings} className="flex max-w-md flex-col gap-2">
-                  <input
-                    type="number"
-                    placeholder={t("feeSettings.memberPriceLabel")}
-                    value={memberPriceCzk}
-                    onChange={(e) => setMemberPriceCzk(e.target.value)}
-                    className={inputClass}
-                  />
-                  <input
-                    type="number"
-                    placeholder={t("feeSettings.nonMemberPriceLabel")}
-                    value={nonMemberPriceCzk}
-                    onChange={(e) => setNonMemberPriceCzk(e.target.value)}
-                    className={inputClass}
-                  />
-                  <input
-                    type="text"
-                    placeholder={t("feeSettings.bankAccountLabel")}
-                    value={registrationBankAccountNumber}
-                    onChange={(e) => setRegistrationBankAccountNumber(e.target.value)}
-                    className={inputClass}
-                  />
-                  <input
-                    type="text"
-                    placeholder={t("feeSettings.bankCodeLabel")}
-                    value={registrationBankCode}
-                    onChange={(e) => setRegistrationBankCode(e.target.value)}
-                    className={inputClass}
-                  />
                   <label className="text-[13px] text-ink-secondary">
                     {t("eventDetail.registrationDeadlineLabel")}
                     <input
@@ -525,6 +486,9 @@ export default function EventDetailPage({
             </div>
           )}
 
+          {/* Platba a účet: prices, payment account, variable symbol, QR, Dokument platby, bank check. */}
+          {tab === "platba" && event && <PaymentSettings key={event.id} eventId={id} event={event} isAdmin={isAdmin} onSaved={load} t={t} />}
+
           {/* Portál rodičů: registrace a členství + portal settings + karta přihlášky. */}
           {tab === "portal" && isAdmin && event && <RegistrationSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />}
 
@@ -537,7 +501,6 @@ export default function EventDetailPage({
               ) : (
                 isAdmin && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
               )}
-              <PriceSettings key={event.id} eventId={id} event={event} onSaved={load} t={t} />
             </div>
           )}
 
@@ -735,7 +698,7 @@ export default function EventDetailPage({
           )}
 
           {/* Sledované dokumenty: the document types tracked per participant (+ their Google Doc templates). */}
-          {tab === "dokumenty" && moduleAccess.mail && (
+          {tab === "dokumenty" && (moduleAccess.mail || moduleAccess.health) && (
             <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("eventSettings.tabDocuments")} />
           )}
 

@@ -39,11 +39,6 @@ export default function PortalSettings({
     autoSendReady?: boolean | null;
     location: string | null;
     portalInfo: string | null;
-    paymentDocTypeId: string | null;
-    bankCheckEnabled: boolean;
-    bankAccountId: string | null;
-    registrationBankAccountNumber: string | null;
-    registrationBankCode: string | null;
   };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
@@ -55,14 +50,6 @@ export default function PortalSettings({
   // Shown on the portal's registration card (slice 3 F).
   const [location, setLocation] = useState(event.location ?? "");
   const [portalInfo, setPortalInfo] = useState(event.portalInfo ?? "");
-  // "Dokument platby" (slice 4 #5): received = "Zaplaceno" in the portal; none = as before.
-  const [paymentDocTypeId, setPaymentDocTypeId] = useState(event.paymentDocTypeId ?? "");
-  const [docTypes, setDocTypes] = useState<{ id: string; name: string }[]>([]);
-  // Automatic payment check (docs/bank-payments-design.md): only the organization's Fio accounts
-  // equal to the event's payment account (saved above) qualify.
-  const [bankCheck, setBankCheck] = useState(event.bankCheckEnabled);
-  const [bankAccountId, setBankAccountId] = useState(event.bankAccountId ?? "");
-  const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber: string; bankCode: string; tokenSetAt: string | null }[]>([]);
   const [everyone, setEveryone] = useState(!!initial.everyone);
   const [yearFrom, setYearFrom] = useState(initial.birthYearFrom != null ? String(initial.birthYearFrom) : "");
   const [yearTo, setYearTo] = useState(initial.birthYearTo != null ? String(initial.birthYearTo) : "");
@@ -79,14 +66,6 @@ export default function PortalSettings({
     fetch(`/api/events/${eventId}/portal-eligibility`)
       .then((r) => (r.ok ? r.json() : null))
       .then(setOptions)
-      .catch(() => {});
-    fetch("/api/bank-accounts")
-      .then((r) => (r.ok ? r.json() : { accounts: [] }))
-      .then((d) => setBankAccounts(d.accounts))
-      .catch(() => {});
-    fetch(`/api/events/${eventId}/list-items?kind=document`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setDocTypes)
       .catch(() => {});
   }, [eventId]);
 
@@ -124,14 +103,10 @@ export default function PortalSettings({
         autoAccept,
         location,
         portalInfo,
-        paymentDocTypeId: paymentDocTypeId || null,
-        bankCheckEnabled: !!paymentDocTypeId && bankCheck && !!bankAccountId,
-        bankAccountId: bankAccountId || null,
       }),
     });
     setSaving(false);
-    const error = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string }).error;
-    setMessage(res.ok ? t("portalSettings.saved") : error?.startsWith("bank_check_") ? t(`bankCheck.${error}`) : t("registrationSettings.saveFailed"));
+    setMessage(res.ok ? t("portalSettings.saved") : t("registrationSettings.saveFailed"));
     if (res.ok) onSaved();
   }
 
@@ -141,11 +116,6 @@ export default function PortalSettings({
     setChildIds((prev) => (prev.includes(c.id) ? prev : [...prev, c.id]));
     setChildPick("");
   }
-
-  const norm = (v: string | null) => (v ?? "").replace(/\s/g, "");
-  const matchingAccounts = bankAccounts.filter(
-    (a) => a.tokenSetAt && a.accountNumber === norm(event.registrationBankAccountNumber) && a.bankCode === norm(event.registrationBankCode)
-  );
 
   const pastDeadline = event.registrationDeadline != null && event.registrationDeadline.slice(0, 10) < new Date().toISOString().slice(0, 10);
 
@@ -167,39 +137,6 @@ export default function PortalSettings({
         {t("portalCard.info")}
         <MarkdownEditor value={portalInfo} onChange={setPortalInfo} rows={5} className={inputClass + " font-mono text-[13px]"} t={t} />
       </label>
-      <label className="text-[13px] text-ink-secondary">
-        {t("paymentDoc.label")}
-        <select value={paymentDocTypeId} onChange={(e) => setPaymentDocTypeId(e.target.value)} className={inputClass + " mt-1"}>
-          <option value="">{t("paymentDoc.none")}</option>
-          {docTypes.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        <span className="mt-1 block text-[11.5px]">{t("paymentDoc.hint")}</span>
-      </label>
-      {paymentDocTypeId && (
-        <div className="-mt-1 flex flex-col gap-1 rounded-lg border border-mist p-2">
-          <label className="flex items-center gap-2 text-[13px] text-ink">
-            <input type="checkbox" checked={bankCheck} onChange={(e) => setBankCheck(e.target.checked)} disabled={!matchingAccounts.length} className="h-4 w-4 accent-ember" />
-            {t("bankCheck.eventSwitch")}
-          </label>
-          {matchingAccounts.length ? (
-            <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className={inputClass}>
-              <option value="">{t("bankCheck.pickAccount")}</option>
-              {matchingAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label} ({a.accountNumber}/{a.bankCode})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="text-[11.5px] text-ink-secondary">{t("bankCheck.noMatchingAccount")}</span>
-          )}
-        </div>
-      )}
-
       <label className="text-[13px] text-ink-secondary">
         {t("autoAccept.label")}
         <select value={autoAccept} onChange={(e) => setAutoAccept(e.target.value as AutoAcceptMode)} className={inputClass + " mt-1"}>
