@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
 import { resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
@@ -27,7 +27,8 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "mail");
+  // Dokumenty lives under Účastníci now: health or mail, like the roster.
+  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
   if (denied) return denied;
 
   const withDocs = new URL(req.url).searchParams.get("withDocuments") === "1";

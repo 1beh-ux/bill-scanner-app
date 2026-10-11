@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 type Result = { status: "ok"; settled: number; review: number } | { status: "nothing_to_do" | "throttled" | "off" } | { status: "error"; code: string };
 
 /**
- * "Zkontrolovat platby" (docs/bank-payments-design.md): roster and Pošta -> Dokumenty,
+ * "Zkontrolovat platby" (docs/bank-payments-design.md): Účastníci -> Dokumenty,
  * only when the event checks the bank. Runs once on page open; onSettled reloads the list.
  */
 export default function BankCheckButton({ eventId, onSettled, t }: { eventId: string; onSettled: () => void; t: (key: string, vars?: Record<string, string>) => string }) {

@@ -1,12 +1,13 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
 export type MenuSection = "bills" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
-// roster = the central participant list, reachable with health OR mail.
-export type MenuModule = "health" | "mail" | "planning" | "roster";
+// roster = the central participant list, reachable with health OR mail; bank = roster + the
+// event's automatic bank check on (docs/bank-payments-design.md).
+export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -38,11 +39,13 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
   ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
   { id: "participants", section: "participants", labelKey: "participantsPage.centralTitle", icon: Users, href: ev("/participants"), module: "roster" },
+  { id: "documents", section: "participants", labelKey: "participantsPage.mailListTitle", icon: FolderCheck, href: ev("/participants/documents"), module: "roster" },
+  { id: "send-email", section: "participants", labelKey: "sendEmail.title", icon: Send, href: ev("/participants/send"), module: "roster" },
+  { id: "bank-payments", section: "participants", labelKey: "bankPayments.title", icon: Landmark, href: ev("/participants/bank"), module: "bank" },
   { id: "participants-import", section: "participants", labelKey: "nav.participantsImport", icon: Upload, href: ev("/participants/import"), module: "roster" },
   { id: "health", section: "health", labelKey: "nav.health", icon: HeartPulse, href: ev("/health"), module: "health" },
   { id: "meds", section: "health", labelKey: "medChecklistPage.title", icon: Pill, href: ev("/health/meds"), module: "health" },
   { id: "mail", section: "mail", labelKey: "nav.mail", icon: Mail, href: ev("/mail"), module: "mail" },
-  { id: "documents", section: "mail", labelKey: "participantsPage.mailListTitle", icon: FolderCheck, href: ev("/mail/participants"), module: "mail" },
   { id: "planning", section: "planning", labelKey: "nav.planning", icon: CalendarClock, href: ev("/planning"), module: "planning" },
   { id: "activities", section: "planning", labelKey: "planActivities.title", icon: Library, href: ev("/planning/activities"), module: "planning" },
   { id: "event-settings", section: "event", labelKey: "nav.eventSetup", icon: Settings, href: (id) => (id ? `/events/${id}` : "/events") },

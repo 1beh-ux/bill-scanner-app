@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { getEnabledModules, hasModuleAccess } from "@/lib/module-access";
 
 // Used by the sidebar to decide which module nav items to show: only
@@ -21,5 +22,11 @@ export async function GET(
     accessible[key] = await hasModuleAccess(user, eventId, key);
   }
 
+  // Not a module: "Platby na účet" shows under Účastníci when the event checks the bank
+  // (docs/bank-payments-design.md) and the user reaches the roster.
+  if (accessible.health || accessible.mail) {
+    const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { bankCheckEnabled: true, bankAccountId: true } });
+    accessible.bankCheck = !!ev?.bankCheckEnabled && !!ev.bankAccountId;
+  }
   return NextResponse.json(accessible);
 }
