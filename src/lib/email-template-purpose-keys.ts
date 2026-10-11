@@ -24,3 +24,7 @@ export const PORTAL_LINK_PURPOSE_KEY = "portal_link";
 // #12): the same send as PORTAL_LINK, another org template to pick on the
 // compose page. Editable at Šablony -> Zdraví -> E-mail.
 export const PORTAL_INVITATION_PURPOSE_KEY = "portal_invitation";
+// Own e-mail templates (organization or event): any name, sent from Poslat e-mail
+// to picked participants like the open e-mail -- same variables, same send.
+export const CUSTOM_PURPOSE_PREFIX = "custom_";
+export const isCustomPurpose = (purposeKey: string) => purposeKey.startsWith(CUSTOM_PURPOSE_PREFIX);

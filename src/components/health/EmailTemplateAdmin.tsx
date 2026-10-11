@@ -20,6 +20,8 @@ interface EmailTemplateAdminProps {
   purposeKey?: string;
   // The Pošta reply keeps "Re: <their subject>" -- only the body is a template.
   bodyOnly?: boolean;
+  // An own template of this event only: no organization default to compare with or revert to.
+  eventOnly?: boolean;
 }
 
 export default function EmailTemplateAdmin({
@@ -28,6 +30,7 @@ export default function EmailTemplateAdmin({
   label,
   purposeKey = PARENT_SUMMARY_PURPOSE_KEY,
   bodyOnly = false,
+  eventOnly = false,
 }: EmailTemplateAdminProps) {
   const { t } = useTranslations();
   // Org scope: the organization's template, or the app's on Aplikace -> Šablony aplikace (?level=app).
@@ -198,7 +201,7 @@ export default function EmailTemplateAdmin({
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
-          {scope === "event" && (
+          {scope === "event" && !eventOnly && (
             <span
               className={
                 "rounded-full px-2 py-0.5 text-[11px] font-medium " +
@@ -210,12 +213,12 @@ export default function EmailTemplateAdmin({
           )}
         </div>
         <div className="flex items-center gap-3">
-          {scope === "event" && hasOverride && (
+          {scope === "event" && hasOverride && !eventOnly && (
             <button onClick={toggleCompare} disabled={comparing} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
               {orgCompare ? t("emailTemplateAdmin.hideCompare") : t("emailTemplateAdmin.compareWithOrg")}
             </button>
           )}
-          {scope === "event" && hasOverride && (
+          {scope === "event" && hasOverride && !eventOnly && (
             <button onClick={handleRevert} disabled={saving} className="text-[13px] text-ink-secondary hover:text-ink disabled:opacity-50">
               {t("emailTemplateAdmin.revertToDefault")}
             </button>

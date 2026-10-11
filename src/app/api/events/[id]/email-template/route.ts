@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { orgIdOfEvent } from "@/lib/org-owner";
+import { isCustomPurpose } from "@/lib/email-template-purpose-keys";
 import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY, modulesForEmailPurpose } from "@/lib/email-template";
 
 export async function GET(
@@ -69,6 +70,10 @@ export async function DELETE(
   const denied = await requireAnyModuleAccess(user, eventId, modulesForEmailPurpose(purposeKey));
   if (denied) return denied;
 
+  // An own template of this event only has nothing to revert to (deleted via /email-templates).
+  if (isCustomPurpose(purposeKey) && !(await prisma.emailTemplate.count({ where: { organizationId: await orgIdOfEvent(eventId), purposeKey } }))) {
+    return NextResponse.json({ error: "event_only" }, { status: 400 });
+  }
   await prisma.eventEmailTemplate.deleteMany({
     where: { eventId, purposeKey },
   });

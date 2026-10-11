@@ -6,6 +6,7 @@ import {
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
   PORTAL_INVITATION_PURPOSE_KEY,
+  isCustomPurpose,
 } from "@/lib/email-template-purpose-keys";
 
 // The participant's family / own portal link (slice 4 #11, src/lib/document-variables.ts
@@ -102,6 +103,7 @@ export const TEMPLATE_VARIABLES = VARIABLES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KE
 export const TEMPLATE_DUMMY_VALUES = DUMMY_VALUES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY];
 
 export function templateVariablesFor(purposeKey: string): readonly string[] {
+  if (isCustomPurpose(purposeKey)) purposeKey = PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY;
   return VARIABLES_BY_PURPOSE[purposeKey] ?? VARIABLES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY];
 }
 
@@ -116,6 +118,7 @@ export function substituteDummyTemplateValues(
   purposeKey: string = PARENT_SUMMARY_PURPOSE_KEY,
   extraDummyValues: Record<string, string> = {}
 ): string {
+  if (isCustomPurpose(purposeKey)) purposeKey = PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY;
   const variables = templateVariablesFor(purposeKey);
   const dummyValues = {
     ...(DUMMY_VALUES_BY_PURPOSE[purposeKey] ?? DUMMY_VALUES_BY_PURPOSE[PARENT_SUMMARY_PURPOSE_KEY]),
