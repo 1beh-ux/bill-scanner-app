@@ -20,7 +20,7 @@ export function isAdminHost(host: string): boolean {
   );
 }
 
-// /r and /p use no files from public/ (fonts come from Google, the rest from /_next/).
+// /r and /p use no files from public/ (fonts are self-hosted under /_next/, like everything else).
 const PUBLIC_HOST_PREFIXES = ["/r/", "/p/", "/api/public/", "/api/portal/", "/_next/"];
 
 /** What a public host serves: the registration page, the portal, their APIs and Next's assets. "/" is the landing page. */
