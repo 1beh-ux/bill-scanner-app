@@ -262,7 +262,9 @@ async function main() {
     const slug = `isolation-${stamp}`;
     await prisma.event.update({ where: { id: eventId }, data: { publicRegistration: true, publicSlug: slug, registrationConnected: true } });
     const rPage = await import("@/app/(public)/r/[slug]/page");
-    const formEl = (await rPage.default({ params: Promise.resolve({ slug }) })) as { props: Record<string, unknown> };
+    // The page is <PublicFrame> (embed / appearance) around <PublicForm>.
+    const frameEl = (await rPage.default({ params: Promise.resolve({ slug }) })) as { props: { children: { props: Record<string, unknown> } } };
+    const formEl = frameEl.props.children;
     const formText = JSON.stringify(formEl.props);
     const meta = await rPage.generateMetadata({ params: Promise.resolve({ slug }) });
     const metaTitle = JSON.stringify(meta.title);
