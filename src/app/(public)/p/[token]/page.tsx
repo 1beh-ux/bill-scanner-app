@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { hostAllowsPortal, publicHostFor, publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { loadScope } from "@/lib/portal-server";
+import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
 import PortalApp from "./PortalApp";
 
 // Parent portal (docs/registration-portal-spec.md G) -- public, outside the login
@@ -29,8 +30,11 @@ export async function generateMetadata({ params }: { params: Promise<{ token: st
   };
 }
 
-export default async function PortalPage({ params }: { params: Promise<{ token: string }> }) {
+type SP = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function PortalPage({ params, searchParams }: { params: Promise<{ token: string }>; searchParams?: SP }) {
   const { token } = await params;
+  const { embed, theme } = embedParams((await searchParams) ?? {});
   // Public host: only a portal one. Admin host: old e-mail links move to the portal host when there is one.
   const portal = await loadPortal(token);
   if (!portal) notFound();
@@ -44,5 +48,9 @@ export default async function PortalPage({ params }: { params: Promise<{ token: 
     prisma.translation.findMany({ where: { key: { startsWith: "portal." } }, select: { key: true, cs: true } }),
     publicOrg(portal.organizationId),
   ]);
-  return <PortalApp token={token} org={org} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />;
+  return (
+    <PublicFrame embed={embed} theme={theme}>
+      <PortalApp token={token} org={org} embed={embed} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />
+    </PublicFrame>
+  );
 }

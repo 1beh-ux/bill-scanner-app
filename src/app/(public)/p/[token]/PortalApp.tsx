@@ -5,6 +5,8 @@ import { ChevronDown, Upload } from "lucide-react";
 import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
+import { useEmbed } from "@/components/embed/PublicFrame";
+import { portalApiFetch, postScrollTop, storeGate } from "@/components/embed/embed-client";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
@@ -93,7 +95,7 @@ const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) 
 // with something missing shows under both "Chybí…" and "Čeká…" (the states themselves are exclusive).
 const inState = (r: { state: RegistrationState; status: string }, st: RegistrationState) => r.state === st || (st === "waiting" && r.status === "pending");
 
-export default function PortalApp({ token, org, strings }: { token: string; org: PublicOrg; strings: Record<string, string> }) {
+export default function PortalApp({ token, org, embed = false, strings }: { token: string; org: PublicOrg; embed?: boolean; strings: Record<string, string> }) {
   const t = useCallback(
     (key: string, vars?: Record<string, string>) => {
       let s = strings[key] ?? key;
@@ -113,7 +115,7 @@ export default function PortalApp({ token, org, strings }: { token: string; org:
   const [registered, setRegistered] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch(api, { cache: "no-store" }).catch(() => null);
+    const res = await portalApiFetch(api, { cache: "no-store" }).catch(() => null);
     if (res?.status === 401) return setPhase("gate");
     if (!res?.ok) return setPhase("unavailable");
     setData(await res.json());
@@ -122,6 +124,10 @@ export default function PortalApp({ token, org, strings }: { token: string; org:
   useEffect(() => {
     load();
   }, [load]);
+  // Embedded: every "page" change (gate -> portal, registered, another member) scrolls the frame into view.
+  useEffect(() => {
+    if (embed && phase !== "loading") postScrollTop();
+  }, [embed, phase, registered, memberId]);
 
   const evName = (e: EventRef) => (e.kind === "membership" ? t("portal.membership", { year: String(e.membershipYear ?? "") }) : e.name);
   // Inactive people (slice 8 #2) sit in the folded "Neaktivní" section, not among the chips.
@@ -245,6 +251,7 @@ export default function PortalApp({ token, org, strings }: { token: string; org:
 }
 
 function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void }) {
+  const embed = useEmbed();
   const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -252,9 +259,15 @@ function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void })
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await fetch(`${api}/gate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ birthDate }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/gate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ birthDate }) }).catch(() => null);
     setBusy(false);
-    if (res?.ok) return onPassed();
+    if (res?.ok) {
+      // In a frame the cookie may not stick: keep the signed gate value for this tab (x-portal-gate).
+      const gate = ((await res.json().catch(() => ({}))) as { gate?: string }).gate;
+      if (embed && gate) storeGate(api.split("/")[3] ?? "", gate);
+      return onPassed();
+    }
+    if (embed) postScrollTop();
     setError(t(res?.status === 429 ? "portal.gateThrottled" : res?.status === 403 ? "portal.gateWrong" : "portal.unavailable"));
   }
   return (
@@ -286,7 +299,7 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
   async function patch(body: object) {
     setBusy(true);
     setMessage(null);
-    const res = await fetch(`${api}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, memberId: member.id }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, memberId: member.id }) }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "portal.saved" : "portal.saveFailed"));
     if (res?.ok) onSaved();
@@ -393,7 +406,7 @@ function Leave({ api, member, t, onDone }: { api: string; member: Member; t: T; 
   async function confirmLeave() {
     setBusy(true);
     setError(null);
-    const res = await fetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: member.id, leave: true, note }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: member.id, leave: true, note }) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setError(t("portal.saveFailed"));
     onDone();
@@ -434,7 +447,7 @@ function Inactive({ api, members, t, onChanged }: { api: string; members: Member
   const [busy, setBusy] = useState(false);
   async function restore(id: string) {
     setBusy(true);
-    await fetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: id, leave: false }) }).catch(() => null);
+    await portalApiFetch(`${api}/leave`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ memberId: id, leave: false }) }).catch(() => null);
     setBusy(false);
     onChanged();
   }
@@ -479,7 +492,7 @@ function AddMember({ api, data, fields, t, onAdded }: { api: string; data: Data;
     setBusy(true);
     setMessage(null);
     const body = { person: { ...person, values }, guardians: person.isAdult ? [] : guardians.filter((g) => g.email.trim()) };
-    const res = await fetch(`${api}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setMessage(t(res?.status === 400 ? "portal.addMemberInvalid" : res?.status === 429 ? "portal.addMemberThrottled" : "portal.saveFailed"));
     setOpen(false);
@@ -596,7 +609,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
     setBusy(true);
     setError(null);
     const picks = picked.map((memberId) => ({ memberId, priceCategory: choice[memberId]?.category, oddil: choice[memberId]?.oddil, answers: answers[memberId], reviewed: reviewed[memberId] }));
-    const res = await fetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
     setBusy(false);
     if (!res?.ok) return setError(t(res?.status === 400 ? "portal.stepIncomplete" : "portal.registerFailed"));
     // The parent already has this link: only the status (slice 4 #10).
@@ -751,7 +764,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
   async function cancel() {
     setBusy(true);
     setMessage(null);
-    const res = await fetch(`${api}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/cancel`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId }) }).catch(() => null);
     setBusy(false);
     setConfirmCancel(false);
     if (res?.ok) onChanged();
@@ -761,7 +774,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
   async function resend() {
     setBusy(true);
     setMessage(null);
-    const res = await fetch(`${api}/resend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId }) }).catch(() => null);
+    const res = await portalApiFetch(`${api}/resend`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId }) }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "portal.resendDone" : res?.status === 429 ? "portal.resendLimit" : "portal.resendFailed"));
     if (res?.ok) onChanged();
@@ -775,7 +788,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
     form.set("participantId", r.participantId);
     form.set("docTypeId", typeId);
     form.set("file", file);
-    const res = await fetch(`${api}/upload`, { method: "POST", body: form }).catch(() => null);
+    const res = await portalApiFetch(`${api}/upload`, { method: "POST", body: form }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "portal.uploadDone" : res?.status === 400 ? "portal.uploadBadFile" : "portal.uploadFailed"));
     if (res?.ok) onChanged();
@@ -1001,7 +1014,7 @@ function BankCheck({ api, participantId, t, onPaid }: { api: string; participant
   const check = useCallback(async () => {
     if (document.hidden) return false;
     setBusy(true);
-    const r = await fetch(`${api}/bank-check`, { method: "POST" }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
+    const r = await portalApiFetch(`${api}/bank-check`, { method: "POST" }).then((res) => (res.ok ? res.json() : null)).catch(() => null);
     setBusy(false);
     setChecked(true);
     if (r?.payments?.[participantId]?.paid) {

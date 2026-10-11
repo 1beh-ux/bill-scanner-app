@@ -5,6 +5,7 @@ import { notFound, permanentRedirect } from "next/navigation";
 import { hostAllowsRegistration, publicHostFor, publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 import { publicEvent, publicFormContext } from "@/lib/public-registration-server";
+import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
 import PublicForm from "./PublicForm";
 
 // Public registration page (docs/registration-slice3-spec.md D) -- outside the
@@ -26,8 +27,11 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: { absolute: org ? `${title} · ${org.name}` : title }, referrer: "no-referrer" };
 }
 
-export default async function PublicRegistrationPage({ params }: { params: Promise<{ slug: string }> }) {
+type SP = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function PublicRegistrationPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams?: SP }) {
   const { slug } = await params;
+  const { embed, theme } = embedParams((await searchParams) ?? {});
   const event = await loadEvent(slug);
   if (!event) notFound();
   // Public host: only its purpose/event. Admin host: old links move to the public host when there is one.
@@ -43,6 +47,7 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
     publicOrg(event.organizationId),
   ]);
   return (
+    <PublicFrame embed={embed} theme={theme}>
     <PublicForm
       slug={slug}
       event={{
@@ -62,5 +67,6 @@ export default async function PublicRegistrationPage({ params }: { params: Promi
       org={org}
       strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))}
     />
+    </PublicFrame>
   );
 }

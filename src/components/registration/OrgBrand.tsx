@@ -1,3 +1,7 @@
+"use client";
+
+import { useEmbed } from "@/components/embed/PublicFrame";
+
 // Public pages (registration form, parent portal, landing) show whose they are
 // (organizations step 5): the organization's name on top, its contact e-mail at
 // the bottom when it has one. Never the app's name, never another organization's.
@@ -8,7 +12,9 @@ export function OrgName({ org }: { org: PublicOrg }) {
 }
 
 export function OrgFooter({ org, label }: { org: PublicOrg; label: string }) {
-  if (!org.contactEmail) return null;
+  // Embedded in the organization's own website: its page has the contact already.
+  const embed = useEmbed();
+  if (!org.contactEmail || embed) return null;
   return (
     <footer className="mt-12 border-t border-mist pt-4 text-[13px] text-ink-secondary">
       {label}{" "}

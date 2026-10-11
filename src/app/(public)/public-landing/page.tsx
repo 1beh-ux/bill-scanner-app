@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { OrgFooter } from "@/components/registration/OrgBrand";
+import PublicFrame, { embedParams } from "@/components/embed/PublicFrame";
 
 // "/" on a public host (src/proxy.ts rewrites it here): whose host it is, nothing
 // else. An unknown host -- or one of a deactivated organization -- is a 404
@@ -26,17 +27,21 @@ export async function generateMetadata(): Promise<Metadata> {
   return { title: { absolute: org ? `${title} · ${org.name}` : title }, robots: { index: false, follow: false } };
 }
 
-export default async function PublicLandingPage() {
+export default async function PublicLandingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const [s, org] = await Promise.all([strings(), hostOrg()]);
   if (!org) notFound();
+  const { embed, theme } = embedParams((await searchParams) ?? {});
+  // Embedded (the portal snippet without a token in the address): say how to get in.
   return (
-    <main data-public-landing className="flex min-h-screen items-center justify-center bg-paper p-6">
-      <div className="max-w-md text-center">
-        <p className="mb-1 text-[14px] font-semibold text-ink">{org.name}</p>
-        <h1 className="mb-2 text-[20px] font-semibold text-ink">{s["publicLanding.title"] ?? "Přihlášky a rodičovský portál"}</h1>
-        <p className="text-[14px] text-ink-secondary">{s["publicLanding.text"] ?? ""}</p>
-        <OrgFooter org={org} label={s["portal.contact"] ?? "Kontakt:"} />
-      </div>
-    </main>
+    <PublicFrame embed={embed} theme={theme}>
+      <main data-public-landing className={"flex items-center justify-center p-6 " + (embed ? "" : "min-h-screen bg-paper")}>
+        <div className="max-w-md text-center">
+          <p className="mb-1 text-[14px] font-semibold text-ink">{org.name}</p>
+          <h1 className="mb-2 text-[20px] font-semibold text-ink">{s["publicLanding.title"] ?? "Přihlášky a rodičovský portál"}</h1>
+          <p className="text-[14px] text-ink-secondary">{embed ? (s["publicLanding.embedText"] ?? "") : (s["publicLanding.text"] ?? "")}</p>
+          <OrgFooter org={org} label={s["portal.contact"] ?? "Kontakt:"} />
+        </div>
+      </main>
+    </PublicFrame>
   );
 }

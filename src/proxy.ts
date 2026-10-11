@@ -40,7 +40,8 @@ function route(req: NextRequest): NextResponse {
   // serve which event / the portal is checked in those routes (src/lib/public-host.ts).
   if (!isAdminHost(host)) {
     if (!publicHostAllows(pathname)) return new NextResponse("Not found", { status: 404 });
-    if (pathname === "/") return NextResponse.rewrite(new URL("/public-landing", req.url));
+    // Keep the query (?embed=1 / ?theme=) for the landing page.
+    if (pathname === "/") return NextResponse.rewrite(new URL(`/public-landing${search}`, req.url));
     return NextResponse.next();
   }
 

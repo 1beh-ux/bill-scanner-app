@@ -87,7 +87,8 @@ export async function portalScope(token: string, gated: boolean): Promise<{ scop
   // family's organization (or an unknown host) the token doesn't exist.
   if (!scope || !hostAllowsPortal(await resolvePublicHost(await headers()), scope.organizationId)) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   if (gated) {
-    const value = (await cookies()).get(gateCookieName(scope.subject))?.value;
+    // The cookie (top-level) or the x-portal-gate header (embedded in an iframe) -- the same signed value.
+    const value = (await cookies()).get(gateCookieName(scope.subject))?.value ?? (await headers()).get("x-portal-gate") ?? undefined;
     if (!gateCookieValid(value, scope.subject, token, secret)) return { error: NextResponse.json({ error: "gate" }, { status: 401 }) };
   }
   return { scope };

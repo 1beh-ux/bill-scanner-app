@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
+import { useEmbed } from "@/components/embed/PublicFrame";
 
 // Light / dark switch for the parent portal and the public registration page
 // (top right, like the app's sidebar toggle). Same storage as the app: the
 // "dark" class on <html> + localStorage "theme", which the root layout's init
 // script applies before first paint. No account to save it to here.
 export default function ThemeToggle({ label }: { label: string }) {
+  const embed = useEmbed();
   const [dark, setDark] = useState(false);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read the class the init script set
@@ -23,6 +25,8 @@ export default function ThemeToggle({ label }: { label: string }) {
     } catch {}
   }
 
+  // Embedded: the website decides (?theme=), no toggle.
+  if (embed) return null;
   return (
     <button
       type="button"

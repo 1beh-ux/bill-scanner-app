@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
+import { postScrollTop } from "@/components/embed/embed-client";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
@@ -89,6 +90,10 @@ export default function PublicForm({
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[] | null>(null);
   const [done, setDone] = useState(false);
+  // Embedded (?embed=1): bring the frame into view after a submit or an error.
+  useEffect(() => {
+    if (done || errors) postScrollTop();
+  }, [done, errors]);
   // The family's portal link -- only when the event auto-sends (slice 4 #10).
   const [portalLink, setPortalLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);

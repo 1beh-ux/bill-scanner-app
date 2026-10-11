@@ -23,8 +23,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   }
 
   if (scope.gateFailures > 0) await saveGateThrottle(scope, 0, null);
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(gateCookieName(scope.subject), gateCookieValue(scope.subject, token, portalSecret()!), {
+  // The same signed value goes back in the body: an embedded portal (iframe, no third-party
+  // cookies) keeps it in sessionStorage and sends it as x-portal-gate (portalScope).
+  const gate = gateCookieValue(scope.subject, token, portalSecret()!);
+  const res = NextResponse.json({ ok: true, gate });
+  res.cookies.set(gateCookieName(scope.subject), gate, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",
