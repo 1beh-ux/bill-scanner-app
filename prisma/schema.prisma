@@ -1495,6 +1495,12 @@ model PublicHost {
   active          Boolean           @default(true)
   createdAt       DateTime          @default(now()) @map("created_at")
   createdByUserId String?           @map("created_by_user_id")
+  // Websites allowed to frame /r and /p of this host (CSP frame-ancestors, src/proxy.ts):
+  // normalized origins "https://host[:port]" (docs/custom-domain.md "Embedding").
+  embedOrigins    String[]          @default([]) @map("embed_origins")
+  // Portal hosts: the organization's web page embedding the portal; portal links in
+  // e-mails become <embedPageUrl>#t=<token>. Its origin must be in embedOrigins.
+  embedPageUrl    String?           @map("embed_page_url")
 
   event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -1515,6 +1521,14 @@ model Organization {
   shortName    String   @map("short_name")
   contactEmail String?  @map("contact_email")
   active       Boolean  @default(true)
+  // Look of the public pages (/r, /p, landing; docs/custom-domain.md "Appearance"). Null = today's look.
+  publicFontFamily        String? @map("public_font_family")
+  publicHeadingFontFamily String? @map("public_heading_font_family")
+  publicBaseFontSize      Int?    @map("public_base_font_size")
+  // compact | normal | large
+  publicHeadingScale      String? @map("public_heading_scale")
+  // compact | normal | relaxed
+  publicLineHeight        String? @map("public_line_height")
   createdAt    DateTime @default(now()) @map("created_at")
 
   users                     User[]
