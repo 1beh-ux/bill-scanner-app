@@ -495,6 +495,19 @@ Deploy: build d7bb77fa-3479-4bc2-90e2-dea278479fd6 SUCCESS -> `bill-scanner-app-
 `00100-jdp`). Checks: tsc, eslint (no new errors), build, check-org-scope 0 unexplained, check-bank-matching,
 test-org-isolation 57/57; login / prihlasky / rodice 200, no errors logged.
 
+# Embedding + appearance (branch embed)
+
+Details: docs/custom-domain.md "Embedding" / "Appearance", spec docs/embed-design.md. Organization-owned
+additions: `PublicHost.embedOrigins` / `embedPageUrl` (super-admin only; organization admins read them)
+and `Organization.public*` appearance fields (edited by the organization's admin for the acting
+organization only). Migration `20261017090000_embed_appearance` (additive).
+
+Deploy: build f497767b-b926-49ea-9081-db5e7f798190 SUCCESS -> `bill-scanner-app-00102-7px` (rollback target
+`00101-pdj`). Checks: tsc, eslint (no new errors), build, check-proxy-hosts, check-org-scope 0 unexplained,
+test-org-isolation 62/62, scripts/embed-check.sh against production all passed. Záře: www.zare.cz +
+zare.cz allowed on prihlasky + rodice; rodice's embedPageUrl NOT set (https://www.zare.cz/rodicovsky-portal
+is 404 -- portal links would break); set it with `scripts/set-zare-embed.ts --apply --page` once the page exists.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
