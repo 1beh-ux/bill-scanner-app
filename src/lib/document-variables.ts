@@ -7,7 +7,7 @@ import { withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 import { readPriceRules, rulePrice } from "@/lib/price-rules";
 import { newPortalToken, portalLinkLine } from "@/lib/portal-gate";
-import { publicUrl } from "@/lib/public-host";
+import { portalLinkFor } from "@/lib/public-host";
 
 export type ParticipantForMerge = {
   name: string;
@@ -203,16 +203,15 @@ export async function portalLinkVars(
   if (!participant.childId || !(event.registrationConnected || event.kind === "membership")) return none;
   const child = await prisma.child.findUnique({ where: { id: participant.childId }, select: { id: true, organizationId: true, portalToken: true, family: { select: { id: true, portalToken: true } } } });
   if (!child) return none;
-  // The person's organization's portal host.
-  const base = await publicUrl("portal", null, "", child.organizationId);
-  if (!base) return none;
   let token = child.family ? child.family.portalToken : child.portalToken;
   if (!token && create) {
     token = newPortalToken();
     if (child.family) await prisma.family.update({ where: { id: child.family.id }, data: { portalToken: token } });
     else await prisma.child.update({ where: { id: child.id }, data: { portalToken: token } });
   }
-  const link = `${base}/p/${token ?? "…"}`;
+  // The person's organization's portal (its web page embedding it, or the portal host).
+  const link = await portalLinkFor(child.organizationId, token ?? "…");
+  if (!link) return none;
   return { portal_link: link, portal_link_line: portalLinkLine(link) };
 }
 

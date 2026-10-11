@@ -4,7 +4,7 @@
 // HMAC of child id + the current token -- so a new token also logs out every
 // device. Tokens are secrets: never log them (or a URL containing one).
 import crypto from "crypto";
-import { publicUrl } from "@/lib/public-host";
+import { portalLinkFor } from "@/lib/public-host";
 import { prisma } from "@/lib/prisma";
 
 /** 32 random bytes, base64url (43 chars). */
@@ -34,7 +34,8 @@ export function gateCookieValid(value: string | undefined, childId: string, toke
 }
 
 /**
- * Public portal link: publicUrl() (portal host, then the env bases); with none
+ * Public portal link: portalLinkFor() (the organization's web page embedding the portal,
+ * the portal host, then the env bases); with none
  * of those, the origin the admin is using -- from the forwarded headers, since
  * behind Cloud Run the request URL is the container's internal address.
  */
@@ -43,7 +44,7 @@ export async function portalUrl(token: string, req: Request): Promise<string> {
   const owner =
     (await prisma.child.findUnique({ where: { portalToken: token }, select: { organizationId: true } })) ??
     (await prisma.family.findUnique({ where: { portalToken: token }, select: { organizationId: true } }));
-  const configured = owner ? await publicUrl("portal", null, `/p/${token}`, owner.organizationId) : null;
+  const configured = owner ? await portalLinkFor(owner.organizationId, token) : null;
   if (configured) return configured;
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
   const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? new URL(req.url).protocol.replace(":", "");

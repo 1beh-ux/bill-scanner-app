@@ -74,6 +74,18 @@ export async function publicUrl(want: Want, eventId: string | null, path: string
   return base ? `${base}${path}` : null;
 }
 
+/**
+ * The parent-portal link of a token: <embedPageUrl>#t=<token> when the organization's default
+ * portal host is embedded in its website (the token after "#" never reaches that website's
+ * server or logs), else https://<portal host>/p/<token> (then the env bases). Null = nothing configured.
+ */
+export async function portalLinkFor(organizationId: string, token: string): Promise<string | null> {
+  const host = await publicHostFor("portal", null, organizationId);
+  const page = host ? (await activeHosts()).find((r) => r.hostname === host)?.embedPageUrl : null;
+  if (page) return `${page.split("#")[0]}#t=${token}`;
+  return publicUrl("portal", null, `/p/${token}`, organizationId);
+}
+
 /** What a public page shows of its organization (organizations step 5): name + contact e-mail. Cached per request. */
 export const publicOrg = perRequest((organizationId: string) =>
   prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { name: true, contactEmail: true } })
