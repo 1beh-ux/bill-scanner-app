@@ -26,12 +26,13 @@ export const familyTarget = (familyId: string) => `family:${familyId}`;
 // don't belong in a URL.
 const KEY = "childrenCompose";
 
-export function portalComposeHref(childIds: string[]): string {
+export function portalComposeHref(childIds: string[], purpose?: "invitation"): string {
+  const p = purpose ? `purpose=${purpose}` : "";
   try {
     sessionStorage.setItem(KEY, JSON.stringify(childIds));
-    return "/children/compose";
+    return `/children/compose${p ? `?${p}` : ""}`;
   } catch {
-    return `/children/compose?ids=${childIds.join(",")}`;
+    return `/children/compose?ids=${childIds.join(",")}${p ? `&${p}` : ""}`;
   }
 }
 

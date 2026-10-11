@@ -26,6 +26,8 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const mode: ComposeMode = query.get("mode") === "freeform" ? "freeform" : "acceptance";
   const regenerate = query.get("regenerate") === "1";
   const purposeKey = mode === "acceptance" ? REGISTRATION_ACCEPTANCE_PURPOSE_KEY : PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY;
+  // Poslat e-mail: an own template (custom_…) to start the open e-mail from.
+  const templateKey = mode === "freeform" ? query.get("template") : null;
 
   const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [recipients, setRecipients] = useState<Recipient[] | null>(null);
@@ -108,6 +110,18 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
       })
       .catch(() => {});
   }, [eventId, mode, purposeKey]);
+
+  useEffect(() => {
+    if (!templateKey) return;
+    fetch(`/api/events/${eventId}/email-template?purposeKey=${encodeURIComponent(templateKey)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        setSubject(data.subject);
+        setBody(data.body);
+      })
+      .catch(() => {});
+  }, [eventId, templateKey]);
 
   const docKey = useMemo(() => [...selectedDocs].sort().join(","), [selectedDocs]);
 

@@ -26,6 +26,11 @@ export default function PortalLinkComposePage() {
   const [childIds, setChildIds] = useState<string[] | null>(null);
   // Which org template to start from (slice 4 #12): the link or the yearly invitation.
   const [purposeKey, setPurposeKey] = useState(PORTAL_LINK_PURPOSE_KEY);
+  // ?purpose=invitation: Účastníci -> Poslat e-mail -> Pozvánka do portálu.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (new URLSearchParams(window.location.search).get("purpose") === "invitation") setPurposeKey(PORTAL_INVITATION_PURPOSE_KEY);
+  }, []);
   const [info, setInfo] = useState<Info | null>(null);
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
