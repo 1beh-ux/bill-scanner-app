@@ -469,6 +469,32 @@ errors), build, check-bank-matching 17/17, check-org-scope 0 unexplained, test-o
 tabornik.online/login 200, prihlasky /r/clenstvi-2027 200, rodice / 200, no errors logged; scheduler
 run -> 200 `{"ok":true,"accounts":0,"results":{}}`.
 
+# Účastníci + e-mail restructure (branch ucastnici-mail)
+
+- **Účastníci** menu: Seznam účastníků, **Dokumenty** (moved from Pošta, `/events/[id]/participants/documents`,
+  old URL redirects; reachable with health or mail), **Poslat e-mail**, **Platby na účet** (only when the
+  event's bank check is on; `modules/mine` returns a `bankCheck` flag), Import.
+- Dokumenty: "Synchronizovat dokumenty" (`/api/events/[id]/documents/sync`: every sheet connection, Drive
+  copies, status sheet) + the list of connected sheets and the document each ticks + "Zkontrolovat platby".
+  The roster no longer has the bank button.
+- Nastavení akce -> **Platba a účet** (`PaymentSettings`): prices, payment account, variable symbol, QR size,
+  Dokument platby + bank check (any event, not only portal-connected ones), price rules. Removed from Akce,
+  Veřejná přihláška, Portál and the field editor (VS / QR fields link here).
+- E-mail types in one list (`src/lib/email-kinds.ts`): Poslat e-mail's submenu, Nastavení akce -> Mail (every
+  template; portal link / invitation are organization-only and link to Šablony) and Šablony -> **Šablony
+  e-mailů** (new section; Zdraví lost its E-mail subtab). Šablony "Pošta" -> **Sledované dokumenty**,
+  "Účastníci" -> **Proměnné (sloupce)**.
+- **Own e-mails**: `custom_…` purpose keys with a `name` (migration `20261016090000_own_email_templates`,
+  additive) on `email_templates` (organization-owned, already guarded) and `event_email_templates`
+  (event-only ones). Sent from Poslat e-mail through the open-e-mail compose page (`?template=`).
+- Poslat e-mail: blank / own / portal e-mails go to participants picked on the page (status, state, group,
+  search); acceptance, document status, reply and health summary explain why they're launched elsewhere and
+  link there. Pozvánka do portálu / nový rok is now launchable from an event (`/children/compose?purpose=invitation`).
+
+Deploy: build d7bb77fa-3479-4bc2-90e2-dea278479fd6 SUCCESS -> `bill-scanner-app-00101-pdj` (rollback target
+`00100-jdp`). Checks: tsc, eslint (no new errors), build, check-org-scope 0 unexplained, check-bank-matching,
+test-org-isolation 57/57; login / prihlasky / rodice 200, no errors logged.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
