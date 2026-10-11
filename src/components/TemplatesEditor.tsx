@@ -5,7 +5,8 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
-import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PORTAL_LINK_PURPOSE_KEY, PORTAL_INVITATION_PURPOSE_KEY, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
+import { EMAIL_KINDS } from "@/lib/email-kinds";
 import { Synced } from "@/components/AppSyncPanel";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { useLevelUrl } from "@/lib/template-level";
@@ -21,20 +22,22 @@ const btnPrimary =
 // aplikace: the same sections, on the organization's or the app's templates (organizations step 4).
 export default function TemplatesEditor({ titleKey, introKey }: { titleKey: string; introKey?: string }) {
   const { t } = useTranslations();
-  const [tab, setTab] = useState<"health" | "mail" | "bills" | "participants" | "planning">("health");
-  // ?tab=participants: the Lidé page's "Co vidí a upravují rodiče" link (slice 4 #9).
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (new URLSearchParams(window.location.search).get("tab") === "participants") setTab("participants");
-  }, []);
-
+  const [tab, setTab] = useState<"health" | "emails" | "mail" | "bills" | "participants" | "planning">("health");
   const sections: { key: typeof tab; labelKey: string }[] = [
     { key: "health", labelKey: "templatesPage.tabHealth" },
+    { key: "emails", labelKey: "templatesPage.tabEmails" },
     { key: "mail", labelKey: "templatesPage.tabMail" },
     { key: "bills", labelKey: "templatesPage.tabBills" },
     { key: "participants", labelKey: "templatesPage.tabParticipants" },
     { key: "planning", labelKey: "nav.planning" },
   ];
+  // ?tab=…: e.g. the Lidé page's "Co vidí a upravují rodiče" (participants), Poslat e-mail (emails).
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("tab");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (wanted && sections.some((x) => x.key === wanted)) setTab(wanted as typeof tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8">
@@ -71,6 +74,7 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
 
         <div className="min-w-0 flex-1">
       {tab === "health" && <HealthTemplatesTab />}
+      {tab === "emails" && <EmailTemplatesTab />}
       {tab === "mail" && <Synced table="list" filter="document"><ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} /></Synced>}
       {tab === "bills" && <Synced table="category"><BillsTemplatesTab /></Synced>}
       {tab === "participants" && <Synced table="field"><ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} /></Synced>}
@@ -98,7 +102,7 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
 
 function HealthTemplatesTab() {
   const { t } = useTranslations();
-  const [subTab, setSubTab] = useState<"med" | "situation" | "email">("med");
+  const [subTab, setSubTab] = useState<"med" | "situation">("med");
 
   return (
     <div>
@@ -123,35 +127,28 @@ function HealthTemplatesTab() {
         >
           {t("healthTemplatesPage.tabSituations")}
         </button>
-        <button
-          onClick={() => setSubTab("email")}
-          className={
-            "border-b-2 px-3 py-2 text-[13px] font-medium " +
-            (subTab === "email" ? "border-ember text-ink" : "border-transparent text-ink-secondary hover:text-ink")
-          }
-        >
-          {t("healthTemplatesPage.tabEmail")}
-        </button>
       </div>
 
       {subTab === "med" && <Synced table="list" filter="med"><ListTemplateAdmin kind="med" scope="org" label={t("healthTemplatesPage.tabMeds")} /></Synced>}
       {subTab === "situation" && (
         <Synced table="list" filter="situation"><ListTemplateAdmin kind="situation" scope="org" label={t("healthTemplatesPage.tabSituations")} /></Synced>
       )}
-      {subTab === "email" && (
-        <div className="flex flex-col gap-6">
-          <Synced table="email" filter={PARENT_SUMMARY_PURPOSE_KEY}><EmailTemplateAdmin scope="org" label={t("healthTemplatesPage.tabEmail")} /></Synced>
-          <Synced table="email" filter={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}>
-            <EmailTemplateAdmin
-              scope="org"
-              purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY}
-              label={t("healthTemplatesPage.tabRegistrationEmail")}
-            />
-          </Synced>
-          <Synced table="email" filter={PORTAL_LINK_PURPOSE_KEY}><EmailTemplateAdmin scope="org" purposeKey={PORTAL_LINK_PURPOSE_KEY} label={t("childProfile.portalLinkTemplate")} /></Synced>
-          <Synced table="email" filter={PORTAL_INVITATION_PURPOSE_KEY}><EmailTemplateAdmin scope="org" purposeKey={PORTAL_INVITATION_PURPOSE_KEY} label={t("portalCompose.purpose.portal_invitation")} /></Synced>
-        </div>
-      )}
+    </div>
+  );
+}
+
+// Šablony e-mailů: every e-mail the organization sends (src/lib/email-kinds.ts) + own e-mails.
+function EmailTemplatesTab() {
+  const { t } = useTranslations();
+  return (
+    <div className="flex flex-col gap-6">
+      <p className="text-[14px] text-ink-secondary">{t("templatesPage.emailsSubtitle")}</p>
+      {EMAIL_KINDS.filter((k) => !k.noTemplate).map((k) => (
+        <Synced key={k.purposeKey} table="email" filter={k.purposeKey}>
+          <EmailTemplateAdmin scope="org" purposeKey={k.purposeKey} label={t(`emailKinds.${k.id}.name`)} bodyOnly={k.bodyOnly} />
+        </Synced>
+      ))}
+      <CustomEmailTemplates scope="org" />
     </div>
   );
 }
