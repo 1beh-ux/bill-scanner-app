@@ -12,9 +12,10 @@ import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
 import PortalSettings from "@/components/events/PortalSettings";
 import PaymentSettings from "@/components/events/PaymentSettings";
+import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
+import { EMAIL_KINDS, kindAllowed, templateEditHref } from "@/lib/email-kinds";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
 import PortalCardLayout from "@/components/events/PortalCardLayout";
-import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_REPLY_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
@@ -677,14 +678,28 @@ export default function EventDetailPage({
           {/* Mail: every e-mail template of the event in one place (each still needs its module). */}
           {tab === "posta" && (moduleAccess.mail || moduleAccess.health) && (
             <div className="flex flex-col gap-6">
-              <EmailTemplateAdmin scope="event" eventId={id} purposeKey={REGISTRATION_ACCEPTANCE_PURPOSE_KEY} label={t("healthTemplatesPage.tabRegistrationEmail")} />
-              {moduleAccess.mail && (
-                <EmailTemplateAdmin scope="event" eventId={id} purposeKey={MAIL_HELPER_BULK_STATUS_PURPOSE_KEY} label={t("mailTab.bulkStatusTemplateLabel")} />
+              {/* Every e-mail type (src/lib/email-kinds.ts), same order as Poslat e-mail. */}
+              {EMAIL_KINDS.filter((k) => !k.noTemplate).map((k) =>
+                k.orgOnly ? (
+                  <div key={k.purposeKey} id={`tpl-${k.purposeKey}`}>
+                    <h3 className="mb-1 text-[15px] font-semibold text-ink">{t(`emailKinds.${k.id}.name`)}</h3>
+                    <p className="text-[13px] text-ink-secondary">
+                      {t("emailKinds.orgOnlyHint")}{" "}
+                      <a href={templateEditHref(id, k)} className="text-ember hover:underline">{t("emailKinds.editInOrg")}</a>
+                    </p>
+                  </div>
+                ) : kindAllowed(k, moduleAccess) ? (
+                  <div key={k.purposeKey} id={`tpl-${k.purposeKey}`}>
+                    <EmailTemplateAdmin scope="event" eventId={id} purposeKey={k.purposeKey} label={t(`emailKinds.${k.id}.name`)} bodyOnly={k.bodyOnly} />
+                  </div>
+                ) : (
+                  <div key={k.purposeKey} id={`tpl-${k.purposeKey}`}>
+                    <h3 className="mb-1 text-[15px] font-semibold text-ink">{t(`emailKinds.${k.id}.name`)}</h3>
+                    <p className="text-[13px] text-ink-secondary">{t(`emailKinds.needs.${k.module}`)}</p>
+                  </div>
+                )
               )}
-              {moduleAccess.mail && (
-                <EmailTemplateAdmin scope="event" eventId={id} purposeKey={MAIL_HELPER_REPLY_PURPOSE_KEY} label={t("mailTab.replyTemplateLabel")} bodyOnly />
-              )}
-              {moduleAccess.health && <EmailTemplateAdmin scope="event" eventId={id} label={t("healthTemplatesPage.tabEmail")} />}
+              <CustomEmailTemplates scope="event" eventId={id} />
               {moduleAccess.mail && <MailDoneLabelSettings eventId={id} event={event} t={t} />}
               {moduleAccess.mail && <MailSyncSettings eventId={id} event={event} onSynced={load} t={t} />}
               {moduleAccess.mail && (
