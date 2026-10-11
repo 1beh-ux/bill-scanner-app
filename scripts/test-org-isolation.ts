@@ -359,6 +359,24 @@ async function main() {
     // Deleting the bank payment document sets the movement aside.
     await (await import("@/app/api/events/[id]/participants/[participantId]/documents/[docTypeId]/route")).DELETE(req("/x", { method: "DELETE" }), params({ id: eventId, participantId: payer.id, docTypeId: payDoc.id }));
     check("deleting a bank payment document -> its movement is ignored", (await prisma.bankMovement.findUniqueOrThrow({ where: { id: ownMov.id } })).status === "ignored", "not ignored");
+
+    // ===== Účastníci / e-mail restructure: own e-mail templates, document sync =====
+    asUser(admin);
+    const customRoute = await import("@/app/api/email-templates/custom/route");
+    const ownTpl = await json(await customRoute.POST(req("/api/email-templates/custom", { method: "POST", body: { name: `Isolation ${stamp}` } })));
+    const ownList = (await json(await customRoute.GET(req("/api/email-templates/custom")))).body as { purposeKey: string }[];
+    asUser(superAdmin);
+    const zareList = (await json(await customRoute.GET(req("/api/email-templates/custom")))).body as { purposeKey: string }[];
+    asUser(admin);
+    check("own e-mail template: in the test org's list, not in Záře's", ownTpl.status === 201 && ownList.some((x) => x.purposeKey === ownTpl.body?.purposeKey) && !zareList.some((x) => x.purposeKey === ownTpl.body?.purposeKey), JSON.stringify({ status: ownTpl.status, own: ownList.length, inZare: zareList.some((x) => x.purposeKey === ownTpl.body?.purposeKey) }));
+    const evTpl = await json(await (await import("@/app/api/events/[id]/email-templates/route")).GET(req("/x"), params({ id: eventId })));
+    check("event's own e-mails include the organization's", (evTpl.body as { purposeKey: string }[]).some((x) => x.purposeKey === ownTpl.body?.purposeKey), JSON.stringify(evTpl.body));
+    if (z.event) {
+      const a = await (await import("@/app/api/events/[id]/documents/sync/route")).GET(req("/x"), params({ id: z.event.id }));
+      const b = await (await import("@/app/api/events/[id]/email-templates/route")).GET(req("/x"), params({ id: z.event.id }));
+      const c = await (await import("@/app/api/events/[id]/documents/sync/route")).POST(req("/x", { method: "POST" }), params({ id: z.event.id }));
+      check("Záře event: document sync / own e-mails -> 404", [a.status, b.status, c.status].every((x) => x === 404), JSON.stringify([a.status, b.status, c.status]));
+    }
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;

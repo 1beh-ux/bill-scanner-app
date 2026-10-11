@@ -12,7 +12,7 @@ import { documentDisplayName } from "@/lib/mail-reply-template";
 // copies, status sheet) with the last sync; POST "Synchronizovat dokumenty" = run them all.
 type Ctx = { params: Promise<{ id: string }> };
 
-async function guard(ctx: Ctx) {
+async function guard(ctx: Ctx): Promise<{ denied: NextResponse } | { eventId: string }> {
   const user = await getCurrentUser();
   if (!user) return { denied: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) } as const;
   const { id: eventId } = await ctx.params;

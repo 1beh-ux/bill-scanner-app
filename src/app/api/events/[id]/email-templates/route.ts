@@ -9,7 +9,7 @@ import { cleanName, customStarter, customTemplatesOf, newCustomPurposeKey } from
 // event) plus the event's own. Text is edited through /api/events/[id]/email-template.
 type Ctx = { params: Promise<{ id: string }> };
 
-async function guard(ctx: Ctx) {
+async function guard(ctx: Ctx): Promise<{ denied: NextResponse } | { eventId: string }> {
   const user = await getCurrentUser();
   if (!user) return { denied: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) } as const;
   const { id: eventId } = await ctx.params;
