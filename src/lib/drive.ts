@@ -678,6 +678,28 @@ export async function writeManifestValues(
   );
 }
 
+/**
+ * Writes `rows` into the tab `title` of a spreadsheet (created when missing; cleared first).
+ * The manifest's "Souhrn" sheet -- the bills stay on the first tab (writeManifestValues).
+ */
+export async function writeSheetTab(eventId: string, spreadsheetId: string, title: string, rows: (string | number)[][]): Promise<void> {
+  await withRetry(
+    eventId,
+    async () => {
+      const sheets = await getSheetsClient(eventId);
+      const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: "sheets.properties.title" });
+      if (!meta.data.sheets?.some((sh) => sh.properties?.title === title)) {
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests: [{ addSheet: { properties: { title } } }] } });
+      }
+      const range = `'${title.replace(/'/g, "''")}'`;
+      await sheets.spreadsheets.values.clear({ spreadsheetId, range: `${range}!A1:Z1000` });
+      await sheets.spreadsheets.values.update({ spreadsheetId, range: `${range}!A1`, valueInputOption: "USER_ENTERED", requestBody: { values: rows } });
+    },
+    `write sheet tab ${title} ${spreadsheetId}`,
+    { purpose: "write" }
+  );
+}
+
 // ---- Folder diagnostics ("Otestovat připojení") ----
 
 export type FolderTestResult =

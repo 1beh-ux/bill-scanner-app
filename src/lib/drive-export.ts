@@ -7,9 +7,13 @@ import {
   createManifestSheet,
   writeManifestValues,
   findFileInFolder,
+  writeSheetTab,
 } from "@/lib/drive";
+import { computeSettlement } from "@/lib/settlement";
+import { officialAccountOf } from "@/lib/official-account";
 import { DriveError } from "@/lib/drive-errors";
-import { buildManifestRows } from "@/lib/manifest";
+import { effectiveAmountCzk } from "@/lib/bill-amount";
+import { buildManifestRows, buildSummaryRows, SUMMARY_SHEET_TITLE } from "@/lib/manifest";
 
 export class DriveExportError extends Error {
   code: string;
@@ -190,7 +194,7 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
       return found ? `https://drive.google.com/file/d/${found.id}/view` : "";
     })
   );
-  const manifestRows = buildManifestRows(bills, links);
+  const manifestRows = buildManifestRows(bills, links, event.manifestCategoryMode === "columns" ? "columns" : "pairs");
 
   const manifestTitle = `Manifest - ${event.name}`;
 
@@ -204,6 +208,19 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   if (manifestSpreadsheetId !== event.driveManifestSpreadsheetId) {
     await prisma.event.update({ where: { id: eventId }, data: { driveManifestSpreadsheetId: manifestSpreadsheetId } });
   }
+
+  // Second sheet "Souhrn": budget per category, official account vs cash, deposits, settlement.
+  const [categories, deposits, official] = await Promise.all([
+    prisma.eventCategory.findMany({ where: { eventId }, orderBy: { name: "asc" } }),
+    prisma.eventDeposit.findMany({ where: { eventId }, orderBy: { receivedAt: "asc" } }),
+    officialAccountOf(eventId, event.organizationId),
+  ]);
+  const settlement = computeSettlement({
+    categories: categories.map((c) => ({ id: c.id, name: c.name, budget: c.budgetAmount })),
+    bills: bills.map((b) => ({ amountCzk: effectiveAmountCzk(b), payerAuthor: b.payerAuthor, categories: b.categories })),
+    deposits,
+  });
+  await writeSheetTab(eventId, manifestSpreadsheetId, SUMMARY_SHEET_TITLE, buildSummaryRows(event.name, settlement, deposits, official ? `${official.accountNumber}/${official.bankCode} (${official.name})` : null));
 
   return { totalApproved: bills.length, newlyExported, alreadyExported, exportFailures, manifestSpreadsheetId };
 }
