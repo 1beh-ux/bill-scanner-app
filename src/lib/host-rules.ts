@@ -31,14 +31,16 @@ export function publicHostAllows(pathname: string): boolean {
 /**
  * Framing headers (docs/custom-domain.md "Embedding"). Pages on admin hosts and everything on
  * public hosts except /r and /p: never framed. /r and /p on a public host: framed by that host's
- * embedOrigins (null = unknown host -> never). /api: X-Frame-Options only -- a route's own CSP
+ * embedOrigins (null = unknown host -> never). /api: X-Frame-Options SAMEORIGIN only (our pages
+ * frame bill / document files; other websites can't) -- a route's own CSP
  * (the `sandbox` on document downloads) must survive, and Next keeps the proxy's header over the
  * route's. /__/: Firebase's sign-in helper, framed by our own pages -- left alone.
  */
 export function framingHeaders(admin: boolean, pathname: string, embedOrigins: string[] | null, embedQuery = false): Record<string, string> {
   if (pathname.startsWith("/__/")) return {};
   const deny = { "Content-Security-Policy": "frame-ancestors 'none'", "X-Frame-Options": "DENY" };
-  if (pathname.startsWith("/api/")) return { "X-Frame-Options": "DENY" };
+  // SAMEORIGIN: our own pages show files in an iframe (bill detail / import PDF preview).
+  if (pathname.startsWith("/api/")) return { "X-Frame-Options": "SAMEORIGIN" };
   if (admin || !embeddablePath(pathname, embedQuery) || !embedOrigins?.length) return deny;
   return { "Content-Security-Policy": `frame-ancestors 'self' ${embedOrigins.join(" ")}` };
 }

@@ -47,7 +47,7 @@ const NONE = JSON.stringify({ "Content-Security-Policy": "frame-ancestors 'none'
 const FRAMING: [string, string, string][] = [
   ["admin page", fh(true, "/login", null), NONE],
   ["admin /r on the admin host", fh(true, "/r/x", ["https://www.zare.cz"]), NONE],
-  ["api: X-Frame-Options only (route CSP kept)", fh(true, "/api/events/x/documents/y", null), JSON.stringify({ "X-Frame-Options": "DENY" })],
+  ["api: X-Frame-Options SAMEORIGIN only (route CSP kept; bill PDF preview frames it)", fh(true, "/api/bills/x/file", null), JSON.stringify({ "X-Frame-Options": "SAMEORIGIN" })],
   ["firebase helper untouched", fh(true, "/__/auth/iframe", null), "{}"],
   ["public /r, no embedders", fh(false, "/r/x", []), NONE],
   ["public /p, unknown host", fh(false, "/p/x", null), NONE],

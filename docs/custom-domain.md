@@ -113,8 +113,9 @@ organization's own website in an iframe (spec: docs/embed-design.md).
   - public hosts: `/r/*` and `/p/*` get `frame-ancestors 'self' <PublicHost.embedOrigins>` and no
     X-Frame-Options (empty list = `'none'` + DENY); the landing page only as `/?embed=1` (the portal
     snippet's fallback without a token); everything else `'none'` + DENY;
-  - `/api/*`: only `X-Frame-Options: DENY` -- Next keeps the proxy's header over a route's own, and the
-    document downloads must keep their `Content-Security-Policy: sandbox`;
+  - `/api/*`: only `X-Frame-Options: SAMEORIGIN` -- our own pages show bill / document files in an iframe;
+    no CSP, because Next keeps the proxy's header over a route's own and the document downloads must keep
+    their `Content-Security-Policy: sandbox`;
   - `/__/*` (Firebase's sign-in helper, framed by our own pages): untouched.
   The host's list comes from the 60 s per-instance cache in `src/lib/public-host.ts`.
 - **Settings** (Aplikace → Veřejné adresy, super-admin; read-only in Organizace → Připojení):
