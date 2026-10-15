@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useRef, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
+import { useUiPrefs } from "@/lib/use-ui-prefs";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
@@ -101,6 +102,8 @@ export default function BillDetailPage({
   const [currency, setCurrency] = useState("CZK");
   const [payerAuthorId, setPayerAuthorId] = useState("");
   const [notes, setNotes] = useState("");
+  const { prefs, save } = useUiPrefs();
+  const notesHeightAtPress = useRef(0);
   const [splits, setSplits] = useState<SplitRow[]>([]);
   const [editingImage, setEditingImage] = useState(false);
 const [processingAi, setProcessingAi] = useState(false);
@@ -680,12 +683,19 @@ const statusLabel = t(
 
           <div>
             <label className={labelClass}>{t("billModal.notes")}</label>
+            {/* 4 rows by default; a height the user drags to is remembered for them (User.uiPrefs) in every bill. */}
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               disabled={isLocked}
-              rows={2}
-              className={inputClass}
+              rows={4}
+              style={prefs.billNotesHeight ? { height: prefs.billNotesHeight } : undefined}
+              onPointerDown={(e) => (notesHeightAtPress.current = e.currentTarget.offsetHeight)}
+              onPointerUp={(e) => {
+                const h = e.currentTarget.offsetHeight;
+                if (h !== notesHeightAtPress.current) save({ billNotesHeight: h });
+              }}
+              className={inputClass + " resize-y"}
             />
           </div>
 
