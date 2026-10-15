@@ -89,6 +89,7 @@ export async function PATCH(
     paymentDocTypeId,
     bankCheckEnabled,
     bankAccountId,
+    manifestCategoryMode,
   } = body;
 
   // Registration & membership switches: admin only, validated.
@@ -252,6 +253,8 @@ export async function PATCH(
       ...(bankAccountId !== undefined && { bankAccountId: bankAccountId || null }),
       ...(bankCheckEnabled !== undefined && { bankCheckEnabled }),
       ...(bankCheckOff && { bankCheckEnabled: false }),
+      // Bills manifest category layout (src/lib/manifest.ts).
+      ...((manifestCategoryMode === "pairs" || manifestCategoryMode === "columns") && { manifestCategoryMode }),
     },
   });
   // Switching the connection on (or making it a membership year) links the participants already there

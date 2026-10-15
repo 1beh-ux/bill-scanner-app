@@ -61,7 +61,7 @@ export default function DriveSettingsTab({
   onSaved,
 }: {
   eventId: string;
-  event: EventDrive & { driveExportFolderId: string | null };
+  event: EventDrive & { driveExportFolderId: string | null; manifestCategoryMode?: string | null };
   driveConnect: string | null;
   onSaved: () => void;
 }) {
@@ -73,6 +73,13 @@ export default function DriveSettingsTab({
     participants: event.driveParticipantsFolderId ?? "",
   });
   const [saving, setSaving] = useState(false);
+  // Manifest category layout: pairs (Kategorie n + Částka n) or one column per category.
+  const [categoryMode, setCategoryMode] = useState(event.manifestCategoryMode === "columns" ? "columns" : "pairs");
+  async function saveCategoryMode(mode: string) {
+    setCategoryMode(mode);
+    await fetch(`/api/events/${eventId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ manifestCategoryMode: mode }) });
+    onSaved();
+  }
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<{ code: string; field?: string } | null>(null);
 
@@ -298,6 +305,14 @@ export default function DriveSettingsTab({
 
       {/* --- export --- */}
       <div className="mt-6 border-t border-mist pt-6">
+        <label className="mb-3 block max-w-md text-[13px] text-ink-secondary">
+          {t("manifestMode.label")}
+          <select value={categoryMode} onChange={(e) => saveCategoryMode(e.target.value)} className="mt-1 w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink">
+            <option value="pairs">{t("manifestMode.pairs")}</option>
+            <option value="columns">{t("manifestMode.columns")}</option>
+          </select>
+          <span className="mt-1 block text-[11.5px]">{t("manifestMode.hint")}</span>
+        </label>
         <button type="button" onClick={() => doExport(false)} disabled={exporting || !event.driveExportFolderId} className={btnPrimary}>
           {exporting ? t("driveSettings.exporting") : t("driveSettings.exportButton")}
         </button>
