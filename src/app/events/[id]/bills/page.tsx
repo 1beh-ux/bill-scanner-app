@@ -10,6 +10,7 @@ import ColumnFilter from "@/components/bills/ColumnFilter";
 import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkEdit";
 import DriveBillsSync from "@/components/bills/DriveBillsSync";
 import { needsPayout } from "@/lib/payout";
+import { readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav";
 
 type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
 
@@ -165,6 +166,25 @@ export default function EventBillsPage({
     load();
   }, [id]);
 
+  // Filters remembered for this tab (src/lib/bill-nav.ts): restored once, then saved on every change.
+  const filtersRestored = useRef(false);
+  useEffect(() => {
+    const f = readListFilters(id);
+    if (f) {
+      /* eslint-disable react-hooks/set-state-in-effect -- one-time restore from sessionStorage */
+      setStatusFilter(f.status);
+      setPaidFilter(f.paid);
+      setSearchQuery(f.search);
+      setColFilters(Object.fromEntries(Object.entries(f.columns).map(([k, v]) => [k, new Set(v)])));
+      /* eslint-enable react-hooks/set-state-in-effect */
+    }
+    filtersRestored.current = true;
+  }, [id]);
+  useEffect(() => {
+    if (!filtersRestored.current) return;
+    saveListFilters(id, { status: statusFilter, paid: paidFilter, search: searchQuery, columns: Object.fromEntries(Object.entries(colFilters).map(([k, v]) => [k, [...v]])) });
+  }, [id, statusFilter, paidFilter, searchQuery, colFilters]);
+
   useEffect(() => {
     fetch(`/api/events?module=bills`)
       .then((r) => (r.ok ? r.json() : []))
@@ -280,6 +300,11 @@ export default function EventBillsPage({
     // cellValues only reads labels; t is stable enough for this list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bills, statusFilter, paidFilter, searchQuery, colFilters]);
+
+  // The detail page walks the bills in exactly this order (previous / next / approve).
+  useEffect(() => {
+    if (bills.length) saveListOrder(id, filteredBills.map((b) => b.id));
+  }, [id, bills.length, filteredBills]);
 
   const paidCounts = useMemo(
     () => ({

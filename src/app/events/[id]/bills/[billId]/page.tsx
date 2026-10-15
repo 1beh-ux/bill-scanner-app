@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { needsPayout } from "@/lib/payout";
+import { adjacentInList } from "@/lib/bill-nav";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
@@ -202,6 +203,13 @@ const [processingAi, setProcessingAi] = useState(false);
   }, [eventId]);
 
   useEffect(() => {
+    // Opened from the bill list: previous / next follow the list as it was shown (filters, order).
+    const fromList = adjacentInList(eventId, billId);
+    if (fromList) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- read from sessionStorage, no fetch needed
+      setAdjacent(fromList);
+      return;
+    }
     fetch(`/api/events/${eventId}/bills`)
       .then((r) => (r.ok ? r.json() : []))
       .then((all: BillListEntry[]) => {
@@ -258,8 +266,12 @@ const [processingAi, setProcessingAi] = useState(false);
     go();
   }
 
-  function navigate(id: string) {
-    leave(() => router.push(`/events/${eventId}/bills/${id}${qs()}`));
+  // saved = called right after a successful save: the "unsaved changes" check would still see the
+  // pre-save form (state updates only land on the next render) and ask for nothing.
+  function navigate(id: string, saved = false) {
+    const go = () => router.push(`/events/${eventId}/bills/${id}${qs()}`);
+    if (saved) go();
+    else leave(go);
   }
 
   // Reload / closing the tab can only get the browser's own prompt.
@@ -387,7 +399,7 @@ const [processingAi, setProcessingAi] = useState(false);
     const ok = await handleSave();
     if (!ok) return;
     if (adjacent.next) {
-      navigate(adjacent.next);
+      navigate(adjacent.next, true);
     } else {
       setMessage(t("billModal.saved"));
       load();
@@ -421,7 +433,7 @@ const [processingAi, setProcessingAi] = useState(false);
 
     setSaving(false);
     if (adjacent.next) {
-      navigate(adjacent.next);
+      navigate(adjacent.next, true);
     } else {
       router.push(backHref);
     }
@@ -465,7 +477,9 @@ async function handleMoveToEvent(targetEventId: string) {
         dropped: String(data.droppedCategories ?? 0),
       }),
     });
-    router.push(`/events/${targetEventId}/bills/${billId}`);
+    // Stay in this event: on to the next bill of the list (the moved one has left it).
+    if (adjacent.next) navigate(adjacent.next, true);
+    else router.push(backHref);
   }
   async function handleProcessAi() {
     setProcessingAi(true);
