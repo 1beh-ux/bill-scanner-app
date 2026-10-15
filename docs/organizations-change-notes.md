@@ -559,6 +559,23 @@ Checks: tsc, eslint (no new errors), build, self-checks, check-org-scope, test-o
 bill through the prod worker twice -> 2 AiUsage rows (extraction / reprocess, tokens, cost, user).
 Backfill: 291 rows (bills 265 = 346.7 MB, participant docs 23, person docs 3), 0 objects missing.
 
+# Bills UX round 2 + Gemini 3.8 Flash (branch bills-ux-2)
+
+- Drive sync re-uploads an exported bill whose file is gone from the export folder (same name).
+- Column filter edits a draft (Použít / Zrušit); list filters + shown order kept per tab
+  (src/lib/bill-nav.ts) and the bill detail walks that order; Schválit / Uložit a další no longer ask
+  about changes they just saved; moving a bill to another event stays here and opens the next bill.
+- Fix before this: BigInt sizeBytes broke JSON of whole bill rows (bill lists empty, revision 00105);
+  BigInt.prototype.toJSON in src/lib/prisma.ts; isolation test covers the bill list.
+- bill-scanner-ai: gemini-2.5-pro (retired Oct 2026) -> gemini-3.8-flash via the Vertex EU endpoint
+  (SDK workaround: full EU model resource name); prompt gives today's date for two-digit years;
+  a future / >400-day-old date never auto-approves. 20 approved bills: totals 20/20, dates 18/20,
+  categories 15/20 (2.5 Pro: 19/17/13). Price 0.75 / 3.75 USD per 1M (intro until 2026-12-31).
+
+Deploy: bill-scanner-ai `00003-8g6` (rollback `00002-m7s`); app build 11c44bab-4414-43d4-bfc4-f402d826e95a ->
+`bill-scanner-app-00107-skn` (rollback `00106-cqs`). Checks: tsc, eslint (no new errors), self-checks,
+test-org-isolation 73/73, embed-check.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
