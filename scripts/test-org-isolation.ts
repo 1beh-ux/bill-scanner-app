@@ -423,6 +423,66 @@ async function main() {
     inval();
     const plain = await portalLinkFor(org.id, "TOKEN123");
     check("portal link: <embedPageUrl>#t=<token> with an embedding page, else https://<portal host>/p/<token>", link === "https://www.example.cz/portal#t=TOKEN123" && plain === `https://portal-${stamp}.test.invalid/p/TOKEN123`, JSON.stringify({ link, plain }));
+
+    // ===== usage metrics & costs (/vyuziti): super-admin only; page views in the right organization =====
+    setCookies({});
+    const accountant = await prisma.user.create({ data: { email: `org-isolation-acc-${stamp}@test.invalid`, displayName: "Isolation accountant", role: "accountant", organizationId: org.id } });
+    const usageCalls = async () => {
+      const act = await import("@/app/api/usage/activity/route");
+      const costs = await import("@/app/api/usage/costs/route");
+      const prices = await import("@/app/api/usage/prices/route");
+      return [
+        (await act.GET(req("/api/usage/activity"))).status,
+        (await costs.GET(req(`/api/usage/costs?event=${eventId}`))).status,
+        (await prices.GET(req("/api/usage/prices"))).status,
+        (await prices.PUT(req("/api/usage/prices", { method: "PUT", body: { models: {}, gcsGbMonth: 999 } }))).status,
+      ];
+    };
+    for (const [who, u] of [["org admin", admin], ["accountant", accountant], ["user", member]] as const) {
+      asUser(u);
+      const st = await usageCalls();
+      check(`${who}: /api/usage/* (activity, costs, prices GET + PUT) -> 403`, st.every((x) => x === 403), JSON.stringify(st));
+    }
+    check("prices unchanged by the refused PUTs", ((await prisma.appSetting.findUnique({ where: { key: "gcpPrices" } }))?.value as { gcsGbMonth?: number } | undefined)?.gcsGbMonth !== 999, "changed");
+    asUser(superAdmin);
+    const saUsage = await usageCalls().then((x) => x.slice(0, 3));
+    check("super-admin: /api/usage/* -> 200", saUsage.every((x) => x === 200), JSON.stringify(saUsage));
+
+    // Page views: route pattern only, the acting organization, the event only when it's that organization's.
+    asUser(admin);
+    const activity = (await import("@/app/api/activity/route")).POST;
+    const beacon = (body: unknown) => activity(new NextRequest("https://tabornik.online/api/activity", { method: "POST", body: JSON.stringify(body) }));
+    const b1 = await beacon({ path: "/events/[id]/bills/[billId]", eventId });
+    const b2 = await beacon({ path: `/events/[id]/bills/${eventId}`, eventId: z.event?.id ?? "x" });
+    const b3 = await beacon({ path: "/r/[slug]" });
+    const rows = await prisma.userActivity.findMany({ where: { userId: admin.id }, orderBy: { createdAt: "asc" } });
+    check(
+      "activity: normalized routes, no raw ids, test organization, foreign event dropped, public page skipped",
+      [b1.status, b2.status, b3.status].every((x) => x === 204) && rows.length === 2 &&
+        rows[0].route === "/events/[id]/bills/[billId]" && rows[0].eventId === eventId && rows[0].module === "bills" &&
+        rows[1].route === "/events/[id]/bills/[id]" && rows[1].eventId === null && rows.every((r) => r.organizationId === org.id),
+      JSON.stringify({ st: [b1.status, b2.status, b3.status], rows: rows.map((r) => [r.route, r.eventId, r.organizationId === org.id, r.module]) })
+    );
+    asUser(null as unknown as User);
+    check("activity: signed out -> 401", (await beacon({ path: "/events" })).status === 401, "not 401");
+
+    // A failed AI call still leaves an AiUsage row (success = false, who and why).
+    const savedAi = process.env.AI_SERVICE_URL;
+    delete process.env.AI_SERVICE_URL;
+    const { extractBillWithAi } = await import("@/lib/ai-extraction");
+    const threw = await extractBillWithAi("none.pdf", "none.pdf", [], { eventId, billId: "isolation-bill", userId: admin.id, purpose: "bill_reprocess" }).then(() => false, () => true);
+    process.env.AI_SERVICE_URL = savedAi;
+    const failRow = await prisma.aiUsage.findFirst({ where: { eventId, billId: "isolation-bill" } });
+    check("AI call failure -> AiUsage row with success=false, user and purpose", threw && !!failRow && !failRow.success && failRow.userId === admin.id && failRow.purpose === "bill_reprocess" && failRow.inputTokens === 0, JSON.stringify(failRow));
+    // Costs of an event show under its own organization only.
+    asUser(superAdmin);
+    const orgCosts = await json(await (await import("@/app/api/usage/costs/route")).GET(req(`/api/usage/costs?org=${org.id}&days=0`)));
+    const zareCosts = await json(await (await import("@/app/api/usage/costs/route")).GET(req(`/api/usage/costs?org=${zare.id}&days=0`)));
+    const inOwn = (orgCosts.body.ai as { id: string; aiCalls: number }[]).find((e) => e.id === eventId);
+    check("event costs: under its own organization, not under another", inOwn?.aiCalls === 1 && !(zareCosts.body.ai as { id: string }[]).some((e) => e.id === eventId), JSON.stringify({ inOwn }));
+    const all = await json(await (await import("@/app/api/usage/costs/route")).GET(req("/api/usage/costs?days=0")));
+    const sumOrgs = (all.body.ai as { aiCalls: number }[]).reduce((n, o) => n + o.aiCalls, 0);
+    check("organizations' AI calls add up to the grand total", sumOrgs === (await prisma.aiUsage.count()), `${sumOrgs} vs ${await prisma.aiUsage.count()}`);
   } finally {
     // --- cleanup: everything the test created, also on failure
     (globalThis as { __orgTestUser?: User | null }).__orgTestUser = null;
@@ -438,6 +498,7 @@ async function main() {
     if (eventId) {
       const ev = { eventId };
       const pv = { participant: { eventId } };
+      await step("aiUsage", () => prisma.aiUsage.deleteMany({ where: ev }));
       await step("mailActionLog", () => prisma.mailActionLog.deleteMany({ where: ev }));
       await step("participantDocument", () => prisma.participantDocument.deleteMany({ where: pv }));
       await step("participantGuardian", () => prisma.participantGuardian.deleteMany({ where: pv }));
@@ -466,6 +527,7 @@ async function main() {
       await step("publicHost", () => prisma.publicHost.deleteMany({ where: ov }));
       await step("bankAccount", () => prisma.bankAccount.deleteMany({ where: ov }));
       await step("portalRateHit", () => prisma.portalRateHit.deleteMany({ where: { key: { startsWith: "bank:" }, createdAt: { gte: new Date(stamp) } } }));
+      await step("userActivity", () => prisma.userActivity.deleteMany({ where: ov }));
       await step("user", () => prisma.user.deleteMany({ where: ov }));
       await step("organization", () => prisma.organization.delete({ where: { id: oid } }));
     }
