@@ -427,7 +427,9 @@ async function main() {
     // ===== usage metrics & costs (/vyuziti): super-admin only; page views in the right organization =====
     setCookies({});
     const accountant = await prisma.user.create({ data: { email: `org-isolation-acc-${stamp}@test.invalid`, displayName: "Isolation accountant", role: "accountant", organizationId: org.id } });
-    const usageCalls = async () => {
+    // The refused PUTs must not change anything; the super-admin pass only reads. Prices restored regardless.
+    const pricesBefore = await prisma.appSetting.findUnique({ where: { key: "gcpPrices" } });
+    const usageCalls = async (withPut = true) => {
       const act = await import("@/app/api/usage/activity/route");
       const costs = await import("@/app/api/usage/costs/route");
       const prices = await import("@/app/api/usage/prices/route");
@@ -435,7 +437,7 @@ async function main() {
         (await act.GET(req("/api/usage/activity"))).status,
         (await costs.GET(req(`/api/usage/costs?event=${eventId}`))).status,
         (await prices.GET(req("/api/usage/prices"))).status,
-        (await prices.PUT(req("/api/usage/prices", { method: "PUT", body: { models: {}, gcsGbMonth: 999 } }))).status,
+        ...(withPut ? [(await prices.PUT(req("/api/usage/prices", { method: "PUT", body: { models: {}, gcsGbMonth: 999 } }))).status] : []),
       ];
     };
     for (const [who, u] of [["org admin", admin], ["accountant", accountant], ["user", member]] as const) {
@@ -445,7 +447,8 @@ async function main() {
     }
     check("prices unchanged by the refused PUTs", ((await prisma.appSetting.findUnique({ where: { key: "gcpPrices" } }))?.value as { gcsGbMonth?: number } | undefined)?.gcsGbMonth !== 999, "changed");
     asUser(superAdmin);
-    const saUsage = await usageCalls().then((x) => x.slice(0, 3));
+    const saUsage = await usageCalls(false);
+    if (pricesBefore) await prisma.appSetting.update({ where: { key: "gcpPrices" }, data: { value: pricesBefore.value as object } });
     check("super-admin: /api/usage/* -> 200", saUsage.every((x) => x === 200), JSON.stringify(saUsage));
 
     // Page views: route pattern only, the acting organization, the event only when it's that organization's.
