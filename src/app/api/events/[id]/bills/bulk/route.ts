@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { approveBill, deleteBill } from "@/lib/bill-actions";
 import { moveBillToEvent } from "@/lib/bill-move";
+import { needsPayout } from "@/lib/payout";
 
 interface FailureDetail {
   billId: string;
@@ -41,7 +42,7 @@ export async function POST(
   // Only operate on bills that actually belong to this event.
   const bills = await prisma.bill.findMany({
     where: { id: { in: billIds }, eventId },
-    select: { id: true, originalFilename: true, payerAuthorId: true },
+    select: { id: true, originalFilename: true, payerAuthorId: true, payerAuthor: { select: { isOfficialAccount: true, payoutNeeded: true } } },
   });
   const nameById = new Map(bills.map((b) => [b.id, b.originalFilename]));
 
@@ -77,8 +78,9 @@ if (action === "move") {
 
     // "Paid by event" bills (no payer) have nothing to reimburse — skip
     // them rather than erroring, since selecting a mixed batch is normal.
-    const eligible = bills.filter((b) => b.payerAuthorId !== null);
-    const skipped = bills.filter((b) => b.payerAuthorId === null);
+    // Same for payers nobody pays out (official account / "no payout").
+    const eligible = bills.filter((b) => needsPayout(b.payerAuthor));
+    const skipped = bills.filter((b) => !needsPayout(b.payerAuthor));
 
     const result = await prisma.bill.updateMany({
       where: { id: { in: eligible.map((b) => b.id) } },
@@ -96,7 +98,7 @@ if (action === "move") {
       failed: skipped.map((b) => ({
         billId: b.id,
         filename: nameById.get(b.id) || b.id,
-        error: "no_payer",
+        error: b.payerAuthorId ? "no_payout" : "no_payer",
       })),
     });
   }

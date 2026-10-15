@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
+import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 
 // What is owed to whom in THIS event (never other events -- for admin too).
 //   scope=approved  approved, not-yet-paid bills only (the default, "to pay out")
@@ -32,6 +33,8 @@ export async function GET(
     where: {
       eventId,
       payerAuthorId: { not: null },
+      // Only payers whose bills are paid out (not the official account / "no payout" payers).
+      payerAuthor: PAYOUT_PAYER_WHERE,
       ...(scope === "approved" ? { status: "approved", paidToAuthor: false } : {}),
     },
     include: {

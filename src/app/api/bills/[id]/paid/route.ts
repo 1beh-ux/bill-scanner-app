@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { needsPayout } from "@/lib/payout";
 
 export async function POST(
   req: NextRequest,
@@ -15,7 +16,7 @@ export async function POST(
 
   const bill = await prisma.bill.findUnique({
     where: { id },
-    include: { event: { select: { status: true } } },
+    include: { event: { select: { status: true } }, payerAuthor: { select: { isOfficialAccount: true, payoutNeeded: true } } },
   });
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -27,6 +28,9 @@ export async function POST(
   }
 if (!bill.payerAuthorId) {
     return NextResponse.json({ error: "no_payer" }, { status: 400 });
+  }
+  if (!needsPayout(bill.payerAuthor)) {
+    return NextResponse.json({ error: "no_payout" }, { status: 400 });
   }
 
   const updated = await prisma.bill.update({

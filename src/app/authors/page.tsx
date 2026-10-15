@@ -10,6 +10,8 @@ type Author = {
   bankAccountNumber: string | null;
   bankCode: string | null;
   active: boolean;
+  isOfficialAccount: boolean;
+  payoutNeeded: boolean;
   mergedInto?: { canonicalName: string } | null;
   eventAccess?: { event: { id: string; name: string } }[];
 };
@@ -126,6 +128,12 @@ export default function AuthorsPage() {
       setError(typeof data.error === "string" && data.error.length > 0 ? data.error : t("authors.errorDeleteFailed"));
       return;
     }
+    load();
+  }
+
+  // "Oficiální účet organizace" / "Řeší se proplacení" (src/lib/payout.ts).
+  async function setFlag(author: Author, flag: "isOfficialAccount" | "payoutNeeded", value: boolean) {
+    await fetch(`/api/authors/${author.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [flag]: value }) });
     load();
   }
 
@@ -417,6 +425,14 @@ export default function AuthorsPage() {
                         >
                           {a.active ? t("common.statusActive") : t("authors.statusInactive")}
                         </button>
+                        <label className="mt-1 flex items-center gap-1.5 whitespace-nowrap text-[12px] text-ink-secondary" title={t("authors.officialHint")}>
+                          <input type="checkbox" checked={a.isOfficialAccount} onChange={(e) => setFlag(a, "isOfficialAccount", e.target.checked)} />
+                          {t("authors.official")}
+                        </label>
+                        <label className="mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-[12px] text-ink-secondary" title={t("authors.payoutHint")}>
+                          <input type="checkbox" checked={a.payoutNeeded && !a.isOfficialAccount} disabled={a.isOfficialAccount} onChange={(e) => setFlag(a, "payoutNeeded", e.target.checked)} />
+                          {t("authors.payout")}
+                        </label>
                       </td>
                       <td className="whitespace-nowrap p-2">
                         <button onClick={() => startEditAuthor(a)} className={linkBtn + " mr-3"}>

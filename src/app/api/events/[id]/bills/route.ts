@@ -27,7 +27,7 @@ export async function GET(
     where: { eventId: id },
     orderBy: { createdAt: "desc" },
     include: {
-      payerAuthor: { select: { canonicalName: true } },
+      payerAuthor: { select: { canonicalName: true, isOfficialAccount: true, payoutNeeded: true } },
       categories: { include: { eventCategory: { select: { name: true } } }, orderBy: { eventCategory: { name: "asc" } } },
       createdBy: { select: { displayName: true } },
     },

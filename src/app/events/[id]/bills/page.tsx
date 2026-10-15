@@ -9,6 +9,7 @@ import { formatCzk } from "@/lib/format";
 import ColumnFilter from "@/components/bills/ColumnFilter";
 import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkEdit";
 import DriveBillsSync from "@/components/bills/DriveBillsSync";
+import { needsPayout } from "@/lib/payout";
 
 type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
 
@@ -23,7 +24,7 @@ type BillItem = {
   currency: string;
   billDate: string | null;
   createdAt: string;
-  payerAuthor: { canonicalName: string } | null;
+  payerAuthor: { canonicalName: string; isOfficialAccount: boolean; payoutNeeded: boolean } | null;
   categories: { eventCategory: { name: string } }[];
   notes: string | null;
   paidToAuthor: boolean;
@@ -224,7 +225,7 @@ export default function EventBillsPage({
       case "payer": return [b.payerAuthor?.canonicalName ?? t("billsPage.payerEventShort")];
       case "amount": return [b.totalAmount === null ? dash : `${parseFloat(b.totalAmount).toLocaleString("cs-CZ")} ${b.currency}`];
       case "amountCzk": return [b.amountCzk ? formatCzk(b.amountCzk) : dash];
-      case "paid": return [!b.payerAuthor ? dash : b.paidToAuthor ? t("billsPage.paidYes") : t("billsPage.paidNo")];
+      case "paid": return [!needsPayout(b.payerAuthor) ? dash : b.paidToAuthor ? t("billsPage.paidYes") : t("billsPage.paidNo")];
       case "createdAt": return [date(b.createdAt)];
       case "createdBy": return [b.createdBy?.displayName ?? dash];
       case "exported": return [b.exportedAt ? t("billsPage.exportedYes") : t("billsPage.exportedNo")];
@@ -248,8 +249,8 @@ export default function EventBillsPage({
 
   const filteredBills = useMemo(() => {
     let byFilter = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
-    if (paidFilter === "paid") byFilter = byFilter.filter((b) => b.payerAuthor && b.paidToAuthor);
-    if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => b.payerAuthor && !b.paidToAuthor);
+    if (paidFilter === "paid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && b.paidToAuthor);
+    if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && !b.paidToAuthor);
 
     for (const [col, allowed] of Object.entries(colFilters) as [BillColumnKey, Set<string>][]) {
       byFilter = byFilter.filter((b) => cellValues(col, b).some((v) => allowed.has(v)));
@@ -282,8 +283,8 @@ export default function EventBillsPage({
 
   const paidCounts = useMemo(
     () => ({
-      paid: bills.filter((b) => b.payerAuthor && b.paidToAuthor).length,
-      unpaid: bills.filter((b) => b.payerAuthor && !b.paidToAuthor).length,
+      paid: bills.filter((b) => needsPayout(b.payerAuthor) && b.paidToAuthor).length,
+      unpaid: bills.filter((b) => needsPayout(b.payerAuthor) && !b.paidToAuthor).length,
     }),
     [bills]
   );
@@ -396,7 +397,8 @@ export default function EventBillsPage({
   }
 
   function paidChip(b: BillItem) {
-    if (!b.payerAuthor) return <span className="text-[13px] text-ink-secondary">—</span>;
+    // Nothing to pay out: "Akce", the official account, a payer marked "no payout".
+    if (!needsPayout(b.payerAuthor)) return <span className="text-[13px] text-ink-secondary">—</span>;
     return b.paidToAuthor ? (
       <span
         title={b.paidAt ? new Date(b.paidAt).toLocaleDateString("cs-CZ") : undefined}
@@ -587,6 +589,9 @@ export default function EventBillsPage({
     }
     if (f.error === "already_approved") {
       return t("billsPage.bulkErrApproved", { filename: f.filename });
+    }
+    if (f.error === "no_payout") {
+      return t("billsPage.bulkErrNoPayout", { filename: f.filename });
     }
     if (f.error === "no_payer") {
       return t("billsPage.bulkErrNoPayer", { filename: f.filename });
@@ -919,7 +924,7 @@ export default function EventBillsPage({
                   <span>{b.payerAuthor?.canonicalName ?? "Akce"}</span>
                   {b.categories.length > 0 && <span>{b.categories.map((c) => c.eventCategory.name).join(", ")}</span>}
                   <span>{b.billDate ? new Date(b.billDate).toLocaleDateString("cs-CZ") : "—"}</span>
-                  {b.payerAuthor && paidChip(b)}
+                  {needsPayout(b.payerAuthor) && paidChip(b)}
                 </div>
               </div>
             ))}

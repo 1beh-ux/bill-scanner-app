@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslations } from "@/lib/i18n";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
+import { needsPayout } from "@/lib/payout";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
@@ -30,7 +31,7 @@ type BillDetail = {
   totalAmount: string | null;
   currency: string;
   payerAuthorId: string | null;
-  payerAuthor?: { id: string; canonicalName: string } | null;
+  payerAuthor?: { id: string; canonicalName: string; isOfficialAccount?: boolean; payoutNeeded?: boolean } | null;
   notes: string | null;
   originalGcsObjectPath: string | null;
   contentHash: string;
@@ -666,7 +667,8 @@ const statusLabel = t(
             />
           </div>
 
-          {bill.payerAuthorId && (
+          {/* Only payers who get money paid out (not the official account / "no payout"). */}
+          {bill.payerAuthorId && needsPayout(bill.payerAuthor) && (
             <div>
               <label className={labelClass}>{t("billModal.paidStatus")}</label>
               <select

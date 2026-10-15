@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
+import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 
 export async function GET(
   req: NextRequest,
@@ -24,6 +25,7 @@ export async function GET(
       status: "approved",
       paidToAuthor: true,
       payerAuthorId: { not: null },
+      payerAuthor: PAYOUT_PAYER_WHERE,
     },
     include: { payerAuthor: true },
   });

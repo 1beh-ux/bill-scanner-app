@@ -46,6 +46,10 @@ export async function PATCH(
   if (!(await authorInOrg(user, id))) return notFound();
   const body = await req.json();
   const { canonicalName, active } = body;
+  // "Oficiální účet organizace" / "Řeší se proplacení": the official account never gets a payout.
+  for (const k of ["isOfficialAccount", "payoutNeeded"]) if (body[k] !== undefined && typeof body[k] !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  const official: boolean | undefined = body.isOfficialAccount;
+  const payoutNeeded: boolean | undefined = official === true ? false : body.payoutNeeded;
 
   const hasAccount = "bankAccountNumber" in body;
   const hasCode = "bankCode" in body;
@@ -65,6 +69,8 @@ export async function PATCH(
       data: {
         ...(canonicalName !== undefined && { canonicalName: String(canonicalName).trim().replace(/\s+/g, " ") }),
         ...(active !== undefined && { active }),
+        ...(official !== undefined && { isOfficialAccount: official }),
+        ...(payoutNeeded !== undefined && { payoutNeeded }),
       },
     });
     if (bank) await setAuthorBank(tx, { authorId: id, bank, userId: user.id, eventId: null, source: "admin_edit" });

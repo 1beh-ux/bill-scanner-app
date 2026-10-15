@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 
 export async function POST(
   req: NextRequest,
@@ -37,6 +38,7 @@ const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
     where: {
       eventId,
       payerAuthorId: authorId,
+      payerAuthor: PAYOUT_PAYER_WHERE,
       ...(scope === "approved" ? { status: "approved" } : {}),
       paidToAuthor: action === "pay" ? false : true,
     },
