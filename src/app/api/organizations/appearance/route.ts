@@ -6,7 +6,16 @@ import { cleanAppearance } from "@/lib/public-appearance";
 
 // Organizace -> Vzhled veřejných stránek: the acting organization's public-page look
 // (docs/custom-domain.md "Appearance"). Organization admin (a super-admin: where acting).
-const SELECT = { publicFontFamily: true, publicHeadingFontFamily: true, publicBaseFontSize: true, publicHeadingScale: true, publicLineHeight: true } as const;
+const SELECT = {
+  publicFontFamily: true,
+  publicHeadingFontFamily: true,
+  publicBaseFontSize: true,
+  publicHeadingScale: true,
+  publicLineHeight: true,
+  publicTheme: true,
+  publicTransparent: true,
+  publicContentWidth: true,
+} as const;
 
 async function guard(): Promise<{ error: NextResponse } | { organizationId: string }> {
   const user = await getCurrentUser();

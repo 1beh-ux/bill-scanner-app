@@ -90,6 +90,17 @@ export async function portalLinkFor(organizationId: string, token: string): Prom
 export const publicOrg = perRequest((organizationId: string) =>
   prisma.organization.findUniqueOrThrow({
     where: { id: organizationId },
-    select: { name: true, contactEmail: true, publicFontFamily: true, publicHeadingFontFamily: true, publicBaseFontSize: true, publicHeadingScale: true, publicLineHeight: true },
+    select: {
+      name: true,
+      contactEmail: true,
+      publicFontFamily: true,
+      publicHeadingFontFamily: true,
+      publicBaseFontSize: true,
+      publicHeadingScale: true,
+      publicLineHeight: true,
+      publicTheme: true,
+      publicTransparent: true,
+      publicContentWidth: true,
+    },
   })
 );

@@ -24,6 +24,10 @@ export const PUBLIC_FONTS: { key: string; label: string; family: string }[] = [
 export const BASE_SIZES = [14, 15, 16, 17, 18];
 export const HEADING_SCALES = ["compact", "normal", "large"] as const;
 export const LINE_HEIGHTS = ["compact", "normal", "relaxed"] as const;
+export const THEMES = ["light", "dark"] as const;
+// Content width: 0 = 100 % (the whole frame / window), else px.
+export const MIN_WIDTH = 320;
+export const MAX_WIDTH = 2400;
 
 export type Appearance = {
   publicFontFamily: string | null;
@@ -31,6 +35,11 @@ export type Appearance = {
   publicBaseFontSize: number | null;
   publicHeadingScale: string | null;
   publicLineHeight: string | null;
+  // light | dark | null = the visitor's system (embedded) / their own choice (not embedded).
+  publicTheme: string | null;
+  // No page / card background: the embedding website's shows through.
+  publicTransparent: boolean;
+  publicContentWidth: number | null;
 };
 
 const fontOk = (v: unknown) => v === null || PUBLIC_FONTS.some((f) => f.key === v);
@@ -44,11 +53,17 @@ export function cleanAppearance(b: Record<string, unknown>): Appearance | null {
     publicBaseFontSize: n(b.publicBaseFontSize) === null ? null : Number(b.publicBaseFontSize),
     publicHeadingScale: n(b.publicHeadingScale),
     publicLineHeight: n(b.publicLineHeight),
+    publicTheme: n(b.publicTheme),
+    publicTransparent: b.publicTransparent === true,
+    publicContentWidth: n(b.publicContentWidth) === null ? null : Number(b.publicContentWidth),
   };
   if (!fontOk(a.publicFontFamily) || !fontOk(a.publicHeadingFontFamily)) return null;
   if (a.publicBaseFontSize !== null && !BASE_SIZES.includes(a.publicBaseFontSize)) return null;
   if (a.publicHeadingScale !== null && !(HEADING_SCALES as readonly unknown[]).includes(a.publicHeadingScale)) return null;
   if (a.publicLineHeight !== null && !(LINE_HEIGHTS as readonly unknown[]).includes(a.publicLineHeight)) return null;
+  if (a.publicTheme !== null && !(THEMES as readonly unknown[]).includes(a.publicTheme)) return null;
+  const w = a.publicContentWidth;
+  if (w !== null && !(Number.isInteger(w) && (w === 0 || (w >= MIN_WIDTH && w <= MAX_WIDTH)))) return null;
   return a as Appearance;
 }
 
@@ -58,8 +73,8 @@ const HEADING_ZOOM: Record<string, number> = { compact: 0.9, normal: 1, large: 1
 const LINE: Record<string, number> = { compact: 1.3, normal: 1.5, relaxed: 1.75 };
 const family = (key: string | null) => PUBLIC_FONTS.find((f) => f.key === key)?.family ?? null;
 
-/** CSS for `${scope}` (the wrapper selector); "" = today's look. */
-export function appearanceCss(a: Partial<Appearance> | null, scope: string): string {
+/** CSS for `${scope}` (the wrapper selector); "" = today's look. page = false: no html/body rules (the admin preview). */
+export function appearanceCss(a: Partial<Appearance> | null, scope: string, page = true): string {
   if (!a) return "";
   const rules: string[] = [];
   const body = family(a.publicFontFamily ?? null);
@@ -75,6 +90,13 @@ export function appearanceCss(a: Partial<Appearance> | null, scope: string): str
   if (heading) h.push(`font-family:${heading}`);
   if (a.publicHeadingScale && HEADING_ZOOM[a.publicHeadingScale] && a.publicHeadingScale !== "normal") h.push(`zoom:${HEADING_ZOOM[a.publicHeadingScale]}`);
   if (h.length) rules.push(`${scope} h1,${scope} h2,${scope} h3{${h.join(";")}}`);
+  // Content width of the form / portal column (.pub-container): 0 = 100 %.
+  if (typeof a.publicContentWidth === "number") rules.push(`${scope} .pub-container{max-width:${a.publicContentWidth === 0 ? "none" : `${a.publicContentWidth}px`}}`);
+  // No background: page and cards transparent (form fields keep theirs, so they stay visible).
+  if (a.publicTransparent) {
+    if (page) rules.push("html,body{background:transparent!important}");
+    rules.push(`${scope} :is(.bg-paper,.bg-paper-2):not(input,select,textarea){background-color:transparent!important}`);
+  }
   // A sanity bound: only our own values reach this string, never free text.
   return rules.join("\n").replace(/[<>]/g, "");
 }

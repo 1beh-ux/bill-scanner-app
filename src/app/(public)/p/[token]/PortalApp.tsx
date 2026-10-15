@@ -139,7 +139,7 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
   const shownRegs = shown.flatMap((m) => m.registrations.map((r) => ({ m, r })));
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-4 pb-16">
+    <div className="pub-container mx-auto w-full max-w-6xl p-4 pb-16">
       <ThemeToggle label={t("portal.toggleTheme")} />
       {/* Also above the birth-date gate: a parent sees whose portal it is before typing anything. */}
       <OrgName org={org} />

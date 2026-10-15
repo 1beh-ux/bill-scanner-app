@@ -18,11 +18,17 @@ export default function PublicFrame({ embed, theme, appearance, children }: { em
   const css = appearanceCss(appearance ?? null, ".pub");
   const ref = useRef<HTMLDivElement>(null);
   // Before first paint (the root layout's script only knows the stored choice).
-  const themeScript = theme
-    ? `document.documentElement.classList.toggle("dark", ${theme === "dark"});`
-    : embed
-      ? `document.documentElement.classList.toggle("dark", matchMedia("(prefers-color-scheme: dark)").matches);`
-      : null;
+  // ?theme= wins; then the organization's "Vzhled" choice (embedded: always; on its own page:
+  // unless the visitor picked with the toggle); embedded without either: the system's.
+  const orgTheme = appearance?.publicTheme === "light" || appearance?.publicTheme === "dark" ? appearance.publicTheme : null;
+  const forced = theme ?? (embed ? orgTheme : null);
+  const themeScript = forced
+    ? `document.documentElement.classList.toggle("dark", ${forced === "dark"});`
+    : orgTheme
+      ? `try{if(!localStorage.getItem("theme"))document.documentElement.classList.toggle("dark", ${orgTheme === "dark"});}catch(e){}`
+      : embed
+        ? `document.documentElement.classList.toggle("dark", matchMedia("(prefers-color-scheme: dark)").matches);`
+        : null;
 
   useEffect(() => {
     if (!embed || window.parent === window) return;

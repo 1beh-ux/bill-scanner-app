@@ -3,12 +3,21 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { publicFontVariables } from "@/components/embed/public-fonts";
-import { appearanceCss, BASE_SIZES, HEADING_SCALES, LINE_HEIGHTS, PUBLIC_FONTS, type Appearance } from "@/lib/public-appearance";
+import { appearanceCss, BASE_SIZES, HEADING_SCALES, LINE_HEIGHTS, MAX_WIDTH, MIN_WIDTH, PUBLIC_FONTS, THEMES, type Appearance } from "@/lib/public-appearance";
 
 // Organizace -> Vzhled veřejných stránek (docs/custom-domain.md "Appearance"): font, sizes and
 // line height of the registration form, the parent portal and the landing page -- embedded in
 // the organization's website or not. The admin app itself is unchanged. Live preview below.
-const EMPTY: Appearance = { publicFontFamily: null, publicHeadingFontFamily: null, publicBaseFontSize: null, publicHeadingScale: null, publicLineHeight: null };
+const EMPTY: Appearance = {
+  publicFontFamily: null,
+  publicHeadingFontFamily: null,
+  publicBaseFontSize: null,
+  publicHeadingScale: null,
+  publicLineHeight: null,
+  publicTheme: null,
+  publicTransparent: false,
+  publicContentWidth: null,
+};
 const inputClass = "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
@@ -85,6 +94,41 @@ export default function AppearancePage() {
               ))}
             </select>
           </label>
+          <label className="text-[13px] text-ink-secondary">
+            {t("appearance.theme")}
+            <select value={a.publicTheme ?? ""} onChange={(e) => set({ publicTheme: e.target.value || null })} className={inputClass + " mt-1"}>
+              <option value="">{t("appearance.themeSystem")}</option>
+              {THEMES.map((k) => (
+                <option key={k} value={k}>{t(`appearance.theme.${k}`)}</option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[11.5px]">{t("appearance.themeHint")}</span>
+          </label>
+          <label className="flex items-start gap-2 text-[13px] text-ink">
+            <input type="checkbox" checked={a.publicTransparent} onChange={(e) => set({ publicTransparent: e.target.checked })} className="mt-0.5 h-4 w-4 accent-ember" />
+            <span>
+              {t("appearance.transparent")}
+              <span className="block text-[11.5px] text-ink-secondary">{t("appearance.transparentHint")}</span>
+            </span>
+          </label>
+          <div className="text-[13px] text-ink-secondary">
+            {t("appearance.width")}
+            <div className="mt-1 flex gap-2">
+              <select
+                value={a.publicContentWidth === null ? "" : a.publicContentWidth === 0 ? "full" : "px"}
+                onChange={(e) => set({ publicContentWidth: e.target.value === "" ? null : e.target.value === "full" ? 0 : (a.publicContentWidth || 900) })}
+                className={inputClass}
+              >
+                <option value="">{t("appearance.widthDefault")}</option>
+                <option value="full">{t("appearance.widthFull")}</option>
+                <option value="px">{t("appearance.widthPx")}</option>
+              </select>
+              {!!a.publicContentWidth && (
+                <input type="number" min={MIN_WIDTH} max={MAX_WIDTH} step={10} value={a.publicContentWidth} onChange={(e) => set({ publicContentWidth: Number(e.target.value) || MIN_WIDTH })} className={inputClass + " w-28"} aria-label="px" />
+              )}
+            </div>
+            <span className="mt-1 block text-[11.5px]">{t("appearance.widthHint", { min: String(MIN_WIDTH), max: String(MAX_WIDTH) })}</span>
+          </div>
           {message && <p className="text-[13px] text-ink">{message}</p>}
           <div className="flex justify-between gap-3">
             <button type="button" disabled={busy} onClick={() => save(EMPTY)} className="text-[14px] text-ink-secondary hover:underline disabled:opacity-50">{t("appearance.reset")}</button>
@@ -95,8 +139,10 @@ export default function AppearancePage() {
         {/* Preview: the public pages' own markup style, with the settings above. */}
         <div className="min-w-0 flex-1">
           <p className="mb-2 text-[12px] uppercase tracking-wide text-ink-secondary">{t("appearance.preview")}</p>
-          <style>{appearanceCss(a, ".pub-preview")}</style>
-          <div className={`pub-preview ${publicFontVariables} flex flex-col gap-4 rounded-lg border border-mist bg-paper p-4`}>
+          <style>{appearanceCss(a, ".pub-preview", false)}</style>
+          {/* The chosen theme is shown in the preview; transparent = the checkered backdrop shows through. */}
+          <div className={a.publicTheme === "dark" ? "dark" : ""} style={a.publicTransparent ? { backgroundImage: "repeating-conic-gradient(#e4e1da 0% 25%, transparent 0% 50%)", backgroundSize: "16px 16px" } : undefined}>
+          <div className={`pub-preview ${publicFontVariables} flex flex-col gap-4 rounded-lg border border-mist ${a.publicTransparent ? "" : "bg-paper"} p-4`}>
             <div>
               <p className="text-[14px] font-semibold text-ink">{t("appearance.sampleOrg")}</p>
               <h1 className="text-[22px] font-semibold text-ink">{t("appearance.sampleEvent")}</h1>
@@ -115,6 +161,7 @@ export default function AppearancePage() {
               <p className="text-[13px] text-ink-secondary">1. 7. – 14. 7. 2027 · Jedlová</p>
               <p className="text-[14px] text-ink">{t("appearance.sampleCardText")}</p>
             </section>
+          </div>
           </div>
         </div>
       </div>

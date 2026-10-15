@@ -145,7 +145,7 @@ export default function PublicForm({
 
   if (done) {
     return (
-      <div className="mx-auto w-full max-w-2xl p-4 pb-16">
+      <div className="pub-container mx-auto w-full max-w-2xl p-4 pb-16">
         <ThemeToggle label={t("portal.toggleTheme")} />
         <OrgName org={org} />
         <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
@@ -182,7 +182,7 @@ export default function PublicForm({
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-4 pb-16">
+    <div className="pub-container mx-auto w-full max-w-4xl p-4 pb-16">
       <ThemeToggle label={t("portal.toggleTheme")} />
       <OrgName org={org} />
       <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
