@@ -5,7 +5,7 @@ import { Fira_Sans, Lato, Merriweather, Montserrat, Noto_Sans, Nunito, Open_Sans
 
 // next/font needs literal options in every call (no shared object / spread).
 const openSans = Open_Sans({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, weight: ["400", "600"], variable: "--pf-open-sans" });
-const roboto = Roboto({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, weight: ["400", "500", "700"], variable: "--pf-roboto" });
+const roboto = Roboto({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, variable: "--pf-roboto" });
 const lato = Lato({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, weight: ["400", "700"], variable: "--pf-lato" });
 const montserrat = Montserrat({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, weight: ["400", "600"], variable: "--pf-montserrat" });
 const sourceSans3 = Source_Sans_3({ subsets: ["latin", "latin-ext"], display: "swap", preload: false, weight: ["400", "600"], variable: "--pf-source-sans-3" });
