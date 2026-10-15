@@ -6,8 +6,11 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import ColumnPicker from "@/components/ColumnPicker";
 import { BILL_COLUMNS, REQUIRED_BILL_COLUMNS, normalizeBillColumns, type BillColumnKey } from "@/lib/bill-columns";
 import { formatCzk } from "@/lib/format";
+import ColumnFilter from "@/components/bills/ColumnFilter";
+import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkEdit";
+import DriveBillsSync from "@/components/bills/DriveBillsSync";
 
-type EventDetail = { id: string; name: string; billsListColumns: unknown };
+type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
 
 type BillItem = {
   id: string;
@@ -110,6 +113,9 @@ export default function EventBillsPage({
   const [aiProgressIds, setAiProgressIds] = useState<Set<string> | null>(null);
   const [events, setEvents] = useState<{ id: string; name: string; status: string }[]>([]);
   const [showMoveSelect, setShowMoveSelect] = useState(false);
+  const [showBulkEdit, setShowBulkEdit] = useState(false);
+  // Excel-like column filters: column -> the values shown (missing = no filter).
+  const [colFilters, setColFilters] = useState<Partial<Record<BillColumnKey, Set<string>>>>({});
   const [moveTargetId, setMoveTargetId] = useState("");
 
   // Guards against out-of-order fetch responses: only the response matching
@@ -203,10 +209,51 @@ export default function EventBillsPage({
     return c;
   }, [bills]);
 
+  // What a column shows for a bill, as text -- the values of its column filter (a bill with
+  // several categories has several).
+  function cellValues(col: BillColumnKey, b: BillItem): string[] {
+    const dash = "—";
+    const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ") : dash);
+    switch (col) {
+      case "sourceFile": return [b.originalFilename];
+      case "status": return [statusLabels[b.status] || b.status];
+      case "billDate": return [date(b.billDate)];
+      case "merchant": return [b.merchantName || dash];
+      case "note": return [b.notes || dash];
+      case "category": return b.categories.length ? b.categories.map((c) => c.eventCategory.name) : [dash];
+      case "payer": return [b.payerAuthor?.canonicalName ?? t("billsPage.payerEventShort")];
+      case "amount": return [b.totalAmount === null ? dash : `${parseFloat(b.totalAmount).toLocaleString("cs-CZ")} ${b.currency}`];
+      case "amountCzk": return [b.amountCzk ? formatCzk(b.amountCzk) : dash];
+      case "paid": return [!b.payerAuthor ? dash : b.paidToAuthor ? t("billsPage.paidYes") : t("billsPage.paidNo")];
+      case "createdAt": return [date(b.createdAt)];
+      case "createdBy": return [b.createdBy?.displayName ?? dash];
+      case "exported": return [b.exportedAt ? t("billsPage.exportedYes") : t("billsPage.exportedNo")];
+    }
+  }
+
+  function filterValues(col: BillColumnKey) {
+    const counts = new Map<string, number>();
+    for (const b of bills) for (const v of new Set(cellValues(col, b))) counts.set(v, (counts.get(v) ?? 0) + 1);
+    return [...counts].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, "cs", { numeric: true }));
+  }
+
+  const setColFilter = (col: BillColumnKey, next: Set<string> | null) =>
+    setColFilters((prev) => {
+      const copy = { ...prev };
+      if (next) copy[col] = next;
+      else delete copy[col];
+      return copy;
+    });
+  const activeColFilters = Object.keys(colFilters).length;
+
   const filteredBills = useMemo(() => {
     let byFilter = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
     if (paidFilter === "paid") byFilter = byFilter.filter((b) => b.payerAuthor && b.paidToAuthor);
     if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => b.payerAuthor && !b.paidToAuthor);
+
+    for (const [col, allowed] of Object.entries(colFilters) as [BillColumnKey, Set<string>][]) {
+      byFilter = byFilter.filter((b) => cellValues(col, b).some((v) => allowed.has(v)));
+    }
 
     const query = normalize(searchQuery.trim());
     if (!query) return byFilter;
@@ -229,7 +276,9 @@ export default function EventBillsPage({
         .join(" ");
       return normalize(haystack).includes(query);
     });
-  }, [bills, statusFilter, paidFilter, searchQuery]);
+    // cellValues only reads labels; t is stable enough for this list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bills, statusFilter, paidFilter, searchQuery, colFilters]);
 
   const paidCounts = useMemo(
     () => ({
@@ -551,6 +600,12 @@ export default function EventBillsPage({
     if (f.error === "target_event_closed") {
       return t("billsPage.bulkErrTargetClosed", { filename: f.filename });
     }
+    if (f.error === "payer_not_in_event") {
+      return t("billBulkEdit.errPayerNotInEvent", { filename: f.filename });
+    }
+    if (f.error === "bill_processing_locked") {
+      return t("billBulkEdit.errProcessing", { filename: f.filename });
+    }
     if (f.error === "target_no_access") {
       return t("billsPage.bulkErrTargetNoAccess", { filename: f.filename });
     }
@@ -572,6 +627,15 @@ export default function EventBillsPage({
           {t("billsPage.uploadButton")}
         </a>
       </div>
+
+      <DriveBillsSync
+        eventId={id}
+        bills={bills}
+        exportFolderId={event.driveExportFolderId}
+        manifestId={event.driveManifestSpreadsheetId}
+        onSynced={refreshBillsQuietly}
+        t={t}
+      />
 
       <div className="mb-3 relative max-w-sm">
         <input
@@ -637,6 +701,15 @@ export default function EventBillsPage({
         </div>
       </div>
 
+      {activeColFilters > 0 && (
+        <p className="mb-3 text-[13px] text-ink-secondary">
+          {t("billFilter.active", { count: String(activeColFilters), shown: String(filteredBills.length) })}{" "}
+          <button type="button" onClick={() => setColFilters({})} className="text-ember hover:underline">
+            {t("billFilter.clearAll")}
+          </button>
+        </p>
+      )}
+
       {searchQuery && (
         <p className="mb-3 text-[13px] text-ink-secondary">
           {t("billsPage.searchResultCount", { count: String(filteredBills.length) })}
@@ -660,6 +733,9 @@ export default function EventBillsPage({
           <button onClick={() => runBulk("mark_unpaid")} disabled={bulkRunning} className={btnSecondary}>
             {t("billsPage.bulkMarkUnpaid")}
           </button>
+          <button onClick={() => setShowBulkEdit((v) => !v)} disabled={bulkRunning} className={btnSecondary}>
+            {t("billBulkEdit.button")}
+          </button>
           <button onClick={() => setShowMoveSelect((v) => !v)} disabled={bulkRunning} className={btnSecondary}>
             {t("billsPage.bulkMoveButton")}
           </button>
@@ -674,6 +750,22 @@ export default function EventBillsPage({
           </button>
           {bulkRunning && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
         </div>
+      )}
+
+      {showBulkEdit && selected.size > 0 && (
+        <BillBulkEdit
+          eventId={id}
+          bills={bills.filter((b) => selected.has(b.id))}
+          t={t}
+          confirm={confirm}
+          onDone={({ succeeded, failed }: { succeeded: number; failed: BulkEditFailure[] }) => {
+            setBulkMessage(t("billsPage.bulkResult", { succeeded: String(succeeded), failed: String(failed.length) }));
+            setBulkFailures(failed);
+            setSelected(new Set());
+            setShowBulkEdit(false);
+            refreshBillsQuietly();
+          }}
+        />
       )}
 
       {showMoveSelect && selected.size > 0 && (
@@ -722,7 +814,7 @@ export default function EventBillsPage({
 
       {filteredBills.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
-          {searchQuery || statusFilter ? t("billsPage.searchNoMatches") : t("eventDetail.billsEmpty")}
+          {searchQuery || statusFilter || activeColFilters ? t("billsPage.searchNoMatches") : t("eventDetail.billsEmpty")}
         </p>
       ) : (
         <>
@@ -735,8 +827,9 @@ export default function EventBillsPage({
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
                 {columns.map((col) => (
-                  <th key={col} className="p-2 text-[12px] font-medium text-ink-secondary">
+                  <th key={col} className="whitespace-nowrap p-2 text-[12px] font-medium text-ink-secondary">
                     {t(BILL_COLUMNS.find((c) => c.key === col)!.labelKey)}
+                    <ColumnFilter values={filterValues(col)} selected={colFilters[col] ?? null} onChange={(next) => setColFilter(col, next)} t={t} />
                   </th>
                 ))}
               </tr>
