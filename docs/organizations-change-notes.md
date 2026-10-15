@@ -508,6 +508,20 @@ test-org-isolation 62/62, scripts/embed-check.sh against production all passed. 
 zare.cz allowed on prihlasky + rodice; rodice's embedPageUrl NOT set (https://www.zare.cz/rodicovsky-portal
 is 404 -- portal links would break); set it with `scripts/set-zare-embed.ts --apply --page` once the page exists.
 
+# Bills UX fixes (branch bills-ux)
+
+- Bill PDF preview blank since the embedding release: `/api/*` sent `X-Frame-Options: DENY`, which also
+  blocked our own iframes (bill detail, import preview). Now `SAMEORIGIN` (other websites still can't frame).
+- Bill detail note: 4 rows; a dragged height is remembered per user (`uiPrefs.billNotesHeight`).
+- Bill list: Excel-like column filters; "Změnit hodnotu" for selected bills (payer, category, date,
+  merchant, note -- through the per-bill PATCH / categories PUT, so locks, payer checks, CZK
+  re-conversion and the audit log apply); "Synchronizovat s Diskem" + status (on Drive / approved,
+  newest upload, missing, not approved).
+
+Deploy: build 06b64c6a-8473-4aa2-816a-8e1cbc25f283 SUCCESS -> `bill-scanner-app-00103-8sx` (rollback target
+`00102-7px`). Checks: tsc, eslint (no new errors), build, check-proxy-hosts, check-org-scope, test-org-isolation
+62/62, embed-check all passed; /api file responses carry X-Frame-Options: SAMEORIGIN.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
