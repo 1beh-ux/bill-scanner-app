@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gcsSize } from "@/lib/gcs";
 import type { BodyView, IncidentCategory, Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -129,6 +130,7 @@ export async function POST(
       pillName: pillName || null,
       details: typeof details === "string" && details.trim() ? details.trim() : null,
       photoGcsPath: photoGcsPath || null,
+      sizeBytes: await gcsSize(photoGcsPath),
       parentIncidentId: parent ? parent.id : null,
       tempC: tempC === "" || tempC === undefined ? null : tempC,
       bodyView: bodyView || null,

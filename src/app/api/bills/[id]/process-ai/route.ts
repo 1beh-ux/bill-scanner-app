@@ -26,7 +26,7 @@ export async function POST(
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
 
-  const result = await processBillWithAi(id);
+  const result = await processBillWithAi(id, { userId: user.id, reprocess: true });
 
   if (!result.ok) {
     const status =

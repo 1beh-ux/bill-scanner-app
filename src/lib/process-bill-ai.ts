@@ -26,7 +26,8 @@ export type ProcessBillAiResult =
  * drifting from the single-bill route. One implementation means a fix
  * here fixes both callers at once.
  */
-export async function processBillWithAi(billId: string): Promise<ProcessBillAiResult> {
+/** userId: who uploaded / clicked (null = automatic); reprocess: the explicit "reprocess" button. */
+export async function processBillWithAi(billId: string, by: { userId?: string | null; reprocess?: boolean } = {}): Promise<ProcessBillAiResult> {
   const bill = await prisma.bill.findUnique({
     where: { id: billId },
     include: { event: { select: { status: true } } },
@@ -50,7 +51,15 @@ export async function processBillWithAi(billId: string): Promise<ProcessBillAiRe
 
   let aiResult;
   try {
-    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories);
+    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories, {
+      eventId: bill.eventId,
+      billId,
+      userId: by.userId ?? null,
+      // Already extracted once (successfully) = a re-run.
+      purpose: by.reprocess || bill.aiConfidence !== null ? "bill_reprocess" : "bill_extraction",
+    });
+    // A FAILED answer without data (invalid JSON / service error) is a failed call, not a result.
+    if (!aiResult.data) throw new Error(`AI service: ${(aiResult as { error?: string }).error ?? aiResult.status}`);
   } catch (err) {
     await prisma.bill.update({
       where: { id: billId },

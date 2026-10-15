@@ -59,6 +59,7 @@ export async function POST(
         id: newId,
         eventId,
         gcsObjectPath,
+        sizeBytes: BigInt(buffer.length),
         originalFilename: filename,
         contentHash,
         ingestChannel: first.ingestChannel,

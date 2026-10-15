@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { billsBucket } from "@/lib/gcs";
+import { billsBucket, gcsSize } from "@/lib/gcs";
 
 export async function POST(
   req: NextRequest,
@@ -73,6 +73,8 @@ export async function POST(
         data: {
           gcsObjectPath: newPath,
           originalGcsObjectPath: originalPath,
+          // The edited file + the kept original.
+          sizeBytes: BigInt(buffer.length) + ((await gcsSize(originalPath)) ?? BigInt(0)),
           contentHash,
           originalFilename: newOriginalFilename,
         },
@@ -152,6 +154,7 @@ export async function DELETE(
       data: {
         gcsObjectPath: bill.originalGcsObjectPath!,
         originalGcsObjectPath: null,
+        sizeBytes: BigInt(buffer.length),
         contentHash,
         originalFilename: revertedFilename,
       },

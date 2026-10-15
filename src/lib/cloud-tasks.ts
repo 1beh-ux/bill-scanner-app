@@ -31,7 +31,7 @@ const TASKS_SECRET = process.env.TASKS_SECRET;
  * run, so there's no longer a single unit of work whose size needs to be
  * kept small enough to finish inside one request.
  */
-export async function enqueueBillAiTasks(billIds: string[]): Promise<void> {
+export async function enqueueBillAiTasks(billIds: string[], userId: string | null = null): Promise<void> {
   if (!PROJECT_ID || !APP_BASE_URL || !TASKS_SECRET) {
     throw new Error(
       "Cloud Tasks is not configured — GOOGLE_CLOUD_PROJECT, APP_BASE_URL and TASKS_SECRET must all be set"
@@ -51,6 +51,8 @@ export async function enqueueBillAiTasks(billIds: string[]): Promise<void> {
             headers: {
               "x-tasks-secret": TASKS_SECRET,
               "Content-Type": "application/json",
+              // Cost metering (AiUsage.userId); trusted: the worker checks the secret first.
+              ...(userId ? { "x-ai-user": userId } : {}),
             },
           },
         },

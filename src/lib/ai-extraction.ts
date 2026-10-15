@@ -1,3 +1,4 @@
+import { recordAiUsage, type AiMeter } from "@/lib/ai-usage";
 import { GoogleAuth } from "google-auth-library";
 import { billsBucket } from "@/lib/gcs";
 
@@ -24,6 +25,9 @@ export interface AiExtractionResult {
   data: AiExtractionData;
   request_id: string;
   processor_version: string;
+  // Cost metering (bill-scanner-ai): set once Gemini answered, also on a failed result.
+  model?: string;
+  usage?: { prompt_tokens: number; output_tokens: number; thinking_tokens: number } | null;
 }
 
 function mimeTypeForFilename(filename: string): string {
@@ -104,7 +108,31 @@ async function getIdToken(): Promise<string> {
   return token;
 }
 
+/**
+ * The one way to Gemini: every call -- retries, reprocess, failures -- leaves an AiUsage row
+ * (src/lib/ai-usage.ts). A call that never got an answer is recorded with zero tokens.
+ */
 export async function extractBillWithAi(
+  gcsObjectPath: string,
+  originalFilename: string,
+  categories: { name: string; description: string | null }[],
+  meter: AiMeter
+): Promise<AiExtractionResult> {
+  let result: AiExtractionResult | null = null;
+  try {
+    result = await callExtract(gcsObjectPath, originalFilename, categories);
+    return result;
+  } finally {
+    const u = result?.usage;
+    await recordAiUsage(
+      meter,
+      { model: result?.model ?? "unknown", input: u?.prompt_tokens ?? 0, output: u?.output_tokens ?? 0, thinking: u?.thinking_tokens ?? 0 },
+      !!result?.data
+    );
+  }
+}
+
+async function callExtract(
   gcsObjectPath: string,
   originalFilename: string,
   categories: { name: string; description: string | null }[]

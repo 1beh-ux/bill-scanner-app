@@ -167,6 +167,8 @@ export async function sendSummaryToGuardians(
           status: "sent",
           sentByUserId,
           pdfGcsPath: pdf.gcsPath,
+          // Same PDF for every guardian: storage counts each path once.
+          sizeBytes: BigInt(pdf.buffer.length),
           subject,
         },
       });
@@ -182,6 +184,8 @@ export async function sendSummaryToGuardians(
           errorMessage,
           sentByUserId,
           pdfGcsPath: pdf.gcsPath,
+          // Same PDF for every guardian: storage counts each path once.
+          sizeBytes: BigInt(pdf.buffer.length),
           subject,
         },
       });

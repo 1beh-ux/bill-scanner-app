@@ -61,7 +61,7 @@ export async function POST(
   });
 
   try {
-    await enqueueBillAiTasks(billIds);
+    await enqueueBillAiTasks(billIds, user.id);
   } catch (err) {
     // Enqueueing itself failed (misconfigured queue, Cloud Tasks API
     // hiccup) — put these bills back to a visible, non-stuck state rather

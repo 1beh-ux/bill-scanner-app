@@ -39,7 +39,8 @@ export async function POST(
   }
 
   const { id } = await params;
-  const result = await processBillWithAi(id);
+  // Who started the run (bulk "AI" in the bill list); none = automatic (stuck-bill requeue).
+  const result = await processBillWithAi(id, { userId: req.headers.get("x-ai-user") || null });
 
   if (!result.ok) {
     // Terminal, bill-specific outcomes — retrying won't change any of

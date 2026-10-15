@@ -217,6 +217,7 @@ export async function ingestBillFiles(
           id: billId,
           eventId,
           gcsObjectPath: objectPath,
+          sizeBytes: BigInt(item.buffer.length),
           originalFilename: item.filename,
           contentHash: item.contentHash,
           ingestChannel,

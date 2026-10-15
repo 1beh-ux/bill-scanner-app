@@ -20,7 +20,7 @@ export async function storeParticipantFile(eventId: string, participantId: strin
   const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
   const gcsPath = `events/${eventId}/mail/documents/${participantId}/${hash}-${sanitizeFilename(filename)}`;
   await billsBucket.file(gcsPath).save(buffer, { contentType });
-  return { gcsPath, contentHash: hash, originalFilename: filename };
+  return { gcsPath, sizeBytes: BigInt(buffer.length), contentHash: hash, originalFilename: filename };
 }
 
 // Persists a system-generated document (the registration-document merge on
@@ -58,6 +58,7 @@ export async function saveGeneratedParticipantDocument(opts: {
   });
   const data = {
     gcsPath,
+    sizeBytes: BigInt(opts.buffer.length),
     contentHash: hash,
     originalFilename: opts.filename,
     receivedVia: "generated" as const,

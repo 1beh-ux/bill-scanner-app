@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { billsBucket, sanitizeFilename } from "@/lib/gcs";
+import { billsBucket, sanitizeFilename, gcsSize } from "@/lib/gcs";
 import { RECEIVED_WHERE, backfillPicks, canBecomePersonDocument, profileDocRows } from "@/lib/registration-status";
 
 // Permanent documents on the person (docs/registration-slice6-spec.md): an
@@ -69,6 +69,7 @@ export async function savePersonDocument(opts: {
       childId: opts.childId,
       docKey: opts.docKey,
       gcsPath,
+      sizeBytes: opts.buffer ? BigInt(opts.buffer.length) : await gcsSize(gcsPath),
       contentHash: hash,
       originalFilename: opts.filename,
       sourceParticipantDocumentId: opts.sourceParticipantDocumentId ?? null,

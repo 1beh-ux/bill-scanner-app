@@ -95,6 +95,7 @@ export async function POST(
             participantId: action.participantId,
             eventListItemId: action.eventListItemId,
             gcsPath: gcsObjectPath,
+            sizeBytes: BigInt(buffer.length),
             contentHash: hash,
             originalFilename: action.filename || null,
             receivedVia: "email",

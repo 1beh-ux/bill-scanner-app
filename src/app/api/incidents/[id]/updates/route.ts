@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { gcsSize } from "@/lib/gcs";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -64,6 +65,8 @@ export async function POST(
             ? body.details.trim()
             : null,
       photoGcsPath: updateType === "void" ? current.photoGcsPath : body.photoGcsPath || null,
+      // Same path as before = the same object: storage counts each path once.
+      sizeBytes: await gcsSize(updateType === "void" ? current.photoGcsPath : body.photoGcsPath),
       tempC: updateType === "void" ? current.tempC : body.tempC === "" || body.tempC === undefined ? null : body.tempC,
       bodyView: updateType === "void" ? current.bodyView : body.bodyView || null,
       bodyXPct:
