@@ -20,6 +20,8 @@ const ALLOW: Record<string, string> = {
   "src/app/api/translations/route.ts": "app-wide texts (GET for every user, writes super-admin only)",
   "src/app/api/exchange-rates/lookup/route.ts": "ČNB rates, app-wide",
   "src/app/api/cron/exchange-rates/route.ts": "cron (CRON_SECRET): app-wide ČNB rates",
+  "src/app/api/usage/activity/route.ts": "super-admin only (requireSuperAdmin): usage across all organizations, by design",
+  "src/app/api/usage/costs/route.ts": "super-admin only (requireSuperAdmin): costs across all organizations, by design",
   "src/app/api/cron/mail-drive-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/mail-sheets-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/participant-sync/route.ts": "cron (CRON_SECRET): one event at a time; linking via the org-safe linkChildren",
