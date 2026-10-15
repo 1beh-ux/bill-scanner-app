@@ -1,8 +1,10 @@
 // Self-check: npx tsx src/lib/bill-nav.check.ts
 import assert from "node:assert/strict";
+import { adjacentInList, readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav";
+
+// The helpers read sessionStorage only when called, so the stub can come after the import.
 const store = new Map<string, string>();
 (globalThis as { sessionStorage?: unknown }).sessionStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
-const { adjacentInList, readListFilters, saveListFilters, saveListOrder } = await import("@/lib/bill-nav");
 
 saveListOrder("e1", ["a", "b", "c"]);
 assert.deepEqual(adjacentInList("e1", "a"), { prev: null, next: "b" });
