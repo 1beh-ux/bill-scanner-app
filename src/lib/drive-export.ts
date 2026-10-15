@@ -135,15 +135,24 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   let alreadyExported = 0;
   const exportFailures: { filename: string; error: string }[] = [];
 
+  // Every run checks Drive itself: an exported file that's no longer in the export folder
+  // (deleted / trashed there) is uploaded again under its same name. The lookup also gives the
+  // manifest's links below.
+  const findOnDrive = (name: string) => findFileInFolder(eventId, event.driveExportFolderId!, name, mimeTypeForExtension(path.extname(name)));
+  const onDrive = new Map(
+    await Promise.all(bills.filter((b) => b.exportFilename).map(async (b) => [b.id, await findOnDrive(b.exportFilename!)] as const))
+  );
+
   for (const bill of bills) {
-    if (bill.exportFilename && bill.exportedAt) {
+    if (bill.exportFilename && bill.exportedAt && onDrive.get(bill.id)) {
       alreadyExported++;
       continue;
     }
 
     // displayFilename is guaranteed set here — only approved bills reach this
     // query, and approval is what sets displayFilename in the first place.
-    const exportFilename = resolveExportFilename(bill.displayFilename as string);
+    // A missing file keeps its name (the manifest and people may refer to it).
+    const exportFilename = bill.exportFilename ?? resolveExportFilename(bill.displayFilename as string);
 
     try {
       const [buffer] = await billsBucket.file(bill.gcsObjectPath).download();
@@ -151,7 +160,8 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
       const uploadBuffer =
         sourceExt === ".pdf" ? buffer : await convertImageToPdfBytes(buffer, sourceExt === ".png");
 
-      await uploadFileToFolder(eventId, event.driveExportFolderId, exportFilename, uploadBuffer, "application/pdf", "export");
+      const uploaded = await uploadFileToFolder(eventId, event.driveExportFolderId, exportFilename, uploadBuffer, "application/pdf", "export");
+      onDrive.set(bill.id, { id: uploaded, name: exportFilename, mimeType: "application/pdf" });
 
       await prisma.bill.update({
         where: { id: bill.id },
@@ -182,18 +192,10 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   // Each file's Drive id is looked up by its exact filename rather than stored,
   // to avoid a second schema field for something cheaply derived. Safe here
   // (unlike the manifest's own id) because this is a pure read.
-  const links = await Promise.all(
-    bills.map(async (b) => {
-      if (!b.exportFilename) return "";
-      const found = await findFileInFolder(
-        eventId,
-        event.driveExportFolderId!,
-        b.exportFilename,
-        mimeTypeForExtension(path.extname(b.exportFilename))
-      );
-      return found ? `https://drive.google.com/file/d/${found.id}/view` : "";
-    })
-  );
+  const links = bills.map((b) => {
+    const found = onDrive.get(b.id);
+    return found ? `https://drive.google.com/file/d/${found.id}/view` : "";
+  });
   const manifestRows = buildManifestRows(bills, links, event.manifestCategoryMode === "columns" ? "columns" : "pairs");
 
   const manifestTitle = `Manifest - ${event.name}`;
