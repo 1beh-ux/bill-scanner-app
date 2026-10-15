@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette, BarChart3 } from "lucide-react";
 
 // superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
@@ -46,6 +46,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
       { path: "/admin/app-templates", labelKey: "nav.appTemplates", icon: LayoutTemplate, adminOnly: true, superAdminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },
       { path: "/exchange-rates", labelKey: "nav.exchangeRates", icon: Landmark, adminOnly: true, superAdminOnly: true },
+      // Usage metrics + AI / storage costs per organization and event (/api/usage/*, 403 for others).
+      { path: "/vyuziti", labelKey: "nav.usage", icon: BarChart3, adminOnly: true, superAdminOnly: true },
     ],
   },
 };

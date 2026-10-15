@@ -16,8 +16,8 @@ export function aiCostUsd(prices: GcpPrices, model: string, t: { input: number; 
   return (t.input * p.input + (t.output + t.thinking) * p.output) / 1e6;
 }
 
-/** Monthly storage cost of `bytes`; null = no price. GB = 1e9 bytes, as GCP bills. */
-export const storageCostUsd = (prices: GcpPrices, bytes: number) => (prices.gcsGbMonth == null ? null : (bytes / 1e9) * prices.gcsGbMonth);
+/** Monthly storage cost of `bytes`; null = no price. GCS bills per GiB (2^30 bytes). */
+export const storageCostUsd = (prices: GcpPrices, bytes: number) => (prices.gcsGbMonth == null ? null : (bytes / 2 ** 30) * prices.gcsGbMonth);
 
 /** A settings body from the page -> prices, or null if malformed. */
 export function parsePrices(v: unknown): GcpPrices | null {

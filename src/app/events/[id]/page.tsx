@@ -10,6 +10,7 @@ import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import HealthNotesSettings from "@/components/health/HealthNotesSettings";
 import SenderEmailField from "@/components/health/SenderEmailField";
 import DriveSettingsTab from "@/components/events/DriveSettingsTab";
+import EventCostCard from "@/components/usage/EventCostCard";
 import PortalSettings from "@/components/events/PortalSettings";
 import PaymentSettings from "@/components/events/PaymentSettings";
 import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
@@ -114,7 +115,7 @@ export default function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { t, role } = useTranslations();
+  const { t, role, isSuperAdmin } = useTranslations();
   const confirm = useConfirm();
   const isAdmin = role === "admin";
   const searchParams = useSearchParams();
@@ -453,6 +454,7 @@ export default function EventDetailPage({
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
               {isAdmin && <ModulesTab eventId={id} t={t} />}
+              {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventDetail.registrationInfoTitle")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
