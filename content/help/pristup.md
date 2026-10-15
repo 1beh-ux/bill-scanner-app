@@ -12,3 +12,5 @@ Záložka Přístup určuje, který uživatel vidí které moduly u této konkr�
 - Nové uživatele (e-mailové účty) přidáváte na úrovni celé organizace pod Organizace → Uživatelé; tady jen určujete jejich přístup k jednotlivým akcím.
 
 Přístup se řídí Google účtem — uživatel se přihlásí svým Google účtem a vidí jen to, co mu tady bylo povoleno.
+
+Aplikace zaznamenává, které stránky přihlášení uživatelé otevírají, kvůli provozu a zlepšování aplikace; záznamy se uchovávají 12 měsíců.

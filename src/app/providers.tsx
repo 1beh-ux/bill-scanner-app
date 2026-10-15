@@ -3,6 +3,7 @@ import { I18nProvider } from "@/lib/i18n";
 import AppSidebar from "@/components/AppSidebar";
 import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { ActingOrgStrip } from "@/components/ActingOrg";
+import ActivityTracker from "@/components/ActivityTracker";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               sticky element in it stayed put. Print gets normal flow back. */}
           <main className="min-w-0 flex-1 overflow-x-auto md:h-screen md:overflow-y-auto print:h-auto print:overflow-visible">
             <ActingOrgStrip />
+            <ActivityTracker />
             {children}
           </main>
         </div>

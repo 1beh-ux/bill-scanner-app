@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncRatesForDate, backfillRates } from "@/lib/exchange-rates";
+import { prisma } from "@/lib/prisma";
 
 export const maxDuration = 300;
 
@@ -21,6 +22,11 @@ export async function POST(req: NextRequest) {
       const result = await backfillRates(Number(daysParam));
       return NextResponse.json({ ok: true, mode: "backfill", ...result });
     }
+
+    // Usage metrics retention: page views are kept 12 months (content/help/pristup.md).
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - 12);
+    await prisma.userActivity.deleteMany({ where: { createdAt: { lt: cutoff } } }).catch((err) => console.log("[cron] activity retention failed:", String(err)));
 
     const result = await syncRatesForDate();
     return NextResponse.json({
