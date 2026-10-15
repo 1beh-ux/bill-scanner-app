@@ -538,6 +538,27 @@ Deploy: build f1795cd1-26b6-4b5d-ab14-2525d1fb9565 SUCCESS -> `bill-scanner-app-
 `00103-8sx`). Checks: tsc, eslint (no new errors), build, settlement + proxy self-checks, check-org-scope,
 test-org-isolation 62/62, embed-check all passed.
 
+# Usage metrics & cost tracking (branch usage-metrics, super-admin only)
+
+- `UserActivity`: one row per page a signed-in user opens (src/components/ActivityTracker.tsx -> POST
+  /api/activity). Route pattern from the app's own route params (`useParams`), server drops id-like
+  segments; organization = acting org; event only if in it. Deleted after 12 months by the daily ČNB cron.
+- `AiUsage`: every Gemini call via `extractBillWithAi` (the only call site) incl. failures. bill-scanner-ai
+  returns `model` + `usage` (prompt / output / thinking tokens). userId: reprocess button = clicker, bulk
+  "AI" = clicker (task header x-ai-user), stuck-bill requeue = null. costUsd frozen from AppSetting
+  "gcpPrices" (Využití -> Ceny GCP).
+- `sizeBytes` on Bill (current + kept original), Incident, IncidentUpdate, ParentEmailLog,
+  ParticipantDocument, PersonDocument; set at every GCS write; scripts/backfill-gcs-sizes.ts for old rows.
+  Storage sums count each GCS path once (shared PDFs / photos).
+- /vyuziti + /api/usage/* (requireSuperAdmin), event cost card in Nastavení akce -> Akce.
+Migration `20261019090000_usage_metrics` (additive).
+
+Deploy: bill-scanner-ai `00002-m7s` (rollback `00001-qn5`; source in ~/bill-scanner-ai, not in git);
+app build 16bf602b-39e4-400c-b202-87803c5b204c -> `bill-scanner-app-00105-pmk` (rollback `00104-ljd`).
+Checks: tsc, eslint (no new errors), build, self-checks, check-org-scope, test-org-isolation 72/72, live
+bill through the prod worker twice -> 2 AiUsage rows (extraction / reprocess, tokens, cost, user).
+Backfill: 291 rows (bills 265 = 346.7 MB, participant docs 23, person docs 3), 0 objects missing.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
