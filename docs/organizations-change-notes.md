@@ -522,6 +522,22 @@ Deploy: build 06b64c6a-8473-4aa2-816a-8e1cbc25f283 SUCCESS -> `bill-scanner-app-
 `00102-7px`). Checks: tsc, eslint (no new errors), build, check-proxy-hosts, check-org-scope, test-org-isolation
 62/62, embed-check all passed; /api file responses carry X-Frame-Options: SAMEORIGIN.
 
+# Settlement with the organization (branch settlement)
+
+- Payers (Author, organization-owned): `isOfficialAccount` (bills paid from the organization's official
+  account; implies no payout) and `payoutNeeded`; payouts only where `needsPayout` (src/lib/payout.ts).
+- `EventDeposit` (event-owned, bills module): deposits from the organization (Rozpočet -> Zálohy).
+- Settlement (src/lib/settlement.ts, self-check settlement.check.ts): official = no payer or the official
+  account, cash = the rest, to return = deposits - cash; Rozpočet -> Vyúčtování (live or approved only, QR
+  to the official payer's account) and the manifest's second sheet "Souhrn" (approved bills).
+- Manifest category layout per event (`Event.manifestCategoryMode`: pairs | columns).
+- Public pages: `Organization.publicTheme` / `publicTransparent` / `publicContentWidth`.
+Migration `20261018090000_settlement` (additive).
+
+Deploy: build f1795cd1-26b6-4b5d-ab14-2525d1fb9565 SUCCESS -> `bill-scanner-app-00104-ljd` (rollback target
+`00103-8sx`). Checks: tsc, eslint (no new errors), build, settlement + proxy self-checks, check-org-scope,
+test-org-isolation 62/62, embed-check all passed.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
