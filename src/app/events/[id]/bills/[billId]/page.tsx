@@ -7,6 +7,7 @@ import { useTranslations } from "@/lib/i18n";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { needsPayout } from "@/lib/payout";
 import { adjacentInList } from "@/lib/bill-nav";
+import ImageViewer from "@/components/bills/ImageViewer";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
@@ -576,20 +577,10 @@ const statusLabel = t(
             <iframe
               src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`}
               title={bill.originalFilename}
-              className="h-[480px] w-full rounded-lg border border-mist"
+              className="h-[70vh] min-h-[480px] w-full rounded-lg border border-mist"
             />
           ) : (
-            <a href={`/api/bills/${bill.id}/file`} target="_blank" rel="noreferrer">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`}
-                alt={bill.originalFilename}
-                className="w-full rounded-lg border border-mist"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            </a>
+            <ImageViewer key={bill.contentHash} src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`} alt={bill.originalFilename} t={t} />
           )}
           <a
             href={`/api/bills/${bill.id}/file`}
