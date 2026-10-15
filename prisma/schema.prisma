@@ -382,6 +382,9 @@ model Event {
   // "Dokument platby" (slice 4 #5): the document type (EventListItem id) whose
   // receipt means "paid" in the portal; never uploadable there. null = none.
   paymentDocTypeId              String?        @map("payment_doc_type_id")
+  // Bills manifest category layout (src/lib/manifest.ts): "pairs" (null, Kategorie n + Částka n)
+  // or "columns" (one column per category, named by it, amounts only).
+  manifestCategoryMode          String?        @map("manifest_category_mode")
   // Automatic payment check (docs/bank-payments-design.md): settled bank
   // movements on this account create the paymentDocTypeId document.
   bankCheckEnabled              Boolean        @default(false) @map("bank_check_enabled")
@@ -406,6 +409,7 @@ model Event {
   planDays               PlanDay[]
   planActivities         PlanActivity[]
   publicHosts            PublicHost[]
+  deposits               EventDeposit[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -458,6 +462,11 @@ model Author {
   bankCode           String?  @map("bank_code")
   mergedIntoAuthorId String?  @map("merged_into_author_id")
   active             Boolean  @default(true)
+  // The organization's official bank account (bills it paid = spent directly by the organization,
+  // never paid out; manifest summary / budget settlement). Implies payoutNeeded = false.
+  isOfficialAccount  Boolean  @default(false) @map("is_official_account")
+  // false = nobody is paid out for this payer's bills (like "Akce"): no "Proplaceno" to track.
+  payoutNeeded       Boolean  @default(true) @map("payout_needed")
   createdAt          DateTime @default(now()) @map("created_at")
 
   mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
@@ -1516,20 +1525,26 @@ model PublicHost {
 // One scout group / organisation. Every org-level table points here
 // (docs/organizations-change-notes.md); existing data belongs to "Pionýrská skupina Záře".
 model Organization {
-  id           String   @id @default(uuid())
-  name         String
-  shortName    String   @map("short_name")
-  contactEmail String?  @map("contact_email")
-  active       Boolean  @default(true)
+  id                      String   @id @default(uuid())
+  name                    String
+  shortName               String   @map("short_name")
+  contactEmail            String?  @map("contact_email")
+  active                  Boolean  @default(true)
   // Look of the public pages (/r, /p, landing; docs/custom-domain.md "Appearance"). Null = today's look.
-  publicFontFamily        String? @map("public_font_family")
-  publicHeadingFontFamily String? @map("public_heading_font_family")
-  publicBaseFontSize      Int?    @map("public_base_font_size")
+  publicFontFamily        String?  @map("public_font_family")
+  publicHeadingFontFamily String?  @map("public_heading_font_family")
+  publicBaseFontSize      Int?     @map("public_base_font_size")
   // compact | normal | large
-  publicHeadingScale      String? @map("public_heading_scale")
+  publicHeadingScale      String?  @map("public_heading_scale")
   // compact | normal | relaxed
-  publicLineHeight        String? @map("public_line_height")
-  createdAt    DateTime @default(now()) @map("created_at")
+  publicLineHeight        String?  @map("public_line_height")
+  // light | dark | null (= the visitor's system setting); ?theme= on the URL still wins.
+  publicTheme             String?  @map("public_theme")
+  // true = no page / card background: the embedding website's shows through.
+  publicTransparent       Boolean  @default(false) @map("public_transparent")
+  // Content width in px; 0 = the full width (100 %); null = today's (form 672 / 896 px, portal 896 px).
+  publicContentWidth      Int?     @map("public_content_width")
+  createdAt               DateTime @default(now()) @map("created_at")
 
   users                     User[]
   events                    Event[]
@@ -1618,4 +1633,21 @@ model BankMovement {
   @@unique([bankAccountId, movementId])
   @@index([participantId])
   @@map("bank_movements")
+}
+
+// Money the organization sent to the event ("záloha") -- Rozpočet -> Zálohy; the settlement
+// compares it with what the event paid in cash (docs/organizations-change-notes.md "Settlement").
+model EventDeposit {
+  id              String   @id @default(uuid())
+  eventId         String   @map("event_id")
+  amountCzk       Decimal  @map("amount_czk") @db.Decimal(14, 2)
+  receivedAt      DateTime @map("received_at") @db.Date
+  note            String?
+  createdByUserId String?  @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_deposits")
 }
