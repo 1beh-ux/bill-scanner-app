@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { budgetState } from "@/lib/budget";
+import BudgetSettlement from "@/components/bills/BudgetSettlement";
 
 type EventBasic = { id: string; name: string };
 
@@ -131,6 +132,8 @@ export default function EventBudgetPage({
           </tfoot>
         </table>
       </div>
+
+      <BudgetSettlement eventId={id} t={t} />
     </div>
   );
 }
