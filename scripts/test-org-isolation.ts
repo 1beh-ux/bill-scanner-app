@@ -469,6 +469,12 @@ async function main() {
     asUser(null as unknown as User);
     check("activity: signed out -> 401", (await beacon({ path: "/events" })).status === 401, "not 401");
 
+    // Whole bill rows (with the BigInt sizeBytes) still serialize: the bill list answers 200 with the size.
+    asUser(admin);
+    await prisma.bill.create({ data: { eventId, gcsObjectPath: `isolation/${stamp}.pdf`, sizeBytes: BigInt(12345), originalFilename: "i.pdf", contentHash: `iso-${stamp}`, ingestChannel: "upload", createdByUserId: admin.id } });
+    const billList = await json(await (await import("@/app/api/events/[id]/bills/route")).GET(req(`/api/events/${eventId}/bills`), params({ id: eventId })));
+    check("bill list with sizeBytes -> 200, size as a number", billList.status === 200 && (billList.body as { sizeBytes: unknown }[])[0]?.sizeBytes === 12345, JSON.stringify({ status: billList.status, body: String(JSON.stringify(billList.body)).slice(0, 200) }));
+
     // A failed AI call still leaves an AiUsage row (success = false, who and why).
     const savedAi = process.env.AI_SERVICE_URL;
     delete process.env.AI_SERVICE_URL;
@@ -502,6 +508,7 @@ async function main() {
       const ev = { eventId };
       const pv = { participant: { eventId } };
       await step("aiUsage", () => prisma.aiUsage.deleteMany({ where: ev }));
+      await step("bill", () => prisma.bill.deleteMany({ where: ev }));
       await step("mailActionLog", () => prisma.mailActionLog.deleteMany({ where: ev }));
       await step("participantDocument", () => prisma.participantDocument.deleteMany({ where: pv }));
       await step("participantGuardian", () => prisma.participantGuardian.deleteMany({ where: pv }));
