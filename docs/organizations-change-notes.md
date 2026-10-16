@@ -576,6 +576,21 @@ Deploy: bill-scanner-ai `00003-8g6` (rollback `00002-m7s`); app build 11c44bab-4
 `bill-scanner-app-00107-skn` (rollback `00106-cqs`). Checks: tsc, eslint (no new errors), self-checks,
 test-org-isolation 73/73, embed-check.
 
+# Úklid Disku + Zpracované soubory (branch drive-cleanup)
+
+- Úklid souborů na Disku (Účtenky menu, src/lib/drive-cleanup.ts): Drive folders scanned as the event's
+  Drive connection; files matched to the organization's bills without downloading -- Drive's SHA-256 vs
+  Bill.contentHash (and split-PDF page hashes), the Drive link (driveSourceFileId), the export name
+  (weak). Duplicates: the copy a bill uses is kept, others proposed for the bin. Move keeps file ids;
+  "delete" = Drive bin only. Bill details only for events with Účtenky access.
+- Event.driveProcessedFolderId (Nastavení akce -> Připojení): after a Drive import, files that are bills
+  (or duplicates of one) move there; failures shown in the import result.
+- Bill detail: Zdroj line (Drive import with a link to the file, upload, camera, bank).
+Migration `20261021090000_drive_processed_folder` (additive). Deploy `bill-scanner-app-00112-4p6`
+(rollback `00111-4m6`). Checks: tsc (full), eslint (no new errors), build, drive-cleanup self-check,
+check-org-scope, test-org-isolation 73/73. Not run against real Drive here (the event's Drive token is
+decrypted only in production) -- first real scan by Pavel.
+
 # How to onboard a new organization
 
 1. **Organization + first admin:** as super-admin, Aplikace → Organizace → **Nová organizace**:
