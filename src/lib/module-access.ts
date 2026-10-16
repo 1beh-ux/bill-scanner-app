@@ -17,7 +17,9 @@ export async function hasModuleAccess(
   moduleKey: ModuleKey
 ): Promise<boolean> {
   if (!(await eventInOrg(user, eventId))) return false;
-  if (isOrgAdmin(user)) return true;
+  // Banka shows private transactions: explicit grant only, organization admins and super-admins
+  // included (they can grant it to themselves in Nastavení akce -> Lidé).
+  if (isOrgAdmin(user) && moduleKey !== "bank") return true;
 
   const grant = await prisma.userEventModuleAccess.findUnique({
     where: { userId_eventId_moduleKey: { userId: user.id, eventId, moduleKey } },

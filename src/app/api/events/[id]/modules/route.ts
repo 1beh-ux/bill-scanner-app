@@ -6,7 +6,7 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { syncParticipantFieldsForEvent } from "@/lib/participant-field-sync";
 import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
 
-const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning"];
+const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning", "bank"];
 
 export async function GET(
   req: NextRequest,

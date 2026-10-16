@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { isOrgAdmin, notFound, requireEventInOrg } from "@/lib/org-scope";
 
-const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning"];
+const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "health", "mail", "planning", "bank"];
 
 // Grant management is admin-only, same as /api/users (whose list this grid
 // is built from) and every other org-wide admin surface in the app.

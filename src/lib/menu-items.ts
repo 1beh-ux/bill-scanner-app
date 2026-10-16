@@ -1,13 +1,14 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
-export type MenuSection = "bills" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
+export type MenuSection = "bills" | "bank" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
 // roster = the central participant list, reachable with health OR mail; bank = roster + the
 // event's automatic bank check on (docs/bank-payments-design.md).
-export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank";
+// bankRecon = the Banka module (bank reconciliation, explicit grant).
+export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -23,6 +24,7 @@ const ev = (path: string) => (eventId: string | null) => (eventId ? `/events/${e
 
 export const MENU_SECTIONS: { id: MenuSection; labelKey: string | null }[] = [
   { id: "bills", labelKey: "nav.sectionBills" },
+  { id: "bank", labelKey: "nav.sectionBank" },
   { id: "participants", labelKey: "nav.sectionParticipants" },
   { id: "health", labelKey: "nav.sectionHealth" },
   { id: "mail", labelKey: "nav.sectionMail" },
@@ -38,6 +40,10 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "payments", section: "bills", labelKey: "nav.payments", icon: QrCode, href: ev("/payments") },
   { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
   ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
+  { id: "bank-overview", section: "bank", labelKey: "bankNav.overview", icon: LayoutDashboard, href: ev("/bank"), module: "bankRecon" },
+  { id: "bank-transactions", section: "bank", labelKey: "bankNav.transactions", icon: ArrowLeftRight, href: ev("/bank/transactions"), module: "bankRecon" },
+  { id: "bank-pairing", section: "bank", labelKey: "bankNav.pairing", icon: Link2, href: ev("/bank/pairing"), module: "bankRecon" },
+  { id: "bank-accounts", section: "bank", labelKey: "bankNav.accounts", icon: Wallet, href: ev("/bank/accounts"), module: "bankRecon" },
   { id: "participants", section: "participants", labelKey: "participantsPage.centralTitle", icon: Users, href: ev("/participants"), module: "roster" },
   { id: "documents", section: "participants", labelKey: "participantsPage.mailListTitle", icon: FolderCheck, href: ev("/participants/documents"), module: "roster" },
   { id: "send-email", section: "participants", labelKey: "sendEmail.title", icon: Send, href: ev("/participants/send"), module: "roster" },

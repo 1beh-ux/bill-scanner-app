@@ -17,12 +17,13 @@ export async function GET(req: NextRequest) {
   // Admin sees every event; everyone else only events they hold at least one
   // module grant on (the event switcher and pickers are built from this).
   const requested = new URL(req.url).searchParams.get("module");
-  const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" || requested === "planning" ? requested : undefined;
+  const moduleFilter = requested === "bills" || requested === "health" || requested === "mail" || requested === "planning" || requested === "bank" ? requested : undefined;
   // Always within the acting organization (switcher, "move bill to event" targets, pickers).
   const scope = await orgWhere(user);
   const events = await prisma.event.findMany({
     where:
-      isOrgAdmin(user)
+      // Banka is granted to admins too (src/lib/module-access.ts): no admin shortcut for it.
+      isOrgAdmin(user) && moduleFilter !== "bank"
         ? scope
         : { ...scope, moduleAccess: { some: { userId: user.id, ...(moduleFilter && { moduleKey: moduleFilter }) } } },
     orderBy: { startDate: "desc" },

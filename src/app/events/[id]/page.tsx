@@ -72,7 +72,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "health" | "mail" | "planning";
+type ModuleKey = "bills" | "health" | "mail" | "planning" | "bank";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -84,7 +84,7 @@ type AccessRow = {
   access: Record<ModuleKey, boolean>;
 };
 
-const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail", "planning"];
+const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail", "planning", "bank"];
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -1105,7 +1105,9 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
           ? "accessTab.moduleHealth"
           : key === "mail"
             ? "accessTab.moduleMail"
-            : "accessTab.modulePlanning"
+            : key === "bank"
+              ? "accessTab.moduleBank"
+              : "accessTab.modulePlanning"
     );
 
   return (
@@ -1180,7 +1182,9 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
           ? "accessTab.moduleHealth"
           : key === "mail"
             ? "accessTab.moduleMail"
-            : "accessTab.modulePlanning"
+            : key === "bank"
+              ? "accessTab.moduleBank"
+              : "accessTab.modulePlanning"
     );
 
   return (
@@ -1213,7 +1217,8 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
                     {MODULE_KEYS.map((key) => {
                       return (
                         <td key={key} className="p-2 text-[14px] text-ink">
-                          {row.role === "admin" ? (
+                          {/* Banka is granted to admins too (private transactions). */}
+                          {row.role === "admin" && key !== "bank" ? (
                             <span className="text-[12px] text-ink-secondary">{t("accessTab.shortcutAdmin")}</span>
                           ) : (
                             <input
