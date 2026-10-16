@@ -41,6 +41,10 @@ type BillDetail = {
   gcsObjectPath: string | null;
   documentMissing: boolean;
   documentFromStatement: boolean;
+  ingestChannel: "drive" | "upload" | "camera" | "bank";
+  driveSourceFileId: string | null;
+  createdAt: string;
+  createdBy?: { displayName: string } | null;
   contentHash: string;
   amountCzk: string | null;
   exchangeRateUsed: string | null;
@@ -622,6 +626,19 @@ const statusLabel = t(
             {t("billModal.openFile")}
           </a>
           )}
+          {/* Where the file came from: Drive import (link to the file), upload, camera, bank payment. */}
+          <p className="mt-2 text-[12.5px] text-ink-secondary">
+            {t("billSource.label")} {t(`billSource.${bill.ingestChannel}`)}
+            {bill.ingestChannel === "drive" && bill.driveSourceFileId && (
+              <>
+                {" · "}
+                <a href={`https://drive.google.com/file/d/${bill.driveSourceFileId}/view`} target="_blank" rel="noreferrer" className="text-ember hover:underline">{t("billSource.driveFile")}</a>
+              </>
+            )}
+            {" · "}
+            {new Date(bill.createdAt).toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" })}
+            {bill.createdBy?.displayName && ` · ${bill.createdBy.displayName}`}
+          </p>
           {!isLocked && bill.gcsObjectPath && (
             <button
               onClick={() => setEditingImage(true)}

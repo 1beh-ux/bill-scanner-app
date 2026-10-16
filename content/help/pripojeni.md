@@ -12,3 +12,5 @@ Aby akce mohla importovat účtenky a odesílat e-maily, musí mít připojený 
 - **Odesílatel e-mailů** — schránka Google Workspace, ze které chodí souhrny a potvrzení rodičům. Vlastník schránky musí jednorázově povolit přístup tlačítkem + Připojit novou schránku.
 
 **Bez těchto dvou připojení akce nefunguje** — proto je obojí součástí checklistu „Akce je připravena" na začátku Nastavení akce.
+
+**Složka Zpracované soubory** — když ji vyplníte, import z Disku po načtení přesune naimportované soubory (i ty, které už v akci byly) ze složky pro import sem, takže ve složce pro import zůstane jen to, co se ještě nenačetlo nebo skončilo chybou. Účet aplikace potřebuje právo zápisu do obou složek. Je to i výchozí cílová složka nástroje Úklid Disku.

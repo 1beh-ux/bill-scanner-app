@@ -22,3 +22,9 @@ V menu Účtenky je seznam všech účtenek akce se stavy (Nové, Schváleno…)
 4. Tlačítkem **Schválit** (nahoře u názvu souboru) účtenku potvrdíte — schválené účtenky se již nepřepočítávají při změně kurzu a jsou připravené k exportu pro účetní (Nastavení akce → Připojení → Exportovat do Drive).
 
 Vícestránkové PDF s více účtenkami se při importu automaticky rozdělí na jednotlivé stránky/účtenky.
+
+## Úklid souborů na Disku
+
+V menu **Úklid Disku** zadáte jednu nebo více složek na Disku (i s podsložkami). Aplikace u každého souboru zjistí, jestli ho používá účtenka — podle obsahu souboru, takže nezáleží na jménu — a ukáže, ve které akci, v jakém stavu je a jestli je proplacená. Soubory se stejným obsahem označí jako duplicity: ponechá kopii, kterou používá účtenka, ostatní navrhne smazat. Vybrané soubory pak přesunete do uklizené složky (odkazy na ně zůstanou funkční) nebo kopie do koše na Disku, odkud jdou 30 dní obnovit.
+
+U každé účtenky je pod náhledem **Zdroj**: import z Disku (s odkazem na původní soubor), nahráno, vyfoceno nebo vytvořeno z platby v bance.

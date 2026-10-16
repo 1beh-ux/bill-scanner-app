@@ -53,6 +53,8 @@ export async function GET(
       categories: { include: { eventCategory: true }, orderBy: { eventCategory: { name: "asc" } } },
       payerAuthor: true,
       event: { select: { id: true, name: true, status: true } },
+      // Bill detail -> Zdroj (who brought the file in).
+      createdBy: { select: { displayName: true } },
     },
   });
 
