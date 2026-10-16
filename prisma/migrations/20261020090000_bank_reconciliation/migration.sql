@@ -1,4 +1,4 @@
--- Banka (bank reconciliation): module key, account sources, transactions, matches, import batches, bill payment fields, audit actions; bill file optional. Additive only.
+-- Banka (bank reconciliation): module key, account sources, transactions, matches, import batches, bill payment fields, audit actions, bank ingest channel; bill file optional. Additive only.
 -- CreateEnum
 CREATE TYPE "BankSourceType" AS ENUM ('fio_api', 'sheet', 'file');
 
@@ -22,6 +22,9 @@ CREATE TYPE "BankImportSource" AS ENUM ('fio', 'sheet', 'csv', 'xlsx', 'paste', 
 
 -- CreateEnum
 CREATE TYPE "BillPaymentChannel" AS ENUM ('cash', 'other_account');
+
+-- AlterEnum
+ALTER TYPE "IngestChannel" ADD VALUE 'bank';
 
 -- AlterEnum
 -- This migration adds more than one value to an enum.

@@ -51,6 +51,8 @@ enum IngestChannel {
   drive
   upload
   camera
+  // Banka: created from a bank transaction ("Vytvořit doklad z platby").
+  bank
 }
 
 enum BillStatus {
