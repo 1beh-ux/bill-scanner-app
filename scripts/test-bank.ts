@@ -20,7 +20,7 @@ function cp1250(text: string) {
   const map: Record<string, number> = { "ý": 0xfd, "ú": 0xfa, "č": 0xe8, "Č": 0xc8, "á": 0xe1, "í": 0xed, "ř": 0xf8, "é": 0xe9, "ž": 0x9e, "ě": 0xec, "š": 0x9a, "ů": 0xf9, "Ú": 0xda, "Š": 0x8a, "Ž": 0x8e, "Ř": 0xd8, "ó": 0xf3 };
   return Buffer.from([...text].map((ch) => (ch.charCodeAt(0) < 128 ? ch.charCodeAt(0) : map[ch] ?? 0x3f))).toString("base64");
 }
-const header = ["Výpis z účtu;2400111111/0800", "Období;1.7.2026 - 31.7.2026", "", "Datum;Název protiúčtu;Protiúčet;VS;Zpráva pro příjemce;Výdaj;Příjem;Typ"];
+const header = ["Výpis z účtu;2400111111/0800", "Období;1.7.2026 - 31.7.2026", "", "Datum;Název protiúčtu;Protiúčet;VS;Zpráva pro příjemce;Výdaj;Příjem;Typ;Původní částka;Původní měna"];
 const rowsA = [
   "03.07.2026;ALBERT CR;;;Nákup potravin;1 234,50;;Platba kartou",
   "04.07.2026;Kavárna;;;Káva;45,00;;Platba kartou",
@@ -30,7 +30,7 @@ const rowsA = [
   "06.07.2026;Hlavní účet;2400222222/2010;;Převod na tábor;;10 000,00;Bezhotovostní příjem",
   "07.07.2026;NOVAKOVA JANA;123456789/0800;;Proplacení;300,00;;Bezhotovostní platba",
   "08.07.2026;Rodič;55555/0100;77;Táborový poplatek;;3 500,00;Bezhotovostní příjem",
-  "09.07.2026;Biedronka;;;Zakupy;553,00;;Platba kartou",
+  "09.07.2026;Biedronka;;;Zakupy;553,00;;Platba kartou;95,00;PLN",
   "20.08.2026;Mimo;;;Pozdě;10,00;;Platba kartou",
   "10.07.2026;Chyba;;;;neplatné;;",
 ];
@@ -117,7 +117,7 @@ async function main() {
     const bied = await tx("Zakupy");
     check("5. unique exact pair -> Jistý", (await sug(albert.id)).length === 1 && (await sug(albert.id))[0].tier === "sure" && (await sug(albert.id))[0].billId === bAlbert.id, await sug(albert.id));
     check("5. two equal amounts -> Možný (not sure)", (await sug(cafe.id)).length === 2 && (await sug(cafe.id)).every((m) => m.tier === "possible"), await sug(cafe.id));
-    check("5. PLN bill vs CZK payment within 3 % -> suggested", (await sug(bied.id)).length === 1, await sug(bied.id));
+    check("5. Kč card payment with the original 95 PLN -> Jistý for the 95 PLN receipt", (await sug(bied.id)).length === 1 && (await sug(bied.id))[0].tier === "sure", await sug(bied.id));
     check("5. nothing confirmed before a person confirms", (await prisma.bankMatch.count({ where: { transaction: { eventId }, confirmedAt: { not: null } } })) === 0);
     const billsList = await json(await R.bills.GET(req("/x"), p));
     check("5. a suggestion shows only as Návrh in Účtenky", (billsList.body as { id: string; payment: { state: string } }[]).find((b) => b.id === bAlbert.id)?.payment.state === "suggested");
@@ -141,13 +141,16 @@ async function main() {
     await R.matches.DELETE(req(`/x?clearPaid=1`, { method: "DELETE" }), params({ id: eventId, matchId: m.id }));
     check("6. unpairing with 'clear Proplaceno' takes it back", !(await prisma.bill.findUniqueOrThrow({ where: { id: bJana.id } })).paidToAuthor && !(await prisma.bankMatch.findUnique({ where: { id: m.id } })));
 
+    const biedMatch = await prisma.bankMatch.findFirstOrThrow({ where: { transactionId: bied.id } });
+    check("foreign: the card payment pairing keeps both sides -- bill 540 Kč (ČNB), payment 553 Kč (bank)", !!biedMatch.confirmedAt && Number(biedMatch.amountCzk) === 540 && Number(biedMatch.amountTx) === 553, { czk: biedMatch.amountCzk, tx: biedMatch.amountTx });
+
     // --- 7. bill from a payment
-    await R.act.POST(req("/x", { method: "POST", body: { action: "reject", ids: [bied.id] } }), p);
-    const made = await json(await R.act.POST(req("/x", { method: "POST", body: { action: "createBills", ids: [bied.id] } }), p));
+    const newRow = await tx("Nový řádek");
+    const made = await json(await R.act.POST(req("/x", { method: "POST", body: { action: "createBills", ids: [newRow.id] } }), p));
     const newBill = await prisma.bill.findUniqueOrThrow({ where: { id: made.body?.billIds?.[0] }, include: { bankMatches: true } });
-    check("7. Vytvořit doklad: bill without a file, chybí doklad, paired + confirmed", made.body?.created === 1 && newBill.gcsObjectPath === null && newBill.documentMissing && newBill.status === "to_review" && newBill.bankMatches.length === 1 && !!newBill.bankMatches[0].confirmedAt && Number(newBill.amountCzk) === 553, { made: made.body, newBill: { ...newBill, sizeBytes: undefined } });
+    check("7. Vytvořit doklad: bill without a file, chybí doklad, paired + confirmed", made.body?.created === 1 && newBill.gcsObjectPath === null && newBill.documentMissing && newBill.status === "to_review" && newBill.bankMatches.length === 1 && !!newBill.bankMatches[0].confirmedAt && Number(newBill.amountCzk) === 10, { made: made.body, newBill: { ...newBill, sizeBytes: undefined } });
     const { approveBill } = await import("@/lib/bill-actions");
-    await prisma.billCategory.create({ data: { billId: newBill.id, eventCategoryId: cat.id, amount: new Prisma.Decimal(553), amountCzk: new Prisma.Decimal(553) } });
+    await prisma.billCategory.create({ data: { billId: newBill.id, eventCategoryId: cat.id, amount: new Prisma.Decimal(10), amountCzk: new Prisma.Decimal(10) } });
     const appr = await approveBill(newBill.id, banker.id);
     check("7. a bill without a file can be approved", appr.ok, appr);
 
@@ -162,15 +165,36 @@ async function main() {
     check("8. a Banka user sees the counterparty", payB.body?.matches?.[0]?.counterparty === "ALBERT CR", payB.body?.matches);
 
     // --- 9. totals
+    // --- foreign currency: a Polish (PLN) account
+    const plnAcc = await json(await R.accounts.POST(req("/x", { method: "POST", body: { label: "Polský", accountNumber: "99887766", bankCode: "0300", sourceType: "file", currency: "PLN" } }), p));
+    const zabka = await bill("Zabka", 541, "2026-07-05", { currency: "PLN", totalAmount: new Prisma.Decimal(95) });
+    const plnText = ["Datum;Protistrana;Zpráva;Částka;Typ", "05.07.2026;Zabka;Nakup PL;-95,00;Platba kartou", "06.07.2026;Lody;Zmrzlina;-20,00;Platba kartou"].join("\n");
+    const plnImp = await json(await R.imp.POST(req("/x", { method: "POST", body: { accountId: plnAcc.body?.id, source: "paste", text: plnText, commit: true } }), p));
+    const zTx = await prisma.bankTransaction.findFirstOrThrow({ where: { bankAccountId: plnAcc.body?.id, message: "Nakup PL" } });
+    const zSug = await sug(zTx.id);
+    check("foreign: PLN account rows stored in PLN; 95 PLN payment -> Jistý for the 95 PLN receipt (541 Kč at ČNB)", plnImp.body?.counts?.new === 2 && zTx.currency === "PLN" && Number(zTx.amount) === -95 && zSug.length === 1 && zSug[0].billId === zabka.id && zSug[0].tier === "sure" && Number(zSug[0].amountTx) === 95 && Number(zSug[0].amountCzk) === 541, { counts: plnImp.body?.counts, cur: zTx.currency, sug: zSug.map((x) => [x.billId === zabka.id, x.tier, Number(x.amountTx), Number(x.amountCzk)]) });
+    await R.act.POST(req("/x", { method: "POST", body: { action: "confirm", ids: [zTx.id] } }), p);
+    const zPay = await json(await R.payment.GET(req("/x"), params({ id: zabka.id })));
+    check("foreign: the receipt counts as paid by the bank, payment shown in PLN", zPay.body?.state === "bank" && zPay.body?.matches?.[0]?.currency === "PLN" && zPay.body.matches[0].amountTx === 95 && zPay.body.matches[0].amountCzk === 541, zPay.body);
+    const lody = await prisma.bankTransaction.findFirstOrThrow({ where: { bankAccountId: plnAcc.body?.id, message: "Zmrzlina" } });
+    const lodyMade = await json(await R.act.POST(req("/x", { method: "POST", body: { action: "createBills", ids: [lody.id] } }), p));
+    const lodyBill = await prisma.bill.findUniqueOrThrow({ where: { id: lodyMade.body?.billIds?.[0] }, include: { bankMatches: true } });
+    const rate = await prisma.exchangeRate.findFirst({ where: { currency: "PLN", rateDate: { lte: new Date("2026-07-06") } }, orderBy: { rateDate: "desc" } });
+    check("foreign: a bill from a PLN payment is in PLN with Kč at the ČNB rate", lodyBill.currency === "PLN" && Number(lodyBill.totalAmount) === 20 && (rate ? Math.abs(Number(lodyBill.amountCzk) - 20 * Number(rate.rateToCzk)) < 0.02 : lodyBill.amountCzk !== null) && Number(lodyBill.bankMatches[0]?.amountTx) === 20, { cur: lodyBill.currency, total: lodyBill.totalAmount, czk: lodyBill.amountCzk, rate: rate && Number(rate.rateToCzk), tx: lodyBill.bankMatches[0]?.amountTx });
+
+    // --- 9. totals (per currency)
     const all = await json(await R.txs.GET(req("/x?tab=all&group=classification"), p));
-    const rows = all.body.rows as { amount: number }[];
-    const inc = rows.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0), out = rows.filter((r) => r.amount < 0).reduce((s, r) => s + r.amount, 0);
+    const rows = all.body.rows as { amount: number; currency: string }[];
     const near = (a: number, b: number) => Math.abs(a - b) < 0.005;
-    check("9. footer totals = sum of the visible rows", near(all.body.totals.income, inc) && near(all.body.totals.expense, out) && all.body.totals.count === rows.length, { totals: all.body.totals, inc, out, n: rows.length });
-    const g = all.body.groups as { income: number; expense: number; count: number }[];
-    check("9. group subtotals add up to the total", near(g.reduce((s, x) => s + x.income, 0), inc) && near(g.reduce((s, x) => s + x.expense, 0), out) && g.reduce((s, x) => s + x.count, 0) === rows.length, g);
+    type CS = { currency: string; income: number; expense: number; incomeCount: number; expenseCount: number };
+    const sumOf = (cur: string, sign: 1 | -1) => rows.filter((r) => r.currency === cur && r.amount * sign > 0).reduce((s, r) => s + r.amount, 0);
+    const czk = (all.body.totals.byCurrency as CS[]).find((c) => c.currency === "CZK")!, pln = (all.body.totals.byCurrency as CS[]).find((c) => c.currency === "PLN")!;
+    check("9. footer totals per currency = sums of the visible rows (Kč and PLN never mixed)", near(czk.income, sumOf("CZK", 1)) && near(czk.expense, sumOf("CZK", -1)) && near(pln.expense, -115) && near(pln.income, 0) && all.body.totals.count === rows.length, { totals: all.body.totals, n: rows.length });
+    const g = all.body.groups as { currency: string; income: number; expense: number; count: number }[];
+    check("9. group subtotals add up to the total per currency", ["CZK", "PLN"].every((c) => near(g.filter((x) => x.currency === c).reduce((s, x) => s + x.income + x.expense, 0), sumOf(c, 1) + sumOf(c, -1))) && g.reduce((s, x) => s + x.count, 0) === rows.length, g);
     const filtered = await json(await R.txs.GET(req("/x?tab=all&dir=out&min=40&max=100"), p));
-    check("9. filters: outgoing 40–100 Kč = the two coffees + fee", (filtered.body.rows as { amount: number }[]).every((r) => r.amount <= -40 && r.amount >= -100) && filtered.body.rows.length === 3, filtered.body.rows.map((r: { amount: number }) => r.amount));
+    // The amount filter works in each row's own currency: the 95 PLN payment is in too.
+    check("9. filters: outgoing 40–100 = the two coffees + fee (Kč) + 95 PLN", (filtered.body.rows as { amount: number }[]).every((r) => r.amount <= -40 && r.amount >= -100) && filtered.body.rows.length === 4, filtered.body.rows.map((r: { amount: number }) => r.amount));
     // --- 2. Sheet re-sync: one row edited, one deleted (the same commit path the Sheet sync uses)
     const { commitImport } = await import("@/lib/bank/import");
     const { rowsToTransactions } = await import("@/lib/bank/parse");
@@ -192,7 +216,7 @@ async function main() {
     check("2. Sheet: edited row = new, deleted row -> sourceMissing, paired row never removed", res.counts.new === 1 && sheetTx.length === 4 && !!tesco?.sourceMissing && !!pennyOld?.sourceMissing && pennyOld.matches.some((m) => m.confirmedAt) && sheetTx.filter((t) => !t.sourceMissing).length === 2, { counts: res.counts, rows: sheetTx.map((t) => [t.counterpartyName, Number(t.amount), t.sourceMissing, t.matches.length]) });
 
     const ov = await json(await R.overview.GET(req("/x"), p));
-    check("Přehled loads, cash withdrawn 2 000", ov.status === 200 && near(ov.body.cash.withdrawn, 2000), ov.body?.cash);
+    check("Přehled loads, cash withdrawn 2 000 Kč", ov.status === 200 && ov.body.cash.withdrawn.length === 1 && ov.body.cash.withdrawn[0].currency === "CZK" && near(ov.body.cash.withdrawn[0].amount, 2000), ov.body?.cash);
   } catch (err) {
     // An exception mid-way is a failure, never a silent stop.
     check("no exception", false, String(err instanceof Error ? err.stack : err));

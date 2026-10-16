@@ -34,3 +34,9 @@ K platbě bez účtenky vytvoříte doklad (**Vytvořit doklady**): datum, čás
 ## Sloupec Platba v Účtenkách
 
 Když má akce Banku zapnutou, vidí všichni s Účtenkami sloupec **Platba**: **Banka** (spárováno celou částkou), **Částečně**, **Hotově**, **Jiný účet**, **Návrh** (čeká na potvrzení), **Nespárováno**. Hotově / Jiný účet nastavíte ručně (i hromadně). Údaje o platbách (protistrana, zpráva) zůstávají jen v Bance.
+
+## Cizí měna (polské účty, platby kartou v zahraničí)
+
+Účet má svou měnu (při přidání účtu vyberete, Fio ji zjistí samo) a pohyby se ukazují v ní — polský účet v PLN. Platba kartou v cizině z korunového účtu ukazuje i původní částku („původně 95,00 PLN“).
+
+Párování porovnává v měně platby: platbu 95 PLN s účtenkou na 95 PLN, korunovou platbu kartou podle její původní částky. Účtenka má vedle své měny i částku v Kč podle kurzu ČNB (ten používá celá aplikace — rozpočty, export) a ta se nemění; kurz banky je vidět jen na platbě. Rozdíl mezi nimi je „kurzový rozdíl“ a při párování se doplní sám. Součty v Pohybech a v Přehledu jsou po měnách — koruny a zloté se nesčítají.
