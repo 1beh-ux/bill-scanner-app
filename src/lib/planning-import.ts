@@ -96,10 +96,11 @@ export function guessMappingFor(headers: string[], fields: ImportField[]): strin
  * ; or , -- whichever splits the first line into more columns. CSV quoting
  * ("a;b", "" escapes, newlines inside quotes) is honored.
  */
-export function parseTable(text: string): string[][] {
+export function parseTable(text: string, delimiter?: string): string[][] {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
   const count = (ch: string) => firstLine.split(ch).length;
-  const delim = firstLine.includes("\t") ? "\t" : count(";") >= count(",") && count(";") > 1 ? ";" : count(",") > 1 ? "," : "\t";
+  // A caller that knows better (bank exports: info lines above the table) passes the delimiter.
+  const delim = delimiter ?? (firstLine.includes("\t") ? "\t" : count(";") >= count(",") && count(";") > 1 ? ";" : count(",") > 1 ? "," : "\t");
 
   const rows: string[][] = [];
   let row: string[] = [];
