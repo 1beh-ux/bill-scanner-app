@@ -30,6 +30,8 @@ export async function moveBillToEvent(
   }
   if (bill.event.status === "closed") return { ok: false, error: "event_closed_locked" };
   if (bill.eventId === targetEventId) return { ok: false, error: "already_in_event" };
+  // Banka: a bill paired with this event's bank payment stays with it (unpair first).
+  if (await prisma.bankMatch.count({ where: { billId, confirmedAt: { not: null } } })) return { ok: false, error: "bank_paired" };
 
   const targetEvent = await prisma.event.findUnique({ where: { id: targetEventId } });
   if (!targetEvent) return { ok: false, error: "target_event_not_found" };
@@ -84,6 +86,8 @@ export async function moveBillToEvent(
     }
 
     await tx.bill.update({ where: { id: billId }, data: { eventId: targetEventId } });
+    // Suggestions were made against the old event's payments.
+    await tx.bankMatch.deleteMany({ where: { billId, confirmedAt: null } });
 
     // Reusing the existing "edit" action type rather than adding a new enum
     // value for this — old/new values are the event NAMES here (not IDs),
