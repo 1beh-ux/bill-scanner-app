@@ -71,17 +71,24 @@ export async function checkBankAccount(bankAccountId: string, { reason }: { reas
   return result;
 }
 
+/**
+ * Fio allows one call per token per 30 s. Every caller of the account's token -- this payment check
+ * (cron, portal polls) and Banka's sync (src/lib/bank/import.ts) -- claims the slot here first.
+ */
+export async function claimFioSlot(bankAccountId: string): Promise<boolean> {
+  const claimed = await prisma.$queryRaw<{ id: string }[]>`
+    UPDATE bank_accounts SET last_checked_at = now()
+    WHERE id = ${bankAccountId} AND active AND (last_checked_at IS NULL OR last_checked_at < now() - interval '35 seconds')
+    RETURNING id`;
+  return claimed.length > 0;
+}
+
 async function run(bankAccountId: string): Promise<CheckResult> {
   const candidates = await bankCandidates(bankAccountId);
   const unpaid = candidates.filter((c) => !c.paid);
   if (!unpaid.length) return { status: "nothing_to_do" };
 
-  // Fio allows one call per token per 30 s; this also keeps parallel callers (cron, portal polls) apart.
-  const claimed = await prisma.$queryRaw<{ id: string }[]>`
-    UPDATE bank_accounts SET last_checked_at = now()
-    WHERE id = ${bankAccountId} AND active AND (last_checked_at IS NULL OR last_checked_at < now() - interval '35 seconds')
-    RETURNING id`;
-  if (!claimed.length) return { status: "throttled" };
+  if (!(await claimFioSlot(bankAccountId))) return { status: "throttled" };
 
   const fail = async (code: FioError | "no_token"): Promise<CheckResult> => {
     await prisma.bankAccount.update({ where: { id: bankAccountId }, data: { lastError: code } });
