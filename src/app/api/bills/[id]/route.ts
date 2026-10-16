@@ -267,7 +267,7 @@ export async function DELETE(
     await tx.bill.delete({ where: { id } });
   });
 
-  await billsBucket.file(bill.gcsObjectPath).delete().catch(() => {});
+  if (bill.gcsObjectPath) await billsBucket.file(bill.gcsObjectPath).delete().catch(() => {});
 
   return NextResponse.json({ ok: true });
 }

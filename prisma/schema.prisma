@@ -80,6 +80,8 @@ enum ModuleKey {
   health
   mail
   planning
+  // Banka (bank reconciliation): explicit per-event grant only, admins included (src/lib/module-access.ts).
+  bank
 }
 
 enum IncidentCategory {
@@ -411,6 +413,9 @@ model Event {
   publicHosts            PublicHost[]
   deposits               EventDeposit[]
   aiUsage                AiUsage[]
+  bankLinks              EventBankAccount[]
+  bankTransactions       BankTransaction[]
+  bankImportBatches      BankImportBatch[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -534,41 +539,50 @@ model Translation {
 }
 
 model Bill {
-  id                    String        @id @default(uuid())
-  eventId               String        @map("event_id")
-  gcsObjectPath         String        @map("gcs_object_path")
-  originalGcsObjectPath String?       @map("original_gcs_object_path")
+  id                         String              @id @default(uuid())
+  eventId                    String              @map("event_id")
+  // null = no file yet ("Vytvořit doklad z platby", documentMissing).
+  gcsObjectPath              String?             @map("gcs_object_path")
+  originalGcsObjectPath      String?             @map("original_gcs_object_path")
   // Bill: current file + the kept original (originalGcsObjectPath) together.
   // Stored bytes in GCS (usage metering, /vyuziti); null = not measured yet (scripts/backfill-gcs-sizes.ts).
-  sizeBytes             BigInt?       @map("size_bytes")
-  originalFilename      String        @map("original_filename")
-  displayFilename       String?       @map("display_filename")
-  driveSourceFileId     String?       @map("drive_source_file_id")
-  contentHash           String        @map("content_hash")
-  ingestChannel         IngestChannel @map("ingest_channel")
-  merchantName          String?       @map("merchant_name")
-  billDate              DateTime?     @map("bill_date") @db.Date
-  totalAmount           Decimal?      @map("total_amount") @db.Decimal(12, 2)
-  currency              Currency      @default(CZK)
-  amountCzk             Decimal?      @map("amount_czk") @db.Decimal(12, 2)
-  exchangeRateUsed      Decimal?      @map("exchange_rate_used") @db.Decimal(12, 6)
-  exchangeRateDate      DateTime?     @map("exchange_rate_date") @db.Date
-  payerAuthorId         String?       @map("payer_author_id")
-  pendingCategoryId     String?       @map("pending_category_id")
-  paidToAuthor          Boolean       @default(false) @map("paid_to_author")
-  paidAt                DateTime?     @map("paid_at")
-  paidByUserId          String?       @map("paid_by_user_id")
-  status                BillStatus    @default(new)
-  notes                 String?
-  aiConfidence          Decimal?      @map("ai_confidence") @db.Decimal(5, 4)
-  aiRawResponse         Json?         @map("ai_raw_response")
-  createdByUserId       String        @map("created_by_user_id")
-  createdAt             DateTime      @default(now()) @map("created_at")
-  updatedAt             DateTime      @default(now()) @updatedAt @map("updated_at")
-  approvedAt            DateTime?     @map("approved_at")
-  approvedByUserId      String?       @map("approved_by_user_id")
-  exportedAt            DateTime?     @map("exported_at")
-  exportFilename        String?       @map("export_filename")
+  sizeBytes                  BigInt?             @map("size_bytes")
+  // Banka (docs/bank-reconciliation.md): paid in cash / from another account, set by hand;
+  // a confirmed bank pair wins over it (src/lib/bank/payment-state.ts).
+  paymentChannel             BillPaymentChannel? @map("payment_channel")
+  paymentNote                String?             @map("payment_note")
+  // Created from a bank transaction without a document / the bank statement is the document.
+  documentMissing            Boolean             @default(false) @map("document_missing")
+  documentFromStatement      Boolean             @default(false) @map("document_from_statement")
+  missingDocAssigneeAuthorId String?             @map("missing_doc_assignee_author_id")
+  originalFilename           String              @map("original_filename")
+  displayFilename            String?             @map("display_filename")
+  driveSourceFileId          String?             @map("drive_source_file_id")
+  contentHash                String              @map("content_hash")
+  ingestChannel              IngestChannel       @map("ingest_channel")
+  merchantName               String?             @map("merchant_name")
+  billDate                   DateTime?           @map("bill_date") @db.Date
+  totalAmount                Decimal?            @map("total_amount") @db.Decimal(12, 2)
+  currency                   Currency            @default(CZK)
+  amountCzk                  Decimal?            @map("amount_czk") @db.Decimal(12, 2)
+  exchangeRateUsed           Decimal?            @map("exchange_rate_used") @db.Decimal(12, 6)
+  exchangeRateDate           DateTime?           @map("exchange_rate_date") @db.Date
+  payerAuthorId              String?             @map("payer_author_id")
+  pendingCategoryId          String?             @map("pending_category_id")
+  paidToAuthor               Boolean             @default(false) @map("paid_to_author")
+  paidAt                     DateTime?           @map("paid_at")
+  paidByUserId               String?             @map("paid_by_user_id")
+  status                     BillStatus          @default(new)
+  notes                      String?
+  aiConfidence               Decimal?            @map("ai_confidence") @db.Decimal(5, 4)
+  aiRawResponse              Json?               @map("ai_raw_response")
+  createdByUserId            String              @map("created_by_user_id")
+  createdAt                  DateTime            @default(now()) @map("created_at")
+  updatedAt                  DateTime            @default(now()) @updatedAt @map("updated_at")
+  approvedAt                 DateTime?           @map("approved_at")
+  approvedByUserId           String?             @map("approved_by_user_id")
+  exportedAt                 DateTime?           @map("exported_at")
+  exportFilename             String?             @map("export_filename")
 
   event       Event          @relation(fields: [eventId], references: [id])
   payerAuthor Author?        @relation(fields: [payerAuthorId], references: [id])
@@ -576,6 +590,7 @@ model Bill {
   approvedBy  User?          @relation("BillApprovedBy", fields: [approvedByUserId], references: [id])
   paidBy      User?          @relation("BillPaidBy", fields: [paidByUserId], references: [id])
   categories  BillCategory[]
+  bankMatches BankMatch[]
   auditLog    BillAuditLog[]
 
   @@unique([eventId, contentHash], name: "bills_event_content_hash_unique")
@@ -1586,26 +1601,41 @@ enum BankProvider {
 }
 
 model BankAccount {
-  id               String       @id @default(uuid())
-  organizationId   String       @map("organization_id")
+  id               String         @id @default(uuid())
+  organizationId   String         @map("organization_id")
   label            String
-  accountNumber    String       @map("account_number")
-  bankCode         String       @map("bank_code")
-  provider         BankProvider @default(fio)
-  tokenEncrypted   String?      @map("token_encrypted")
-  tokenSetAt       DateTime?    @map("token_set_at")
-  tokenSetByUserId String?      @map("token_set_by_user_id")
-  lastCheckedAt    DateTime?    @map("last_checked_at")
-  lastSuccessAt    DateTime?    @map("last_success_at")
+  accountNumber    String         @map("account_number")
+  bankCode         String         @map("bank_code")
+  provider         BankProvider   @default(fio)
+  tokenEncrypted   String?        @map("token_encrypted")
+  tokenSetAt       DateTime?      @map("token_set_at")
+  tokenSetByUserId String?        @map("token_set_by_user_id")
+  lastCheckedAt    DateTime?      @map("last_checked_at")
+  lastSuccessAt    DateTime?      @map("last_success_at")
   // Short code (src/lib/bank/fio-client.ts FioError), never a message or URL.
-  lastError        String?      @map("last_error")
-  active           Boolean      @default(true)
-  createdAt        DateTime     @default(now()) @map("created_at")
+  lastError        String?        @map("last_error")
+  active           Boolean        @default(true)
+  // Banka (docs/bank-reconciliation.md). The registration payment check uses the same account and
+  // token (one Fio token, one 30 s throttle: lastCheckedAt).
+  sourceType       BankSourceType @default(fio_api) @map("source_type")
+  iban             String?
+  currency         String         @default("CZK")
+  sheetId          String?        @map("sheet_id")
+  sheetRange       String?        @map("sheet_range")
+  columnMapping    Json?          @map("column_mapping")
+  lastSyncAt       DateTime?      @map("last_sync_at")
+  lastSyncResult   Json?          @map("last_sync_result")
+  createdById      String?        @map("created_by_id")
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
 
-  organization Organization   @relation(fields: [organizationId], references: [id])
-  tokenSetBy   User?          @relation("BankAccountTokenSetBy", fields: [tokenSetByUserId], references: [id], onDelete: SetNull)
-  events       Event[]
-  movements    BankMovement[]
+  organization  Organization       @relation(fields: [organizationId], references: [id])
+  tokenSetBy    User?              @relation("BankAccountTokenSetBy", fields: [tokenSetByUserId], references: [id], onDelete: SetNull)
+  events        Event[]
+  movements     BankMovement[]
+  eventLinks    EventBankAccount[]
+  transactions  BankTransaction[]
+  importBatches BankImportBatch[]
 
   @@unique([organizationId, accountNumber, bankCode])
   @@map("bank_accounts")
@@ -1714,4 +1744,173 @@ model AppSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("app_settings")
+}
+
+// ---- Banka: bank reconciliation (docs/bank-reconciliation.md) ----
+
+enum BankSourceType {
+  fio_api
+  sheet
+  file
+}
+
+enum BankClassification {
+  expense
+  income
+  cash
+  transfer
+  fee
+  private
+  other_event
+}
+
+enum BankIncomeType {
+  fee
+  grant
+  donation
+  refund
+  other
+}
+
+enum BankMatchMethod {
+  suggested
+  manual
+}
+
+enum BankMatchTier {
+  sure
+  possible
+}
+
+enum BankDifferenceReason {
+  fx
+  fee
+  rounding
+  partial
+}
+
+enum BankImportSource {
+  fio
+  sheet
+  csv
+  xlsx
+  paste
+  gpc
+  camt
+}
+
+enum BillPaymentChannel {
+  cash
+  other_account
+}
+
+// Which accounts an event reconciles, and the date window (default: the event's dates).
+model EventBankAccount {
+  id            String   @id @default(uuid())
+  eventId       String   @map("event_id")
+  bankAccountId String   @map("bank_account_id")
+  dateFrom      DateTime @map("date_from") @db.Date
+  dateTo        DateTime @map("date_to") @db.Date
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  event       Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  bankAccount BankAccount @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, bankAccountId])
+  @@map("event_bank_accounts")
+}
+
+// One movement on the account, in one event. amount is signed (minus = outgoing).
+model BankTransaction {
+  id                    String             @id @default(uuid())
+  bankAccountId         String             @map("bank_account_id")
+  eventId               String             @map("event_id")
+  // fio:<ID pohybu> | CAMT AcctSvcrRef | h:<sha256> (src/lib/bank/parse.ts)
+  externalId            String             @map("external_id")
+  bookingDate           DateTime           @map("booking_date") @db.Date
+  valueDate             DateTime?          @map("value_date") @db.Date
+  amount                Decimal            @db.Decimal(14, 2)
+  currency              String             @default("CZK")
+  originalAmount        Decimal?           @map("original_amount") @db.Decimal(14, 2)
+  originalCurrency      String?            @map("original_currency")
+  counterpartyAccount   String?            @map("counterparty_account")
+  counterpartyBankCode  String?            @map("counterparty_bank_code")
+  counterpartyName      String?            @map("counterparty_name")
+  vs                    String?
+  ks                    String?
+  ss                    String?
+  message               String?
+  note                  String?
+  bankType              String?            @map("bank_type")
+  classification        BankClassification
+  // false = still the automatic classification (import never overwrites a user's choice).
+  classifiedByUser      Boolean            @default(false) @map("classified_by_user")
+  incomeType            BankIncomeType?    @map("income_type")
+  personAuthorId        String?            @map("person_author_id")
+  // Reimbursement hint: the counterparty is this payer (src/lib/bank/suggest.ts).
+  reimbursementAuthorId String?            @map("reimbursement_author_id")
+  noDocumentNeeded      Boolean            @default(false) @map("no_document_needed")
+  userNote              String?            @map("user_note")
+  // No longer in the source (Google Sheet); never deleted automatically.
+  sourceMissing         Boolean            @default(false) @map("source_missing")
+  importBatchId         String?            @map("import_batch_id")
+  createdAt             DateTime           @default(now()) @map("created_at")
+  updatedAt             DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  bankAccount BankAccount      @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  event       Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  importBatch BankImportBatch? @relation(fields: [importBatchId], references: [id], onDelete: SetNull)
+  matches     BankMatch[]
+
+  @@unique([bankAccountId, externalId])
+  @@index([eventId, bookingDate])
+  @@index([eventId, classification])
+  @@map("bank_transactions")
+}
+
+// A transaction <-> bill pairing. method suggested + confirmedAt null = only a suggestion (counts nowhere).
+model BankMatch {
+  id               String                @id @default(uuid())
+  transactionId    String                @map("transaction_id")
+  billId           String                @map("bill_id")
+  amountCzk        Decimal               @map("amount_czk") @db.Decimal(14, 2)
+  method           BankMatchMethod
+  tier             BankMatchTier?
+  score            Int                   @default(0)
+  reasons          Json                  @default("[]")
+  differenceReason BankDifferenceReason? @map("difference_reason")
+  // This pairing marked the bill Proplaceno (unpairing offers to clear it).
+  setPaidToAuthor  Boolean               @default(false) @map("set_paid_to_author")
+  confirmedById    String?               @map("confirmed_by_id")
+  confirmedAt      DateTime?             @map("confirmed_at")
+  rejectedById     String?               @map("rejected_by_id")
+  rejectedAt       DateTime?             @map("rejected_at")
+  createdAt        DateTime              @default(now()) @map("created_at")
+
+  transaction BankTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  bill        Bill            @relation(fields: [billId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, billId])
+  @@index([billId])
+  @@map("bank_matches")
+}
+
+model BankImportBatch {
+  id            String           @id @default(uuid())
+  bankAccountId String           @map("bank_account_id")
+  eventId       String           @map("event_id")
+  source        BankImportSource
+  fileName      String?          @map("file_name")
+  counts        Json
+  // Per-row result table (src/lib/bank/import.ts).
+  rows          Json
+  userId        String?          @map("user_id")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  bankAccount  BankAccount       @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
+  event        Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  transactions BankTransaction[]
+
+  @@index([eventId, createdAt])
+  @@map("bank_import_batches")
 }

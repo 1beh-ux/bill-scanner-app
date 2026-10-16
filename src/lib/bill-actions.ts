@@ -119,10 +119,7 @@ export async function deleteBill(
     await tx.bill.delete({ where: { id: billId } });
   });
 
-  await billsBucket
-    .file(bill.gcsObjectPath)
-    .delete()
-    .catch(() => {});
+  if (bill.gcsObjectPath) await billsBucket.file(bill.gcsObjectPath).delete().catch(() => {});
 
   return { ok: true, billId };
 }

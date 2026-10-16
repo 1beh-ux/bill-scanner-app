@@ -25,6 +25,8 @@ export async function GET(
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
 
+  // A bill created from a bank payment has no document yet.
+  if (!bill.gcsObjectPath) return NextResponse.json({ error: "no_file" }, { status: 404 });
   const file = billsBucket.file(bill.gcsObjectPath);
 
   const t2 = Date.now();

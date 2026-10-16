@@ -33,6 +33,10 @@ export async function POST(
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
 
+  // Editing needs an image to edit (a bill from a bank payment may have none yet).
+  if (!bill.gcsObjectPath) return NextResponse.json({ error: "no_file" }, { status: 400 });
+  const currentPath = bill.gcsObjectPath;
+
   const formData = await req.formData();
   const file = formData.get("file") as File | null;
 
@@ -46,12 +50,12 @@ export async function POST(
   // Preserve the untouched scan the first time this bill is edited.
   let originalPath = bill.originalGcsObjectPath;
   if (!originalPath) {
-    originalPath = bill.gcsObjectPath.replace("/bills/", "/bills-originals/");
-    await billsBucket.file(bill.gcsObjectPath).copy(billsBucket.file(originalPath));
+    originalPath = currentPath.replace("/bills/", "/bills-originals/");
+    await billsBucket.file(currentPath).copy(billsBucket.file(originalPath));
   }
 
   // Write to a fresh path so cached copies of the previous version are never served.
-  const newPath = `${bill.gcsObjectPath.split("#")[0]}#${Date.now()}.jpg`;
+  const newPath = `${currentPath.split("#")[0]}#${Date.now()}.jpg`;
   await billsBucket.file(newPath).save(buffer, { contentType: "image/jpeg" });
 
   const previousPath = bill.gcsObjectPath;
@@ -131,7 +135,7 @@ export async function DELETE(
   if (bill.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
-  if (!bill.originalGcsObjectPath) {
+  if (!bill.originalGcsObjectPath || !bill.gcsObjectPath) {
     return NextResponse.json({ error: "no_original" }, { status: 400 });
   }
 

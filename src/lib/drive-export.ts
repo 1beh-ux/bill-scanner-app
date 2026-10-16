@@ -149,6 +149,9 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
       continue;
     }
 
+    // No document (created from a bank payment): nothing to upload; the manifest says "chybí doklad".
+    if (!bill.gcsObjectPath) continue;
+
     // displayFilename is guaranteed set here — only approved bills reach this
     // query, and approval is what sets displayFilename in the first place.
     // A missing file keeps its name (the manifest and people may refer to it).

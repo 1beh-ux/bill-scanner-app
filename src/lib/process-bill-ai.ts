@@ -42,6 +42,9 @@ export async function processBillWithAi(billId: string, by: { userId?: string | 
     select: { id: true, name: true, description: true },
   });
   if (eventCategories.length === 0) return { ok: false, error: "no_categories" };
+  // Created from a bank payment, no document yet: nothing to read.
+  if (!bill.gcsObjectPath) return { ok: false, error: "no_file" };
+  const gcsObjectPath = bill.gcsObjectPath;
 
   // Transition to "processing" right before the actual extraction call —
   // this is what makes the bill list's status pills and polling reflect
@@ -51,7 +54,7 @@ export async function processBillWithAi(billId: string, by: { userId?: string | 
 
   let aiResult;
   try {
-    aiResult = await extractBillWithAi(bill.gcsObjectPath, bill.originalFilename, eventCategories, {
+    aiResult = await extractBillWithAi(gcsObjectPath, bill.originalFilename, eventCategories, {
       eventId: bill.eventId,
       billId,
       userId: by.userId ?? null,

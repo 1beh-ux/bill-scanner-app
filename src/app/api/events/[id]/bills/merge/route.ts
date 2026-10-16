@@ -30,13 +30,13 @@ export async function POST(
   const bills = ids.map((id) => byId.get(id));
   if (bills.some((b) => !b)) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const ordered = bills as NonNullable<(typeof bills)[number]>[];
-  if (ordered.some((b) => b.status !== "new" || !b.originalFilename.toLowerCase().endsWith(".pdf"))) {
+  if (ordered.some((b) => b.status !== "new" || !b.gcsObjectPath || !b.originalFilename.toLowerCase().endsWith(".pdf"))) {
     return NextResponse.json({ error: "only_new_pdfs" }, { status: 400 });
   }
 
   const merged = await PDFDocument.create();
   for (const bill of ordered) {
-    const [buffer] = await billsBucket.file(bill.gcsObjectPath).download();
+    const [buffer] = await billsBucket.file(bill.gcsObjectPath!).download();
     const src = await PDFDocument.load(buffer);
     for (const page of await merged.copyPages(src, src.getPageIndices())) merged.addPage(page);
   }
@@ -74,7 +74,7 @@ export async function POST(
     return bill;
   });
 
-  await Promise.all(ordered.map((b) => billsBucket.file(b.gcsObjectPath).delete().catch(() => {})));
+  await Promise.all(ordered.map((b) => billsBucket.file(b.gcsObjectPath!).delete().catch(() => {})));
 
   return NextResponse.json({ id: created.id, originalFilename: created.originalFilename, payerAuthorId: created.payerAuthorId });
 }

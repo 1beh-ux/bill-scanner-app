@@ -47,7 +47,7 @@ export async function POST(
     // these. Returning 2xx tells Cloud Tasks the task is done so it stops
     // retrying a bill that will never succeed (e.g. it was deleted, or its
     // event got closed mid-run).
-    const terminal = ["not_found", "bill_approved_locked", "event_closed_locked", "no_categories"];
+    const terminal = ["not_found", "bill_approved_locked", "event_closed_locked", "no_categories", "no_file"];
     if (terminal.includes(result.error)) {
       return NextResponse.json({ ok: false, error: result.error }, { status: 200 });
     }

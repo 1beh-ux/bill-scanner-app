@@ -32,7 +32,7 @@ export async function POST(
     const status =
       result.error === "not_found"
         ? 404
-        : result.error === "no_categories"
+        : result.error === "no_categories" || result.error === "no_file"
           ? 400
           : result.error === "ai_call_failed"
             ? 502
