@@ -6,6 +6,7 @@ import { driveErrorText } from "@/lib/drive-error-messages";
 import { BILL_IMPORT_FIELDS, DEFAULT_JOIN, MULTI_COLUMN_FIELDS, buildRecords, type JoinSettings } from "@/lib/bills-import";
 import { guessMappingFor, parseTable } from "@/lib/planning-import";
 import type { BillImportIssue, BillImportResult } from "@/lib/bills-import-run";
+import ColumnMappingTable from "@/components/import/ColumnMappingTable";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -216,34 +217,15 @@ export default function BillTableImportPage({ params }: { params: Promise<{ id: 
             {t("planImport.mappingTitle")}{" "}
             <span className="text-[13px] font-normal text-ink-secondary">({t("planImport.rowCount", { count: String(rows.length) })})</span>
           </h2>
-          <div className="overflow-x-auto rounded-lg border border-mist">
-            <table className="w-full text-[13px]">
-              <tbody>
-                {headers.map((h, i) => (
-                  <tr key={i} className="border-b border-mist/60 last:border-0">
-                    <td className="p-2 font-medium text-ink">{h || `#${i + 1}`}</td>
-                    <td className="max-w-[260px] truncate p-2 text-ink-secondary">{rows.map((r) => r[i]).filter(Boolean).slice(0, 2).join(" · ")}</td>
-                    <td className="w-[220px] p-2">
-                      <select
-                        value={mapping[i] ?? ""}
-                        onChange={(e) => mapColumn(i, e.target.value)}
-                        className={inputClass + " py-1.5"}
-                      >
-                        <option value="">{t("planImport.ignoreColumn")}</option>
-                        {BILL_IMPORT_FIELDS.map((f) => (
-                          <option key={f.key} value={f.key}>
-                            {t(`billImport.field.${f.key}`)}
-                            {f.required ? " *" : ""}
-                            {MULTI_COLUMN_FIELDS.has(f.key) ? " ⊕" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ColumnMappingTable
+            headers={headers}
+            rows={rows}
+            mapping={mapping}
+            fields={BILL_IMPORT_FIELDS}
+            label={(f) => `${t(`billImport.field.${f.key}`)}${f.required ? " *" : ""}${MULTI_COLUMN_FIELDS.has(f.key) ? " ⊕" : ""}`}
+            onChange={mapColumn}
+            t={t}
+          />
 
           <div className="mt-4 flex flex-wrap items-center gap-4 text-[13px] text-ink">
             <label className="flex items-center gap-1.5">
