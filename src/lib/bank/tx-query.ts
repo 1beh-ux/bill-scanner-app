@@ -3,6 +3,16 @@
 import { Prisma, type BankClassification } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 
+/**
+ * Runs queries one after another: the database (db-f1-micro) has ~25 connections for every app
+ * instance together, and a Banka page needs a dozen aggregates -- fired at once they exhaust them.
+ */
+export async function inSeries<T extends readonly (() => Promise<unknown>)[]>(fns: T): Promise<{ [K in keyof T]: Awaited<ReturnType<T[K]>> }> {
+  const out: unknown[] = [];
+  for (const f of fns) out.push(await f());
+  return out as { [K in keyof T]: Awaited<ReturnType<T[K]>> };
+}
+
 export const TABS = ["todo", "suggested", "paired", "nodoc", "income", "excluded", "all"] as const;
 export type Tab = (typeof TABS)[number];
 const CONFIRMED = { some: { confirmedAt: { not: null } } } as const;
@@ -65,10 +75,10 @@ export const txWhere = (eventId: string, tab: Tab, tier: string | null, f: TxFil
 
 /** Příjmy / výdaje / saldo / počet of a where. */
 export async function totals(where: Prisma.BankTransactionWhereInput) {
-  const [inc, out] = await Promise.all([
-    prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true }, _count: true }),
-    prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
-  ]);
+  const [inc, out] = await inSeries([
+    () => prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true }, _count: true }),
+    () => prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
+  ] as const);
   const income = Number(inc._sum.amount ?? 0), expense = Number(out._sum.amount ?? 0);
   return { income, expense, saldo: Math.round((income + expense) * 100) / 100, count: inc._count + out._count, incomeCount: inc._count, expenseCount: out._count };
 }
@@ -84,15 +94,17 @@ export async function groups(where: Prisma.BankTransactionWhereInput, by: GroupB
       ["suggested", { matches: { none: { confirmedAt: { not: null } }, some: { confirmedAt: null, rejectedAt: null } } }],
       ["unpaired", { matches: { none: { OR: [{ confirmedAt: { not: null } }, { rejectedAt: null }] } } }],
     ];
-    return Promise.all(parts.map(async ([key, w]) => ({ key, ...(await totals({ AND: [where, w] })) })));
+    const out: Group[] = [];
+    for (const [key, w] of parts) out.push({ key, ...(await totals({ AND: [where, w] })) });
+    return out;
   }
   const field = by === "classification" ? "classification" : by === "counterparty" ? "counterpartyName" : by === "person" ? "personAuthorId" : "bookingDate";
   const rows = await prisma.bankTransaction.groupBy({ by: [field], where, _sum: { amount: true }, _count: true });
   // Income and expense per group need the sign split: two groupBys.
-  const signed = await Promise.all([
-    prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true } }),
-    prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true } }),
-  ]);
+  const signed = [
+    await prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true } }),
+    await prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true } }),
+  ];
   const keyOf = (r: Record<string, unknown>) => {
     const v = r[field];
     if (by === "month") return (v as Date).toISOString().slice(0, 7);
@@ -113,7 +125,9 @@ export async function groups(where: Prisma.BankTransactionWhereInput, by: GroupB
 /** Count per tab (the tab labels). */
 export async function tabCounts(eventId: string, f: TxFilters) {
   const extra = filterWhere(f);
-  const entries = await Promise.all(TABS.map(async (tab) => [tab, await prisma.bankTransaction.count({ where: { AND: [{ eventId }, tabWhere(tab), ...extra] } })] as const));
-  const [sure, possible] = await Promise.all(["sure", "possible"].map((tier) => prisma.bankTransaction.count({ where: { AND: [{ eventId }, tabWhere("suggested", tier), ...extra] } })));
+  const entries: [string, number][] = [];
+  for (const tab of TABS) entries.push([tab, await prisma.bankTransaction.count({ where: { AND: [{ eventId }, tabWhere(tab), ...extra] } })]);
+  const sure = await prisma.bankTransaction.count({ where: { AND: [{ eventId }, tabWhere("suggested", "sure"), ...extra] } });
+  const possible = await prisma.bankTransaction.count({ where: { AND: [{ eventId }, tabWhere("suggested", "possible"), ...extra] } });
   return { ...Object.fromEntries(entries), sure, possible } as Record<Tab | "sure" | "possible", number>;
 }

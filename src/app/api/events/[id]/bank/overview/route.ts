@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireBank } from "@/lib/bank/guard";
-import { totals, tabWhere } from "@/lib/bank/tx-query";
+import { inSeries, totals, tabWhere } from "@/lib/bank/tx-query";
 import { getBillPaymentStates } from "@/lib/bank/payment-state";
 
 // Banka -> Přehled (docs/bank-reconciliation.md A9): count + sum per card, aggregated in the database.
@@ -11,23 +11,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if ("error" in ctx) return ctx.error;
   const ev = { eventId: id };
   const expense = { ...ev, classification: "expense" as const };
-  const [all, paired, sure, possible, unpaired, cashOut, nodoc, links, bills, privateRows, authors] = await Promise.all([
-    totals(ev),
-    totals({ ...expense, matches: { some: { confirmedAt: { not: null } } } }),
-    totals({ AND: [expense, tabWhere("suggested", "sure"), { matches: { none: { confirmedAt: { not: null } } } }] }),
-    totals({ AND: [expense, tabWhere("suggested", "possible"), { matches: { none: { confirmedAt: { not: null } } } }] }),
-    totals({ ...expense, noDocumentNeeded: false, matches: { none: { OR: [{ confirmedAt: { not: null } }, { rejectedAt: null }] } } }),
-    totals({ ...ev, classification: "cash" }),
-    totals({ AND: [ev, tabWhere("nodoc")] }),
-    prisma.eventBankAccount.findMany({ where: ev, include: { bankAccount: { select: { label: true, accountNumber: true, bankCode: true, lastSyncResult: true } } } }),
-    prisma.bill.findMany({ where: { ...ev, status: { not: "failed" } }, select: { id: true, amountCzk: true, paymentChannel: true, documentMissing: true } }),
-    prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private" }, _sum: { amount: true }, _count: true }),
-    prisma.author.findMany({ where: { organizationId: ctx.event.organizationId }, select: { id: true, canonicalName: true } }),
-  ]);
-  const privateSigned = await Promise.all([
-    prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { lt: 0 } }, _sum: { amount: true } }),
-    prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { gt: 0 } }, _sum: { amount: true } }),
-  ]);
+  const [all, paired, sure, possible, unpaired, cashOut, nodoc, links, bills, privateRows, authors] = await inSeries([
+    () => totals(ev),
+    () => totals({ ...expense, matches: { some: { confirmedAt: { not: null } } } }),
+    () => totals({ AND: [expense, tabWhere("suggested", "sure"), { matches: { none: { confirmedAt: { not: null } } } }] }),
+    () => totals({ AND: [expense, tabWhere("suggested", "possible"), { matches: { none: { confirmedAt: { not: null } } } }] }),
+    () => totals({ ...expense, noDocumentNeeded: false, matches: { none: { OR: [{ confirmedAt: { not: null } }, { rejectedAt: null }] } } }),
+    () => totals({ ...ev, classification: "cash" }),
+    () => totals({ AND: [ev, tabWhere("nodoc")] }),
+    () => prisma.eventBankAccount.findMany({ where: ev, include: { bankAccount: { select: { label: true, accountNumber: true, bankCode: true, lastSyncResult: true } } } }),
+    () => prisma.bill.findMany({ where: { ...ev, status: { not: "failed" } }, select: { id: true, amountCzk: true, paymentChannel: true, documentMissing: true } }),
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private" }, _sum: { amount: true }, _count: true }),
+    () => prisma.author.findMany({ where: { organizationId: ctx.event.organizationId }, select: { id: true, canonicalName: true } }),
+  ] as const);
+  const privateSigned = await inSeries([
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { lt: 0 } }, _sum: { amount: true } }),
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { gt: 0 } }, _sum: { amount: true } }),
+  ] as const);
   const states = await getBillPaymentStates(bills);
   const docs: Record<string, { count: number; sum: number }> = {};
   for (const b of bills) {
