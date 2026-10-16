@@ -33,12 +33,12 @@ export interface ImportSummary {
   authorsResolved: AuthorResolution[];
   skippedAlreadyImported: number;
   /** Names of the files skipped because a previous import already brought them in. */
-  skippedAlreadyImportedFiles: { filename: string; subfolderName: string   // Files moved to the event's Zpracované soubory folder (when set).
-  processed: { moved: number; failures: { filename: string; error: string }[] };
-}[];
+  skippedAlreadyImportedFiles: { filename: string; subfolderName: string }[];
   skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
   downloadFailures: { filename: string; error: string }[];
   ingest: IngestResult;
+  // Files moved to the event's Zpracované soubory folder (when set).
+  processed: { moved: number; failures: { filename: string; error: string }[] };
   /** The Google account used (and the service account), for messages about failed downloads. */
   identityEmail: string;
   serviceAccountEmail: string;
