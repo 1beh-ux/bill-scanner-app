@@ -161,10 +161,11 @@ export async function PATCH(
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
   // is not recognisably an id is rejected (and says which field). Empty = unset.
-  const folderIds: Record<"driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId", string | null | undefined> = {
+  const folderIds: Record<"driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId", string | null | undefined> = {
     driveIngestFolderId: undefined,
     driveExportFolderId: undefined,
     driveParticipantsFolderId: undefined,
+    driveProcessedFolderId: undefined,
   };
   for (const field of Object.keys(folderIds) as (keyof typeof folderIds)[]) {
     const raw = body[field];
@@ -180,9 +181,10 @@ export async function PATCH(
   const driveIngestFolderId = folderIds.driveIngestFolderId;
   const driveExportFolderId = folderIds.driveExportFolderId;
   const driveParticipantsFolderId = folderIds.driveParticipantsFolderId;
+  const driveProcessedFolderId = folderIds.driveProcessedFolderId;
   // Whoever saves the Drive folders becomes the person whose Google account the
   // event's Drive work runs as (see DriveAccount / getDriveIdentity).
-  const savesDrive = driveIngestFolderId !== undefined || driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined;
+  const savesDrive = driveIngestFolderId !== undefined || driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined || driveProcessedFolderId !== undefined;
 
   // Everything already exported/synced was written to the *old* folder, and
   // the manifest sheet id is remembered per event -- so after a folder change
@@ -210,6 +212,7 @@ export async function PATCH(
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
       ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),
+      ...(driveProcessedFolderId !== undefined && { driveProcessedFolderId }),
       ...(driveExportFolderId !== undefined && { driveExportFolderId }),
       ...(driveParticipantsFolderId !== undefined && { driveParticipantsFolderId }),
       ...(memberPriceCzk !== undefined && { memberPriceCzk }),

@@ -31,6 +31,7 @@ type EventDetail = {
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
   driveParticipantsFolderId: string | null;
+  driveProcessedFolderId: string | null;
   driveDocSyncEnabled: boolean;
   statusExportEnabled: boolean;
   mailDoneLabelName: string | null;

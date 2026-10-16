@@ -5,7 +5,7 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { getDriveIdentity, testFolder } from "@/lib/drive";
 import { DriveError, parseFolderId, type DriveErrorCode, type DriveErrorParams } from "@/lib/drive-errors";
 
-type Label = "ingest" | "export" | "participants";
+type Label = "ingest" | "export" | "participants" | "processed";
 type Item =
   | { ok: true; folderId: string; name: string; inSharedDrive: boolean }
   | { ok: false; folderId: string | null; error: DriveErrorCode; params: DriveErrorParams };
@@ -34,15 +34,17 @@ export async function POST(
     export: typeof body.exportFolderId === "string" ? body.exportFolderId : (body.exportFolderId === undefined ? event.driveExportFolderId : null),
     participants:
       typeof body.participantsFolderId === "string" ? body.participantsFolderId : (body.participantsFolderId === undefined ? event.driveParticipantsFolderId : null),
+    processed: typeof body.processedFolderId === "string" ? body.processedFolderId : (body.processedFolderId === undefined ? event.driveProcessedFolderId : null),
   };
 
   const identity = await getDriveIdentity(id);
   const baseParams: DriveErrorParams = { identity: identity.email, identityKind: identity.kind, serviceAccount: identity.serviceAccountEmail };
-  const need: Record<Label, "read" | "write"> = { ingest: "read", export: "write", participants: "write" };
+  // processed: files are moved in (and out of the ingest folder -- moving needs write there too).
+  const need: Record<Label, "read" | "write"> = { ingest: "read", export: "write", participants: "write", processed: "write" };
 
   const results: Partial<Record<Label, Item>> = {};
   const ids: Partial<Record<Label, string>> = {};
-  for (const label of ["ingest", "export", "participants"] as Label[]) {
+  for (const label of ["ingest", "export", "participants", "processed"] as Label[]) {
     const input = raw[label];
     if (!input || !input.trim()) continue;
     const folderId = parseFolderId(input);

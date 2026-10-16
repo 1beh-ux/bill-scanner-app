@@ -19,7 +19,7 @@ type IdentityResponse = {
   isConfiguredByMe: boolean;
   sameFolder: boolean;
 };
-type Label = "ingest" | "export" | "participants";
+type Label = "ingest" | "export" | "participants" | "processed";
 type FolderResult =
   | { ok: true; folderId: string; name: string }
   | { ok: false; folderId: string | null; error: string; params: DriveErrorInfo };
@@ -35,6 +35,7 @@ type EventDrive = {
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
   driveParticipantsFolderId: string | null;
+  driveProcessedFolderId?: string | null;
 };
 
 const inputClass =
@@ -44,10 +45,12 @@ const btnPrimary =
 const btnSecondary =
   "rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
 
-const FIELDS: { label: Label; field: "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId"; prop: keyof EventDrive; labelKey: string }[] = [
+const FIELDS: { label: Label; field: "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId"; prop: keyof EventDrive; labelKey: string }[] = [
   { label: "ingest", field: "driveIngestFolderId", prop: "driveIngestFolderId", labelKey: "driveSettings.ingestFolderLabel" },
   { label: "export", field: "driveExportFolderId", prop: "driveExportFolderId", labelKey: "driveSettings.exportFolderLabel" },
   { label: "participants", field: "driveParticipantsFolderId", prop: "driveParticipantsFolderId", labelKey: "driveSettings.participantsFolderLabel" },
+  // Imported files are moved here after a Drive import (and the cleanup tool's default target).
+  { label: "processed", field: "driveProcessedFolderId", prop: "driveProcessedFolderId", labelKey: "driveSettings.processedFolderLabel" },
 ];
 
 // The event's Drive settings: whose Google account does the work, the three
@@ -71,6 +74,7 @@ export default function DriveSettingsTab({
     ingest: event.driveIngestFolderId ?? "",
     export: event.driveExportFolderId ?? "",
     participants: event.driveParticipantsFolderId ?? "",
+    processed: event.driveProcessedFolderId ?? "",
   });
   const [saving, setSaving] = useState(false);
   // Manifest category layout: pairs (Kategorie n + Částka n) or one column per category.
@@ -110,6 +114,7 @@ export default function DriveSettingsTab({
     ingest: parseFolderId(values.ingest),
     export: parseFolderId(values.export),
     participants: parseFolderId(values.participants),
+    processed: parseFolderId(values.processed),
   };
   const sameFolder = !!parsed.ingest && parsed.ingest === parsed.export;
   const anyFolder = FIELDS.some((f) => values[f.label].trim());
@@ -143,6 +148,7 @@ export default function DriveSettingsTab({
         driveIngestFolderId: values.ingest.trim() || null,
         driveExportFolderId: values.export.trim() || null,
         driveParticipantsFolderId: values.participants.trim() || null,
+        driveProcessedFolderId: values.processed.trim() || null,
       }),
     });
     setSaving(false);
@@ -153,7 +159,7 @@ export default function DriveSettingsTab({
     }
     // Show the ids as saved (a pasted URL becomes its id) and check the connection right away.
     const ev = await res.json();
-    setValues({ ingest: ev.driveIngestFolderId ?? "", export: ev.driveExportFolderId ?? "", participants: ev.driveParticipantsFolderId ?? "" });
+    setValues({ ingest: ev.driveIngestFolderId ?? "", export: ev.driveExportFolderId ?? "", participants: ev.driveParticipantsFolderId ?? "", processed: ev.driveProcessedFolderId ?? "" });
     setSaved(true);
     onSaved();
     loadIdentity();
@@ -292,7 +298,7 @@ export default function DriveSettingsTab({
             type="button"
             disabled={testing || !anyFolder}
             onClick={() =>
-              runTest({ ingestFolderId: values.ingest, exportFolderId: values.export, participantsFolderId: values.participants })
+              runTest({ ingestFolderId: values.ingest, exportFolderId: values.export, participantsFolderId: values.participants, processedFolderId: values.processed })
             }
             className={btnSecondary}
           >

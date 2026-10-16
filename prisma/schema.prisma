@@ -279,6 +279,9 @@ model Event {
   // files) live -- separate from the bills export folder above. Null falls
   // back to driveExportFolderId (the old shared behavior).
   driveParticipantsFolderId     String?        @map("drive_participants_folder_id")
+  // Zpracované soubory: Drive import moves imported files here (src/lib/drive-import.ts); the
+  // "Úklid souborů na Disku" tool's default target.
+  driveProcessedFolderId        String?        @map("drive_processed_folder_id")
   // The user whose connected Google account does this event's Drive work (see
   // DriveAccount). Set when someone saves the event's Drive folders, when a user
   // connects from the Drive tab and none is set, or via "take over".

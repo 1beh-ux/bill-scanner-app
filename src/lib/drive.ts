@@ -255,7 +255,7 @@ export interface DriveFileEntry {
 }
 
 /** Which of the event's folders an operation targets (only used to word error messages). */
-export type DriveFolderLabel = "ingest" | "export" | "participants";
+export type DriveFolderLabel = "ingest" | "export" | "participants" | "processed";
 
 const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
 const GOOGLE_NATIVE_MIME_PREFIX = "application/vnd.google-apps.";
