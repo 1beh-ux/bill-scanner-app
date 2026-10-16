@@ -9,7 +9,10 @@ import {
 } from "@/lib/drive";
 import { ingestBillFiles, type RawFileInput, type IngestResult } from "@/lib/bill-ingest";
 import { DriveError } from "@/lib/drive-errors";
-import { getDriveIdentity } from "@/lib/drive";
+import { getDriveIdentity, moveDriveFile } from "@/lib/drive";
+import crypto from "crypto";
+
+const sha256Hex = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
 
 export class DriveImportError extends Error {
   code: string;
@@ -30,7 +33,9 @@ export interface ImportSummary {
   authorsResolved: AuthorResolution[];
   skippedAlreadyImported: number;
   /** Names of the files skipped because a previous import already brought them in. */
-  skippedAlreadyImportedFiles: { filename: string; subfolderName: string }[];
+  skippedAlreadyImportedFiles: { filename: string; subfolderName: string   // Files moved to the event's Zpracované soubory folder (when set).
+  processed: { moved: number; failures: { filename: string; error: string }[] };
+}[];
   skippedNativeGoogleFiles: { filename: string; subfolderName: string }[];
   downloadFailures: { filename: string; error: string }[];
   ingest: IngestResult;
@@ -92,16 +97,16 @@ export async function importBillsFromDrive(
   const authorsResolved: AuthorResolution[] = [];
   const skippedNativeGoogleFiles: { filename: string; subfolderName: string }[] = [];
   const candidateFileIds: string[] = [];
-  const fileMeta = new Map<string, { authorId: string | null; name: string; mimeType: string; subfolderName: string }>();
+  const fileMeta = new Map<string, { authorId: string | null; name: string; mimeType: string; subfolderName: string; folderId: string }>();
 
-  function collect(files: Awaited<ReturnType<typeof listFilesInSubfolder>>, subfolderName: string, authorId: string | null) {
+  function collect(files: Awaited<ReturnType<typeof listFilesInSubfolder>>, subfolderName: string, authorId: string | null, folderId: string) {
     for (const file of files) {
       if (isGoogleNativeFile(file.mimeType)) {
         skippedNativeGoogleFiles.push({ filename: file.name, subfolderName });
         continue;
       }
       candidateFileIds.push(file.id);
-      fileMeta.set(file.id, { authorId, name: file.name, mimeType: file.mimeType, subfolderName });
+      fileMeta.set(file.id, { authorId, name: file.name, mimeType: file.mimeType, subfolderName, folderId });
     }
   }
 
@@ -115,12 +120,12 @@ export async function importBillsFromDrive(
       created,
     });
 
-    collect(await listFilesInSubfolder(eventId, subfolder.id, "ingest"), subfolder.name, author.id);
+    collect(await listFilesInSubfolder(eventId, subfolder.id, "ingest"), subfolder.name, author.id, subfolder.id);
   }
 
   // Files directly in the ingest folder have no author subfolder -- imported
   // as event-paid bills (no payer), same as a plain upload.
-  collect(await listFilesInSubfolder(eventId, event.driveIngestFolderId, "ingest"), "", null);
+  collect(await listFilesInSubfolder(eventId, event.driveIngestFolderId, "ingest"), "", null, event.driveIngestFolderId);
 
   // Skip files already brought in by a previous import run, without downloading
   // them again — this is what driveSourceFileId was reserved for.
@@ -158,6 +163,28 @@ export async function importBillsFromDrive(
   const ingest = await ingestBillFiles(eventId, userId, "drive", rawFiles);
   const identity = await getDriveIdentity(eventId);
 
+  // Zpracované soubory: every file that is now a bill here (this run or earlier), or whose content
+  // already is one (a duplicate), leaves the import folder. Failed / skipped files stay to be seen.
+  const processed = { moved: 0, failures: [] as { filename: string; error: string }[] };
+  if (event.driveProcessedFolderId) {
+    const linked = new Set(
+      (await prisma.bill.findMany({ where: { eventId, driveSourceFileId: { in: candidateFileIds } }, select: { driveSourceFileId: true } })).map((b) => b.driveSourceFileId)
+    );
+    const dupHashes = new Set(
+      (await prisma.bill.findMany({ where: { eventId, contentHash: { in: rawFiles.map((f) => sha256Hex(f.buffer)) } }, select: { contentHash: true } })).map((b) => b.contentHash)
+    );
+    const toMove = candidateFileIds.filter((fid) => linked.has(fid) || dupHashes.has(sha256Hex(rawFiles.find((f) => f.driveSourceFileId === fid)?.buffer ?? Buffer.alloc(0))));
+    for (const fid of toMove) {
+      const meta = fileMeta.get(fid)!;
+      try {
+        await moveDriveFile(eventId, fid, meta.folderId, event.driveProcessedFolderId);
+        processed.moved++;
+      } catch (err) {
+        processed.failures.push({ filename: meta.name, error: err instanceof DriveError ? err.code : "drive_unknown" });
+      }
+    }
+  }
+
   return {
     authorsResolved,
     skippedAlreadyImported: alreadyImportedIds.size,
@@ -168,6 +195,7 @@ export async function importBillsFromDrive(
     skippedNativeGoogleFiles,
     downloadFailures,
     ingest,
+    processed,
     identityEmail: identity.email,
     serviceAccountEmail: identity.serviceAccountEmail,
   };

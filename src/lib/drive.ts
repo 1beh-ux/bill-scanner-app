@@ -252,6 +252,8 @@ export interface DriveFileEntry {
   webViewLink?: string;
   size?: number;
   sha256Checksum?: string;
+  modifiedTime?: string;
+  parents?: string[];
 }
 
 /** Which of the event's folders an operation targets (only used to word error messages). */
@@ -270,7 +272,7 @@ async function listChildren(
   do {
     const res = await drive.files.list({
       q: `'${folderId}' in parents and trashed = false`,
-      fields: "nextPageToken, files(id, name, mimeType, webViewLink, size, sha256Checksum)",
+      fields: "nextPageToken, files(id, name, mimeType, webViewLink, size, sha256Checksum, modifiedTime, parents)",
       pageSize: 200,
       pageToken,
       supportsAllDrives: true,
@@ -285,6 +287,8 @@ async function listChildren(
           webViewLink: f.webViewLink ?? undefined,
           size: f.size ? Number(f.size) : undefined,
           sha256Checksum: f.sha256Checksum ?? undefined,
+          modifiedTime: f.modifiedTime ?? undefined,
+          parents: f.parents ?? undefined,
         });
       }
     }
@@ -319,6 +323,61 @@ export async function listFilesInSubfolder(eventId: string, folderId: string, la
     },
     `list files of ${folderId}`,
     { folderId, folderLabel: label, purpose: "read" }
+  );
+}
+
+// ---- "Úklid souborů na Disku" (src/lib/drive-cleanup.ts) and the post-import move ----
+
+export type DriveTreeFile = DriveFileEntry & { folderId: string; folderPath: string };
+
+/** Every file under a folder (subfolders too when `recursive`), with the path of the folder it lies in. */
+export async function listFolderTree(eventId: string, rootId: string, recursive: boolean, maxFiles = 5000): Promise<{ rootName: string; files: DriveTreeFile[]; truncated: boolean }> {
+  return withRetry(
+    eventId,
+    async () => {
+      const drive = await getDriveClient(eventId);
+      const root = await drive.files.get({ fileId: rootId, fields: "id, name, mimeType", supportsAllDrives: true });
+      if (root.data.mimeType !== FOLDER_MIME_TYPE) throw Object.assign(new Error("not a folder"), { code: 404 });
+      const files: DriveTreeFile[] = [];
+      const queue: { id: string; path: string }[] = [{ id: rootId, path: root.data.name ?? rootId }];
+      while (queue.length && files.length < maxFiles) {
+        const folder = queue.shift()!;
+        for (const e of await listChildren(drive, folder.id)) {
+          if (e.mimeType === FOLDER_MIME_TYPE) {
+            if (recursive) queue.push({ id: e.id, path: `${folder.path} / ${e.name}` });
+          } else files.push({ ...e, folderId: folder.id, folderPath: folder.path });
+        }
+      }
+      return { rootName: root.data.name ?? rootId, files: files.slice(0, maxFiles), truncated: files.length >= maxFiles };
+    },
+    `list folder tree ${rootId}`,
+    { folderId: rootId, purpose: "read" }
+  );
+}
+
+/** Moves a file between folders (same file id, so links keep working). */
+export async function moveDriveFile(eventId: string, fileId: string, fromFolderId: string, toFolderId: string): Promise<void> {
+  await withRetry(
+    eventId,
+    async () => {
+      const drive = await getDriveClient(eventId);
+      await drive.files.update({ fileId, addParents: toFolderId, removeParents: fromFolderId, supportsAllDrives: true, fields: "id" });
+    },
+    `move file ${fileId}`,
+    { folderId: toFolderId, purpose: "write" }
+  );
+}
+
+/** Moves a file to Drive's bin (restorable there for 30 days) -- never a permanent delete. */
+export async function trashDriveFile(eventId: string, fileId: string): Promise<void> {
+  await withRetry(
+    eventId,
+    async () => {
+      const drive = await getDriveClient(eventId);
+      await drive.files.update({ fileId, requestBody: { trashed: true }, supportsAllDrives: true, fields: "id" });
+    },
+    `trash file ${fileId}`,
+    { purpose: "write" }
   );
 }
 

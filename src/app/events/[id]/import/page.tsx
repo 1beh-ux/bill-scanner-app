@@ -190,6 +190,10 @@ export default function EventImportPage({
         ...(data.downloadFailures ?? []).map(
           (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: driveErrorText(t, f.error, identityInfo) })
         ),
+        // Imported fine, but couldn't be moved to the Zpracované soubory folder.
+        ...(data.processed?.failures ?? []).map(
+          (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: t("importPage.moveFailed", { reason: driveErrorText(t, f.error, { ...identityInfo, folderLabel: "processed" }) }) })
+        ),
       ],
       splits: (data.ingest.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
       blankPages: (data.ingest.blankPagesSkipped ?? []).map((b: { originalFilename: string; pageNumbers: number[] }) => ({ name: b.originalFilename, pageNumbers: b.pageNumbers })),
