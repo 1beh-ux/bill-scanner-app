@@ -445,6 +445,22 @@ const [processingAi, setProcessingAi] = useState(false);
     }
   }
 
+  // Delete, then on to the next bill of the list as shown (or back to the list).
+  async function handleDelete() {
+    if (!(await confirm({ message: t("billModal.deleteConfirm", { name: bill?.displayFilename ?? bill?.originalFilename ?? "" }), confirmLabel: t("billModal.delete"), danger: true }))) return;
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/bills/${billId}`, { method: "DELETE" });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(t(`billModal.error.${data.error}`) || t("billModal.deleteFailed"));
+      return;
+    }
+    if (adjacent.next) navigate(adjacent.next, true);
+    else router.push(backHref);
+  }
+
   async function handleReopen() {
     setSaving(true);
     setError(null);
@@ -862,6 +878,16 @@ const statusLabel = t(
                   </option>
                 ))}
               </select>
+            )}
+            {/* Not for an approved bill (reopen it first) or one the AI is working on. */}
+            {!isLocked && (
+              <button
+                onClick={handleDelete}
+                disabled={saving}
+                className="ml-auto rounded-lg border border-red-300 px-4 py-2 text-[13px] text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {t("billModal.delete")}
+              </button>
             )}
             {saving && <span className="text-[13px] text-ink-secondary">{t("common.loading")}</span>}
           </div>

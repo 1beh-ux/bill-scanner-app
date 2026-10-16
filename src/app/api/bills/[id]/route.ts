@@ -260,6 +260,10 @@ export async function DELETE(
   }
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
+  // Same locks as the bill detail: an approved bill is reopened first, the AI must be done, the event open.
+  if (bill.status === "approved") return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
+  if (bill.status === "queued" || bill.status === "processing") return NextResponse.json({ error: "bill_processing_locked" }, { status: 409 });
+  if ((await prisma.event.findUnique({ where: { id: bill.eventId }, select: { status: true } }))?.status === "closed") return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
 
   await prisma.$transaction(async (tx) => {
     await tx.billCategory.deleteMany({ where: { billId: id } });
