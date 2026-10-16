@@ -3,8 +3,8 @@
 // pairing wins over a hand-set channel (conflict = both set: shown with a warning).
 import { prisma } from "@/lib/prisma";
 
-export type PaymentState = "bank" | "partial" | "cash" | "other_account" | "suggested" | "unpaired";
-export const PAYMENT_STATES: PaymentState[] = ["bank", "partial", "cash", "other_account", "suggested", "unpaired"];
+import type { PaymentState } from "@/lib/bank/payment-states";
+export { PAYMENT_STATES, type PaymentState } from "@/lib/bank/payment-states";
 
 export function paymentState(b: { amountCzk: number | null; paymentChannel: "cash" | "other_account" | null; confirmedSum: number; openSuggestions: number }): { state: PaymentState; conflict: boolean } {
   const conflict = b.confirmedSum > 0.005 && !!b.paymentChannel;

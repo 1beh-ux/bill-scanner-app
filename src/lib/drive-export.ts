@@ -13,6 +13,7 @@ import { computeSettlement } from "@/lib/settlement";
 import { officialAccountOf } from "@/lib/official-account";
 import { DriveError } from "@/lib/drive-errors";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
+import { getBillPaymentStates } from "@/lib/bank/payment-state";
 import { buildManifestRows, buildSummaryRows, SUMMARY_SHEET_TITLE } from "@/lib/manifest";
 
 export class DriveExportError extends Error {
@@ -199,7 +200,19 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
     const found = onDrive.get(b.id);
     return found ? `https://drive.google.com/file/d/${found.id}/view` : "";
   });
-  const manifestRows = buildManifestRows(bills, links, event.manifestCategoryMode === "columns" ? "columns" : "pairs");
+  // Banka on: Platba, Datum platby, ID pohybu per bill (only these -- no transaction details).
+  const bankOn = !!(await prisma.eventModule.findFirst({ where: { eventId, moduleKey: "bank", enabled: true }, select: { eventId: true } }));
+  if (bankOn) {
+    const states = await getBillPaymentStates(bills);
+    const txIds = [...new Set([...states.values()].flatMap((x) => x.transactionIds))];
+    const ext = new Map((await prisma.bankTransaction.findMany({ where: { id: { in: txIds } }, select: { id: true, externalId: true } })).map((x) => [x.id, x.externalId]));
+    for (const b of bills as (typeof bills[number] & { bank?: unknown })[]) {
+      const st = states.get(b.id)!;
+      // Bank movement ids as the bank shows them (fio:123 -> 123); a content hash isn't one.
+      b.bank = { state: st.state, paidOn: st.paidOn, movementIds: st.transactionIds.map((t) => ext.get(t) ?? "").filter((x) => x && !x.startsWith("h:")).map((x) => x.replace(/^(fio|id):/, "")) };
+    }
+  }
+  const manifestRows = buildManifestRows(bills, links, event.manifestCategoryMode === "columns" ? "columns" : "pairs", bankOn);
 
   const manifestTitle = `Manifest - ${event.name}`;
 

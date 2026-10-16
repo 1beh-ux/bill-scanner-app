@@ -32,7 +32,7 @@ export async function POST(
   const action: string = body.action;
   const billIds: string[] = body.billIds || [];
 
-  if (!["approve", "delete", "mark_paid", "mark_unpaid", "move"].includes(action)) {
+  if (!["approve", "delete", "mark_paid", "mark_unpaid", "move", "channel_cash", "channel_other", "channel_clear"].includes(action)) {
     return NextResponse.json({ error: "unknown_action" }, { status: 400 });
   }
   if (billIds.length === 0) {
@@ -45,6 +45,19 @@ export async function POST(
     select: { id: true, originalFilename: true, payerAuthorId: true, payerAuthor: { select: { isOfficialAccount: true, payoutNeeded: true } } },
   });
   const nameById = new Map(bills.map((b) => [b.id, b.originalFilename]));
+
+  // Platba by hand (Banka): Hotově / Jiný účet (+ note) / clear. A confirmed bank pairing still wins.
+  if (action.startsWith("channel_")) {
+    const channel = action === "channel_cash" ? "cash" : action === "channel_other" ? "other_account" : null;
+    const note = channel && typeof body.note === "string" ? body.note.slice(0, 300) || null : null;
+    const ids = bills.map((b) => b.id);
+    await prisma.$transaction([
+      prisma.bill.updateMany({ where: { id: { in: ids } }, data: { paymentChannel: channel, paymentNote: note } }),
+      ...ids.map((billId) => prisma.billAuditLog.create({ data: { billId, userId: user.id, actionType: "bank_channel", fieldName: "paymentChannel", newValue: channel } })),
+      ...(channel ? [prisma.bankMatch.deleteMany({ where: { billId: { in: ids }, confirmedAt: null, rejectedAt: null } })] : []),
+    ]);
+    return NextResponse.json({ action, succeededCount: ids.length, failedCount: 0, failed: [] });
+  }
 
 if (action === "move") {
     const targetEventId: string | undefined = body.targetEventId;

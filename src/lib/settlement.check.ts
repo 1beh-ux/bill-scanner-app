@@ -35,4 +35,9 @@ assert.deepEqual(rows[0].slice(-2), ["Jídlo", "Výlety"]);
 assert.deepEqual(rows[1].slice(-2), [100, ""]);
 assert.deepEqual(rows[2].slice(-2), [100, 200]);
 assert.equal(rows[2][6], "Bez proplacení");
+// Banka columns + a bill without a document.
+const bankRows = buildManifestRows([{ ...mb("100", [["Jídlo", null]]), documentMissing: true, bank: { state: "bank", paidOn: "2026-07-03", movementIds: ["2647"] } }], [], "pairs", true);
+assert.deepEqual(bankRows[0].slice(9, 12), ["Platba", "Datum platby", "ID pohybu"]);
+assert.deepEqual(bankRows[1].slice(7, 12), ["chybí doklad", "", "Banka", "2026-07-03", "2647"]);
+assert.equal(buildManifestRows([mb("100", [["Jídlo", null]])], [], "pairs")[0].includes("Platba"), false, "no bank columns without Banka");
 console.log("ok");

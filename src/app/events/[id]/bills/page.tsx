@@ -11,13 +11,14 @@ import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkE
 import DriveBillsSync from "@/components/bills/DriveBillsSync";
 import { needsPayout } from "@/lib/payout";
 import { readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav";
+import { PAYMENT_STATES, type PaymentState } from "@/lib/bank/payment-states";
 
 type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
 
 type BillItem = {
   id: string;
   originalFilename: string;
-  ingestChannel: "drive" | "upload" | "camera";
+  ingestChannel: "drive" | "upload" | "camera" | "bank";
   status: string;
   merchantName: string | null;
   totalAmount: string | null;
@@ -32,6 +33,10 @@ type BillItem = {
   paidAt: string | null;
   exportedAt: string | null;
   createdBy: { displayName: string } | null;
+  // Banka on: how it was paid (null = Banka off for this event).
+  payment: { state: PaymentState; conflict: boolean } | null;
+  documentMissing: boolean;
+  documentFromStatement: boolean;
 };
 
 type BulkFailure = {
@@ -101,6 +106,9 @@ export default function EventBillsPage({
   const [event, setEvent] = useState<EventDetail | null>(null);
   // Paid = reimbursed to the payer. Only bills WITH a payer take part (paid directly by the event = nothing to pay out).
   const [paidFilter, setPaidFilter] = useState<null | "paid" | "unpaid">(null);
+  // Banka: Platba state, or "missing" (no document); Přehled links here with ?payment=.
+  const [paymentFilter, setPaymentFilter] = useState<string | null>(null);
+  const [channelNote, setChannelNote] = useState("");
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -175,15 +183,19 @@ export default function EventBillsPage({
       setStatusFilter(f.status);
       setPaidFilter(f.paid);
       setSearchQuery(f.search);
+      setPaymentFilter(f.payment ?? null);
       setColFilters(Object.fromEntries(Object.entries(f.columns).map(([k, v]) => [k, new Set(v)])));
       /* eslint-enable react-hooks/set-state-in-effect */
     }
+    const fromUrl = new URLSearchParams(window.location.search).get("payment");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a Přehled link's filter wins
+    if (fromUrl) setPaymentFilter(fromUrl);
     filtersRestored.current = true;
   }, [id]);
   useEffect(() => {
     if (!filtersRestored.current) return;
-    saveListFilters(id, { status: statusFilter, paid: paidFilter, search: searchQuery, columns: Object.fromEntries(Object.entries(colFilters).map(([k, v]) => [k, [...v]])) });
-  }, [id, statusFilter, paidFilter, searchQuery, colFilters]);
+    saveListFilters(id, { status: statusFilter, paid: paidFilter, search: searchQuery, payment: paymentFilter, columns: Object.fromEntries(Object.entries(colFilters).map(([k, v]) => [k, [...v]])) });
+  }, [id, statusFilter, paidFilter, searchQuery, colFilters, paymentFilter]);
 
   useEffect(() => {
     fetch(`/api/events?module=bills`)
@@ -249,6 +261,7 @@ export default function EventBillsPage({
       case "createdAt": return [date(b.createdAt)];
       case "createdBy": return [b.createdBy?.displayName ?? dash];
       case "exported": return [b.exportedAt ? t("billsPage.exportedYes") : t("billsPage.exportedNo")];
+      case "payment": return [b.payment ? t(`paymentState.${b.payment.state}`) : dash];
     }
   }
 
@@ -271,6 +284,11 @@ export default function EventBillsPage({
     let byFilter = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
     if (paidFilter === "paid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && b.paidToAuthor);
     if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && !b.paidToAuthor);
+    if (paymentFilter === "missing") byFilter = byFilter.filter((b) => b.documentMissing);
+    // Přehled's "ničím nekryté" = no payment and no hand-set channel (Návrh + Nespárováno).
+    else if (paymentFilter === "uncovered") byFilter = byFilter.filter((b) => b.payment && (b.payment.state === "suggested" || b.payment.state === "unpaired"));
+    else if (paymentFilter === "bank") byFilter = byFilter.filter((b) => b.payment && (b.payment.state === "bank" || b.payment.state === "partial"));
+    else if (paymentFilter) byFilter = byFilter.filter((b) => b.payment?.state === paymentFilter);
 
     for (const [col, allowed] of Object.entries(colFilters) as [BillColumnKey, Set<string>][]) {
       byFilter = byFilter.filter((b) => cellValues(col, b).some((v) => allowed.has(v)));
@@ -299,7 +317,7 @@ export default function EventBillsPage({
     });
     // cellValues only reads labels; t is stable enough for this list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bills, statusFilter, paidFilter, searchQuery, colFilters]);
+  }, [bills, statusFilter, paidFilter, searchQuery, colFilters, paymentFilter]);
 
   // The detail page walks the bills in exactly this order (previous / next / approve).
   useEffect(() => {
@@ -315,7 +333,14 @@ export default function EventBillsPage({
   );
 
   // Displayed columns: the event's saved choice (same for everyone with access), else the default.
-  const columns: BillColumnKey[] = useMemo(() => normalizeBillColumns(event?.billsListColumns ?? null), [event?.billsListColumns]);
+  const bankOn = bills.some((b) => b.payment);
+  // Banka on and no saved choice: Platba shown after Proplaceno (it can be hidden in Sloupce).
+  const columns: BillColumnKey[] = useMemo(() => {
+    const cols = normalizeBillColumns(event?.billsListColumns ?? null);
+    if (!bankOn || event?.billsListColumns || cols.includes("payment")) return bankOn ? cols : cols.filter((c) => c !== "payment");
+    const at = cols.indexOf("paid");
+    return at >= 0 ? [...cols.slice(0, at + 1), "payment", ...cols.slice(at + 1)] : [...cols, "payment"];
+  }, [event?.billsListColumns, bankOn]);
   // The source file is the link that opens a bill; without that column the merchant becomes the link.
   const linkColumn: BillColumnKey = columns.includes("sourceFile") ? "sourceFile" : "merchant";
 
@@ -340,7 +365,13 @@ export default function EventBillsPage({
       );
     switch (col) {
       case "sourceFile":
-        return <td key={col} className="p-2 text-[14px] [overflow-wrap:anywhere]">{link(b.originalFilename)}</td>;
+        return (
+          <td key={col} className="p-2 text-[14px] [overflow-wrap:anywhere]">
+            {link(b.originalFilename)}
+            {b.documentMissing && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("missingDoc.badge")}</span>}
+            {b.documentFromStatement && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px] text-ink-secondary">{t("missingDoc.badgeStatement")}</span>}
+          </td>
+        );
       case "status":
         return (
           <td key={col} className="p-2">
@@ -418,6 +449,19 @@ export default function EventBillsPage({
             {b.exportedAt ? t("billsPage.exportedYes") : t("billsPage.exportedNo")}
           </td>
         );
+      case "payment":
+        return (
+          <td key={col} className="whitespace-nowrap p-2 text-[13px]">
+            {b.payment ? (
+              <span className={"rounded-full px-2 py-0.5 text-[12px] " + (["bank", "cash", "other_account"].includes(b.payment.state) ? "bg-pine-bg text-pine" : b.payment.state === "partial" || b.payment.state === "suggested" ? "bg-amber-100 text-amber-800" : "bg-paper-2 text-ink-secondary")}>
+                {t(`paymentState.${b.payment.state}`)}
+                {b.payment.conflict && <span title={t("billPayment.conflict")}> ⚠</span>}
+              </span>
+            ) : (
+              "—"
+            )}
+          </td>
+        );
     }
   }
 
@@ -474,7 +518,7 @@ export default function EventBillsPage({
     }
   }
 
-  async function runBulk(action: "approve" | "delete" | "mark_paid" | "mark_unpaid") {
+  async function runBulk(action: "approve" | "delete" | "mark_paid" | "mark_unpaid" | "channel_cash" | "channel_other" | "channel_clear") {
     if (selected.size === 0) return;
 
     // Every bulk action asks first; the text says what happens and, where it
@@ -484,6 +528,9 @@ export default function EventBillsPage({
       approve: "billsPage.confirmBulkApprove",
       mark_paid: "billsPage.confirmBulkMarkPaid",
       mark_unpaid: "billsPage.confirmBulkMarkUnpaid",
+      channel_cash: "billsPage.confirmBulkChannelCash",
+      channel_other: "billsPage.confirmBulkChannelOther",
+      channel_clear: "billsPage.confirmBulkChannelClear",
     }[action];
     const ok = await confirm({
       message: t(confirmKey, { count: String(selected.size) }),
@@ -499,7 +546,7 @@ export default function EventBillsPage({
     const res = await fetch(`/api/events/${id}/bills/bulk`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action, billIds: Array.from(selected) }),
+      body: JSON.stringify({ action, billIds: Array.from(selected), ...(action === "channel_other" && { note: channelNote }) }),
     });
 
     if (!res.ok) {
@@ -713,6 +760,19 @@ export default function EventBillsPage({
             {t(p === "paid" ? "billsPage.paidYes" : "billsPage.paidNo")} ({paidCounts[p]})
           </button>
         ))}
+        {bankOn && (
+          <>
+            <span className="mx-1 self-center text-ink-secondary/40">|</span>
+            {[...PAYMENT_STATES, "missing"].map((p) => (
+              <button key={p} onClick={() => setPaymentFilter(paymentFilter === p ? null : p)} className={`${pillBase} ${paymentFilter === p ? pillActive : pillInactive}`}>
+                {p === "missing" ? t("missingDoc.badge") : t(`paymentState.${p}`)} ({p === "missing" ? bills.filter((b) => b.documentMissing).length : bills.filter((b) => b.payment?.state === p).length})
+              </button>
+            ))}
+            {paymentFilter && !([...PAYMENT_STATES, "missing"] as string[]).includes(paymentFilter) && (
+              <button onClick={() => setPaymentFilter(null)} className={`${pillBase} ${pillActive}`}>{t(`bankOverview.doc.${paymentFilter}`)} ✕</button>
+            )}
+          </>
+        )}
         <div className="ml-auto">
           <ColumnPicker
             options={BILL_COLUMNS.map((c) => ({ key: c.key, label: t(c.labelKey) }))}
@@ -763,6 +823,14 @@ export default function EventBillsPage({
           <button onClick={() => runBulk("mark_unpaid")} disabled={bulkRunning} className={btnSecondary}>
             {t("billsPage.bulkMarkUnpaid")}
           </button>
+          {bankOn && (
+            <>
+              <button onClick={() => runBulk("channel_cash")} disabled={bulkRunning} className={btnSecondary}>{t("billsPage.bulkChannelCash")}</button>
+              <input value={channelNote} onChange={(e) => setChannelNote(e.target.value)} placeholder={t("billPayment.notePlaceholder")} className="w-32 rounded-lg border border-mist bg-paper px-2 py-1.5 text-[13px]" />
+              <button onClick={() => runBulk("channel_other")} disabled={bulkRunning} className={btnSecondary}>{t("billsPage.bulkChannelOther")}</button>
+              <button onClick={() => runBulk("channel_clear")} disabled={bulkRunning} className={btnSecondary}>{t("billsPage.bulkChannelClear")}</button>
+            </>
+          )}
           <button onClick={() => setShowBulkEdit((v) => !v)} disabled={bulkRunning} className={btnSecondary}>
             {t("billBulkEdit.button")}
           </button>

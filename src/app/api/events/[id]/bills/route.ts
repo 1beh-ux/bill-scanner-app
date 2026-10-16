@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { ingestBillFiles } from "@/lib/bill-ingest";
 import { requeueStuckBills } from "@/lib/requeue-stuck-bills";
+import { getBillPaymentStates } from "@/lib/bank/payment-state";
 
 export async function GET(
   req: NextRequest,
@@ -33,7 +34,10 @@ export async function GET(
     },
   });
 
-  return NextResponse.json(bills);
+  // Banka on: each bill's payment state (Platba column). No transaction details here.
+  const bankOn = await prisma.eventModule.findFirst({ where: { eventId: id, moduleKey: "bank", enabled: true }, select: { eventId: true } });
+  const states = bankOn ? await getBillPaymentStates(bills) : null;
+  return NextResponse.json(bills.map((b) => ({ ...b, payment: states ? { state: states.get(b.id)!.state, conflict: states.get(b.id)!.conflict } : null })));
 }
 
 export async function POST(

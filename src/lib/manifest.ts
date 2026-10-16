@@ -26,6 +26,10 @@ export interface ManifestBill {
   paidToAuthor: boolean;
   exportFilename: string | null;
   categories: { eventCategoryId?: string; amountCzk: { toString(): string } | null; eventCategory: { name: string } }[];
+  documentMissing?: boolean;
+  documentFromStatement?: boolean;
+  // Banka on: Platba, its date, the paired movement ids (nothing else from the bank).
+  bank?: { state: string; paidOn: string | null; movementIds: string[] } | null;
 }
 
 export const MANIFEST_FIXED_HEADER = ["Datum", "Obchod", "Částka", "Měna", "Částka Kč", "Plátce", "Proplaceno", "Soubor", "Odkaz"];
@@ -43,8 +47,11 @@ export function categoryPairCount(bills: Pick<ManifestBill, "categories">[]): nu
   return Math.max(1, ...bills.map((b) => b.categories.length));
 }
 
-export function manifestHeader(pairs: number): string[] {
-  const header = [...MANIFEST_FIXED_HEADER];
+export const MANIFEST_BANK_HEADER = ["Platba", "Datum platby", "ID pohybu"];
+export const PAYMENT_STATE_LABEL: Record<string, string> = { bank: "Banka", partial: "Částečně", cash: "Hotově", other_account: "Jiný účet", suggested: "Nespárováno", unpaired: "Nespárováno" };
+
+export function manifestHeader(pairs: number, bankOn = false): string[] {
+  const header = [...MANIFEST_FIXED_HEADER, ...(bankOn ? MANIFEST_BANK_HEADER : [])];
   for (let i = 1; i <= pairs; i++) header.push(`Kategorie ${i}`, `Částka kat. ${i} (Kč)`);
   return header;
 }
@@ -53,22 +60,12 @@ export function manifestHeader(pairs: number): string[] {
  * `links` = Drive link per bill (parallel to `bills`). Categories are ordered by name so
  * the columns are stable between runs.
  */
-export function buildManifestRows(bills: ManifestBill[], links: string[], mode: "pairs" | "columns" = "pairs"): (string | number)[][] {
-  if (mode === "columns") return buildColumnRows(bills, links);
+export function buildManifestRows(bills: ManifestBill[], links: string[], mode: "pairs" | "columns" = "pairs", bankOn = false): (string | number)[][] {
+  if (mode === "columns") return buildColumnRows(bills, links, bankOn);
   const pairs = categoryPairCount(bills);
   const rows = bills.map((b, i) => {
     const cats = [...b.categories].sort((x, y) => x.eventCategory.name.localeCompare(y.eventCategory.name, "cs"));
-    const row: (string | number)[] = [
-      b.billDate ? b.billDate.toISOString().slice(0, 10) : "",
-      b.merchantName ?? "",
-      b.totalAmount?.toString() ?? "",
-      b.currency,
-      b.amountCzk?.toString() ?? "",
-      b.payerAuthor?.canonicalName ?? PAYER_EVENT_LABEL,
-      paidOutLabel(b.payerAuthorId, b.paidToAuthor, b.payerAuthor),
-      b.exportFilename ?? "",
-      links[i] ?? "",
-    ];
+    const row = fixedCells(b, links[i] ?? "", bankOn);
     for (let p = 0; p < pairs; p++) {
       const c = cats[p];
       if (!c) {
@@ -81,10 +78,13 @@ export function buildManifestRows(bills: ManifestBill[], links: string[], mode: 
     }
     return row;
   });
-  return [manifestHeader(pairs), ...rows];
+  return [manifestHeader(pairs, bankOn), ...rows];
 }
 
-const fixedCells = (b: ManifestBill, link: string): (string | number)[] => [
+// Soubor: the exported file, or why there is none (a bill created from a bank payment).
+const fileCell = (b: ManifestBill) => b.exportFilename ?? (b.documentFromStatement ? "výpis" : b.documentMissing ? "chybí doklad" : "");
+
+const fixedCells = (b: ManifestBill, link: string, bankOn = false): (string | number)[] => [
   b.billDate ? b.billDate.toISOString().slice(0, 10) : "",
   b.merchantName ?? "",
   b.totalAmount?.toString() ?? "",
@@ -92,15 +92,16 @@ const fixedCells = (b: ManifestBill, link: string): (string | number)[] => [
   b.amountCzk?.toString() ?? "",
   b.payerAuthor?.canonicalName ?? PAYER_EVENT_LABEL,
   paidOutLabel(b.payerAuthorId, b.paidToAuthor, b.payerAuthor),
-  b.exportFilename ?? "",
+  fileCell(b),
   link,
+  ...(bankOn ? [b.bank ? PAYMENT_STATE_LABEL[b.bank.state] ?? "" : "", b.bank?.paidOn ?? "", b.bank?.movementIds.join(", ") ?? ""] : []),
 ];
 
 /** "columns": one column per category used by any bill (by name), the bill's CZK amount in it. */
-function buildColumnRows(bills: ManifestBill[], links: string[]): (string | number)[][] {
+function buildColumnRows(bills: ManifestBill[], links: string[], bankOn: boolean): (string | number)[][] {
   const names = [...new Set(bills.flatMap((b) => b.categories.map((c) => c.eventCategory.name)))].sort((a, b) => a.localeCompare(b, "cs"));
   const rows = bills.map((b, i) => {
-    const row = fixedCells(b, links[i] ?? "");
+    const row = fixedCells(b, links[i] ?? "", bankOn);
     for (const name of names) {
       const c = b.categories.find((x) => x.eventCategory.name === name);
       const amount = c ? (b.categories.length === 1 ? (c.amountCzk ?? b.amountCzk) : c.amountCzk) : null;
@@ -108,7 +109,7 @@ function buildColumnRows(bills: ManifestBill[], links: string[]): (string | numb
     }
     return row;
   });
-  return [[...MANIFEST_FIXED_HEADER, ...names], ...rows];
+  return [[...MANIFEST_FIXED_HEADER, ...(bankOn ? MANIFEST_BANK_HEADER : []), ...names], ...rows];
 }
 
 export const SUMMARY_SHEET_TITLE = "Souhrn";

@@ -19,7 +19,9 @@ export type BillColumnKey =
   | "paid"
   | "createdAt"
   | "createdBy"
-  | "exported";
+  | "exported"
+  // Banka on: how the bill was paid (src/lib/bank/payment-state.ts).
+  | "payment";
 
 export const BILL_COLUMNS: { key: BillColumnKey; labelKey: string }[] = [
   { key: "sourceFile", labelKey: "eventDetail.colFilename" },
@@ -35,6 +37,7 @@ export const BILL_COLUMNS: { key: BillColumnKey; labelKey: string }[] = [
   { key: "createdAt", labelKey: "billsPage.colCreatedAt" },
   { key: "createdBy", labelKey: "billsPage.colCreatedBy" },
   { key: "exported", labelKey: "billsPage.colExported" },
+  { key: "payment", labelKey: "billsPage.colPayment" },
 ];
 
 export const BILL_COLUMN_KEYS = BILL_COLUMNS.map((c) => c.key);
