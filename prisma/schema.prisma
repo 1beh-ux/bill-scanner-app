@@ -596,13 +596,15 @@ model Bill {
   exportedAt                 DateTime?           @map("exported_at")
   exportFilename             String?             @map("export_filename")
 
-  event       Event          @relation(fields: [eventId], references: [id])
-  payerAuthor Author?        @relation(fields: [payerAuthorId], references: [id])
-  createdBy   User           @relation("BillCreatedBy", fields: [createdByUserId], references: [id])
-  approvedBy  User?          @relation("BillApprovedBy", fields: [approvedByUserId], references: [id])
-  paidBy      User?          @relation("BillPaidBy", fields: [paidByUserId], references: [id])
+  event       Event                    @relation(fields: [eventId], references: [id])
+  payerAuthor Author?                  @relation(fields: [payerAuthorId], references: [id])
+  createdBy   User                     @relation("BillCreatedBy", fields: [createdByUserId], references: [id])
+  approvedBy  User?                    @relation("BillApprovedBy", fields: [approvedByUserId], references: [id])
+  paidBy      User?                    @relation("BillPaidBy", fields: [paidByUserId], references: [id])
   categories  BillCategory[]
   bankMatches BankMatch[]
+  dupDismissA BillDuplicateDismissal[] @relation("DupDismissA")
+  dupDismissB BillDuplicateDismissal[] @relation("DupDismissB")
   auditLog    BillAuditLog[]
 
   @@unique([eventId, contentHash], name: "bills_event_content_hash_unique")
@@ -1925,4 +1927,21 @@ model BankImportBatch {
 
   @@index([eventId, createdAt])
   @@map("bank_import_batches")
+}
+
+// "Není duplicita": two bills a person confirmed are different receipts (src/lib/bill-duplicates.ts).
+// billAId < billBId; deleted with either bill.
+model BillDuplicateDismissal {
+  id        String   @id @default(uuid())
+  billAId   String   @map("bill_a_id")
+  billBId   String   @map("bill_b_id")
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  billA Bill @relation("DupDismissA", fields: [billAId], references: [id], onDelete: Cascade)
+  billB Bill @relation("DupDismissB", fields: [billBId], references: [id], onDelete: Cascade)
+
+  @@unique([billAId, billBId])
+  @@index([billBId])
+  @@map("bill_duplicate_dismissals")
 }

@@ -6,6 +6,8 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { ingestBillFiles } from "@/lib/bill-ingest";
 import { requeueStuckBills } from "@/lib/requeue-stuck-bills";
 import { getBillPaymentStates } from "@/lib/bank/payment-state";
+import { findDuplicateGroups } from "@/lib/bill-duplicates";
+import { loadDupBills } from "@/lib/bill-duplicates-server";
 
 export async function GET(
   req: NextRequest,
@@ -37,7 +39,10 @@ export async function GET(
   // Banka on: each bill's payment state (Platba column). No transaction details here.
   const bankOn = await prisma.eventModule.findFirst({ where: { eventId: id, moduleKey: "bank", enabled: true }, select: { eventId: true } });
   const states = bankOn ? await getBillPaymentStates(bills) : null;
-  return NextResponse.json(bills.map((b) => ({ ...b, payment: states ? { state: states.get(b.id)!.state, conflict: states.get(b.id)!.conflict } : null })));
+  // "možná duplicita" badge: bills of this event that look like another one here (not dismissed).
+  const { dup, dismissed } = await loadDupBills(id);
+  const suspicious = new Set(findDuplicateGroups(dup, dismissed).flatMap((g) => g.billIds));
+  return NextResponse.json(bills.map((b) => ({ ...b, possibleDuplicate: suspicious.has(b.id), payment: states ? { state: states.get(b.id)!.state, conflict: states.get(b.id)!.conflict } : null })));
 }
 
 export async function POST(

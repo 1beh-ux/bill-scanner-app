@@ -38,6 +38,7 @@ type BillItem = {
   payment: { state: PaymentState; conflict: boolean } | null;
   documentMissing: boolean;
   documentFromStatement: boolean;
+  possibleDuplicate: boolean;
 };
 
 type BulkFailure = {
@@ -397,6 +398,7 @@ export default function EventBillsPage({
             {link(b.originalFilename)}
             {b.documentMissing && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("missingDoc.badge")}</span>}
             {b.documentFromStatement && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px] text-ink-secondary">{t("missingDoc.badgeStatement")}</span>}
+            {b.possibleDuplicate && <a href={`/events/${id}/bills/duplicates?ids=${b.id}`} className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800 hover:underline">{t("billDup.badge")}</a>}
           </td>
         );
       case "status":
@@ -731,9 +733,15 @@ export default function EventBillsPage({
         </h1>
         {/* Part 10: Import is no longer a permanent sidebar item -- it's a one-off action,
             reachable as a button from the page it feeds. */}
-        <a href={`/events/${id}/import`} className={btnPrimary}>
-          {t("billsPage.uploadButton")}
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          <a href={`/events/${id}/bills/duplicates`} className={btnSecondary}>
+            {t("billDup.findAll")}
+            {bills.some((b) => b.possibleDuplicate) && ` (${bills.filter((b) => b.possibleDuplicate).length})`}
+          </a>
+          <a href={`/events/${id}/import`} className={btnPrimary}>
+            {t("billsPage.uploadButton")}
+          </a>
+        </div>
       </div>
 
       <DriveBillsSync
@@ -848,6 +856,9 @@ export default function EventBillsPage({
           <button onClick={() => runBulk("reopen")} disabled={bulkRunning} className={btnSecondary}>
             {t("billsPage.bulkReopen")}
           </button>
+          <a href={`/events/${id}/bills/duplicates?ids=${[...selected].join(",")}`} className={btnSecondary}>
+            {t("billDup.findSelected")}
+          </a>
           <button onClick={runBulkAi} disabled={hasActiveAiRun} className={btnPrimary}>
             {hasActiveAiRun ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
           </button>
