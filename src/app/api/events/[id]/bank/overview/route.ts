@@ -19,14 +19,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     () => totals({ ...expense, noDocumentNeeded: false, matches: { none: { OR: [{ confirmedAt: { not: null } }, { rejectedAt: null }] } } }),
     () => totals({ ...ev, classification: "cash" }),
     () => totals({ AND: [ev, tabWhere("nodoc")] }),
-    () => prisma.eventBankAccount.findMany({ where: ev, include: { bankAccount: { select: { label: true, accountNumber: true, bankCode: true, lastSyncResult: true } } } }),
+    () => prisma.eventBankAccount.findMany({ where: ev, include: { bankAccount: { select: { label: true, accountNumber: true, bankCode: true, currency: true, lastSyncResult: true } } } }),
     () => prisma.bill.findMany({ where: { ...ev, status: { not: "failed" } }, select: { id: true, amountCzk: true, paymentChannel: true, documentMissing: true } }),
-    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private" }, _sum: { amount: true }, _count: true }),
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId", "currency"], where: { ...ev, classification: "private" }, _sum: { amount: true }, _count: true }),
     () => prisma.author.findMany({ where: { organizationId: ctx.event.organizationId }, select: { id: true, canonicalName: true } }),
   ] as const);
   const privateSigned = await inSeries([
-    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { lt: 0 } }, _sum: { amount: true } }),
-    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId"], where: { ...ev, classification: "private", amount: { gt: 0 } }, _sum: { amount: true } }),
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId", "currency"], where: { ...ev, classification: "private", amount: { lt: 0 } }, _sum: { amount: true } }),
+    () => prisma.bankTransaction.groupBy({ by: ["personAuthorId", "currency"], where: { ...ev, classification: "private", amount: { gt: 0 } }, _sum: { amount: true } }),
   ] as const);
   const states = await getBillPaymentStates(bills);
   const docs: Record<string, { count: number; sum: number }> = {};
@@ -40,17 +40,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({
     accounts: links.map((l) => {
       const info = (l.bankAccount.lastSyncResult as { info?: { openingBalance?: number | null; closingBalance?: number | null } } | null)?.info;
-      return { label: l.bankAccount.label, number: `${l.bankAccount.accountNumber}/${l.bankAccount.bankCode}`, openingBalance: info?.openingBalance ?? null, closingBalance: info?.closingBalance ?? null };
+      return { label: l.bankAccount.label, number: `${l.bankAccount.accountNumber}/${l.bankAccount.bankCode}`, currency: l.bankAccount.currency, openingBalance: info?.openingBalance ?? null, closingBalance: info?.closingBalance ?? null };
     }),
     all,
     pairing: { paired, sure, possible, unpaired },
     documents: docs,
     missingDocuments: { count: bills.filter((b) => b.documentMissing).length, sum: bills.filter((b) => b.documentMissing).reduce((s, b) => s + Number(b.amountCzk ?? 0), 0) },
-    cash: { withdrawn: Math.abs(cashOut.expense), withdrawals: cashOut.count, billsCash: cashBills.reduce((s, b) => s + Number(b.amountCzk ?? 0), 0), billsCashCount: cashBills.length },
+    // Per currency (a Polish account withdraws PLN); bills Hotově in Kč (ČNB).
+    cash: { withdrawn: cashOut.byCurrency.map((x) => ({ currency: x.currency, amount: Math.abs(x.expense) })), withdrawals: cashOut.count, billsCash: cashBills.reduce((s, b) => s + Number(b.amountCzk ?? 0), 0), billsCashCount: cashBills.length },
+    // Per person and currency.
     private: privateRows.map((r) => {
-      const out = Number(privateSigned[0].find((x) => x.personAuthorId === r.personAuthorId)?._sum.amount ?? 0);
-      const inc = Number(privateSigned[1].find((x) => x.personAuthorId === r.personAuthorId)?._sum.amount ?? 0);
-      return { personId: r.personAuthorId, name: r.personAuthorId ? name.get(r.personAuthorId) ?? null : null, out, in: inc, saldo: Math.round((out + inc) * 100) / 100, count: r._count };
+      const same = (x: { personAuthorId: string | null; currency: string }) => x.personAuthorId === r.personAuthorId && x.currency === r.currency;
+      const out = Number(privateSigned[0].find(same)?._sum.amount ?? 0);
+      const inc = Number(privateSigned[1].find(same)?._sum.amount ?? 0);
+      return { personId: r.personAuthorId, currency: r.currency, name: r.personAuthorId ? name.get(r.personAuthorId) ?? null : null, out, in: inc, saldo: Math.round((out + inc) * 100) / 100, count: r._count };
     }),
     nodoc,
   });

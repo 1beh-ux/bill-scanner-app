@@ -61,8 +61,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
   return NextResponse.json({
     tx: { ...tx, amount: Number(tx.amount), originalAmount: tx.originalAmount === null ? null : Number(tx.originalAmount), matches: undefined },
-    confirmed: tx.matches.filter((m) => m.confirmedAt).map((m) => ({ id: m.id, amountCzk: Number(m.amountCzk), setPaidToAuthor: m.setPaidToAuthor, bill: shape(m.bill) })),
-    suggestions: tx.matches.filter((m) => !m.confirmedAt).map((m) => ({ id: m.id, tier: m.tier, score: m.score, reasons: m.reasons, amountCzk: Number(m.amountCzk), bill: shape(m.bill) })),
+    confirmed: tx.matches.filter((m) => m.confirmedAt).map((m) => ({ id: m.id, amountCzk: Number(m.amountCzk), amountTx: Number(m.amountTx ?? m.amountCzk), setPaidToAuthor: m.setPaidToAuthor, bill: shape(m.bill) })),
+    suggestions: tx.matches.filter((m) => !m.confirmedAt).map((m) => ({ id: m.id, tier: m.tier, score: m.score, reasons: m.reasons, amountCzk: Number(m.amountCzk), amountTx: Number(m.amountTx ?? m.amountCzk), bill: shape(m.bill) })),
     bills,
     otherBills,
     reimbursement,

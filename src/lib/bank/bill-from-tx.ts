@@ -6,6 +6,7 @@
 import { Prisma, type Currency } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { resolveCanonicalMerchant } from "@/lib/merchant-aliases";
+import { convertToCzk } from "@/lib/exchange-rates";
 
 const CURRENCIES: Currency[] = ["CZK", "PLN", "EUR"];
 const dec = (n: number, places = 2) => new Prisma.Decimal(n.toFixed(places));
@@ -20,11 +21,17 @@ export async function createBillsFromTransactions(o: { eventId: string; transact
   });
   const created: string[] = [];
   for (const tx of txs) {
-    const czk = Math.abs(Number(tx.amount));
+    const paid = Math.abs(Number(tx.amount)); // in the account's currency
     const raw = tx.counterpartyName ?? fromMessage(tx.message);
     const merchant = raw ? (await resolveCanonicalMerchant(raw, event.organizationId)) ?? raw : null;
-    const foreign = tx.originalAmount !== null && tx.originalCurrency && CURRENCIES.includes(tx.originalCurrency as Currency) && tx.originalCurrency !== "CZK";
-    const total = foreign ? Number(tx.originalAmount) : czk;
+    // The receipt's currency: a foreign account's own, or a Kč card payment's original amount.
+    const accountForeign = tx.currency !== "CZK" && CURRENCIES.includes(tx.currency as Currency);
+    const original = !accountForeign && tx.originalAmount !== null && !!tx.originalCurrency && tx.originalCurrency !== "CZK" && CURRENCIES.includes(tx.originalCurrency as Currency);
+    const currency = (accountForeign ? tx.currency : original ? tx.originalCurrency : "CZK") as Currency;
+    const total = original ? Number(tx.originalAmount) : paid;
+    // Kč always at the ČNB (national) rate, like every other bill -- not the bank's rate.
+    const conv = currency === "CZK" ? null : await convertToCzk(new Prisma.Decimal(total.toFixed(2)), currency, tx.bookingDate);
+    const czk = currency === "CZK" ? paid : conv ? Number(conv.amountCzk) : tx.currency === "CZK" ? paid : null;
     // The category last used for this merchant in this event.
     const lastCat = merchant
       ? await prisma.billCategory.findFirst({ where: { bill: { eventId: o.eventId, merchantName: merchant } }, orderBy: { bill: { createdAt: "desc" } }, select: { eventCategoryId: true } })
@@ -35,7 +42,7 @@ export async function createBillsFromTransactions(o: { eventId: string; transact
         data: {
           eventId: o.eventId,
           gcsObjectPath: null,
-          originalFilename: `${o.fromStatement ? "Bankovní výpis" : "Platba"} ${date} ${czk.toFixed(2)} Kč`,
+          originalFilename: `${o.fromStatement ? "Bankovní výpis" : "Platba"} ${date} ${paid.toFixed(2)} ${tx.currency === "CZK" ? "Kč" : tx.currency}`,
           contentHash: `bank:${tx.id}`,
           ingestChannel: "bank",
           createdByUserId: o.userId,
@@ -43,10 +50,10 @@ export async function createBillsFromTransactions(o: { eventId: string; transact
           merchantName: merchant,
           billDate: tx.bookingDate,
           totalAmount: dec(total),
-          currency: foreign ? (tx.originalCurrency as Currency) : "CZK",
-          amountCzk: dec(czk),
-          exchangeRateUsed: dec(foreign ? czk / total : 1, 6),
-          exchangeRateDate: tx.bookingDate,
+          currency,
+          amountCzk: czk === null ? null : dec(czk),
+          exchangeRateUsed: currency === "CZK" ? dec(1, 6) : conv ? conv.rateUsed : null,
+          exchangeRateDate: currency === "CZK" ? tx.bookingDate : conv ? conv.rateDate : null,
           // Paid directly by the event (no payer): nothing to reimburse.
           payerAuthorId: null,
           paidToAuthor: true,
@@ -55,14 +62,16 @@ export async function createBillsFromTransactions(o: { eventId: string; transact
           notes: [tx.message, tx.vs ? `VS ${tx.vs}` : null].filter(Boolean).join(" · ") || null,
         },
       });
-      if (lastCat) await db.billCategory.create({ data: { billId: b.id, eventCategoryId: lastCat.eventCategoryId, amount: dec(total), amountCzk: dec(czk) } });
+      if (lastCat) await db.billCategory.create({ data: { billId: b.id, eventCategoryId: lastCat.eventCategoryId, amount: dec(total), amountCzk: czk === null ? null : dec(czk) } });
+      // Bill side at ČNB, payment side as booked; a different Kč is the bank's rate (kurzový rozdíl).
+      const fxDiff = tx.currency === "CZK" && czk !== null && Math.abs(czk - paid) > 0.005;
       await db.bankMatch.upsert({
         where: { transactionId_billId: { transactionId: tx.id, billId: b.id } },
-        create: { transactionId: tx.id, billId: b.id, amountCzk: dec(czk), method: "manual", confirmedAt: new Date(), confirmedById: o.userId },
+        create: { transactionId: tx.id, billId: b.id, amountCzk: dec(czk ?? 0), amountTx: dec(paid), differenceReason: fxDiff ? "fx" : null, method: "manual", confirmedAt: new Date(), confirmedById: o.userId },
         update: {},
       });
       await db.bankMatch.deleteMany({ where: { transactionId: tx.id, confirmedAt: null, rejectedAt: null } });
-      await db.billAuditLog.create({ data: { billId: b.id, userId: o.userId, actionType: "bank_create", fieldName: "bank", newValue: `${date} ${czk.toFixed(2)}` } });
+      await db.billAuditLog.create({ data: { billId: b.id, userId: o.userId, actionType: "bank_create", fieldName: "bank", newValue: `${date} ${paid.toFixed(2)} ${tx.currency}` } });
       if (o.fromStatement) await db.bankTransaction.update({ where: { id: tx.id }, data: { noDocumentNeeded: true } });
       return b;
     });

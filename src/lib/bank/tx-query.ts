@@ -73,20 +73,31 @@ export function filterWhere(f: TxFilters): Prisma.BankTransactionWhereInput[] {
 
 export const txWhere = (eventId: string, tab: Tab, tier: string | null, f: TxFilters): Prisma.BankTransactionWhereInput => ({ AND: [{ eventId }, tabWhere(tab, tier), ...filterWhere(f)] });
 
-/** Příjmy / výdaje / saldo / počet of a where. */
-export async function totals(where: Prisma.BankTransactionWhereInput) {
+export type CurrencySum = { currency: string; income: number; expense: number; saldo: number; incomeCount: number; expenseCount: number };
+export type Totals = { count: number; byCurrency: CurrencySum[] };
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Příjmy / výdaje / saldo / počet of a where -- per currency (Kč and a PLN account never add up). */
+export async function totals(where: Prisma.BankTransactionWhereInput): Promise<Totals> {
   const [inc, out] = await inSeries([
-    () => prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true }, _count: true }),
-    () => prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
+    () => prisma.bankTransaction.groupBy({ by: ["currency"], where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true }, _count: true }),
+    () => prisma.bankTransaction.groupBy({ by: ["currency"], where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
   ] as const);
-  const income = Number(inc._sum.amount ?? 0), expense = Number(out._sum.amount ?? 0);
-  return { income, expense, saldo: Math.round((income + expense) * 100) / 100, count: inc._count + out._count, incomeCount: inc._count, expenseCount: out._count };
+  const map = new Map<string, CurrencySum>();
+  const get = (c: string) => map.get(c) ?? map.set(c, { currency: c, income: 0, expense: 0, saldo: 0, incomeCount: 0, expenseCount: 0 }).get(c)!;
+  for (const r of inc) Object.assign(get(r.currency), { income: r2(Number(r._sum.amount ?? 0)), incomeCount: r._count });
+  for (const r of out) Object.assign(get(r.currency), { expense: r2(Number(r._sum.amount ?? 0)), expenseCount: r._count });
+  const byCurrency = [...map.values()].map((x) => ({ ...x, saldo: r2(x.income + x.expense) })).sort((a, b) => (a.currency === "CZK" ? -1 : b.currency === "CZK" ? 1 : a.currency.localeCompare(b.currency)));
+  return { count: byCurrency.reduce((s, x) => s + x.incomeCount + x.expenseCount, 0), byCurrency };
 }
 
-export type GroupBy = "classification" | "pair" | "counterparty" | "person" | "month";
-export type Group = { key: string | null; income: number; expense: number; count: number; incomeCount?: number; expenseCount?: number };
+/** The sums of one currency of a Totals (zeros when absent). */
+export const inCurrency = (t: Totals, currency: string): CurrencySum => t.byCurrency.find((x) => x.currency === currency) ?? { currency, income: 0, expense: 0, saldo: 0, incomeCount: 0, expenseCount: 0 };
 
-/** Subtotals of the filtered rows (they add up to totals()). */
+export type GroupBy = "classification" | "pair" | "counterparty" | "person" | "month";
+export type Group = { key: string | null; currency: string; income: number; expense: number; count: number };
+
+/** Subtotals of the filtered rows, per group and currency (they add up to totals()). */
 export async function groups(where: Prisma.BankTransactionWhereInput, by: GroupBy): Promise<Group[]> {
   if (by === "pair") {
     const parts: [string, Prisma.BankTransactionWhereInput][] = [
@@ -95,31 +106,32 @@ export async function groups(where: Prisma.BankTransactionWhereInput, by: GroupB
       ["unpaired", { matches: { none: { OR: [{ confirmedAt: { not: null } }, { rejectedAt: null }] } } }],
     ];
     const out: Group[] = [];
-    for (const [key, w] of parts) out.push({ key, ...(await totals({ AND: [where, w] })) });
+    for (const [key, w] of parts) for (const c of (await totals({ AND: [where, w] })).byCurrency) out.push({ key, currency: c.currency, income: c.income, expense: c.expense, count: c.incomeCount + c.expenseCount });
     return out;
   }
   const field = by === "classification" ? "classification" : by === "counterparty" ? "counterpartyName" : by === "person" ? "personAuthorId" : "bookingDate";
-  const rows = await prisma.bankTransaction.groupBy({ by: [field], where, _sum: { amount: true }, _count: true });
   // Income and expense per group need the sign split: two groupBys.
   const signed = [
-    await prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true } }),
-    await prisma.bankTransaction.groupBy({ by: [field], where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true } }),
+    await prisma.bankTransaction.groupBy({ by: [field, "currency"], where: { AND: [where, { amount: { gt: 0 } }] }, _sum: { amount: true }, _count: true }),
+    await prisma.bankTransaction.groupBy({ by: [field, "currency"], where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
   ];
   const keyOf = (r: Record<string, unknown>) => {
     const v = r[field];
     if (by === "month") return (v as Date).toISOString().slice(0, 7);
     return v === null || v === undefined ? null : String(v);
   };
-  const map = new Map<string | null, Group>();
-  for (const r of rows) {
-    const k = keyOf(r);
-    const g = map.get(k) ?? { key: k, income: 0, expense: 0, count: 0 };
-    g.count += r._count;
-    map.set(k, g);
-  }
-  for (const r of signed[0]) map.get(keyOf(r))!.income += Number(r._sum.amount ?? 0);
-  for (const r of signed[1]) map.get(keyOf(r))!.expense += Number(r._sum.amount ?? 0);
-  return [...map.values()].sort((a, b) => (by === "month" ? String(a.key).localeCompare(String(b.key)) : a.income + a.expense - (b.income + b.expense)));
+  const map = new Map<string, Group>();
+  signed.forEach((rows, sign) => {
+    for (const r of rows as unknown as (Record<string, unknown> & { currency: string; _sum: { amount: unknown }; _count: number })[]) {
+      const k = keyOf(r);
+      const id = `${k}|${r.currency}`;
+      const g = map.get(id) ?? map.set(id, { key: k, currency: r.currency, income: 0, expense: 0, count: 0 }).get(id)!;
+      g.count += r._count;
+      if (sign === 0) g.income = r2(g.income + Number(r._sum.amount ?? 0));
+      else g.expense = r2(g.expense + Number(r._sum.amount ?? 0));
+    }
+  });
+  return [...map.values()].sort((a, b) => (by === "month" ? String(a.key).localeCompare(String(b.key)) || a.currency.localeCompare(b.currency) : a.currency.localeCompare(b.currency) || a.income + a.expense - (b.income + b.expense)));
 }
 
 /** Count per tab (the tab labels). */

@@ -40,6 +40,11 @@ export async function syncFio(eventId: string, link: EventBankAccount & { bankAc
   } catch {
     return { error: "bad_response" };
   }
+  // Fio says the account's currency (a PLN / EUR account at Fio).
+  if (parsed.info.currency && parsed.info.currency !== account.currency) {
+    await prisma.bankAccount.update({ where: { id: account.id }, data: { currency: parsed.info.currency } });
+    account.currency = parsed.info.currency;
+  }
   const results: RowResult[] = parsed.txs.map((tx, i) => ({ line: i + 1, ok: true, tx }));
   const res = await commitImport({ eventId, account, source: "fio", userId, results, window, markMissing: true });
   await prisma.bankAccount.update({ where: { id: account.id }, data: { lastSuccessAt: new Date(), lastError: null, lastSyncResult: { ...res, info: parsed.info, window } } });

@@ -1888,6 +1888,10 @@ model BankMatch {
   transactionId    String                @map("transaction_id")
   billId           String                @map("bill_id")
   amountCzk        Decimal               @map("amount_czk") @db.Decimal(14, 2)
+  // The same allocation in the TRANSACTION's currency (a PLN account: PLN). amountCzk is the bill's
+  // side at the ČNB rate (budgets, Platba state); amountTx says how much of the payment is used.
+  // null (older rows) = amountCzk.
+  amountTx         Decimal?              @map("amount_tx") @db.Decimal(14, 2)
   method           BankMatchMethod
   tier             BankMatchTier?
   score            Int                   @default(0)

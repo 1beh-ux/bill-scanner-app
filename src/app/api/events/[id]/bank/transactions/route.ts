@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         matches: {
           where: { rejectedAt: null },
           orderBy: [{ confirmedAt: "desc" }, { score: "desc" }],
-          select: { id: true, amountCzk: true, confirmedAt: true, tier: true, reasons: true, setPaidToAuthor: true, bill: { select: { id: true, merchantName: true, billDate: true, amountCzk: true, displayFilename: true, originalFilename: true, documentMissing: true } } },
+          select: { id: true, amountCzk: true, amountTx: true, confirmedAt: true, tier: true, reasons: true, setPaidToAuthor: true, bill: { select: { id: true, merchantName: true, billDate: true, amountCzk: true, totalAmount: true, currency: true, displayFilename: true, originalFilename: true, documentMissing: true } } },
         },
       },
     }),
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       originalAmount: r.originalAmount === null ? null : Number(r.originalAmount),
       person: r.personAuthorId ? name.get(r.personAuthorId) ?? null : null,
       reimbursementOf: r.reimbursementAuthorId ? name.get(r.reimbursementAuthorId) ?? null : null,
-      matches: r.matches.map((m) => ({ ...m, amountCzk: Number(m.amountCzk), bill: { ...m.bill, amountCzk: m.bill.amountCzk === null ? null : Number(m.bill.amountCzk) } })),
+      matches: r.matches.map((m) => ({ ...m, amountCzk: Number(m.amountCzk), amountTx: Number(m.amountTx ?? m.amountCzk), bill: { ...m.bill, amountCzk: m.bill.amountCzk === null ? null : Number(m.bill.amountCzk), totalAmount: m.bill.totalAmount === null ? null : Number(m.bill.totalAmount) } })),
     })),
     truncated: rows.length === LIMIT,
     counts,

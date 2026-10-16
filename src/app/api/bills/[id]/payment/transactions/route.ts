@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireBillAccess } from "@/lib/bank/bill-access";
 import { hasBankAccess } from "@/lib/bank/guard";
+import { billValueIn } from "@/lib/bank/currency";
 
 // Bill detail -> "Spárovat s platbou" (Banka users only): the event's outgoing payments not fully
 // paired, closest amount first; the pairing itself goes through Banka's pairing route.
@@ -16,15 +17,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       amount: { lt: 0 },
       ...(q && { OR: [{ counterpartyName: { contains: q, mode: "insensitive" } }, { message: { contains: q, mode: "insensitive" } }, { vs: { contains: q } }] }),
     },
-    include: { matches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true } } },
+    include: { matches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, amountTx: true } } },
     take: 2000,
   });
-  const target = Number(a.bill.amountCzk ?? 0);
+  // Closest first, compared in each payment's currency (the bill's amount in it, else Kč).
+  const bill = { currency: a.bill.currency, totalAmount: a.bill.totalAmount === null ? null : Number(a.bill.totalAmount), amountCzk: a.bill.amountCzk === null ? null : Number(a.bill.amountCzk) };
+  const distance = (t: { currency: string; remaining: number }) => {
+    const v = billValueIn(bill, t.currency);
+    return v === null ? Number.MAX_SAFE_INTEGER : Math.abs(t.remaining - v);
+  };
   return NextResponse.json(
     txs
-      .map((t) => ({ id: t.id, bookingDate: t.bookingDate, amount: Number(t.amount), counterpartyName: t.counterpartyName, message: t.message, remaining: Math.abs(Number(t.amount)) - t.matches.reduce((s, m) => s + Number(m.amountCzk), 0) }))
+      .map((t) => ({ id: t.id, bookingDate: t.bookingDate, amount: Number(t.amount), currency: t.currency, counterpartyName: t.counterpartyName, message: t.message, remaining: Math.abs(Number(t.amount)) - t.matches.reduce((s, m) => s + Number(m.amountTx ?? m.amountCzk), 0) }))
       .filter((t) => t.remaining > 0.005)
-      .sort((x, y) => Math.abs(x.remaining - target) - Math.abs(y.remaining - target))
+      .sort((x, y) => distance(x) - distance(y))
       .slice(0, 30)
   );
 }

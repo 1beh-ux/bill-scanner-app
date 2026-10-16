@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
   const bank = await hasBankAccess(a.user, a.bill.eventId);
   const matches = await prisma.bankMatch.findMany({
     where: { billId: a.bill.id, confirmedAt: { not: null } },
-    select: { id: true, amountCzk: true, setPaidToAuthor: true, transaction: { select: { id: true, bookingDate: true, amount: true, counterpartyName: true, counterpartyAccount: true, counterpartyBankCode: true } } },
+    select: { id: true, amountCzk: true, amountTx: true, setPaidToAuthor: true, transaction: { select: { id: true, bookingDate: true, amount: true, currency: true, originalAmount: true, originalCurrency: true, counterpartyName: true, counterpartyAccount: true, counterpartyBankCode: true } } },
   });
   const state = await getBillPaymentState(a.bill);
   const paired = matches.reduce((s, m) => s + Number(m.amountCzk), 0);
@@ -33,6 +33,9 @@ export async function GET(_req: NextRequest, { params }: Ctx) {
       setPaidToAuthor: m.setPaidToAuthor,
       date: m.transaction.bookingDate,
       amount: Number(m.transaction.amount),
+      currency: m.transaction.currency,
+      amountTx: Number(m.amountTx ?? m.amountCzk),
+      original: m.transaction.originalCurrency && m.transaction.originalAmount !== null ? { amount: Number(m.transaction.originalAmount), currency: m.transaction.originalCurrency } : null,
       ...(bank && { counterparty: m.transaction.counterpartyName ?? (m.transaction.counterpartyAccount ? `${m.transaction.counterpartyAccount}/${m.transaction.counterpartyBankCode ?? ""}` : null) }),
     })),
   });

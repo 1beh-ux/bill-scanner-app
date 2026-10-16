@@ -4,6 +4,7 @@
 // way the Platby screen does, and remembers that it did (unpairing offers to undo it).
 import { Prisma, type BankDifferenceReason } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
+import { billValueIn } from "@/lib/bank/currency";
 
 const dec = (n: number) => new Prisma.Decimal(n.toFixed(2));
 const money = (n: number) => Math.round(n * 100) / 100;
@@ -12,7 +13,7 @@ const money = (n: number) => Math.round(n * 100) / 100;
 async function remainingOfBills(billIds: string[]) {
   const bills = await prisma.bill.findMany({
     where: { id: { in: billIds } },
-    select: { id: true, eventId: true, amountCzk: true, payerAuthorId: true, paidToAuthor: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, transactionId: true } } },
+    select: { id: true, eventId: true, amountCzk: true, totalAmount: true, currency: true, payerAuthorId: true, paidToAuthor: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, transactionId: true } } },
   });
   return bills.map((b) => ({ ...b, remaining: money(Number(b.amountCzk ?? 0) - b.bankMatches.reduce((s, m) => s + Number(m.amountCzk), 0)) }));
 }
@@ -24,25 +25,51 @@ export type PairError = "not_found" | "not_in_event" | "reason_required" | "noth
  * the sum differs from the payment a reason is required. Existing suggestion rows become manual,
  * confirmed pairings.
  */
-export async function pairTransaction(o: { eventId: string; transactionId: string; billIds: string[]; userId: string; differenceReason?: BankDifferenceReason | null }): Promise<{ ok: true; paired: number; markedPaid: number } | { error: PairError; difference?: number }> {
-  const tx = await prisma.bankTransaction.findFirst({ where: { id: o.transactionId, eventId: o.eventId }, include: { matches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true } } } });
+/**
+ * Amounts are compared in the PAYMENT's currency (src/lib/bank/currency.ts): a PLN account against the
+ * bills' PLN amounts; a Kč card payment abroad by its original amount when all bills are in that
+ * currency; Kč otherwise. difference (in `currency`) -- a reason is needed when it isn't zero, or when
+ * a bill has no amount in the payment's currency at all. Each pairing stores the bill's Kč (ČNB) and
+ * its share of the payment in the payment's currency.
+ */
+export async function pairTransaction(o: { eventId: string; transactionId: string; billIds: string[]; userId: string; differenceReason?: BankDifferenceReason | null }): Promise<{ ok: true; paired: number; markedPaid: number } | { error: PairError; difference?: number | null; currency?: string }> {
+  const tx = await prisma.bankTransaction.findFirst({ where: { id: o.transactionId, eventId: o.eventId }, include: { matches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, amountTx: true } } } });
   if (!tx) return { error: "not_found" };
   const bills = (await remainingOfBills(o.billIds)).filter((b) => b.remaining > 0.005 && !b.bankMatches.some((m) => m.transactionId === tx.id));
   if (bills.some((b) => b.eventId !== o.eventId)) return { error: "not_in_event" };
   if (!bills.length) return { error: "nothing_to_pair" };
-  const txRemaining = money(Math.abs(Number(tx.amount)) - tx.matches.reduce((s, m) => s + Number(m.amountCzk), 0));
-  const sum = money(bills.reduce((s, b) => s + b.remaining, 0));
-  const difference = money(sum - txRemaining);
-  if (Math.abs(difference) > 0.005 && !o.differenceReason) return { error: "reason_required", difference };
+  const txRemaining = money(Math.abs(Number(tx.amount)) - tx.matches.reduce((s, m) => s + Number(m.amountTx ?? m.amountCzk), 0));
+  const asMoney = (b: (typeof bills)[number]) => ({ currency: b.currency, totalAmount: b.totalAmount === null ? null : Number(b.totalAmount), amountCzk: b.amountCzk === null ? null : Number(b.amountCzk) });
+  const fraction = (b: (typeof bills)[number]) => (b.amountCzk && Number(b.amountCzk) > 0 ? b.remaining / Number(b.amountCzk) : 1);
+  const inTx = bills.map((b) => billValueIn(asMoney(b), tx.currency, fraction(b)));
+  let difference: number | null = inTx.every((v) => v !== null) ? money(inTx.reduce((s, v) => s! + v!, 0)! - txRemaining) : null;
+  // A card payment abroad: its original amount against the receipts in that currency.
+  let originalMatched = false;
+  if (difference !== 0 && tx.originalCurrency && tx.originalAmount !== null && tx.matches.length === 0) {
+    const inOrig = bills.map((b) => billValueIn(asMoney(b), tx.originalCurrency!, fraction(b)));
+    originalMatched = inOrig.every((v) => v !== null) && Math.abs(inOrig.reduce((s, v) => s! + v!, 0)! - Number(tx.originalAmount)) < 0.005;
+    if (originalMatched) difference = 0;
+  }
+  if ((difference === null || Math.abs(difference) > 0.005) && !o.differenceReason) return { error: "reason_required", difference, currency: tx.currency };
+  // The payment's side per bill: the bills' values in the payment's currency (unknown ones, or a
+  // matched original amount: the payment shared by Kč). The payment is never over-used, and with a
+  // reason other than "částečná platba" (kurz, poplatek, zaokrouhlení) it is used up completely.
+  const known = inTx.every((v) => v !== null) && !originalMatched;
+  const czkTotal = bills.reduce((s, b) => s + b.remaining, 0);
+  const base = bills.map((b, i) => (known ? inTx[i]! : czkTotal > 0 ? (txRemaining * b.remaining) / czkTotal : 0));
+  const baseSum = base.reduce((s, v) => s + v, 0);
+  const useAll = originalMatched || (!!o.differenceReason && o.differenceReason !== "partial");
+  const scale = baseSum > 0 && (useAll || baseSum > txRemaining) ? txRemaining / baseSum : 1;
+  const share = base.map((v) => money(v * scale));
 
   // Reimbursement: the payer's own bills get Proplaceno at the payment's booking date.
   const reimburse = (b: { payerAuthorId: string | null; paidToAuthor: boolean }) => !!tx.reimbursementAuthorId && b.payerAuthorId === tx.reimbursementAuthorId && !b.paidToAuthor;
   const now = new Date();
   let markedPaid = 0;
   await prisma.$transaction(async (db) => {
-    for (const b of bills) {
+    for (const [i, b] of bills.entries()) {
       const paid = reimburse(b);
-      const data = { amountCzk: dec(b.remaining), method: "manual" as const, differenceReason: Math.abs(difference) > 0.005 ? o.differenceReason ?? null : null, confirmedAt: now, confirmedById: o.userId, rejectedAt: null, rejectedById: null, setPaidToAuthor: paid };
+      const data = { amountCzk: dec(b.remaining), amountTx: dec(share[i]), method: "manual" as const, differenceReason: difference === null || Math.abs(difference) > 0.005 ? o.differenceReason ?? null : null, confirmedAt: now, confirmedById: o.userId, rejectedAt: null, rejectedById: null, setPaidToAuthor: paid };
       await db.bankMatch.upsert({ where: { transactionId_billId: { transactionId: tx.id, billId: b.id } }, create: { transactionId: tx.id, billId: b.id, ...data }, update: data });
       await db.billAuditLog.create({ data: { billId: b.id, userId: o.userId, actionType: "bank_pair", fieldName: "bank", newValue: `${tx.bookingDate.toISOString().slice(0, 10)} ${Number(tx.amount).toFixed(2)}` } });
       if (paid) {

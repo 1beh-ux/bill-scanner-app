@@ -43,11 +43,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     const accountNumber = typeof body.accountNumber === "string" ? body.accountNumber.replace(/\s/g, "") : "";
     const bankCode = typeof body.bankCode === "string" ? body.bankCode.trim() : "";
     const sourceType = ["fio_api", "sheet", "file"].includes(body.sourceType) ? body.sourceType : null;
+    // The account's currency (a Polish account: PLN); its movements are in it.
+    const currency = typeof body.currency === "string" && /^[A-Z]{3}$/.test(body.currency) ? body.currency : "CZK";
     if (!label || !/^(\d{1,6}-)?\d{2,10}$/.test(accountNumber) || !/^\d{4}$/.test(bankCode) || !sourceType) return NextResponse.json({ error: "invalid" }, { status: 400 });
     if (sourceType === "fio_api" && bankCode !== "2010") return NextResponse.json({ error: "fio_bank_code" }, { status: 400 });
     const existing = await prisma.bankAccount.findFirst({ where: { organizationId: ctx.event.organizationId, accountNumber, bankCode }, select: { id: true } });
     if (existing) return NextResponse.json({ error: "exists" }, { status: 409 });
-    accountId = (await prisma.bankAccount.create({ data: { organizationId: ctx.event.organizationId, label, accountNumber, bankCode, sourceType, createdById: ctx.user.id } })).id;
+    accountId = (await prisma.bankAccount.create({ data: { organizationId: ctx.event.organizationId, label, accountNumber, bankCode, sourceType, currency, createdById: ctx.user.id } })).id;
   }
   await prisma.eventBankAccount.upsert({
     where: { eventId_bankAccountId: { eventId: ctx.event.id, bankAccountId: accountId } },
