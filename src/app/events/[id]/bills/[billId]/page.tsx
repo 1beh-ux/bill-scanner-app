@@ -8,6 +8,8 @@ import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { needsPayout } from "@/lib/payout";
 import { adjacentInList } from "@/lib/bill-nav";
 import ImageViewer from "@/components/bills/ImageViewer";
+import BillPaymentBox from "@/components/bank/BillPaymentBox";
+import MissingDocument from "@/components/bank/MissingDocument";
 import ImageEditor from "@/components/ImageEditor";
 import { useAlert, useConfirm } from "@/components/ConfirmDialog";
 import PayerCombobox from "@/components/payers/PayerCombobox";
@@ -36,6 +38,9 @@ type BillDetail = {
   payerAuthor?: { id: string; canonicalName: string; isOfficialAccount?: boolean; payoutNeeded?: boolean } | null;
   notes: string | null;
   originalGcsObjectPath: string | null;
+  gcsObjectPath: string | null;
+  documentMissing: boolean;
+  documentFromStatement: boolean;
   contentHash: string;
   amountCzk: string | null;
   exchangeRateUsed: string | null;
@@ -573,7 +578,16 @@ const statusLabel = t(
 
       <div className="grid grid-cols-1 gap-6 p-4 md:p-6 lg:grid-cols-2">
         <div>
-          {isPdf ? (
+          {/* Created from a bank payment: no document yet (or the statement is the document). */}
+          {!bill.gcsObjectPath ? (
+            <MissingDocument
+              billId={bill.id}
+              fromStatement={bill.documentFromStatement}
+              locked={isApproved}
+              onChanged={(newId) => (newId && newId !== bill.id ? router.push(`/events/${eventId}/bills/${newId}`) : load())}
+              t={t}
+            />
+          ) : isPdf ? (
             <iframe
               src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`}
               title={bill.originalFilename}
@@ -582,6 +596,7 @@ const statusLabel = t(
           ) : (
             <ImageViewer key={bill.contentHash} src={`/api/bills/${bill.id}/file?v=${bill.contentHash}`} alt={bill.originalFilename} t={t} />
           )}
+          {bill.gcsObjectPath && (
           <a
             href={`/api/bills/${bill.id}/file`}
             target="_blank"
@@ -590,7 +605,8 @@ const statusLabel = t(
           >
             {t("billModal.openFile")}
           </a>
-          {!isLocked && (
+          )}
+          {!isLocked && bill.gcsObjectPath && (
             <button
               onClick={() => setEditingImage(true)}
               className="mt-1.5 block text-[13px] text-ember hover:underline"
@@ -671,6 +687,8 @@ const statusLabel = t(
               onPayerCreated={(p) => setPayers((prev) => [...prev, p])}
             />
           </div>
+
+          <BillPaymentBox billId={bill.id} eventId={eventId} locked={isApproved} t={t} />
 
           {/* Only payers who get money paid out (not the official account / "no payout"). */}
           {bill.payerAuthorId && needsPayout(bill.payerAuthor) && (
@@ -823,7 +841,7 @@ const statusLabel = t(
             )}
             <button
               onClick={handleProcessAi}
-              disabled={isLocked || processingAi || saving}
+              disabled={isLocked || processingAi || saving || !bill.gcsObjectPath}
               className="rounded-lg border border-mist px-4 py-2 text-[13px] text-ink-secondary hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
             >
               {processingAi ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
