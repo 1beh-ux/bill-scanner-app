@@ -15,6 +15,7 @@ const pln = (id: string, o: Partial<DupBill> = {}) => b(id, { totalAmount: 95, c
 assert.equal(duplicateReason(pln("a"), pln("b", { amountCzk: 541.2 })), "amount_date", "same PLN amount (Kč from another day's rate)");
 assert.equal(duplicateReason(pln("a"), b("b", { totalAmount: 543, amountCzk: 543, merchantName: "Biedronka" })), "amount_date", "PLN vs the same receipt in Kč (within 1 %)");
 assert.equal(duplicateReason(pln("a"), b("b", { totalAmount: 560, amountCzk: 560 })), null, "Kč more than 1 % off");
+assert.equal(duplicateReason(b("a", { totalAmount: 1740, amountCzk: 1740 }), b("b", { totalAmount: 1755, amountCzk: 1755 })), null, "two Kč bills: exact only (1740 vs 1755 is not one receipt)");
 
 // Groups: a-b-c chained, d separate; a dismissed pair breaks it; focus limits.
 const all = [b("a", {}), b("b", { merchantName: "Lidl" }), b("c", { billDate: "2026-07-03" }), b("d", { totalAmount: 7, amountCzk: 7 }), b("e", { totalAmount: 7, amountCzk: 7, merchantName: "Penny" })];

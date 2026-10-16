@@ -5,8 +5,8 @@
 //   amount_date same amount and the same date
 //   amount_near same amount, date within ±3 days and the same shop
 //   amount_shop same amount and shop, one of the dates unknown
-// "Same amount" = the same amount in the same currency, or Kč (ČNB) within 1 % -- so a receipt
-// entered once in PLN and once in Kč still pairs up. Pairs marked "Není duplicita" never come back.
+// "Same amount" = the same amount in the same currency, or -- across currencies -- Kč (ČNB) within 1 %,
+// so a receipt entered once in PLN and once in Kč still pairs up. Pairs marked "Není duplicita" never come back.
 import { fold } from "@/lib/planning-import";
 
 export type DupReason = "content" | "amount_date" | "amount_near" | "amount_shop";
@@ -19,6 +19,8 @@ export const pairKey = (a: string, b: string) => (a < b ? `${a}:${b}` : `${b}:${
 
 export function sameAmount(a: DupBill, b: DupBill): boolean {
   if (a.totalAmount !== null && b.totalAmount !== null && a.currency === b.currency && Math.abs(a.totalAmount - b.totalAmount) < 0.005) return true;
+  // Kč within 1 % only across currencies (the rates differ); two Kč bills must match exactly.
+  if (a.currency === b.currency) return false;
   if (a.amountCzk !== null && b.amountCzk !== null && Math.max(a.amountCzk, b.amountCzk) > 0) return Math.abs(a.amountCzk - b.amountCzk) / Math.max(a.amountCzk, b.amountCzk) <= 0.01;
   return false;
 }
