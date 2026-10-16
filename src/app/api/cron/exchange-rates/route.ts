@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncRatesForDate, backfillRates } from "@/lib/exchange-rates";
 import { prisma } from "@/lib/prisma";
+import { dailyBankSync } from "@/lib/bank/sync";
 
 export const maxDuration = 300;
 
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
     await prisma.userActivity.deleteMany({ where: { createdAt: { lt: cutoff } } }).catch((err) => console.log("[cron] activity retention failed:", String(err)));
 
     const result = await syncRatesForDate();
+
+    // Banka: daily Fio sync of active events' accounts (never fails the rates job).
+    await dailyBankSync().then((log) => log.forEach((l) => console.log("[cron] bank sync", l))).catch((err) => console.log("[cron] bank sync failed:", err instanceof Error ? err.message.slice(0, 100) : "unknown"));
     return NextResponse.json({
       ok: true,
       mode: "daily",
