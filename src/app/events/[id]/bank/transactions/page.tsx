@@ -8,18 +8,20 @@ import ColumnPicker from "@/components/ColumnPicker";
 import BankHeader from "@/components/bank/BankHeader";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { dmy, kc, pluralForm, reasonText, type Reason } from "@/components/bank/bank-format";
+import { money } from "@/lib/bank/currency";
 
 // Banka -> Pohyby (docs/bank-reconciliation.md A6): tabs, filters, columns, inline classification,
 // keyboard triage, totals always visible, bulk actions. Suggestions are only ever confirmed here or
 // in Párování by a person.
-type Match = { id: string; amountCzk: number; confirmedAt: string | null; tier: "sure" | "possible" | null; reasons: Reason[]; setPaidToAuthor: boolean; bill: { id: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; displayFilename: string | null; originalFilename: string; documentMissing: boolean } };
+type Match = { id: string; amountCzk: number; amountTx: number; confirmedAt: string | null; tier: "sure" | "possible" | null; reasons: Reason[]; setPaidToAuthor: boolean; bill: { id: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; displayFilename: string | null; originalFilename: string; documentMissing: boolean } };
 type Tx = {
   id: string; bookingDate: string; amount: number; currency: string; originalAmount: number | null; originalCurrency: string | null;
   counterpartyAccount: string | null; counterpartyBankCode: string | null; counterpartyName: string | null; vs: string | null; message: string | null; note: string | null; bankType: string | null;
   classification: string; incomeType: string | null; personAuthorId: string | null; person: string | null; reimbursementOf: string | null; noDocumentNeeded: boolean; userNote: string | null; sourceMissing: boolean; matches: Match[];
 };
-type Totals = { income: number; expense: number; saldo: number; count: number };
-type Data = { rows: Tx[]; truncated: boolean; counts: Record<string, number>; totals: Totals; groups: (Totals & { key: string | null; label: string | null })[] | null; authors: { id: string; canonicalName: string }[] };
+type CurrencySum = { currency: string; income: number; expense: number; incomeCount: number; expenseCount: number };
+type Totals = { count: number; byCurrency: CurrencySum[] };
+type Data = { rows: Tx[]; truncated: boolean; counts: Record<string, number>; totals: Totals; groups: { key: string | null; label: string | null; currency: string; income: number; expense: number; count: number }[] | null; authors: { id: string; canonicalName: string }[] };
 
 const TABS = ["todo", "suggested", "paired", "nodoc", "income", "excluded", "all"];
 const CLASSES = ["expense", "income", "cash", "transfer", "fee", "private", "other_event"];
@@ -80,7 +82,22 @@ function BankTransactions({ id }: { id: string }) {
   const columns = prefs.bankColumns[id] ?? COLUMNS;
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const sel = rows.filter((r) => selected.has(r.id));
-  const sum = (list: Tx[]) => ({ income: list.filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0), expense: list.filter((r) => r.amount < 0).reduce((s, r) => s + r.amount, 0), count: list.length });
+  // Per currency: Kč and a PLN account never add up.
+  const sum = (list: Tx[]): Totals => {
+    const by = new Map<string, CurrencySum>();
+    for (const r of list) {
+      const x = by.get(r.currency) ?? { currency: r.currency, income: 0, expense: 0, incomeCount: 0, expenseCount: 0 };
+      if (r.amount > 0) {
+        x.income += r.amount;
+        x.incomeCount++;
+      } else {
+        x.expense += r.amount;
+        x.expenseCount++;
+      }
+      by.set(r.currency, x);
+    }
+    return { count: list.length, byCurrency: [...by.values()] };
+  };
 
   async function act(body: object, reload = true) {
     const r = await fetch(`/api/events/${id}/bank/transactions/actions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
@@ -148,8 +165,9 @@ function BankTransactions({ id }: { id: string }) {
   const setFilter = (k: string, v: string) => setF((x) => ({ ...x, [k]: v }));
   const amountCell = (r: Tx) => (
     <span className={"tabular-nums " + (r.amount > 0 ? "text-pine" : "text-ink")}>
-      {kc(r.amount)}
-      {r.originalCurrency && r.originalAmount !== null && <span className="block text-[11px] text-ink-secondary">{kc(r.originalAmount)} {r.originalCurrency}</span>}
+      {money(r.amount, r.currency)}
+      {/* A card payment abroad: what the receipt says (the bank's rate made the amount above). */}
+      {r.originalCurrency && r.originalAmount !== null && <span className="block text-[11px] text-ink-secondary">{money(r.originalAmount, r.originalCurrency)}</span>}
     </span>
   );
   const cell: Record<string, (r: Tx) => React.ReactNode> = {
@@ -188,12 +206,12 @@ function BankTransactions({ id }: { id: string }) {
         {r.matches.map((m) =>
           m.confirmedAt ? (
             <span key={m.id} className="inline-flex items-center gap-1 rounded-full bg-pine-bg px-2 py-0.5 text-[11.5px] text-pine">
-              <a href={`/events/${id}/bills/${m.bill.id}`} className="hover:underline">{m.bill.merchantName ?? m.bill.originalFilename} · {kc(m.amountCzk)}</a>
+              <a href={`/events/${id}/bills/${m.bill.id}`} className="hover:underline">{m.bill.merchantName ?? m.bill.originalFilename} · {chipAmount(r, m)}</a>
               <button type="button" onClick={() => unpair(m)} aria-label={t("bankTx.unpair")} className="hover:text-red-600">✕</button>
             </span>
           ) : (
             <span key={m.id} title={m.reasons.map((x) => reasonText(x, t)).join(", ")} className={"inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11.5px] " + (m.tier === "sure" ? "border-pine text-pine" : "border-amber-500 text-amber-700")}>
-              <a href={`/events/${id}/bills/${m.bill.id}`} className="hover:underline">{t(`bankTier.${m.tier}`)}: {m.bill.merchantName ?? m.bill.originalFilename} · {kc(m.amountCzk)}</a>
+              <a href={`/events/${id}/bills/${m.bill.id}`} className="hover:underline">{t(`bankTier.${m.tier}`)}: {m.bill.merchantName ?? m.bill.originalFilename} · {chipAmount(r, m)}</a>
               <button type="button" onClick={() => act({ action: "confirm", ids: [r.id] })} aria-label={t("bankTx.confirmOne")} className="font-semibold hover:text-pine">✓</button>
               <button type="button" onClick={() => act({ action: "reject", ids: [r.id], matchIds: [m.id] })} aria-label={t("bankTx.rejectOne")} className="hover:text-red-600">✕</button>
             </span>
@@ -208,7 +226,13 @@ function BankTransactions({ id }: { id: string }) {
       <input defaultValue={r.userNote ?? ""} onBlur={(e) => e.target.value !== (r.userNote ?? "") && act({ action: "note", ids: [r.id], userNote: e.target.value }, false)} className={input + " w-36 py-0.5"} aria-label={t("bankTx.colNote")} />
     ),
   };
-  const totalsLine = (x: { income: number; expense: number; count: number }) => t("bankTx.totals", { income: kc(x.income), expense: kc(x.expense), saldo: kc(x.income + x.expense), count: String(x.count), noun: t(`bankPlural.tx.${pluralForm(x.count)}`) });
+  // The bill in its own currency; a foreign receipt also in Kč (ČNB).
+  const chipAmount = (r: Tx, m: Match) =>
+    m.bill.currency !== "CZK" ? `${money(m.bill.totalAmount, m.bill.currency)} (${money(m.amountCzk, "CZK")})` : r.currency !== "CZK" ? `${money(m.amountTx, r.currency)} (${money(m.amountCzk, "CZK")})` : money(m.amountCzk, "CZK");
+  const totalsLine = (x: Totals) =>
+    (x.byCurrency.length ? x.byCurrency : [{ currency: "CZK", income: 0, expense: 0, incomeCount: 0, expenseCount: 0 }])
+      .map((c) => t("bankTx.totals", { income: money(c.income, c.currency), expense: money(c.expense, c.currency), saldo: money(c.income + c.expense, c.currency), count: String(c.incomeCount + c.expenseCount), noun: t(`bankPlural.tx.${pluralForm(c.incomeCount + c.expenseCount)}`) }))
+      .join(" | ");
 
   return (
     <div className="mx-auto max-w-[1400px] p-4 pb-0 md:p-8 md:pb-0">
@@ -265,9 +289,9 @@ function BankTransactions({ id }: { id: string }) {
           <thead><tr className="border-b border-mist text-left text-ink-secondary"><th className="p-1.5 font-medium">{t(`bankGroup.${group}`)}</th><th className="p-1.5 text-right font-medium">{t("bankTx.income")}</th><th className="p-1.5 text-right font-medium">{t("bankTx.expense")}</th><th className="p-1.5 text-right font-medium">{t("bankTx.saldo")}</th><th className="p-1.5 text-right font-medium">{t("bankTx.count")}</th></tr></thead>
           <tbody>
             {data.groups.map((g) => (
-              <tr key={String(g.key)} className="border-b border-mist/60">
+              <tr key={`${g.key}|${g.currency}`} className="border-b border-mist/60">
                 <td className="p-1.5">{g.key === null ? "—" : group === "classification" ? t(`bankClass.${g.key}`) : group === "pair" ? t(`bankPair.${g.key}`) : g.label}</td>
-                <td className="p-1.5 text-right tabular-nums text-pine">{kc(g.income)}</td><td className="p-1.5 text-right tabular-nums">{kc(g.expense)}</td><td className="p-1.5 text-right tabular-nums">{kc(g.income + g.expense)}</td><td className="p-1.5 text-right">{g.count}</td>
+                <td className="p-1.5 text-right tabular-nums text-pine">{money(g.income, g.currency)}</td><td className="p-1.5 text-right tabular-nums">{money(g.expense, g.currency)}</td><td className="p-1.5 text-right tabular-nums">{money(g.income + g.expense, g.currency)}</td><td className="p-1.5 text-right">{g.count}</td>
               </tr>
             ))}
           </tbody>

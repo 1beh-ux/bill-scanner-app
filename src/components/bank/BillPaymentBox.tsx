@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { dmy, kc } from "@/components/bank/bank-format";
+import { money } from "@/lib/bank/currency";
 
 // Bill detail -> Platba (docs/bank-reconciliation.md A7): how the bill was paid. Paired payments
 // (counterparty only with Banka), "Spárovat s platbou" (Banka users), Hotově / Jiný účet by hand.
 type T = (key: string, vars?: Record<string, string>) => string;
 type Payment = {
   enabled: boolean; bankAccess: boolean; state: string; conflict: boolean; channel: string | null; note: string | null; amountMismatch: boolean;
-  matches: { id: string; amountCzk: number; setPaidToAuthor: boolean; date: string; amount: number; counterparty?: string | null }[];
+  matches: { id: string; amountCzk: number; amountTx: number; setPaidToAuthor: boolean; date: string; amount: number; currency: string; original: { amount: number; currency: string } | null; counterparty?: string | null }[];
 };
-type Candidate = { id: string; bookingDate: string; amount: number; counterpartyName: string | null; message: string | null; remaining: number };
+type Candidate = { id: string; bookingDate: string; amount: number; currency: string; counterpartyName: string | null; message: string | null; remaining: number };
 const btn = "rounded-lg border border-mist bg-paper-2 px-2.5 py-1 text-[13px] text-ink hover:bg-mist disabled:opacity-50";
 
 export default function BillPaymentBox({ billId, eventId, locked, t }: { billId: string; eventId: string; locked: boolean; t: T }) {
@@ -46,7 +47,7 @@ export default function BillPaymentBox({ billId, eventId, locked, t }: { billId:
     if (d.error === "reason_required") {
       // The payment differs from the bill: ask which kind of difference.
       const reasons = ["fx", "fee", "rounding", "partial"];
-      for (const x of reasons) if (await confirm({ message: t("billPayment.differenceAsk", { diff: kc(d.difference), reason: t(`bankDiff.${x}`) }) })) return pairWith(c, x);
+      for (const x of reasons) if (await confirm({ message: t("billPayment.differenceAsk", { diff: d.difference === null || d.difference === undefined ? t("billPayment.unknownDiff") : money(d.difference, d.currency ?? "CZK"), reason: t(`bankDiff.${x}`) }) })) return pairWith(c, x);
       return;
     }
     if (!r.ok) return setMsg(t(`bankPairing.error.${d.error ?? "failed"}`));
@@ -72,7 +73,13 @@ export default function BillPaymentBox({ billId, eventId, locked, t }: { billId:
       {p.amountMismatch && <p className="mb-1 text-amber-700">{t("billPayment.mismatch")}</p>}
       {p.matches.map((m) => (
         <div key={m.id} className="flex items-center justify-between gap-2 border-b border-mist/60 py-1">
-          <span>{dmy(m.date)} · {kc(m.amount)} Kč{m.counterparty ? ` · ${m.counterparty}` : ""}{Math.abs(Math.abs(m.amount) - m.amountCzk) > 0.005 && ` (${t("billPayment.allocated", { amount: kc(m.amountCzk) })})`}</span>
+          <span>
+            {dmy(m.date)} · {money(m.amount, m.currency)}
+            {m.original && ` (${money(m.original.amount, m.original.currency)})`}
+            {m.counterparty ? ` · ${m.counterparty}` : ""}
+            {/* Part of the payment, or another currency: what this bill counts in Kč (ČNB). */}
+            {(Math.abs(Math.abs(m.amount) - m.amountTx) > 0.005 || m.currency !== "CZK" || Math.abs(m.amountTx - m.amountCzk) > 0.005) && ` · ${t("billPayment.allocated", { amount: money(m.amountCzk, "CZK") })}`}
+          </span>
           {p.bankAccess && !locked && <button type="button" className="text-ink-secondary hover:text-red-600" onClick={() => unpair(m)} aria-label={t("bankTx.unpair")}>✕</button>}
         </div>
       ))}
@@ -93,7 +100,7 @@ export default function BillPaymentBox({ billId, eventId, locked, t }: { billId:
           {cands.map((c) => (
             <button key={c.id} type="button" onClick={() => pairWith(c)} className="flex w-full justify-between gap-2 border-b border-mist/60 py-1 text-left hover:bg-paper">
               <span>{dmy(c.bookingDate)} · {c.counterpartyName ?? c.message ?? "—"}</span>
-              <span className="tabular-nums">{kc(c.remaining)}</span>
+              <span className="tabular-nums">{money(c.remaining, c.currency)}</span>
             </button>
           ))}
         </div>

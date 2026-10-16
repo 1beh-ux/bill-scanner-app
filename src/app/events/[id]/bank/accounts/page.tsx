@@ -11,7 +11,7 @@ import { driveErrorText } from "@/lib/drive-error-messages";
 // Banka -> Účty a import: the event's accounts (window, source, Fio token, sync) and the import
 // with preview (docs/bank-reconciliation.md A3).
 type Account = {
-  id: string; label: string; accountNumber: string; bankCode: string; sourceType: "fio_api" | "sheet" | "file";
+  id: string; label: string; accountNumber: string; bankCode: string; currency: string; sourceType: "fio_api" | "sheet" | "file";
   tokenSaved: boolean; sheetId: string | null; sheetRange: string | null; lastSyncAt: string | null; lastError: string | null;
   lastSyncResult: { counts?: Record<string, number>; error?: string } | null;
 };
@@ -37,7 +37,7 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
   const [busy, setBusy] = useState<string | null>(null);
   const [token, setToken] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ existing: "", label: "", accountNumber: "", bankCode: "2010", sourceType: "fio_api" });
+  const [form, setForm] = useState({ existing: "", label: "", accountNumber: "", bankCode: "2010", sourceType: "fio_api", currency: "CZK" });
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/events/${id}/bank/accounts`);
@@ -118,6 +118,10 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
               <select value={form.sourceType} onChange={(e) => setForm({ ...form, sourceType: e.target.value })} className={inputClass}>
                 {["fio_api", "sheet", "file"].map((s) => <option key={s} value={s}>{t(`bankSource.${s}`)}</option>)}
               </select>
+              {/* The account's currency: a Polish account's movements are in PLN. */}
+              <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className={inputClass} aria-label={t("bankAccountsPage.currency")}>
+                {["CZK", "PLN", "EUR"].map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
           )}
           <p className="text-[12px] text-ink-secondary">{t("bankAccountsPage.windowHint", { from: date(data.eventDates.from), to: date(data.eventDates.to) })}</p>
@@ -136,7 +140,7 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
                 <span className="text-[15px] font-semibold text-ink">{a.label}</span>{" "}
-                <span className="text-ink-secondary">{a.accountNumber}/{a.bankCode} · {t(`bankSource.${a.sourceType}`)}</span>
+                <span className="text-ink-secondary">{a.accountNumber}/{a.bankCode} · {a.currency} · {t(`bankSource.${a.sourceType}`)}</span>
               </div>
               <button type="button" className="text-ink-secondary hover:text-red-600" onClick={() => unlink(a)}>{t("bankAccountsPage.unlink")}</button>
             </div>

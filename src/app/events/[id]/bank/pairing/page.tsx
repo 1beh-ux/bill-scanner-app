@@ -6,19 +6,20 @@ import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import BankHeader from "@/components/bank/BankHeader";
 import { dmy, kc, reasonText, type Reason } from "@/components/bank/bank-format";
+import { billValueIn, money } from "@/lib/bank/currency";
 
 // Banka -> Párování (docs/bank-reconciliation.md A7): left the payments to pair, right the candidates
 // for the selected one; tick bills, see the difference, Spárovat (Enter) -> next payment.
 type Bill = { id: string; eventId: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; notes: string | null; originalFilename: string; status: string; documentMissing: boolean; remaining: number; eventName?: string };
 type Cand = {
-  tx: { id: string; bookingDate: string; amount: number; counterpartyName: string | null; message: string | null; vs: string | null; bankType: string | null; originalAmount: number | null; originalCurrency: string | null };
-  confirmed: { id: string; amountCzk: number; setPaidToAuthor: boolean; bill: Bill }[];
-  suggestions: { id: string; tier: "sure" | "possible"; reasons: Reason[]; amountCzk: number; bill: Bill }[];
+  tx: { id: string; bookingDate: string; amount: number; currency: string; counterpartyName: string | null; message: string | null; vs: string | null; bankType: string | null; originalAmount: number | null; originalCurrency: string | null };
+  confirmed: { id: string; amountCzk: number; amountTx: number; setPaidToAuthor: boolean; bill: Bill }[];
+  suggestions: { id: string; tier: "sure" | "possible"; reasons: Reason[]; amountCzk: number; amountTx: number; bill: Bill }[];
   bills: Bill[];
   otherBills: Bill[];
   reimbursement: { author: { id: string; canonicalName: string }; billIds: string[] } | null;
 };
-type Tx = { id: string; bookingDate: string; amount: number; counterpartyName: string | null; message: string | null; reimbursementOf: string | null; matches: { confirmedAt: string | null }[] };
+type Tx = { id: string; bookingDate: string; amount: number; currency: string; counterpartyName: string | null; message: string | null; reimbursementOf: string | null; matches: { confirmedAt: string | null }[] };
 const btn = "rounded-lg border border-mist bg-paper-2 px-2.5 py-1 text-[13px] text-ink hover:bg-mist disabled:opacity-50";
 
 function Pairing({ id }: { id: string }) {
@@ -66,10 +67,19 @@ function Pairing({ id }: { id: string }) {
     for (const b of [...(cand?.suggestions.map((s) => s.bill) ?? []), ...(cand?.bills ?? []), ...(cand?.otherBills ?? [])]) m.set(b.id, b);
     return m;
   }, [cand]);
-  const payment = cand ? Math.abs(cand.tx.amount) - cand.confirmed.reduce((s, m) => s + m.amountCzk, 0) : 0;
+  // Compared in the payment's currency (src/lib/bank/currency.ts, same rules as the server): the bills'
+  // values in it, or a card payment's original amount; unknown (no amount in that currency) = a reason.
+  const cur = cand?.tx.currency ?? "CZK";
+  const payment = cand ? Math.round((Math.abs(cand.tx.amount) - cand.confirmed.reduce((s, m) => s + m.amountTx, 0)) * 100) / 100 : 0;
   const chosen = [...ticked].map((x) => all.get(x)).filter((b): b is Bill => !!b && b.eventId === id);
-  const sum = chosen.reduce((s, b) => s + b.remaining, 0);
-  const diff = Math.round((sum - payment) * 100) / 100;
+  const frac = (b: Bill) => (b.amountCzk ? b.remaining / b.amountCzk : 1);
+  const inTx = chosen.map((b) => billValueIn(b, cur, frac(b)));
+  const sum = inTx.every((v) => v !== null) ? inTx.reduce((s, v) => s! + v!, 0)! : null;
+  const sumCzk = chosen.reduce((s, b) => s + b.remaining, 0);
+  const inOrig = cand?.tx.originalCurrency && cand.confirmed.length === 0 ? chosen.map((b) => billValueIn(b, cand.tx.originalCurrency!, frac(b))) : null;
+  const originalMatch = !!inOrig && inOrig.every((v) => v !== null) && Math.abs(inOrig.reduce((s, v) => s! + v!, 0)! - (cand?.tx.originalAmount ?? NaN)) < 0.005;
+  const diff = originalMatch ? 0 : sum === null ? null : Math.round((sum - payment) * 100) / 100;
+  const needsReason = chosen.length > 0 && (diff === null || Math.abs(diff) > 0.005);
 
   function select(txId: string) {
     setCurrent(txId);
@@ -79,7 +89,7 @@ function Pairing({ id }: { id: string }) {
   }
   async function pair() {
     if (!cand || !chosen.length) return;
-    if (Math.abs(diff) > 0.005 && !reason) return setMsg(t("bankPairing.reasonRequired"));
+    if (needsReason && !reason) return setMsg(t("bankPairing.reasonRequired"));
     const r = await fetch(`/api/events/${id}/bank/pairing/${cand.tx.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billIds: chosen.map((b) => b.id), differenceReason: reason || null }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return setMsg(t(`bankPairing.error.${d.error ?? "failed"}`));
@@ -123,10 +133,14 @@ function Pairing({ id }: { id: string }) {
       <span className="flex-1">
         <a href={`/events/${b.eventId}/bills/${b.id}`} target="_blank" rel="noreferrer" className="font-medium text-ink hover:underline">{b.merchantName ?? b.originalFilename}</a>
         {b.documentMissing && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("bankPairing.noDocBadge")}</span>}
-        <span className="block text-[12px] text-ink-secondary">{dmy(b.billDate)}{b.currency !== "CZK" && b.totalAmount !== null && ` · ${kc(b.totalAmount)} ${b.currency}`}{b.notes && ` · ${b.notes.slice(0, 60)}`}{b.eventName && ` · ${b.eventName}`}</span>
+        <span className="block text-[12px] text-ink-secondary">{dmy(b.billDate)}{b.notes && ` · ${b.notes.slice(0, 60)}`}{b.eventName && ` · ${b.eventName}`}</span>
         {extra}
       </span>
-      <span className="tabular-nums">{kc(b.remaining)}</span>
+      {/* The bill in its currency; a foreign one also in Kč (ČNB). */}
+      <span className="text-right tabular-nums">
+        {b.currency !== "CZK" ? money(billValueIn(b, b.currency, frac(b)), b.currency) : money(b.remaining, "CZK")}
+        {b.currency !== "CZK" && <span className="block text-[11px] text-ink-secondary">{money(b.remaining, "CZK")} ČNB</span>}
+      </span>
     </label>
   );
 
@@ -143,7 +157,7 @@ function Pairing({ id }: { id: string }) {
                 <span className="text-ink">{x.counterpartyName ?? x.message ?? "—"}</span>
                 <span className="block text-[12px] text-ink-secondary">{dmy(x.bookingDate)}{x.reimbursementOf && ` · ${t("bankTx.reimbursement", { name: x.reimbursementOf })}`}</span>
               </span>
-              <span className="tabular-nums">{kc(x.amount)}</span>
+              <span className="tabular-nums">{money(x.amount, x.currency)}</span>
             </button>
           ))}
         </div>
@@ -154,15 +168,15 @@ function Pairing({ id }: { id: string }) {
           ) : (
             <>
               <div className="mb-3 rounded-lg border border-mist bg-paper-2 p-3 text-[13px]">
-                <div className="flex justify-between text-[15px] font-semibold text-ink"><span>{cand.tx.counterpartyName ?? "—"}</span><span className="tabular-nums">{kc(cand.tx.amount)}</span></div>
-                <p className="text-ink-secondary">{dmy(cand.tx.bookingDate)} · {[cand.tx.bankType, cand.tx.message, cand.tx.vs && `VS ${cand.tx.vs}`].filter(Boolean).join(" · ")}{cand.tx.originalCurrency && cand.tx.originalAmount !== null && ` · ${kc(cand.tx.originalAmount)} ${cand.tx.originalCurrency}`}</p>
+                <div className="flex justify-between text-[15px] font-semibold text-ink"><span>{cand.tx.counterpartyName ?? "—"}</span><span className="tabular-nums">{money(cand.tx.amount, cand.tx.currency)}</span></div>
+                <p className="text-ink-secondary">{dmy(cand.tx.bookingDate)} · {[cand.tx.bankType, cand.tx.message, cand.tx.vs && `VS ${cand.tx.vs}`].filter(Boolean).join(" · ")}{cand.tx.originalCurrency && cand.tx.originalAmount !== null && ` · ${t("bankPairing.original", { amount: money(cand.tx.originalAmount, cand.tx.originalCurrency) })}`}</p>
                 {cand.reimbursement && <p className="mt-1 text-pine">{t("bankPairing.reimbursementHint", { name: cand.reimbursement.author.canonicalName })}</p>}
                 {cand.confirmed.length > 0 && (
                   <p className="mt-1">
                     {t("bankPairing.alreadyPaired")}{" "}
                     {cand.confirmed.map((m) => (
                       <span key={m.id} className="mr-1 inline-flex items-center gap-1 rounded-full bg-pine-bg px-2 py-0.5 text-[11.5px] text-pine">
-                        {m.bill.merchantName ?? m.bill.originalFilename} · {kc(m.amountCzk)}
+                        {m.bill.merchantName ?? m.bill.originalFilename} · {money(m.amountTx, cur)}{cur !== "CZK" && ` (${money(m.amountCzk, "CZK")})`}
                         <button type="button" onClick={() => unpair(m)} aria-label={t("bankTx.unpair")}>✕</button>
                       </span>
                     ))}
@@ -186,10 +200,15 @@ function Pairing({ id }: { id: string }) {
               </div>
 
               <div className="sticky bottom-0 mt-3 flex flex-wrap items-center gap-2 border-t border-mist bg-paper py-2 text-[13px]">
-                <span className={Math.abs(diff) < 0.005 && chosen.length ? "text-pine" : "text-ink"}>
-                  {t("bankPairing.bar", { chosen: kc(sum), payment: kc(payment), diff: kc(diff) })} {Math.abs(diff) < 0.005 && chosen.length > 0 && "✓"}
+                <span className={!needsReason && chosen.length ? "text-pine" : "text-ink"}>
+                  {originalMatch
+                    ? t("bankPairing.barOriginal", { original: money(cand.tx.originalAmount, cand.tx.originalCurrency!), payment: money(payment, cur) })
+                    : sum === null
+                      ? t("bankPairing.barUnknown", { chosen: money(sumCzk, "CZK"), payment: money(payment, cur) })
+                      : t("bankPairing.bar", { chosen: money(sum, cur), payment: money(payment, cur), diff: money(diff, cur) })}{" "}
+                  {!needsReason && chosen.length > 0 && "✓"}
                 </span>
-                {Math.abs(diff) > 0.005 && chosen.length > 0 && (
+                {needsReason && (
                   <select value={reason} onChange={(e) => setReason(e.target.value)} className="rounded-lg border border-mist bg-paper-2 px-2 py-1">
                     <option value="">{t("bankPairing.reason")}</option>
                     {["fx", "fee", "rounding", "partial"].map((r) => <option key={r} value={r}>{t(`bankDiff.${r}`)}</option>)}
