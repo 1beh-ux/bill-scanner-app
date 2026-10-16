@@ -12,6 +12,7 @@ async function main() {
     { key: "billFilter.selectAllShown", cs: "(Vybrat vše nalezené)", en: "(Select all found)" },
     { key: "billFilter.noValues", cs: "Nic nenalezeno.", en: "Nothing found." },
     { key: "billFilter.clear", cs: "Zrušit filtr sloupce", en: "Clear column filter" },
+    { key: "billsPage.sortHint", cs: "Seřadit (klik: A→Z / od nejmenšího, znovu: obráceně, potřetí: zrušit)", en: "Sort (click: A→Z / smallest first, again: reverse, third time: off)" },
     { key: "billsPage.bulkReopen", cs: "Znovu otevřít", en: "Reopen" },
     { key: "billsPage.confirmBulkReopen", cs: "Znovu otevřít {count} vybraných účtenek? Schválené se vrátí do stavu Nové a půjdou upravit; ostatní se přeskočí.", en: "Reopen {count} selected bills? Approved ones go back to New and can be edited; others are skipped." },
     { key: "billsPage.bulkErrNotApproved", cs: "{filename}: není schválená", en: "{filename}: not approved" },

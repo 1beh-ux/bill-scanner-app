@@ -11,6 +11,7 @@ import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkE
 import DriveBillsSync from "@/components/bills/DriveBillsSync";
 import { needsPayout } from "@/lib/payout";
 import { readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav";
+import { nextSort, sortBy, type SortDir, type SortValue } from "@/lib/bill-sort";
 import { PAYMENT_STATES, type PaymentState } from "@/lib/bank/payment-states";
 
 type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
@@ -108,6 +109,7 @@ export default function EventBillsPage({
   const [paidFilter, setPaidFilter] = useState<null | "paid" | "unpaid">(null);
   // Banka: Platba state, or "missing" (no document); Přehled links here with ?payment=.
   const [paymentFilter, setPaymentFilter] = useState<string | null>(null);
+  const [sort, setSort] = useState<{ col: string; dir: SortDir } | null>(null);
   const [channelNote, setChannelNote] = useState("");
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -184,6 +186,7 @@ export default function EventBillsPage({
       setPaidFilter(f.paid);
       setSearchQuery(f.search);
       setPaymentFilter(f.payment ?? null);
+      setSort(f.sort ?? null);
       setColFilters(Object.fromEntries(Object.entries(f.columns).map(([k, v]) => [k, new Set(v)])));
       /* eslint-enable react-hooks/set-state-in-effect */
     }
@@ -194,8 +197,8 @@ export default function EventBillsPage({
   }, [id]);
   useEffect(() => {
     if (!filtersRestored.current) return;
-    saveListFilters(id, { status: statusFilter, paid: paidFilter, search: searchQuery, payment: paymentFilter, columns: Object.fromEntries(Object.entries(colFilters).map(([k, v]) => [k, [...v]])) });
-  }, [id, statusFilter, paidFilter, searchQuery, colFilters, paymentFilter]);
+    saveListFilters(id, { status: statusFilter, paid: paidFilter, search: searchQuery, payment: paymentFilter, sort, columns: Object.fromEntries(Object.entries(colFilters).map(([k, v]) => [k, [...v]])) });
+  }, [id, statusFilter, paidFilter, searchQuery, colFilters, paymentFilter, sort]);
 
   useEffect(() => {
     fetch(`/api/events?module=bills`)
@@ -280,7 +283,7 @@ export default function EventBillsPage({
     });
   const activeColFilters = Object.keys(colFilters).length;
 
-  const filteredBills = useMemo(() => {
+  const matchingBills = useMemo(() => {
     let byFilter = statusFilter ? bills.filter((b) => b.status === statusFilter) : bills;
     if (paidFilter === "paid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && b.paidToAuthor);
     if (paidFilter === "unpaid") byFilter = byFilter.filter((b) => needsPayout(b.payerAuthor) && !b.paidToAuthor);
@@ -318,6 +321,30 @@ export default function EventBillsPage({
     // cellValues only reads labels; t is stable enough for this list.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bills, statusFilter, paidFilter, searchQuery, colFilters, paymentFilter]);
+
+  // Sorting by a column title (src/lib/bill-sort.ts): numbers / dates by value, text A-Z in Czech.
+  const filteredBills = useMemo(() => {
+    if (!sort) return matchingBills;
+    const num = (v: string | null) => (v === null || v === "" ? null : Number(v));
+    const time = (v: string | null) => (v ? Date.parse(v) : null);
+    const key = (b: BillItem): SortValue => {
+      switch (sort.col as BillColumnKey) {
+        case "amount": return num(b.totalAmount);
+        case "amountCzk": return num(b.amountCzk);
+        case "billDate": return time(b.billDate);
+        case "createdAt": return time(b.createdAt);
+        case "exported": return time(b.exportedAt);
+        case "category": return b.categories.map((c) => c.eventCategory.name).join(", ");
+        default: {
+          const v = cellValues(sort.col as BillColumnKey, b)[0] ?? "";
+          return v === "—" ? null : v;
+        }
+      }
+    };
+    return sortBy(matchingBills, key, sort.dir);
+    // cellValues only reads labels
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchingBills, sort]);
 
   // The detail page walks the bills in exactly this order (previous / next / approve).
   useEffect(() => {
@@ -932,8 +959,11 @@ export default function EventBillsPage({
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
                 {columns.map((col) => (
-                  <th key={col} className="whitespace-nowrap p-2 text-[12px] font-medium text-ink-secondary">
-                    {t(BILL_COLUMNS.find((c) => c.key === col)!.labelKey)}
+                  <th key={col} className="whitespace-nowrap p-2 text-[12px] font-medium text-ink-secondary" aria-sort={sort?.col === col ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => setSort(nextSort(sort, col))} title={t("billsPage.sortHint")} className={"hover:text-ink " + (sort?.col === col ? "text-ink" : "")}>
+                      {t(BILL_COLUMNS.find((c) => c.key === col)!.labelKey)}
+                      {sort?.col === col && <span aria-hidden="true"> {sort.dir === "asc" ? "▲" : "▼"}</span>}
+                    </button>
                     <ColumnFilter values={filterValues(col)} selected={colFilters[col] ?? null} onChange={(next) => setColFilter(col, next)} t={t} />
                   </th>
                 ))}

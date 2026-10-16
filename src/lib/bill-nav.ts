@@ -2,7 +2,7 @@
 // bill and coming back, and the detail's previous / next / "save and next" / approve walk the bills
 // exactly as the list showed them (filters, search, order). Storage can fail (private mode): then the
 // list starts unfiltered and the detail falls back to the event's whole list.
-export type BillListFilters = { status: string | null; paid: "paid" | "unpaid" | null; search: string; columns: Record<string, string[]>; payment?: string | null };
+export type BillListFilters = { status: string | null; paid: "paid" | "unpaid" | null; search: string; columns: Record<string, string[]>; payment?: string | null; sort?: { col: string; dir: "asc" | "desc" } | null };
 
 const filtersKey = (eventId: string) => `bills-filters:${eventId}`;
 const orderKey = (eventId: string) => `bills-order:${eventId}`;
