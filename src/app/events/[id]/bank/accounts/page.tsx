@@ -6,6 +6,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import BankHeader, { syncErrorKey } from "@/components/bank/BankHeader";
 import ColumnMappingTable from "@/components/import/ColumnMappingTable";
 import { BANK_FIELDS } from "@/lib/bank/fields";
+import { driveErrorText } from "@/lib/drive-error-messages";
 
 // Banka -> Účty a import: the event's accounts (window, source, Fio token, sync) and the import
 // with preview (docs/bank-reconciliation.md A3).
@@ -200,7 +201,8 @@ function ImportPanel({ eventId, links, onDone, t, countsText }: { eventId: strin
     }).catch(() => null);
     setBusy(false);
     const body = r ? await r.json().catch(() => ({})) : {};
-    if (!r?.ok) return setError(t(`bankImport.error.${body.error ?? "failed"}`));
+    // A Google Sheet problem: the app's usual Drive message (sharing, identity...).
+    if (!r?.ok) return setError(source === "sheet" && body.error && !["bad_request", "empty", "spreadsheet_id_required", "event_closed_locked"].includes(body.error) ? driveErrorText(t, body.error, body) : t(`bankImport.error.${body.error ?? "failed"}`));
     if (commit) {
       const batch = await fetch(`/api/events/${eventId}/bank/batches/${body.batchId}`).then((x) => x.json());
       setResult({ counts: batch.counts, rows: batch.rows });
