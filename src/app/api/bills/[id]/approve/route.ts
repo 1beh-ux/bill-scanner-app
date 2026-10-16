@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { approveBill } from "@/lib/bill-actions";
+import { approveBill, reopenBill } from "@/lib/bill-actions";
 
 export async function POST(
   req: NextRequest,
@@ -58,28 +58,8 @@ export async function DELETE(
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
 
-  if (bill.event.status === "closed") {
-    return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
-  }
-
-  const updated = await prisma.$transaction(async (tx) => {
-    const result = await tx.bill.update({
-      where: { id },
-      data: {
-        status: "new",
-        approvedAt: null,
-        approvedByUserId: null,
-      },
-    });
-    await tx.billAuditLog.create({
-      data: {
-        billId: id,
-        userId: user.id,
-        actionType: "reopen",
-      },
-    });
-    return result;
-  });
-
-  return NextResponse.json(updated);
+  const r = await reopenBill(id, user.id);
+  // Already open: nothing to do (same as before -- the call just returns the bill).
+  if (!r.ok && r.error !== "not_approved") return NextResponse.json({ error: r.error }, { status: r.error === "not_found" ? 404 : 409 });
+  return NextResponse.json(await prisma.bill.findUnique({ where: { id } }));
 }

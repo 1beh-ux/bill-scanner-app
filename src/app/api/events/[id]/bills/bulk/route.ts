@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { approveBill, deleteBill } from "@/lib/bill-actions";
+import { approveBill, deleteBill, reopenBill } from "@/lib/bill-actions";
 import { moveBillToEvent } from "@/lib/bill-move";
 import { needsPayout } from "@/lib/payout";
 
@@ -32,7 +32,7 @@ export async function POST(
   const action: string = body.action;
   const billIds: string[] = body.billIds || [];
 
-  if (!["approve", "delete", "mark_paid", "mark_unpaid", "move", "channel_cash", "channel_other", "channel_clear"].includes(action)) {
+  if (!["approve", "delete", "mark_paid", "mark_unpaid", "move", "channel_cash", "channel_other", "channel_clear", "reopen"].includes(action)) {
     return NextResponse.json({ error: "unknown_action" }, { status: 400 });
   }
   if (billIds.length === 0) {
@@ -131,6 +131,13 @@ if (action === "move") {
           error: result.error || "unknown",
         });
       }
+      continue;
+    }
+
+    if (action === "reopen") {
+      const r = await reopenBill(bill.id, user.id);
+      if (r.ok) succeeded.push(bill.id);
+      else failed.push({ billId: bill.id, filename: nameById.get(bill.id) || bill.id, error: r.error });
       continue;
     }
 

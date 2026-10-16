@@ -104,6 +104,19 @@ export async function approveBill(
   return { ok: true, billId, displayFilename };
 }
 
+/** Approved -> back to "new" (Znovu otevřít), one bill or many (bulk). */
+export async function reopenBill(billId: string, userId: string): Promise<{ ok: true; billId: string } | { ok: false; billId: string; error: string }> {
+  const bill = await prisma.bill.findUnique({ where: { id: billId }, include: { event: { select: { status: true } } } });
+  if (!bill) return { ok: false, billId, error: "not_found" };
+  if (bill.event.status === "closed") return { ok: false, billId, error: "event_closed_locked" };
+  if (bill.status !== "approved") return { ok: false, billId, error: "not_approved" };
+  await prisma.$transaction([
+    prisma.bill.update({ where: { id: billId }, data: { status: "new", approvedAt: null, approvedByUserId: null } }),
+    prisma.billAuditLog.create({ data: { billId, userId, actionType: "reopen" } }),
+  ]);
+  return { ok: true, billId };
+}
+
 export async function deleteBill(
   billId: string
 ): Promise<{ ok: boolean; billId: string; error?: string }> {

@@ -518,7 +518,7 @@ export default function EventBillsPage({
     }
   }
 
-  async function runBulk(action: "approve" | "delete" | "mark_paid" | "mark_unpaid" | "channel_cash" | "channel_other" | "channel_clear") {
+  async function runBulk(action: "approve" | "reopen" | "delete" | "mark_paid" | "mark_unpaid" | "channel_cash" | "channel_other" | "channel_clear") {
     if (selected.size === 0) return;
 
     // Every bulk action asks first; the text says what happens and, where it
@@ -526,6 +526,7 @@ export default function EventBillsPage({
     const confirmKey = {
       delete: "billsPage.confirmBulkDelete",
       approve: "billsPage.confirmBulkApprove",
+      reopen: "billsPage.confirmBulkReopen",
       mark_paid: "billsPage.confirmBulkMarkPaid",
       mark_unpaid: "billsPage.confirmBulkMarkUnpaid",
       channel_cash: "billsPage.confirmBulkChannelCash",
@@ -661,6 +662,9 @@ export default function EventBillsPage({
     }
     if (f.error === "already_approved") {
       return t("billsPage.bulkErrApproved", { filename: f.filename });
+    }
+    if (f.error === "not_approved") {
+      return t("billsPage.bulkErrNotApproved", { filename: f.filename });
     }
     if (f.error === "no_payout") {
       return t("billsPage.bulkErrNoPayout", { filename: f.filename });
@@ -813,6 +817,9 @@ export default function EventBillsPage({
           </span>
           <button onClick={() => runBulk("approve")} disabled={bulkRunning} className={btnPrimary}>
             {t("billsPage.bulkApprove")}
+          </button>
+          <button onClick={() => runBulk("reopen")} disabled={bulkRunning} className={btnSecondary}>
+            {t("billsPage.bulkReopen")}
           </button>
           <button onClick={runBulkAi} disabled={hasActiveAiRun} className={btnPrimary}>
             {hasActiveAiRun ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
