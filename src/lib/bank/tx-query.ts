@@ -70,11 +70,11 @@ export async function totals(where: Prisma.BankTransactionWhereInput) {
     prisma.bankTransaction.aggregate({ where: { AND: [where, { amount: { lt: 0 } }] }, _sum: { amount: true }, _count: true }),
   ]);
   const income = Number(inc._sum.amount ?? 0), expense = Number(out._sum.amount ?? 0);
-  return { income, expense, saldo: Math.round((income + expense) * 100) / 100, count: inc._count + out._count };
+  return { income, expense, saldo: Math.round((income + expense) * 100) / 100, count: inc._count + out._count, incomeCount: inc._count, expenseCount: out._count };
 }
 
 export type GroupBy = "classification" | "pair" | "counterparty" | "person" | "month";
-export type Group = { key: string | null; income: number; expense: number; count: number };
+export type Group = { key: string | null; income: number; expense: number; count: number; incomeCount?: number; expenseCount?: number };
 
 /** Subtotals of the filtered rows (they add up to totals()). */
 export async function groups(where: Prisma.BankTransactionWhereInput, by: GroupBy): Promise<Group[]> {

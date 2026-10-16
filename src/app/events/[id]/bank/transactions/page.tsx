@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import ColumnPicker from "@/components/ColumnPicker";
@@ -31,15 +31,25 @@ const KEYS: Record<string, string> = { s: "private", p: "cash", t: "transfer", f
 const input = "rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink";
 const btn = "rounded-lg border border-mist bg-paper-2 px-2.5 py-1 text-[13px] text-ink hover:bg-mist disabled:opacity-50";
 
-export default function BankTransactionsPage({ params }: { params: Promise<{ id: string }> }) {
+export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  return (
+    <Suspense>
+      <BankTransactions id={id} />
+    </Suspense>
+  );
+}
+
+function BankTransactions({ id }: { id: string }) {
   const { t } = useTranslations();
+  // Přehled links here with ?tab= and filters (cls, pair, person, dir).
+  const sp = useSearchParams();
   const confirm = useConfirm();
   const router = useRouter();
   const { prefs, save } = useUiPrefs();
-  const [tab, setTab] = useState("todo");
-  const [tier, setTier] = useState<string | null>(null);
-  const [f, setF] = useState<Record<string, string>>({});
+  const [tab, setTab] = useState(TABS.includes(sp.get("tab") ?? "") ? sp.get("tab")! : "todo");
+  const [tier, setTier] = useState<string | null>(sp.get("tier"));
+  const [f, setF] = useState<Record<string, string>>(Object.fromEntries(["cls", "pair", "person", "dir"].flatMap((k) => (sp.get(k) ? [[k, sp.get(k)!]] : []))));
   const [group, setGroup] = useState("");
   const [data, setData] = useState<Data | null>(null);
   const [denied, setDenied] = useState(false);
