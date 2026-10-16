@@ -38,3 +38,14 @@ assert.equal(suggestPairs([tx("t1", "2026-07-03", 99)], [bill("b1", "2026-07-03"
 assert.ok(sameName("NOVAKOVA JANA", "Jana Nováková"));
 assert.ok(!sameName("NOVAK JAN", "Jana Nováková"));
 console.log("check-bank-suggest: all passed");
+
+// Payment state (src/lib/bank/payment-state.ts)
+import { paymentState } from "../src/lib/bank/payment-state";
+const ps = (o: Partial<Parameters<typeof paymentState>[0]>) => paymentState({ amountCzk: 100, paymentChannel: null, confirmedSum: 0, openSuggestions: 0, ...o });
+assert.deepEqual(ps({ confirmedSum: 100 }), { state: "bank", conflict: false });
+assert.deepEqual(ps({ confirmedSum: 40 }), { state: "partial", conflict: false });
+assert.deepEqual(ps({ paymentChannel: "cash" }), { state: "cash", conflict: false });
+assert.deepEqual(ps({ confirmedSum: 100, paymentChannel: "cash" }), { state: "bank", conflict: true }, "a confirmed pair wins, with a warning");
+assert.deepEqual(ps({ openSuggestions: 2 }), { state: "suggested", conflict: false }, "a suggestion is only Návrh");
+assert.deepEqual(ps({}), { state: "unpaired", conflict: false });
+console.log("check-bank-suggest (payment state): all passed");

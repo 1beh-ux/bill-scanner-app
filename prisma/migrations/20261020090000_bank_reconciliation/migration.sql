@@ -1,4 +1,4 @@
--- Banka (bank reconciliation): module key, account sources, transactions, matches, import batches, bill payment fields; bill file optional. Additive only.
+-- Banka (bank reconciliation): module key, account sources, transactions, matches, import batches, bill payment fields, audit actions; bill file optional. Additive only.
 -- CreateEnum
 CREATE TYPE "BankSourceType" AS ENUM ('fio_api', 'sheet', 'file');
 
@@ -22,6 +22,21 @@ CREATE TYPE "BankImportSource" AS ENUM ('fio', 'sheet', 'csv', 'xlsx', 'paste', 
 
 -- CreateEnum
 CREATE TYPE "BillPaymentChannel" AS ENUM ('cash', 'other_account');
+
+-- AlterEnum
+-- This migration adds more than one value to an enum.
+-- With PostgreSQL versions 11 and earlier, this is not possible
+-- in a single migration. This can be worked around by creating
+-- multiple migrations, each migration adding only one value to
+-- the enum.
+
+
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_pair';
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_unpair';
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_reject';
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_create';
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_replace';
+ALTER TYPE "AuditActionType" ADD VALUE 'bank_channel';
 
 -- AlterEnum
 ALTER TYPE "ModuleKey" ADD VALUE 'bank';

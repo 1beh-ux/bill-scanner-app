@@ -73,6 +73,13 @@ enum AuditActionType {
   edit
   approve
   reopen
+  // Banka: pairing with a bank transaction (docs/bank-reconciliation.md).
+  bank_pair
+  bank_unpair
+  bank_reject
+  bank_create
+  bank_replace
+  bank_channel
 }
 
 enum ModuleKey {
