@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { runDriveExport, type ExportSummary } from "@/lib/drive-export-client";
 import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
 
 // Bill list: "Synchronizovat s Diskem" -- uploads approved bills not yet on Drive and rewrites the
@@ -9,7 +10,7 @@ import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages"
 // what's still missing (approved, not uploaded) and what never goes there (not approved).
 type T = (key: string, vars?: Record<string, string>) => string;
 type Bill = { status: string; exportedAt: string | null };
-type Summary = { totalApproved: number; newlyExported: number; alreadyExported: number; exportFailures: { filename: string; error: string }[]; manifestSpreadsheetId: string };
+type Summary = ExportSummary;
 
 const btn = "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-paper disabled:opacity-50";
 
@@ -17,6 +18,7 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<{ code: string; info: DriveErrorInfo } | null>(null);
   const [result, setResult] = useState<Summary | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const approved = bills.filter((b) => b.status === "approved");
   const onDrive = approved.filter((b) => b.exportedAt).length;
@@ -29,11 +31,11 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
     setRunning(true);
     setError(null);
     setResult(null);
-    const res = await fetch(`/api/events/${eventId}/drive-export`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ recreateManifest }) }).catch(() => null);
-    const data = await res?.json().catch(() => ({}));
+    const out = await runDriveExport(eventId, recreateManifest, (done, remaining) => setProgress(t("billDriveSync.progress", { done: String(done), remaining: String(remaining) })));
     setRunning(false);
-    if (!res?.ok) return setError({ code: data?.error ?? "drive_unknown", info: data ?? {} });
-    setResult(data);
+    setProgress(null);
+    if (!out.ok) return setError({ code: out.data.error ?? "drive_unknown", info: out.data });
+    setResult(out.data);
     onSynced();
   }
 
@@ -50,7 +52,7 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
     <div className="mb-4 flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-3 text-[13px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <button type="button" onClick={() => sync()} disabled={running || approved.length === 0} className={btn}>
-          {running ? t("billDriveSync.running") : t("billDriveSync.button")}
+          {running ? progress ?? t("billDriveSync.running") : t("billDriveSync.button")}
         </button>
         <span className="text-ink">{t("billDriveSync.status", { onDrive: String(onDrive), approved: String(approved.length) })}</span>
         {last && <span className="text-ink-secondary">{t("billDriveSync.last", { when: new Date(last).toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" }) })}</span>}

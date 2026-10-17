@@ -6,7 +6,7 @@ import {
   uploadFileToFolder,
   createManifestSheet,
   writeManifestValues,
-  findFileInFolder,
+  listFilesInSubfolder,
   writeSheetTab,
 } from "@/lib/drive";
 import { computeSettlement } from "@/lib/settlement";
@@ -30,25 +30,14 @@ export interface ExportSummary {
   alreadyExported: number;
   exportFailures: { filename: string; error: string }[];
   manifestSpreadsheetId: string;
+  // Stopped to stay well inside the request limit: call again for the rest (the screens do).
+  partial: boolean;
+  remaining: number;
 }
 
-function mimeTypeForExtension(ext: string): string {
-  switch (ext.toLowerCase()) {
-    case ".pdf":
-      return "application/pdf";
-    case ".jpg":
-    case ".jpeg":
-      return "image/jpeg";
-    case ".png":
-      return "image/png";
-    case ".heic":
-      return "image/heic";
-    case ".webp":
-      return "image/webp";
-    default:
-      return "application/octet-stream";
-  }
-}
+// A run uploads for at most this long, then reports `partial` (Cloud Run cuts a request at 600 s,
+// and a cut-off run kept uploading while the user retried: two runs, every file twice -- 2026-10-17).
+const UPLOAD_BUDGET_MS = 240_000;
 
 /**
  * Wraps a raster image into a single-page PDF, so every export is a PDF
@@ -99,6 +88,22 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   if (!event) throw new DriveExportError("event_not_found");
   if (!event.driveExportFolderId) throw new DriveExportError("no_export_folder");
 
+  // One export per event at a time; the claim expires by itself if a run dies.
+  const claimed = await prisma.$queryRaw<{ id: string }[]>`
+    UPDATE events SET drive_export_locked_until = now() + interval '8 minutes'
+    WHERE id = ${eventId} AND (drive_export_locked_until IS NULL OR drive_export_locked_until < now())
+    RETURNING id`;
+  if (!claimed.length) throw new DriveExportError("export_running");
+  try {
+    return await runExport(eventId, event as typeof event & { driveExportFolderId: string }, opts);
+  } finally {
+    await prisma.event.update({ where: { id: eventId }, data: { driveExportLockedUntil: null } }).catch(() => {});
+  }
+}
+
+async function runExport(eventId: string, event: NonNullable<Awaited<ReturnType<typeof prisma.event.findUnique>>> & { driveExportFolderId: string }, opts: { recreateManifest?: boolean }): Promise<ExportSummary> {
+  const started = Date.now();
+
   const bills = await prisma.bill.findMany({
     where: { eventId, status: "approved" },
     orderBy: { billDate: "asc" },
@@ -136,13 +141,15 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   let alreadyExported = 0;
   const exportFailures: { filename: string; error: string }[] = [];
 
-  // Every run checks Drive itself: an exported file that's no longer in the export folder
-  // (deleted / trashed there) is uploaded again under its same name. The lookup also gives the
-  // manifest's links below.
-  const findOnDrive = (name: string) => findFileInFolder(eventId, event.driveExportFolderId!, name, mimeTypeForExtension(path.extname(name)));
-  const onDrive = new Map(
-    await Promise.all(bills.filter((b) => b.exportFilename).map(async (b) => [b.id, await findOnDrive(b.exportFilename!)] as const))
-  );
+  // Every run checks Drive itself -- ONE listing of the export folder (not a lookup per file: those
+  // ran all at once, and a lookup that came back empty under load meant an upload twice). A file
+  // that is no longer there (deleted / trashed) is uploaded again under its same name. The listing
+  // also gives the manifest's links below.
+  const listed = await listFilesInSubfolder(eventId, event.driveExportFolderId, "export");
+  const byName = new Map<string, { id: string; name: string; mimeType: string }>();
+  for (const f of listed) if (!byName.has(f.name)) byName.set(f.name, { id: f.id, name: f.name, mimeType: f.mimeType });
+  const onDrive = new Map(bills.filter((b) => b.exportFilename).map((b) => [b.id, byName.get(b.exportFilename!) ?? null] as const));
+  let remaining = 0;
 
   for (const bill of bills) {
     if (bill.exportFilename && bill.exportedAt && onDrive.get(bill.id)) {
@@ -152,6 +159,11 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
 
     // No document (created from a bank payment): nothing to upload; the manifest says "chybí doklad".
     if (!bill.gcsObjectPath) continue;
+    // Out of time for this call: the rest goes in the next one.
+    if (Date.now() - started > UPLOAD_BUDGET_MS) {
+      remaining++;
+      continue;
+    }
 
     // displayFilename is guaranteed set here — only approved bills reach this
     // query, and approval is what sets displayFilename in the first place.
@@ -240,5 +252,5 @@ export async function exportEventBills(eventId: string, opts: { recreateManifest
   });
   await writeSheetTab(eventId, manifestSpreadsheetId, SUMMARY_SHEET_TITLE, buildSummaryRows(event.name, settlement, deposits, official ? `${official.accountNumber}/${official.bankCode} (${official.name})` : null));
 
-  return { totalApproved: bills.length, newlyExported, alreadyExported, exportFailures, manifestSpreadsheetId };
+  return { totalApproved: bills.length, newlyExported, alreadyExported, exportFailures, manifestSpreadsheetId, partial: remaining > 0, remaining };
 }

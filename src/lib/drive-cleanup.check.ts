@@ -16,7 +16,7 @@ assert.equal(matchVia(file, bill({ contentHash: sha(`${pdf}:page:3`) }), pageOf)
 assert.equal(matchVia(file, bill({ exportFilename: "a.pdf" }), pageOf), "export_name");
 assert.equal(matchVia(file, bill({}), pageOf), null);
 
-const row = (id: string, modified: string, via: "drive_id" | "content" | null): CleanupRow => ({
+const row = (id: string, modified: string, via: "drive_id" | "content" | "export_name" | null): CleanupRow => ({
   fileId: id, name: id, folderId: "D", folderPath: "D", size: 1, modifiedTime: modified, link: null, mimeType: "application/pdf",
   matches: via ? [{ billId: "b", eventId: "e", eventName: "E", accessible: true, via }] : [], duplicateGroup: null, keeper: false, billInSeveralEvents: false, proposed: via ? "move" : "none",
 });
@@ -30,4 +30,18 @@ assert.equal(by("alone").duplicateGroup, null, "a single file is no duplicate");
 const two = [row("newer", "2026-03-01", null), row("older", "2026-02-01", null)];
 markDuplicates(two, () => "h");
 assert.ok(two.find((r) => r.fileId === "older")!.keeper, "no bill: the oldest copy is kept");
+
+// Same name in one folder (bytes differ): the oldest stays, a copy a bill uses by content too.
+const named = [
+  { ...row("n-new", "2026-10-17", "export_name"), name: "001-00.pdf", folderId: "F" },
+  { ...row("n-old", "2026-10-10", "export_name"), name: "001-00.pdf", folderId: "F" },
+  { ...row("n-content", "2026-10-18", "content"), name: "001-00.pdf", folderId: "F" },
+  { ...row("n-other-folder", "2026-10-19", null), name: "001-00.pdf", folderId: "G" },
+];
+markDuplicates(named, (r) => r.fileId);
+const n = (id: string) => named.find((r) => r.fileId === id)!;
+assert.ok(n("n-old").keeper && n("n-old").proposed !== "trash");
+assert.equal(n("n-new").proposed, "trash");
+assert.ok(n("n-content").keeper && n("n-content").proposed === "move", "a file a bill uses by content is never binned for its name");
+assert.equal(n("n-other-folder").duplicateGroup, null, "another folder is no duplicate");
 console.log("ok");

@@ -4,6 +4,9 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { exportEventBills, DriveExportError } from "@/lib/drive-export";
 import { DriveError, httpStatusForDriveError } from "@/lib/drive-errors";
 
+// Each call uploads for at most ~4 min (drive-export.ts), plus the manifest.
+export const maxDuration = 600;
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -27,7 +30,7 @@ export async function POST(
       return NextResponse.json({ error: err.code, ...err.params }, { status: httpStatusForDriveError(err.code) });
     }
     if (err instanceof DriveExportError) {
-      const status = err.code === "event_not_found" ? 404 : 400;
+      const status = err.code === "event_not_found" ? 404 : err.code === "export_running" ? 409 : 400;
       return NextResponse.json({ error: err.code }, { status });
     }
     throw err;

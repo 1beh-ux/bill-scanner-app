@@ -49,24 +49,37 @@ export function matchVia(
 
 /**
  * Duplicates among scanned files (same SHA-256): the copy a bill uses is kept (imported-from-Drive
- * first, then any match), else the oldest; the others are proposed for the bin. Mutates rows. Pure.
+ * first, then any match), else the oldest; the others are proposed for the bin.
+ * Then the same NAME twice in one folder: export runs that overlapped uploaded a bill's file twice,
+ * and each upload of a converted photo has different bytes (2026-10-17). There the oldest is kept,
+ * and a copy a bill uses by content is never proposed for the bin (different files can share a
+ * name). Mutates rows. Pure.
  */
 export function markDuplicates(rows: CleanupRow[], hashOf: (r: CleanupRow) => string | undefined) {
-  const byHash = new Map<string, CleanupRow[]>();
-  for (const r of rows) {
-    const h = hashOf(r);
-    if (h) byHash.set(h, [...(byHash.get(h) ?? []), r]);
-  }
+  const group = (keyOf: (r: CleanupRow) => string | undefined) => {
+    const m = new Map<string, CleanupRow[]>();
+    for (const r of rows) {
+      const k = keyOf(r);
+      if (k) m.set(k, [...(m.get(k) ?? []), r]);
+    }
+    return [...m].filter(([, g]) => g.length > 1);
+  };
   const rank = (r: CleanupRow) => (r.matches.some((m) => m.via === "drive_id") ? 0 : r.matches.length ? 1 : 2);
-  for (const [h, group] of byHash) {
-    if (group.length < 2) continue;
-    [...group]
-      .sort((a, b) => rank(a) - rank(b) || (a.modifiedTime ?? "").localeCompare(b.modifiedTime ?? ""))
-      .forEach((r, i) => {
-        r.duplicateGroup = h.slice(0, 12);
-        r.keeper = i === 0;
-        if (i > 0) r.proposed = "trash";
-      });
+  const oldest = (a: CleanupRow, b: CleanupRow) => (a.modifiedTime ?? "").localeCompare(b.modifiedTime ?? "");
+  for (const [h, g] of group(hashOf)) {
+    [...g].sort((a, b) => rank(a) - rank(b) || oldest(a, b)).forEach((r, i) => {
+      r.duplicateGroup = h.slice(0, 12);
+      r.keeper = i === 0;
+      if (i > 0) r.proposed = "trash";
+    });
+  }
+  const usedByContent = (r: CleanupRow) => r.matches.some((m) => m.via !== "export_name");
+  for (const [k, g] of group((r) => (r.duplicateGroup ? undefined : `${r.folderId}/${r.name}`))) {
+    [...g].sort(oldest).forEach((r, i) => {
+      r.duplicateGroup = "name:" + crypto.createHash("sha256").update(k).digest("hex").slice(0, 7);
+      r.keeper = i === 0 || usedByContent(r);
+      if (!r.keeper) r.proposed = "trash";
+    });
   }
 }
 const MAX_PAGES = 40;

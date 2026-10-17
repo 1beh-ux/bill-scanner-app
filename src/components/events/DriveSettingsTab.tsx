@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { parseFolderId } from "@/lib/drive-errors";
+import { runDriveExport, type ExportSummary } from "@/lib/drive-export-client";
 import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
 
 type Identity = {
@@ -23,14 +24,6 @@ type Label = "ingest" | "export" | "participants" | "processed";
 type FolderResult =
   | { ok: true; folderId: string; name: string }
   | { ok: false; folderId: string | null; error: string; params: DriveErrorInfo };
-type ExportSummary = {
-  totalApproved: number;
-  newlyExported: number;
-  alreadyExported: number;
-  manifestSpreadsheetId: string;
-  exportFailures?: { filename: string; error: string }[];
-};
-
 type EventDrive = {
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
@@ -175,18 +168,13 @@ export default function DriveSettingsTab({
     setExporting(true);
     setExportError(null);
     setExportResult(null);
-    const res = await fetch(`/api/events/${eventId}/drive-export`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recreateManifest }),
-    });
+    const out = await runDriveExport(eventId, recreateManifest, () => {});
     setExporting(false);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setExportError({ code: data.error ?? "drive_unknown", info: data });
+    if (!out.ok) {
+      setExportError({ code: out.data.error ?? "drive_unknown", info: out.data });
       return;
     }
-    setExportResult(data);
+    setExportResult(out.data);
   }
 
   const identity = info?.identity;

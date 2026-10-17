@@ -66,6 +66,8 @@ const rows: Row[] = [
   r("driveCleanup.proposed.none", "ponechat / prověřit", "keep / review"),
   r("driveCleanup.done.move", "přesunuto ✓", "moved ✓"),
   r("driveCleanup.done.trash", "v koši ✓", "in the bin ✓"),
+  r("driveSettings.error.export_running", "Export na Disk pro tuto akci už běží (možná v jiném okně). Počkejte, až doběhne, a zkuste to znovu.", "A Drive export for this event is already running (maybe in another window). Wait for it to finish and try again."),
+  r("billDriveSync.progress", "Nahráno {done}, zbývá {remaining} – pokračuji…", "Uploaded {done}, {remaining} to go – continuing…"),
 ];
 
 async function main() {
