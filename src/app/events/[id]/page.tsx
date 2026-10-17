@@ -1,5 +1,6 @@
 "use client";
 
+import AppearanceEditor from "@/components/AppearanceEditor";
 import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -73,7 +74,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "health" | "mail" | "planning" | "bank";
+type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "bank";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -85,7 +86,7 @@ type AccessRow = {
   access: Record<ModuleKey, boolean>;
 };
 
-const MODULE_KEYS: ModuleKey[] = ["bills", "health", "mail", "planning", "bank"];
+const MODULE_KEYS: ModuleKey[] = ["bills", "participants", "health", "mail", "planning", "bank"];
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -129,6 +130,8 @@ export default function EventDetailPage({
     return OLD_TAB_MAP[requestedTab] ?? (SECTION_KEYS.includes(requestedTab as Tab) ? (requestedTab as Tab) : "akce");
   });
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
+  // The participants' settings (Účastníci, Pošta, Dokumenty tabs): the Účastníci module, or Zdraví / Pošta.
+  const roster = !!(moduleAccess.participants || moduleAccess.health || moduleAccess.mail);
 
   const [event, setEvent] = useState<EventDetail | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -196,10 +199,11 @@ export default function EventDetailPage({
 
   useEffect(() => {
     if (tab === "zdravi" && !moduleAccess.health) setTab("akce");
-    if (tab === "posta" && !moduleAccess.mail && !moduleAccess.health) setTab("akce");
-    if (tab === "dokumenty" && !moduleAccess.mail && !moduleAccess.health) setTab("akce");
+    if (tab === "posta" && !roster) setTab("akce");
+    if (tab === "dokumenty" && !roster) setTab("akce");
     if (tab === "planovani" && !moduleAccess.planning) setTab("akce");
-    if (tab === "ucastnici" && !moduleAccess.health && !moduleAccess.mail) setTab("akce");
+    if (tab === "ucastnici" && !roster) setTab("akce");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- roster derives from moduleAccess
   }, [tab, moduleAccess]);
 
   useEffect(() => {
@@ -328,11 +332,30 @@ export default function EventDetailPage({
 
   // help = Nápověda topic (src/content/help-topics.ts) linked from an unmet item.
   const checklist: { labelKey: string; done: boolean; section: Tab; help: string }[] = [
-    { labelKey: "eventDetail.checklistDrive", done: !!(event.driveIngestFolderId || event.driveExportFolderId), section: "pripojeni", help: "pripojeni" },
+    // Bills: where approved bills go (Synchronizovat s Diskem), and where imported files are filed.
+    { labelKey: "eventDetail.checklistDrive", done: !!event.driveExportFolderId, section: "pripojeni", help: "pripojeni" },
+    ...(event.driveIngestFolderId ? [{ labelKey: "eventDetail.checklistProcessedFolder", done: !!event.driveProcessedFolderId, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
     { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni", help: "pripojeni" },
     { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
+    { labelKey: "eventDetail.checklistBudgets", done: totalBudget > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
+    ...(roster ? [{ labelKey: "eventDetail.checklistParticipantsFolder", done: !!event.driveParticipantsFolderId, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
     ...(moduleAccess.mail
       ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "dokumenty" as Tab, help: "nastaveni-ucastnici-posta" }]
+      : []),
+    // Registration: what parents see and pay.
+    ...(event.publicRegistration || event.registrationConnected
+      ? [
+          { labelKey: "eventDetail.checklistPrice", done: event.memberPriceCzk !== null || event.nonMemberPriceCzk !== null, section: "platba" as Tab, help: "prijeti-registrace" },
+          { labelKey: "eventDetail.checklistRegistrationAccount", done: !!event.registrationBankAccountNumber, section: "platba" as Tab, help: "prijeti-registrace" },
+          { labelKey: "eventDetail.checklistLocation", done: !!event.location, section: "akce" as Tab, help: "prijeti-registrace" },
+        ]
+      : []),
+    ...(event.publicRegistration ? [{ labelKey: "eventDetail.checklistPublicSlug", done: !!event.publicSlug, section: "verejna" as Tab, help: "prijeti-registrace" }] : []),
+    ...(event.bankCheckEnabled
+      ? [
+          { labelKey: "eventDetail.checklistBankAccount", done: !!event.bankAccountId, section: "platba" as Tab, help: "prijeti-registrace" },
+          { labelKey: "eventDetail.checklistPaymentDoc", done: !!event.paymentDocTypeId, section: "platba" as Tab, help: "prijeti-registrace" },
+        ]
       : []),
     { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce", help: "prijeti-registrace" },
   ];
@@ -347,10 +370,10 @@ export default function EventDetailPage({
     ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
     { key: "pripojeni", labelKey: "eventSettings.tabPripojeni", help: "pripojeni" },
     { key: "uctenky", labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" },
-    ...(moduleAccess.health || moduleAccess.mail ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(roster ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth", help: "nastaveni-zdravi" }] : []),
-    ...(moduleAccess.mail || moduleAccess.health ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
-    ...(moduleAccess.mail || moduleAccess.health ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(roster ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
+    ...(roster ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
   ];
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
@@ -505,6 +528,7 @@ export default function EventDetailPage({
               ) : (
                 isAdmin && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
               )}
+              {isAdmin && <AppearanceEditor embedded />}
             </div>
           )}
 
@@ -526,7 +550,7 @@ export default function EventDetailPage({
               {/* One control for both modules now (Part 5: "not repeated elsewhere") -- the
                   gmail.modify scope warning only matters when Mail is enabled (it reads/
                   moves inbound mail; Health only ever sends), so purpose follows that. */}
-              {(moduleAccess.health || moduleAccess.mail) && (
+              {roster && (
                 <>
                   <SenderEmailField eventId={id} purpose={moduleAccess.mail ? "mail" : "health"} />
                   {mySignature && (
@@ -654,7 +678,7 @@ export default function EventDetailPage({
             </>
           )}
 
-          {tab === "ucastnici" && (moduleAccess.health || moduleAccess.mail) && (
+          {tab === "ucastnici" && roster && (
             <ParticipantFieldAdmin scope="event" eventId={id} label={t("eventSettings.tabParticipants")} />
           )}
 
@@ -679,7 +703,7 @@ export default function EventDetailPage({
           )}
 
           {/* Mail: every e-mail template of the event in one place (each still needs its module). */}
-          {tab === "posta" && (moduleAccess.mail || moduleAccess.health) && (
+          {tab === "posta" && roster && (
             <div className="flex flex-col gap-6">
               {/* Every e-mail type (src/lib/email-kinds.ts), same order as Poslat e-mail. */}
               {EMAIL_KINDS.filter((k) => !k.noTemplate).map((k) =>
@@ -716,7 +740,7 @@ export default function EventDetailPage({
           )}
 
           {/* Sledované dokumenty: the document types tracked per participant (+ their Google Doc templates). */}
-          {tab === "dokumenty" && (moduleAccess.mail || moduleAccess.health) && (
+          {tab === "dokumenty" && roster && (
             <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("eventSettings.tabDocuments")} />
           )}
 
@@ -1108,7 +1132,9 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
             ? "accessTab.moduleMail"
             : key === "bank"
               ? "accessTab.moduleBank"
-              : "accessTab.modulePlanning"
+              : key === "participants"
+                ? "accessTab.moduleParticipants"
+                : "accessTab.modulePlanning"
     );
 
   return (
@@ -1185,7 +1211,9 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
             ? "accessTab.moduleMail"
             : key === "bank"
               ? "accessTab.moduleBank"
-              : "accessTab.modulePlanning"
+              : key === "participants"
+                ? "accessTab.moduleParticipants"
+                : "accessTab.modulePlanning"
     );
 
   return (

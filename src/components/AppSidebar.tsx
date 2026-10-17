@@ -93,7 +93,8 @@ export default function AppSidebar() {
   const showHealth = moduleAccess.health && !hiddenModules.includes("health");
   const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
   const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
-  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showHealth || showMail, bank: (showHealth || showMail) && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank };
+  const showParticipants = (moduleAccess.participants && !hiddenModules.includes("participants")) || showHealth || showMail;
+  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank };
 
   const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin) && (!i.module || moduleShown[i.module])).map((i) => ({
     ...i,

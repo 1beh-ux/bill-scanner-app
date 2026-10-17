@@ -12,7 +12,7 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const event = await prisma.event.findUnique({ where: { id: eventId }, select: { senderEmail: true } });
@@ -31,7 +31,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const { senderEmail } = await req.json();

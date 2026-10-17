@@ -18,6 +18,10 @@ Uložené dokumenty pak najdete i na stránce Dokumenty (kdo má co doručeno):
 
 ![Stránka Dokumenty — přehled po dětech](/napoveda/images/posta-2.jpg)
 
+### Synchronizovat s Diskem
+
+Tlačítko **Synchronizovat s Diskem** nahoře nahraje dokumenty po dětech a tabulku se seznamem účastníků a stavem dokumentů do složky pro Účastníky a Poštu (Nastavení akce → Připojení na Google) a spustí i napojené tabulky. Pod tlačítkem uvidíte, co proběhlo.
+
 ### Hromadný status update
 
 Tlačítkem "Odeslání pošty" (na Seznamu účastníků) pošlete všem rodičům přehled, jaké dokumenty už máme a jaké chybí:

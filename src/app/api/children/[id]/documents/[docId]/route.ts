@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (isOrgAdmin(user)) {
     if (!(await childInOrg(user, id))) return notFound();
   } else {
-    const denied = eventId ? await requireAnyModuleAccess(user, eventId, ["health", "mail"]) : NextResponse.json({ error: "admin_only" }, { status: 403 });
+    const denied = eventId ? await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]) : NextResponse.json({ error: "admin_only" }, { status: 403 });
     if (denied) return denied;
     if (!(await prisma.participant.findFirst({ where: { eventId: eventId!, childId: id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

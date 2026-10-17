@@ -16,7 +16,7 @@ async function load(params: Promise<{ id: string; docId: string }>) {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   const { id: eventId, docId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return { error: denied };
   const doc = await prisma.participantDocument.findUnique({ where: { id: docId }, include: { participant: { select: { eventId: true } } } });
   if (!doc || doc.participant.eventId !== eventId) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };

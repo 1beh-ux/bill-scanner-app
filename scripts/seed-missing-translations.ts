@@ -288,7 +288,7 @@ export const ROWS: Row[] = [
 
   // -- Participants/settings/Health/Mail prompt, Part 5/10: event settings restructure ------
   { key: "eventSettings.tabAkce", cs: "Akce", en: "Event" },
-  { key: "eventSettings.tabPripojeni", cs: "Připojení", en: "Connections" },
+  { key: "eventSettings.tabPripojeni", cs: "Připojení na Google", en: "Google connections" },
   { key: "eventSettings.tabUctenky", cs: "Účtenky", en: "Bills" },
   { key: "eventDetail.registrationDeadlineLabel", cs: "Termín odpovědi rodičů (nepovinné)", en: "Parent response deadline (optional)" },
   { key: "eventDetail.checklistTitle", cs: "Akce je připravená: {done} / {total}", en: "Event readiness: {done} / {total}" },

@@ -27,7 +27,7 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const denied = await requireAnyModuleAccess(user, id, ["bills", "health", "mail", "planning", "bank"]);
+  const denied = await requireAnyModuleAccess(user, id, ["bills", "participants", "health", "mail", "planning", "bank"]);
   if (denied) return denied;
 
   const event = await prisma.event.findUnique({ where: { id } });
@@ -72,6 +72,7 @@ export async function PATCH(
     mailQuestionnaireUrl,
     qrSizeMm,
     billsListColumns,
+    billsListPills,
     registrationDeadline,
     kind,
     membershipYear,
@@ -231,6 +232,9 @@ export async function PATCH(
       // dropped, required columns kept; null resets to the default set.
       ...(billsListColumns !== undefined && {
         billsListColumns: billsListColumns === null ? Prisma.DbNull : normalizeBillColumns(billsListColumns),
+      }),
+      ...(billsListPills !== undefined && {
+        billsListPills: Array.isArray(billsListPills) ? billsListPills.filter((k: unknown): k is string => typeof k === "string").slice(0, 50) : Prisma.DbNull,
       }),
       ...(qrSizeMm !== undefined && { qrSizeMm: qrSizeMm === null ? null : Math.min(150, Math.max(10, Math.round(Number(qrSizeMm)) || 35)) }),
       ...(mailQuestionnaireUrl !== undefined && { mailQuestionnaireUrl: mailQuestionnaireUrl || null }),

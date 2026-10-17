@@ -33,7 +33,7 @@ export async function GET(
   const { id: eventId } = await params;
   // The central "Seznam účastníků" section is reachable by health or mail
   // grants alike -- this is now the shared roster endpoint for both.
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const [participants, allowedKeys, event, activeFields] = await Promise.all([
@@ -179,7 +179,7 @@ export async function POST(
   const { id: eventId } = await params;
   // The central "Seznam účastníků" section is reachable by health or mail
   // grants alike -- this is now the shared roster endpoint for both.
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();

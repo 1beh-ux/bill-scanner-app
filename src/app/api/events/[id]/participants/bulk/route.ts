@@ -23,7 +23,7 @@ export async function POST(
   }
 
   const { id: eventId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();

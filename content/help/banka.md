@@ -17,7 +17,21 @@ Před importem vidíte náhled: **Nové / Duplicita / Mimo období / Chyba** (s 
 
 ## Klasifikace
 
-Každý pohyb má klasifikaci: **Výdaj**, **Příjem** (poplatek, dotace, dar, vratka, jiný), **Pokladna** (výběr hotovosti), **Převod** (mezi vlastními účty), **Poplatek** (bance), **Soukromé** (s osobou — kdo komu dluží) a **Jiná akce**. Při importu se nastaví sama (bankomat → Pokladna, vlastní účet → Převod, poplatek → Poplatek, VS účastníka → Příjem/poplatek), vaši ruční změnu už žádný import nepřepíše.
+Každý pohyb má klasifikaci:
+
+- **Výdaj** — platba za něco pro akci; má mít doklad a nabízí se k párování s účtenkami.
+- **Příjem** (poplatek účastníka, dotace, dar, vratka, jiný) — peníze, které akce dostala.
+- **Pokladna** — výběr hotovosti; doklady jsou pak u jednotlivých nákupů za hotové.
+- **Poplatek** — poplatek bance, výdaj bez dokladu.
+- **Vlastní převod – vyloučit** — mezi vlastními účty organizace; nepočítá se do příjmů ani výdajů.
+- **Soukromé – vyloučit** — platba, která s akcí nesouvisí; můžete určit osobu, která ji má vrátit.
+- **Jiná akce – vyloučit** — patří jiné akci; přes **Přesunout do** ji předáte.
+
+Vysvětlení najdete i přímo v Pohybech pod „Co znamenají kategorie pohybů?“.
+
+**Pozor na znaménko:** příjem a výdaj v součtech se řídí znaménkem částky (plus = příchozí, minus = odchozí), ne kategorií. Když import načetl výdaj jako kladnou částku, u řádku se ukáže „⚠ částka je kladná – otočit na výdaj“; jedním kliknutím znaménko otočíte a pohyb se začne nabízet k párování. Ostatní údaje (datum, částku, protistranu, VS, zprávu) opravíte tužkou ✎ vedle data. Spárovaný pohyb nejde měnit v částce ani datu — nejdřív ho odpárujte. Opakovaný import vaše opravy nepřepíše.
+
+V Pohybech fungují nad sloupci filtry a řazení jako v seznamu účtenek (kliknutím na název sloupce řadíte, ikonou filtru vybíráte hodnoty). Výběr osoby nabízí jen plátce této akce. Při importu se nastaví sama (bankomat → Pokladna, vlastní účet → Převod, poplatek → Poplatek, VS účastníka → Příjem/poplatek), vaši ruční změnu už žádný import nepřepíše.
 
 V **Pohybech** stačí klávesy: ↑/↓ řádek, **S** soukromé, **P** pokladna, **T** převod, **F** poplatek, **V** výdaj, **Enter** otevře párování.
 
@@ -26,6 +40,8 @@ V **Pohybech** stačí klávesy: ↑/↓ řádek, **S** soukromé, **P** pokladn
 Aplikace páruje platby s účtenkami podle **částky a data** (obchod, VS a text zprávy jen rozhodují mezi stejnými kandidáty). **Nikdy nic nespáruje sama** — jen navrhne: **Jistý** návrh (jediná shoda na obou stranách) a **Možný** návrh. Návrh se nikde nepočítá, dokud ho nepotvrdíte (✓ u řádku, **Potvrdit návrhy**, **Potvrdit všechny jisté**). Zamítnutý návrh se už znovu nenabídne.
 
 V **Párování** vlevo vyberete platbu, vpravo zaškrtnete účtenky (i z jiné akce — **Přesunout sem**) a **Spárovat** (Enter). Když se součet liší, vyberete důvod (kurzový rozdíl, poplatek, zaokrouhlení, částečná platba). Platba plátci (proplacení) má jeho neproplacené účtenky předem zaškrtnuté a po spárování je označí jako **Proplaceno**.
+
+Vlevo si platby můžete filtrovat (k párování / spárované / všechny výdaje, hledání, datum, částka). Vpravo jsou jen účtenky, které ještě nejsou zaplacené; zaškrtnutím **i zaplacené** uvidíte i spárované a označené Hotově / Jiný účet — s tím, jak jsou zaplacené, a křížkem pro odpárování. Když tak spárujete účtenku vedenou jako Hotově, aplikace se zeptá a změní ji na Banka. U **schválené** (zamčené) účtenky se aplikace před každou změnou platby zeptá, jestli ji opravdu chcete měnit.
 
 ## Vytvořit doklad / Najít doklad
 

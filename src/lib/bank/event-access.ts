@@ -9,7 +9,7 @@ import { notFound } from "@/lib/org-scope";
 export async function requireEventBank(eventId: string): Promise<{ error: NextResponse } | { userId: string; event: Event }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return { error: denied };
   return { userId: user.id, event: await prisma.event.findUniqueOrThrow({ where: { id: eventId } }) };
 }

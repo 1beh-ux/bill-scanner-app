@@ -31,12 +31,29 @@ export default function DriveCleanupPage({ params }: { params: Promise<{ id: str
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Map<string, { ok: boolean; error?: string; action: string }>>(new Map());
 
+  // The folders, options and target last scanned for this event are remembered in this browser.
+  const memoKey = `driveCleanup:${id}`;
+  useEffect(() => {
+    try {
+      const m = JSON.parse(localStorage.getItem(memoKey) ?? "null");
+      if (m) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- restored once from this browser
+        setFolders(m.folders ?? "");
+        setRecursive(m.recursive ?? true);
+        if (m.target) setTarget(m.target);
+      }
+    } catch {}
+  }, [memoKey]);
+
   // The event's Zpracované soubory folder is the default target.
   useEffect(() => {
     fetch(`/api/events/${id}`).then((r) => (r.ok ? r.json() : null)).then((ev) => ev?.driveProcessedFolderId && setTarget((x) => x || ev.driveProcessedFolderId)).catch(() => {});
   }, [id]);
 
   async function runScan() {
+    try {
+      localStorage.setItem(memoKey, JSON.stringify({ folders, recursive, target }));
+    } catch {}
     setBusy(true);
     setError(null);
     setResults(new Map());

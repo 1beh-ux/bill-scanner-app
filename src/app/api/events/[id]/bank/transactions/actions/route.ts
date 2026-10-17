@@ -11,7 +11,7 @@ const INCOME: BankIncomeType[] = ["fee", "grant", "donation", "refund", "other"]
 const NO_DOC: BankClassification[] = ["cash", "transfer", "fee", "private", "other_event", "income"];
 
 /**
- * Banka -> Pohyby actions on rows of this event: classify, noDoc, note, confirmPreview, confirm,
+ * Banka -> Pohyby actions on rows of this event: classify, noDoc, note, edit, confirmPreview, confirm,
  * reject, move, createBills, suggest. Body: { action, ids?, sure?, ... }.
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -52,6 +52,34 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     case "note": {
       const r = await prisma.bankTransaction.updateMany({ where: { id: { in: ids } }, data: { userNote: typeof body.userNote === "string" ? body.userNote.slice(0, 500) || null : null } });
       return NextResponse.json({ updated: r.count });
+    }
+    // Fix what an import got wrong (e.g. a spending imported as a positive amount). One row; a
+    // re-import never overwrites it (rows are matched by externalId and existing ones skipped).
+    case "edit": {
+      const row = ids.length === 1 ? await prisma.bankTransaction.findUnique({ where: { id: ids[0] }, include: { matches: { where: { confirmedAt: { not: null } }, select: { id: true } } } }) : null;
+      if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
+      const amount = body.amount === undefined ? undefined : Number(body.amount);
+      if (amount !== undefined && (!Number.isFinite(amount) || amount === 0)) return NextResponse.json({ error: "bad_amount" }, { status: 400 });
+      const date = typeof body.bookingDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.bookingDate) ? new Date(body.bookingDate) : undefined;
+      // The pairings were made for the old amount.
+      if (row.matches.length && ((amount !== undefined && amount !== Number(row.amount)) || date)) return NextResponse.json({ error: "paired" }, { status: 409 });
+      const text = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 500) || null : undefined);
+      await prisma.bankTransaction.update({
+        where: { id: row.id },
+        data: {
+          ...(amount !== undefined && { amount: Math.round(amount * 100) / 100 }),
+          ...(date && { bookingDate: date }),
+          ...(text(body.counterpartyName) !== undefined && { counterpartyName: text(body.counterpartyName) }),
+          ...(text(body.counterpartyAccount) !== undefined && { counterpartyAccount: text(body.counterpartyAccount) }),
+          ...(text(body.vs) !== undefined && { vs: text(body.vs) }),
+          ...(text(body.message) !== undefined && { message: text(body.message) }),
+          // Now a spending: an expense to pair; now money in: income.
+          ...(amount !== undefined && Math.sign(amount) !== Math.sign(Number(row.amount)) && { classification: amount < 0 ? "expense" : "income", classifiedByUser: true, noDocumentNeeded: amount > 0, incomeType: amount > 0 ? "other" : null }),
+        },
+      });
+      await prisma.bankMatch.deleteMany({ where: { transactionId: row.id, confirmedAt: null, rejectedAt: null } });
+      const s = amount !== undefined && amount < 0 ? await runSuggestions(id) : null;
+      return NextResponse.json({ updated: 1, suggested: s?.suggested ?? 0 });
     }
     case "confirmPreview":
       return NextResponse.json(await previewConfirm({ eventId: id, transactionIds: body.sure ? undefined : ids, onlySure: !!body.sure }));

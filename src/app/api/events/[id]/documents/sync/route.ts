@@ -16,7 +16,7 @@ async function guard(ctx: Ctx): Promise<{ denied: NextResponse } | { eventId: st
   const user = await getCurrentUser();
   if (!user) return { denied: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) } as const;
   const { id: eventId } = await ctx.params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   return denied ? ({ denied } as const) : ({ eventId } as const);
 }
 
@@ -42,7 +42,7 @@ async function overview(eventId: string) {
     })),
     drive: { configured: !!participantsRootFolderId(event), enabled: event.driveDocSyncEnabled },
     statusSheet: {
-      configured: !!event.driveExportFolderId,
+      configured: !!participantsRootFolderId(event),
       enabled: event.statusExportEnabled,
       url: event.statusExportSheetId ? `https://docs.google.com/spreadsheets/d/${event.statusExportSheetId}` : null,
       lastAt: event.statusExportLastSyncedAt,
@@ -56,7 +56,8 @@ export async function GET(_req: Request, ctx: Ctx) {
   return NextResponse.json(await overview(g.eventId));
 }
 
-export async function POST(_req: Request, ctx: Ctx) {
+/** ?all=1 (Pošta's "Synchronizovat s Diskem"): Drive copies and the status sheet even when not switched on for the automatic runs. */
+export async function POST(req: Request, ctx: Ctx) {
   const g = await guard(ctx);
   if ("denied" in g) return g.denied;
   const { eventId } = g;
@@ -78,9 +79,10 @@ export async function POST(_req: Request, ctx: Ctx) {
     });
   }
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
-  if (event.driveDocSyncEnabled && participantsRootFolderId(event)) {
+  const all = new URL(req.url).searchParams.get("all") === "1";
+  if ((all || event.driveDocSyncEnabled) && participantsRootFolderId(event)) {
     await step("drive", async () => String((await syncParticipantDocumentsToDrive(eventId)).synced));
   }
-  if (event.statusExportEnabled && event.driveExportFolderId) await step("statusSheet", async () => void (await syncStatusSheetExport(eventId)));
+  if ((all || event.statusExportEnabled) && participantsRootFolderId(event)) await step("statusSheet", async () => void (await syncStatusSheetExport(eventId)));
   return NextResponse.json({ results, ...(await overview(eventId)) });
 }

@@ -23,7 +23,7 @@ export async function PATCH(
   if (!guardian) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();
@@ -60,7 +60,7 @@ export async function DELETE(
   if (!guardian) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, guardian.participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   await prisma.participantGuardian.delete({ where: { id: guardianId } });

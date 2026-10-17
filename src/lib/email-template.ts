@@ -155,7 +155,7 @@ export function senderIdentity(
 // health or mail access reaches (same as the bulk-email send route).
 export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
   if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY || purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) return ["mail"];
-  if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["health", "mail"];
+  if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
   return ["health"];
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { runDriveExport, type ExportSummary } from "@/lib/drive-export-client";
 import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
 
@@ -14,8 +14,23 @@ type Summary = ExportSummary;
 
 const btn = "rounded-lg border border-mist bg-paper-2 px-3 py-1.5 text-[13px] text-ink hover:bg-paper disabled:opacity-50";
 
-export default function DriveBillsSync({ eventId, bills, exportFolderId, manifestId, onSynced, t }: { eventId: string; bills: Bill[]; exportFolderId: string | null; manifestId: string | null; onSynced: () => void; t: T }) {
+export default function DriveBillsSync({ eventId, bills, exportFolderId, manifestId, lockedUntil, onSynced, t }: { eventId: string; bills: Bill[]; exportFolderId: string | null; manifestId: string | null; lockedUntil: string | null; onSynced: () => void; t: T }) {
   const [running, setRunning] = useState(false);
+  // An export started elsewhere (another tab, or this page before a reload) still runs: the button
+  // stays off and the page looks every few seconds until it's done (Event.driveExportLockedUntil).
+  const [elsewhere, setElsewhere] = useState(() => !!lockedUntil && new Date(lockedUntil) > new Date());
+  useEffect(() => {
+    if (!elsewhere) return;
+    const timer = setInterval(async () => {
+      const ev = await fetch(`/api/events/${eventId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (ev && !(ev.driveExportLockedUntil && new Date(ev.driveExportLockedUntil) > new Date())) {
+        setElsewhere(false);
+        onSynced();
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onSynced is a new function every render
+  }, [elsewhere, eventId]);
   const [error, setError] = useState<{ code: string; info: DriveErrorInfo } | null>(null);
   const [result, setResult] = useState<Summary | null>(null);
   const [progress, setProgress] = useState<string | null>(null);
@@ -34,6 +49,7 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
     const out = await runDriveExport(eventId, recreateManifest, (done, remaining) => setProgress(t("billDriveSync.progress", { done: String(done), remaining: String(remaining) })));
     setRunning(false);
     setProgress(null);
+    if (!out.ok && out.data.error === "export_running") return setElsewhere(true);
     if (!out.ok) return setError({ code: out.data.error ?? "drive_unknown", info: out.data });
     setResult(out.data);
     onSynced();
@@ -51,8 +67,8 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
   return (
     <div className="mb-4 flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-3 text-[13px]">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <button type="button" onClick={() => sync()} disabled={running || approved.length === 0} className={btn}>
-          {running ? progress ?? t("billDriveSync.running") : t("billDriveSync.button")}
+        <button type="button" onClick={() => sync()} disabled={running || elsewhere || approved.length === 0} className={btn}>
+          {running ? progress ?? t("billDriveSync.running") : elsewhere ? t("billDriveSync.runningElsewhere") : t("billDriveSync.button")}
         </button>
         <span className="text-ink">{t("billDriveSync.status", { onDrive: String(onDrive), approved: String(approved.length) })}</span>
         {last && <span className="text-ink-secondary">{t("billDriveSync.last", { when: new Date(last).toLocaleString("cs-CZ", { dateStyle: "short", timeStyle: "short" }) })}</span>}

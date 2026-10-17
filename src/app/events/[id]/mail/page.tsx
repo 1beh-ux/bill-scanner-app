@@ -6,6 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import MailInboxList from "@/components/mail/MailInboxList";
 import MailDetailPanel from "@/components/mail/MailDetailPanel";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import MailDriveSync from "@/components/mail/MailDriveSync";
 import MailActionLogModal from "@/components/mail/MailActionLogModal";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
 import type { DocumentType, MailMessage, Participant } from "@/components/mail/types";
@@ -157,6 +158,7 @@ export default function MailPage({ params }: { params: Promise<{ id: string }> }
         <div className="flex gap-2">
           <UploadReviewLink eventId={eventId} />
           <StatusUpdateButton eventId={eventId} className={btnSecondary} />
+          <MailDriveSync eventId={eventId} className={btnSecondary} t={t} />
           <button onClick={() => setLogsModalOpen(true)} className={btnSecondary}>
             {t("mailPage.logsButton")}
           </button>

@@ -10,6 +10,7 @@ const MODULE_SURFACES: Record<ModuleKey, ParticipantFieldSurface[]> = {
   mail: ["mail_list"],
   planning: [],
   bank: [],
+  participants: ["list"],
 };
 
 /**

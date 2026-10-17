@@ -18,7 +18,7 @@ export async function POST(
 
   const participant = await prisma.participant.findUnique({ where: { id }, include: { event: true } });
   if (!participant) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const rootFolderId = participantsRootFolderId(participant.event);

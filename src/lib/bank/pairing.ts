@@ -13,7 +13,7 @@ const money = (n: number) => Math.round(n * 100) / 100;
 async function remainingOfBills(billIds: string[]) {
   const bills = await prisma.bill.findMany({
     where: { id: { in: billIds } },
-    select: { id: true, eventId: true, amountCzk: true, totalAmount: true, currency: true, payerAuthorId: true, paidToAuthor: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, transactionId: true } } },
+    select: { id: true, eventId: true, amountCzk: true, totalAmount: true, currency: true, payerAuthorId: true, paidToAuthor: true, paymentChannel: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true, transactionId: true } } },
   });
   return bills.map((b) => ({ ...b, remaining: money(Number(b.amountCzk ?? 0) - b.bankMatches.reduce((s, m) => s + Number(m.amountCzk), 0)) }));
 }
@@ -75,6 +75,11 @@ export async function pairTransaction(o: { eventId: string; transactionId: strin
       if (paid) {
         await db.bill.update({ where: { id: b.id }, data: { paidToAuthor: true, paidAt: tx.bookingDate, paidByUserId: o.userId } });
         markedPaid++;
+      }
+      // Marked "Hotově" / "Jiný účet" by hand before, but the bank shows it was this payment.
+      if (b.paymentChannel) {
+        await db.bill.update({ where: { id: b.id }, data: { paymentChannel: null } });
+        await db.billAuditLog.create({ data: { billId: b.id, userId: o.userId, actionType: "bank_channel", fieldName: "paymentChannel", oldValue: b.paymentChannel, newValue: null } });
       }
     }
     // Other open suggestions of this payment are moot now.

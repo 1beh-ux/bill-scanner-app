@@ -33,7 +33,7 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId, participantId, docTypeId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
   // Both must be this event's -- never another event's (or organization's) participant.
   const [inEvent, typeInEvent] = await Promise.all([
@@ -84,7 +84,7 @@ export async function DELETE(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId, participantId, docTypeId } = await params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
   // Both must be this event's -- never another event's (or organization's) participant.
   const [inEvent, typeInEvent] = await Promise.all([

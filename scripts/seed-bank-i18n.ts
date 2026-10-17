@@ -26,7 +26,7 @@ const rows: Row[] = [
   r("bankCheck.error.history_locked", "Data starší 90 dní: odemkněte historii ve Fio internetovém bankovnictví (Nastavení → API → zámek) a zkuste to do 10 minut znovu.", "Data older than 90 days: unlock the history in Fio internet banking (Settings → API → lock) and retry within 10 minutes."),
 
   ...each("paymentState", [["bank", "Banka", "Bank"], ["partial", "Částečně", "Partly"], ["cash", "Hotově", "Cash"], ["other_account", "Jiný účet", "Other account"], ["suggested", "Návrh", "Suggested"], ["unpaired", "Nespárováno", "Unpaired"]]),
-  ...each("bankClass", [["expense", "Výdaj", "Expense"], ["income", "Příjem", "Income"], ["cash", "Pokladna", "Cash withdrawal"], ["transfer", "Převod", "Transfer"], ["fee", "Poplatek", "Bank fee"], ["private", "Soukromé", "Private"], ["other_event", "Jiná akce", "Another event"]]),
+  ...each("bankClass", [["expense", "Výdaj", "Expense"], ["income", "Příjem", "Income"], ["cash", "Pokladna", "Cash withdrawal"], ["transfer", "Vlastní převod – vyloučit", "Own transfer – excluded"], ["fee", "Poplatek", "Bank fee"], ["private", "Soukromé – vyloučit", "Private – excluded"], ["other_event", "Jiná akce – vyloučit", "Another event – excluded"]]),
   ...each("bankIncome", [["fee", "Poplatek účastníka", "Participant fee"], ["grant", "Dotace", "Grant"], ["donation", "Dar", "Donation"], ["refund", "Vratka", "Refund"], ["other", "Jiný příjem", "Other income"]]),
   ...each("bankDiff", [["fx", "Kurzový rozdíl", "Exchange difference"], ["fee", "Poplatek", "Fee"], ["rounding", "Zaokrouhlení", "Rounding"], ["partial", "Částečná platba", "Partial payment"]]),
   ...each("bankSource", [["fio_api", "Fio API", "Fio API"], ["sheet", "Google Tabulka", "Google Sheet"], ["file", "Soubor / vložení", "File / paste"]]),

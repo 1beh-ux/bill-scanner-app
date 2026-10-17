@@ -72,7 +72,7 @@ async function main() {
     { key: "billDriveSync.notApproved", cs: "{count} neschválených se nenahrává", en: "{count} not approved (not uploaded)" },
     { key: "billDriveSync.openFolder", cs: "Otevřít složku", en: "Open folder" },
     { key: "billDriveSync.noFolder", cs: "Účtenky se zatím na Disk nesynchronizují – akce nemá nastavenou exportní složku.", en: "Bills aren't synced to Drive yet – the event has no export folder." },
-    { key: "billDriveSync.setFolder", cs: "Nastavit v Připojení", en: "Set it in Connections" },
+    { key: "billDriveSync.setFolder", cs: "Nastavit v Připojení na Google", en: "Set it in Google connections" },
   ];
   for (const row of rows) {
     await prisma.translation.upsert({ where: { key: row.key }, update: { cs: row.cs, en: row.en }, create: row });

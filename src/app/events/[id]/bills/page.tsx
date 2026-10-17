@@ -14,7 +14,7 @@ import { readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav"
 import { nextSort, sortBy, type SortDir, type SortValue } from "@/lib/bill-sort";
 import { PAYMENT_STATES, type PaymentState } from "@/lib/bank/payment-states";
 
-type EventDetail = { id: string; name: string; billsListColumns: unknown; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
+type EventDetail = { id: string; name: string; billsListColumns: unknown; billsListPills: unknown; driveExportLockedUntil: string | null; driveExportFolderId: string | null; driveManifestSpreadsheetId: string | null };
 
 type BillItem = {
   id: string;
@@ -371,6 +371,27 @@ export default function EventBillsPage({
   }, [event?.billsListColumns, bankOn]);
   // The source file is the link that opens a bill; without that column the merchant becomes the link.
   const linkColumn: BillColumnKey = columns.includes("sourceFile") ? "sourceFile" : "merchant";
+
+  // Filter pills: which and in what order, per event like the columns (Event.billsListPills).
+  const pillOptions = useMemo(
+    () => ["all", ...STATUSES.map((s) => `status:${s}`), "paid", "unpaid", ...(bankOn ? [...PAYMENT_STATES, "missing"].map((p) => `pay:${p}`) : [])],
+    [bankOn]
+  );
+  const savedPills = Array.isArray(event?.billsListPills) ? (event.billsListPills as string[]) : null;
+  const pills = savedPills ? savedPills.filter((k) => pillOptions.includes(k)) : pillOptions;
+  const pillLabel = (k: string) =>
+    k === "all" ? t("billsPage.filterAll")
+    : k.startsWith("status:") ? statusLabels[k.slice(7)]
+    : k === "paid" ? t("billsPage.paidYes")
+    : k === "unpaid" ? t("billsPage.paidNo")
+    : k === "pay:missing" ? t("missingDoc.badge")
+    : t(`paymentState.${k.slice(4)}`);
+
+  async function savePills(keys: string[] | null) {
+    await fetch(`/api/events/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billsListPills: keys }) });
+    const res = await fetch(`/api/events/${id}`);
+    if (res.ok) setEvent(await res.json());
+  }
 
   async function saveColumns(keys: string[] | null) {
     await fetch(`/api/events/${id}`, {
@@ -749,6 +770,7 @@ export default function EventBillsPage({
         bills={bills}
         exportFolderId={event.driveExportFolderId}
         manifestId={event.driveManifestSpreadsheetId}
+        lockedUntil={event.driveExportLockedUntil}
         onSynced={refreshBillsQuietly}
         t={t}
       />
@@ -774,45 +796,54 @@ export default function EventBillsPage({
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
-        <button
-          onClick={() => setStatusFilter(null)}
-          className={`${pillBase} ${statusFilter === null ? pillActive : pillInactive}`}
-        >
-          {t("billsPage.filterAll")} ({bills.length})
-        </button>
-        {STATUSES.map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(statusFilter === s ? null : s)}
-            className={`${pillBase} ${statusFilter === s ? pillActive : pillInactive}`}
-          >
-            {statusLabels[s]} ({counts[s]})
-          </button>
-        ))}
-        <span className="mx-1 self-center text-ink-secondary/40">|</span>
-        {(["paid", "unpaid"] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPaidFilter(paidFilter === p ? null : p)}
-            className={`${pillBase} ${paidFilter === p ? pillActive : pillInactive}`}
-          >
-            {t(p === "paid" ? "billsPage.paidYes" : "billsPage.paidNo")} ({paidCounts[p]})
-          </button>
-        ))}
-        {bankOn && (
-          <>
-            <span className="mx-1 self-center text-ink-secondary/40">|</span>
-            {[...PAYMENT_STATES, "missing"].map((p) => (
-              <button key={p} onClick={() => setPaymentFilter(paymentFilter === p ? null : p)} className={`${pillBase} ${paymentFilter === p ? pillActive : pillInactive}`}>
-                {p === "missing" ? t("missingDoc.badge") : t(`paymentState.${p}`)} ({p === "missing" ? bills.filter((b) => b.documentMissing).length : bills.filter((b) => b.payment?.state === p).length})
-              </button>
-            ))}
-            {paymentFilter && !([...PAYMENT_STATES, "missing"] as string[]).includes(paymentFilter) && (
-              <button onClick={() => setPaymentFilter(null)} className={`${pillBase} ${pillActive}`}>{t(`bankOverview.doc.${paymentFilter}`)} ✕</button>
-            )}
-          </>
+        {pills.map((key, i) => {
+          // A divider wherever the pill group changes (status | paid | payment).
+          const group = (k: string) => (k === "all" || k.startsWith("status:") ? 0 : k === "paid" || k === "unpaid" ? 1 : 2);
+          const sep = i > 0 && group(pills[i - 1]) !== group(key) && <span className="mx-1 self-center text-ink-secondary/40">|</span>;
+          const pill = (active: boolean, onClick: () => void, label: string) => (
+            <span key={key} className="contents">
+              {sep}
+              <button onClick={onClick} className={`${pillBase} ${active ? pillActive : pillInactive}`}>{label}</button>
+            </span>
+          );
+          if (key === "all") return pill(statusFilter === null, () => setStatusFilter(null), `${t("billsPage.filterAll")} (${bills.length})`);
+          if (key.startsWith("status:")) {
+            const s = key.slice(7);
+            return pill(statusFilter === s, () => setStatusFilter(statusFilter === s ? null : s), `${statusLabels[s]} (${counts[s]})`);
+          }
+          if (key === "paid" || key === "unpaid")
+            return pill(paidFilter === key, () => setPaidFilter(paidFilter === key ? null : key), `${t(key === "paid" ? "billsPage.paidYes" : "billsPage.paidNo")} (${paidCounts[key]})`);
+          const p = key.slice(4);
+          return pill(
+            paymentFilter === p,
+            () => setPaymentFilter(paymentFilter === p ? null : p),
+            `${p === "missing" ? t("missingDoc.badge") : t(`paymentState.${p}`)} (${p === "missing" ? bills.filter((b) => b.documentMissing).length : bills.filter((b) => b.payment?.state === p).length})`
+          );
+        })}
+        {/* A filter set elsewhere (bank overview link, or a pill that's hidden now) stays removable. */}
+        {paymentFilter && !pills.includes(`pay:${paymentFilter}`) && (
+          <button onClick={() => setPaymentFilter(null)} className={`${pillBase} ${pillActive}`}>{([...PAYMENT_STATES, "missing"] as string[]).includes(paymentFilter) ? t(`paymentState.${paymentFilter}`) : t(`bankOverview.doc.${paymentFilter}`)} ✕</button>
         )}
-        <div className="ml-auto">
+        {statusFilter && !pills.includes(`status:${statusFilter}`) && (
+          <button onClick={() => setStatusFilter(null)} className={`${pillBase} ${pillActive}`}>{statusLabels[statusFilter]} ✕</button>
+        )}
+        {paidFilter && !pills.includes(paidFilter) && (
+          <button onClick={() => setPaidFilter(null)} className={`${pillBase} ${pillActive}`}>{t(paidFilter === "paid" ? "billsPage.paidYes" : "billsPage.paidNo")} ✕</button>
+        )}
+        <div className="ml-auto flex gap-2">
+          <ColumnPicker
+            options={pillOptions.map((k) => ({ key: k, label: pillLabel(k) }))}
+            shown={pills}
+            labels={{
+              button: t("billsPage.pillsButton"),
+              title: t("billsPage.pillsPickerTitle"),
+              dragHint: t("participantsPage.columnsDragHint"),
+              notShown: t("participantsPage.columnsNotShown"),
+              reset: t("billsPage.columnsReset"),
+            }}
+            onSave={(keys) => savePills(keys)}
+            onReset={() => savePills(null)}
+          />
           <ColumnPicker
             options={BILL_COLUMNS.map((c) => ({ key: c.key, label: t(c.labelKey) }))}
             shown={columns}

@@ -3,7 +3,7 @@ title: Účastníci
 order: 6
 ---
 
-Seznam všech dětí přihlášených na akci najdete pod Seznam účastníků.
+Seznam všech dětí přihlášených na akci najdete pod Seznam účastníků. Menu Účastníci se ukáže, když má akce zapnutý modul **Účastníci** (nebo Zdraví či Poštu) a vy k němu máte přístup (Nastavení akce → Lidé).
 
 ![Seznam účastníků](/napoveda/images/ucastnici-1.jpg)
 

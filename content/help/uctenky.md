@@ -5,6 +5,8 @@ order: 2
 
 V menu Účtenky je seznam všech účtenek akce se stavy (Nové, Schváleno…) a filtry Proplaceno/Neproplaceno.
 
+Které filtry (štítky nad seznamem) se ukazují a v jakém pořadí, nastavíte tlačítkem **Filtry** vedle tlačítka Sloupce — platí pro celou akci. Kliknutím na název sloupce seznam řadíte (A→Z, Z→A, zpět), ikonou vedle názvu filtrujete hodnoty jako v Excelu.
+
 ![Seznam účtenek](/napoveda/images/uctenky-1.jpg)
 
 1. Kliknete na **Nahrát účtenky** a vyberete způsob: nahrát soubor, vyfotit, import z Google Drive nebo z tabulky.
@@ -23,8 +25,12 @@ V menu Účtenky je seznam všech účtenek akce se stavy (Nové, Schváleno…)
 
 Vícestránkové PDF s více účtenkami se při importu automaticky rozdělí na jednotlivé stránky/účtenky.
 
+## Synchronizace s Diskem
+
+**Synchronizovat s Diskem** nahraje schválené účtenky, které na Disku ještě nejsou, a přepíše manifest. Běží vždy jen jedna synchronizace akce — když už běží (třeba z jiného okna nebo před obnovením stránky), tlačítko je vypnuté s textem „Export na Disk právě běží…“ a stránka se sama obnoví, až doběhne. Velký export se nahrává po částech a stránka pokračuje sama („Nahráno X, zbývá Y“).
+
 ## Úklid souborů na Disku
 
-V menu **Úklid Disku** zadáte jednu nebo více složek na Disku (i s podsložkami). Aplikace u každého souboru zjistí, jestli ho používá účtenka — podle obsahu souboru, takže nezáleží na jménu — a ukáže, ve které akci, v jakém stavu je a jestli je proplacená. Soubory se stejným obsahem označí jako duplicity: ponechá kopii, kterou používá účtenka, ostatní navrhne smazat. Vybrané soubory pak přesunete do uklizené složky (odkazy na ně zůstanou funkční) nebo kopie do koše na Disku, odkud jdou 30 dní obnovit.
+V menu **Úklid Disku** zadáte jednu nebo více složek na Disku (i s podsložkami). Aplikace u každého souboru zjistí, jestli ho používá účtenka — podle obsahu souboru, takže nezáleží na jménu — a ukáže, ve které akci, v jakém stavu je a jestli je proplacená. Soubory se stejným obsahem označí jako duplicity: ponechá kopii, kterou používá účtenka, ostatní navrhne smazat. Soubory se stejným jménem ve stejné složce (např. dvakrát nahraný export) označí také: ponechá nejstarší, ostatní navrhne smazat (soubor, který účtenka používá podle obsahu, nikdy). Zadané složky si aplikace pro každou akci pamatuje. Vybrané soubory pak přesunete do uklizené složky (odkazy na ně zůstanou funkční) nebo kopie do koše na Disku, odkud jdou 30 dní obnovit.
 
 U každé účtenky je pod náhledem **Zdroj**: import z Disku (s odkazem na původní soubor), nahráno, vyfoceno nebo vytvořeno z platby v bance.

@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const participant = await prisma.participant.findUnique({ where: { id }, include: { guardians: true } });
   if (!participant) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
   const [event, fields, allowed] = await Promise.all([
     prisma.event.findUniqueOrThrow({ where: { id: participant.eventId } }).then(withMembers),

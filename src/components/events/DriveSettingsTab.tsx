@@ -270,6 +270,11 @@ export default function DriveSettingsTab({
             {fieldError(f.label) && (
               <p className="mt-0.5 text-[12px] text-red-600">{driveErrorText(t, "not_a_folder_id", { folderLabel: f.label })}</p>
             )}
+            {parsed[f.label] && (
+              <a href={`https://drive.google.com/drive/folders/${parsed[f.label]}`} target="_blank" rel="noreferrer" className="mt-0.5 inline-block text-[12px] text-ember hover:underline">
+                {t("driveSettings.openFolder")} ↗
+              </a>
+            )}
             {testResults?.[f.label] && <FolderStatus result={testResults[f.label]!} />}
           </div>
         ))}

@@ -24,7 +24,7 @@ export async function GET(
 
   // Not a module: "Platby na účet" shows under Účastníci when the event checks the bank
   // (docs/bank-payments-design.md) and the user reaches the roster.
-  if (accessible.health || accessible.mail) {
+  if (accessible.participants || accessible.health || accessible.mail) {
     const ev = await prisma.event.findUnique({ where: { id: eventId }, select: { bankCheckEnabled: true, bankAccountId: true } });
     accessible.bankCheck = !!ev?.bankCheckEnabled && !!ev.bankAccountId;
   }

@@ -5,7 +5,7 @@ import { NAV_SECTIONS } from "@/lib/nav-sections";
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
 export type MenuSection = "bills" | "bank" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
-// roster = the central participant list, reachable with health OR mail; bank = roster + the
+// roster = the central participant list, reachable with participants, health or mail; bank = roster + the
 // event's automatic bank check on (docs/bank-payments-design.md).
 // bankRecon = the Banka module (bank reconciliation, explicit grant).
 export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon";

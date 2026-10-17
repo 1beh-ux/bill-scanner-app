@@ -25,14 +25,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         matches: {
           where: { rejectedAt: null },
           orderBy: [{ confirmedAt: "desc" }, { score: "desc" }],
-          select: { id: true, amountCzk: true, amountTx: true, confirmedAt: true, tier: true, reasons: true, setPaidToAuthor: true, bill: { select: { id: true, merchantName: true, billDate: true, amountCzk: true, totalAmount: true, currency: true, displayFilename: true, originalFilename: true, documentMissing: true } } },
+          select: { id: true, amountCzk: true, amountTx: true, confirmedAt: true, tier: true, reasons: true, setPaidToAuthor: true, bill: { select: { id: true, merchantName: true, billDate: true, amountCzk: true, totalAmount: true, currency: true, displayFilename: true, originalFilename: true, documentMissing: true, status: true } } },
         },
       },
     }),
     () => tabCounts(id, f),
     () => totals(where),
     () => (by ? groups(where, by) : Promise.resolve(null)),
-    () => prisma.author.findMany({ where: { organizationId: ctx.event.organizationId }, select: { id: true, canonicalName: true } }),
+    () => prisma.author.findMany({ where: { organizationId: ctx.event.organizationId }, select: { id: true, canonicalName: true, active: true, mergedIntoAuthorId: true, eventAccess: { where: { eventId: id }, select: { eventId: true } } }, orderBy: { canonicalName: "asc" } }),
   ] as const);
   const name = new Map(authors.map((a) => [a.id, a.canonicalName]));
   return NextResponse.json({
@@ -48,6 +48,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     counts,
     totals: sum,
     groups: grouped?.map((g) => ({ ...g, label: by === "person" && g.key ? name.get(g.key) ?? g.key : g.key })) ?? null,
-    authors,
+    // The pickers offer this event's payers only (plus anyone a row already points to).
+    authors: authors
+      .filter((a) => (a.eventAccess.length && a.active && !a.mergedIntoAuthorId) || rows.some((r) => r.personAuthorId === a.id))
+      .map((a) => ({ id: a.id, canonicalName: a.canonicalName })),
   });
 }

@@ -13,7 +13,7 @@ async function guard(ctx: Ctx): Promise<{ denied: NextResponse } | { eventId: st
   const user = await getCurrentUser();
   if (!user) return { denied: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) } as const;
   const { id: eventId } = await ctx.params;
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   return denied ? ({ denied } as const) : ({ eventId } as const);
 }
 

@@ -56,7 +56,7 @@ export async function GET(
   if (!participant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const allowedKeys = await allowedParticipantFieldKeys(user, participant.eventId);
@@ -109,7 +109,7 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, existing.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, existing.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();
@@ -199,7 +199,7 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, existing.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, existing.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   await deleteParticipantCascade(id);

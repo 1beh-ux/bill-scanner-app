@@ -28,7 +28,7 @@ export async function GET(
   }
   const { id: eventId } = await params;
   // Dokumenty lives under Účastníci now: health or mail, like the roster.
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const withDocs = new URL(req.url).searchParams.get("withDocuments") === "1";

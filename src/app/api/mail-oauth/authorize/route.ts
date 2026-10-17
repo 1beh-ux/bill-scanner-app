@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
       ? eventIdParam
         ? await requireModuleAccess(user, eventIdParam, "bills")
         : null
-      : await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+      : await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const nonce = crypto.randomBytes(16).toString("hex");

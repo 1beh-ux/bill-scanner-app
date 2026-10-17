@@ -19,7 +19,7 @@ export async function POST(
   if (!participant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, participant.eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, participant.eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();

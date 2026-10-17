@@ -91,6 +91,9 @@ enum ModuleKey {
   planning
   // Banka (bank reconciliation): explicit per-event grant only, admins included (src/lib/module-access.ts).
   bank
+  // Účastníci (central roster, documents, sending): on its own, without Zdraví / Pošta. Those two
+  // still reach the roster too (they work on the same participants).
+  participants
 }
 
 enum IncidentCategory {
@@ -346,6 +349,8 @@ model Event {
   // event, so everyone with access sees the same columns; null = the default set.
   // (A Json array like participantsListColumns -- Prisma has no nullable scalar list.)
   billsListColumns              Json?          @map("bills_list_columns")
+  // Ordered filter pills shown above the bills list ("status:new", "paid", "pay:bank"...); null = all.
+  billsListPills                Json?          @map("bills_list_pills")
   // Ordered participant-field keys shown as columns in the Documents overview
   // (mail_list fields); null = all of them. Saved via /mail/sync-settings.
   documentsListColumns          Json?          @map("documents_list_columns")
@@ -427,6 +432,7 @@ model Event {
   planActivities         PlanActivity[]
   publicHosts            PublicHost[]
   deposits               EventDeposit[]
+  incomes                EventIncome[]
   aiUsage                AiUsage[]
   bankLinks              EventBankAccount[]
   bankTransactions       BankTransaction[]
@@ -1711,6 +1717,24 @@ model EventDeposit {
 
   @@index([eventId])
   @@map("event_deposits")
+}
+
+// Rozpočet -> Příjmy: the event's income lines (participant fees, the organization's subsidy, grants,
+// sponsors...), each planned and real, so the budget shows a planned and a real result. Bills module.
+model EventIncome {
+  id         String   @id @default(uuid())
+  eventId    String   @map("event_id")
+  name       String
+  plannedCzk Decimal? @map("planned_czk") @db.Decimal(14, 2)
+  actualCzk  Decimal? @map("actual_czk") @db.Decimal(14, 2)
+  note       String?
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_incomes")
 }
 
 // Usage metrics (/vyuziti, super-admin only): one row per page a signed-in user opened.

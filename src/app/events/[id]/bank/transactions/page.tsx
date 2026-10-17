@@ -9,11 +9,13 @@ import BankHeader from "@/components/bank/BankHeader";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import { dmy, kc, pluralForm, reasonText, type Reason } from "@/components/bank/bank-format";
 import { money } from "@/lib/bank/currency";
+import ColumnFilter from "@/components/bills/ColumnFilter";
+import { nextSort, sortBy, type SortDir, type SortValue } from "@/lib/bill-sort";
 
 // Banka -> Pohyby (docs/bank-reconciliation.md A6): tabs, filters, columns, inline classification,
 // keyboard triage, totals always visible, bulk actions. Suggestions are only ever confirmed here or
 // in Párování by a person.
-type Match = { id: string; amountCzk: number; amountTx: number; confirmedAt: string | null; tier: "sure" | "possible" | null; reasons: Reason[]; setPaidToAuthor: boolean; bill: { id: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; displayFilename: string | null; originalFilename: string; documentMissing: boolean } };
+type Match = { id: string; amountCzk: number; amountTx: number; confirmedAt: string | null; tier: "sure" | "possible" | null; reasons: Reason[]; setPaidToAuthor: boolean; bill: { id: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; displayFilename: string | null; originalFilename: string; documentMissing: boolean; status: string } };
 type Tx = {
   id: string; bookingDate: string; amount: number; currency: string; originalAmount: number | null; originalCurrency: string | null;
   counterpartyAccount: string | null; counterpartyBankCode: string | null; counterpartyName: string | null; vs: string | null; message: string | null; note: string | null; bankType: string | null;
@@ -59,6 +61,7 @@ function BankTransactions({ id }: { id: string }) {
   const [focus, setFocus] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
   const [events, setEvents] = useState<{ id: string; name: string }[]>([]);
+  const [editing, setEditing] = useState<Tx | null>(null);
   const tableRef = useRef<HTMLTableSectionElement>(null);
 
   const query = useMemo(() => {
@@ -80,7 +83,50 @@ function BankTransactions({ id }: { id: string }) {
   }, [id]);
 
   const columns = prefs.bankColumns[id] ?? COLUMNS;
-  const rows = useMemo(() => data?.rows ?? [], [data]);
+  const allRows = useMemo(() => data?.rows ?? [], [data]);
+
+  // Column header filters and sorting, as in the bill list (on the loaded rows of the tab).
+  const [colFilters, setColFilters] = useState<Record<string, Set<string>>>({});
+  const [sort, setSort] = useState<{ col: string; dir: SortDir } | null>(null);
+  const dash = "—";
+  const pairState = (r: Tx) => (r.matches.some((m) => m.confirmedAt) ? "paired" : r.matches.length ? "suggested" : "unpaired");
+  const cellValues = useCallback(
+    (col: string, r: Tx): string[] => {
+      switch (col) {
+        case "date": return [dmy(r.bookingDate)];
+        case "amount": return [money(r.amount, r.currency)];
+        case "counterparty": return [r.counterpartyName || dash];
+        case "vs": return [r.vs || dash];
+        case "message": return [[r.message, r.note].filter(Boolean).join(" · ") || dash];
+        case "classification": return [t(`bankClass.${r.classification}`)];
+        case "pairing": return [t(`bankPair.${pairState(r)}`)];
+        case "person": return [r.person || dash];
+        case "note": return [r.userNote || dash];
+        default: return [dash];
+      }
+    },
+    [t]
+  );
+  const sortKey = (col: string, r: Tx): SortValue => (col === "date" ? r.bookingDate : col === "amount" ? r.amount : (v => (v === dash ? null : v))(cellValues(col, r)[0]));
+  const rows = useMemo(() => {
+    let list = allRows;
+    for (const [col, allowed] of Object.entries(colFilters)) list = list.filter((r) => cellValues(col, r).some((v) => allowed.has(v)));
+    return sort ? sortBy(list, (r) => sortKey(sort.col, r), sort.dir) : list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sortKey only reads cellValues
+  }, [allRows, colFilters, sort, cellValues]);
+  const filterValues = (col: string) => {
+    const counts = new Map<string, number>();
+    for (const r of allRows) for (const v of new Set(cellValues(col, r))) counts.set(v, (counts.get(v) ?? 0) + 1);
+    return [...counts].map(([value, count]) => ({ value, count })).sort((a, b) => a.value.localeCompare(b.value, "cs", { numeric: true }));
+  };
+  const setColFilter = (col: string, next: Set<string> | null) =>
+    setColFilters((prev) => {
+      const copy = { ...prev };
+      if (next) copy[col] = next;
+      else delete copy[col];
+      return copy;
+    });
+  const headerFiltered = Object.keys(colFilters).length > 0;
   const sel = rows.filter((r) => selected.has(r.id));
   // Per currency: Kč and a PLN account never add up.
   const sum = (list: Tx[]): Totals => {
@@ -107,6 +153,14 @@ function BankTransactions({ id }: { id: string }) {
     return res;
   }
   const classify = (ids: string[], classification: string, extra: object = {}) => act({ action: "classify", ids, classification, ...extra });
+  async function saveEdit(form: HTMLFormElement) {
+    if (!editing) return;
+    const v = Object.fromEntries(new FormData(form)) as Record<string, string>;
+    const r = await act({ action: "edit", ids: [editing.id], ...v, amount: Number(v.amount.replace(/\s/g, "").replace(",", ".")) });
+    if (!r.error) setEditing(null);
+  }
+  // A spending imported as money in (or the other way round): one click turns the sign.
+  const flipSign = (r: Tx) => act({ action: "edit", ids: [r.id], amount: -r.amount });
 
   async function confirmSuggestions(ids: string[] | null) {
     const p = await act({ action: "confirmPreview", ...(ids ? { ids } : { sure: true }) }, false);
@@ -130,6 +184,7 @@ function BankTransactions({ id }: { id: string }) {
     setSelected(new Set());
   }
   async function unpair(m: Match) {
+    if (m.bill.status === "approved" && !(await confirm({ message: t("bankPairing.approvedConfirm", { count: "1" }) }))) return;
     if (!(await confirm({ message: t("bankTx.unpairConfirm", { amount: kc(m.amountCzk) }), danger: true }))) return;
     const clearPaid = m.setPaidToAuthor ? await confirm({ message: t("bankTx.unpairClearPaid") }) : false;
     await fetch(`/api/events/${id}/bank/matches/${m.id}?clearPaid=${clearPaid ? 1 : 0}`, { method: "DELETE" });
@@ -171,7 +226,13 @@ function BankTransactions({ id }: { id: string }) {
     </span>
   );
   const cell: Record<string, (r: Tx) => React.ReactNode> = {
-    date: (r) => <span className="whitespace-nowrap">{dmy(r.bookingDate)}{r.sourceMissing && <span title={t("bankTx.sourceMissing")} className="ml-1 text-amber-700">⚠</span>}</span>,
+    date: (r) => (
+      <span className="whitespace-nowrap">
+        {dmy(r.bookingDate)}
+        {r.sourceMissing && <span title={t("bankTx.sourceMissing")} className="ml-1 text-amber-700">⚠</span>}
+        <button type="button" onClick={() => setEditing(r)} title={t("bankTx.edit")} aria-label={t("bankTx.edit")} className="ml-1 text-ink-secondary hover:text-ember">✎</button>
+      </span>
+    ),
     amount: amountCell,
     counterparty: (r) => (
       <span className="[overflow-wrap:anywhere]">
@@ -187,6 +248,10 @@ function BankTransactions({ id }: { id: string }) {
         <select value={r.classification} onChange={(e) => classify([r.id], e.target.value)} className={input + " py-0.5"} aria-label={t("bankTx.colClassification")}>
           {CLASSES.map((c) => <option key={c} value={c}>{t(`bankClass.${c}`)}</option>)}
         </select>
+        {/* The class says spending, the sign says money in (or vice versa): totals and pairing go by the sign. */}
+        {((r.classification === "expense" && r.amount > 0) || (r.classification === "income" && r.amount < 0)) && (
+          <button type="button" onClick={() => flipSign(r)} className="text-left text-[11.5px] text-amber-700 hover:underline">{t(r.amount > 0 ? "bankTx.signMismatchIn" : "bankTx.signMismatchOut")}</button>
+        )}
         {r.classification === "income" && (
           <select value={r.incomeType ?? "other"} onChange={(e) => classify([r.id], "income", { incomeType: e.target.value })} className={input + " py-0.5"} aria-label={t("bankTx.incomeType")}>
             {INCOME.map((c) => <option key={c} value={c}>{t(`bankIncome.${c}`)}</option>)}
@@ -212,7 +277,7 @@ function BankTransactions({ id }: { id: string }) {
           ) : (
             <span key={m.id} title={m.reasons.map((x) => reasonText(x, t)).join(", ")} className={"inline-flex items-center gap-1 rounded-full border border-dashed px-2 py-0.5 text-[11.5px] " + (m.tier === "sure" ? "border-pine text-pine" : "border-amber-500 text-amber-700")}>
               <a href={`/events/${id}/bills/${m.bill.id}`} className="hover:underline">{t(`bankTier.${m.tier}`)}: {m.bill.merchantName ?? m.bill.originalFilename} · {chipAmount(r, m)}</a>
-              <button type="button" onClick={() => act({ action: "confirm", ids: [r.id] })} aria-label={t("bankTx.confirmOne")} className="font-semibold hover:text-pine">✓</button>
+              <button type="button" onClick={async () => (m.bill.status !== "approved" || (await confirm({ message: t("bankPairing.approvedConfirm", { count: "1" }) }))) && act({ action: "confirm", ids: [r.id] })} aria-label={t("bankTx.confirmOne")} className="font-semibold hover:text-pine">✓</button>
               <button type="button" onClick={() => act({ action: "reject", ids: [r.id], matchIds: [m.id] })} aria-label={t("bankTx.rejectOne")} className="hover:text-red-600">✕</button>
             </span>
           )
@@ -282,6 +347,13 @@ function BankTransactions({ id }: { id: string }) {
         <label>{t("bankTx.groupBy")}<select value={group} onChange={(e) => setGroup(e.target.value)} className={input + " block"}><option value="">{t("bankTx.groupNone")}</option>{["classification", "pair", "counterparty", "person", "month"].map((g) => <option key={g} value={g}>{t(`bankGroup.${g}`)}</option>)}</select></label>
       </div>
       <p className="mb-2 text-[11.5px] text-ink-secondary">{t("bankTx.keysHint")}</p>
+      <details className="mb-3 rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[12.5px] text-ink">
+        <summary className="cursor-pointer text-ink-secondary">{t("bankTx.classHelpTitle")}</summary>
+        <ul className="mt-2 flex flex-col gap-1">
+          {CLASSES.map((c) => <li key={c}><b>{t(`bankClass.${c}`)}</b> – {t(`bankClassHelp.${c}`)}</li>)}
+        </ul>
+        <p className="mt-2 text-ink-secondary">{t("bankTx.classHelpSign")}</p>
+      </details>
       {msg && <p className="mb-2 text-[13px] text-ink">{msg}</p>}
 
       {data?.groups && (
@@ -300,7 +372,7 @@ function BankTransactions({ id }: { id: string }) {
 
       {!data ? (
         <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>
-      ) : rows.length === 0 ? (
+      ) : allRows.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">{t("bankTx.empty")}</p>
       ) : (
         <div className="overflow-x-auto">
@@ -308,7 +380,15 @@ function BankTransactions({ id }: { id: string }) {
             <thead>
               <tr className="border-b border-mist text-left text-ink-secondary">
                 <th className="w-8 p-1.5"><input type="checkbox" aria-label={t("bankTx.selectAll")} checked={sel.length === rows.length} onChange={(e) => setSelected(e.target.checked ? new Set(rows.map((r) => r.id)) : new Set())} /></th>
-                {columns.map((c) => <th key={c} className={"p-1.5 font-medium " + (c === "amount" ? "text-right" : "")}>{t(`bankTx.col${c[0].toUpperCase()}${c.slice(1)}`)}</th>)}
+                {columns.map((c) => (
+                  <th key={c} className={"whitespace-nowrap p-1.5 font-medium " + (c === "amount" ? "text-right" : "")} aria-sort={sort?.col === c ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                    <button type="button" onClick={() => setSort(nextSort(sort, c))} title={t("billsPage.sortHint")} className={"hover:text-ink " + (sort?.col === c ? "text-ink" : "")}>
+                      {t(`bankTx.col${c[0].toUpperCase()}${c.slice(1)}`)}
+                      {sort?.col === c && <span aria-hidden="true"> {sort.dir === "asc" ? "▲" : "▼"}</span>}
+                    </button>
+                    <ColumnFilter values={filterValues(c)} selected={colFilters[c] ?? null} onChange={(next) => setColFilter(c, next)} t={t} />
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody ref={tableRef}>
@@ -321,6 +401,27 @@ function BankTransactions({ id }: { id: string }) {
             </tbody>
           </table>
           {data.truncated && <p className="mt-2 text-[12px] text-amber-700">{t("bankTx.truncated")}</p>}
+        </div>
+      )}
+
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={() => setEditing(null)}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={(e) => { e.preventDefault(); saveEdit(e.currentTarget); }} className="w-full max-w-md rounded-lg border border-mist bg-paper p-4 text-[13px]">
+            <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("bankTx.editTitle")}</h2>
+            <p className="mb-3 text-[12px] text-ink-secondary">{t("bankTx.editHint")}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="text-ink-secondary">{t("bankTx.colDate")}<input type="date" name="bookingDate" defaultValue={editing.bookingDate.slice(0, 10)} className={input + " block w-full"} /></label>
+              <label className="text-ink-secondary">{t("bankTx.colAmount")} ({editing.currency})<input name="amount" inputMode="decimal" defaultValue={String(editing.amount)} className={input + " block w-full"} /></label>
+              <label className="col-span-2 text-ink-secondary">{t("bankTx.colCounterparty")}<input name="counterpartyName" defaultValue={editing.counterpartyName ?? ""} className={input + " block w-full"} /></label>
+              <label className="text-ink-secondary">{t("bankTx.account")}<input name="counterpartyAccount" defaultValue={editing.counterpartyAccount ?? ""} className={input + " block w-full"} /></label>
+              <label className="text-ink-secondary">{t("bankTx.colVs")}<input name="vs" defaultValue={editing.vs ?? ""} className={input + " block w-full"} /></label>
+              <label className="col-span-2 text-ink-secondary">{t("bankTx.colMessage")}<input name="message" defaultValue={editing.message ?? ""} className={input + " block w-full"} /></label>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className={btn} onClick={() => setEditing(null)}>{t("common.cancel")}</button>
+              <button type="submit" className="rounded-lg bg-ember px-3 py-1 text-[13px] font-medium text-white hover:bg-ember-hover">{t("common.save")}</button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -346,7 +447,10 @@ function BankTransactions({ id }: { id: string }) {
             )}
           </div>
         )}
-        {data && <span className="text-ink-secondary">{t("bankTx.shown")} {totalsLine(data.totals)}</span>}
+        {data && <span className="text-ink-secondary">{t("bankTx.shown")} {totalsLine(headerFiltered ? sum(rows) : data.totals)}</span>}
+        {headerFiltered && (
+          <button type="button" onClick={() => setColFilters({})} className="ml-3 text-[12px] text-ember hover:underline">{t("bankTx.clearColumnFilters")}</button>
+        )}
       </div>
     </div>
   );

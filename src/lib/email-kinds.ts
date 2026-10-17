@@ -20,7 +20,7 @@ export type EmailKind = {
   id: string;
   launch: "compose" | "portal" | "elsewhere";
   launchHref?: (eventId: string) => string;
-  // Module needed to edit / send it (roster = health or mail).
+  // Module needed to edit / send it (roster = participants, health or mail).
   module: "health" | "mail" | "roster";
   // No stored template (the blank e-mail).
   noTemplate?: boolean;
@@ -44,4 +44,4 @@ export const templateEditHref = (eventId: string, k: { purposeKey: string; orgOn
   k.orgOnly ? "/templates?tab=emails" : `/events/${eventId}?tab=posta#tpl-${k.purposeKey}`;
 
 export const kindAllowed = (k: { module: EmailKind["module"] }, access: Record<string, boolean>) =>
-  k.module === "roster" ? !!(access.health || access.mail) : !!access[k.module];
+  k.module === "roster" ? !!(access.participants || access.health || access.mail) : !!access[k.module];

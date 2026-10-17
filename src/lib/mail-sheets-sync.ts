@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { createManifestSheet, writeManifestValues } from "@/lib/drive";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
+import { participantsRootFolderId } from "@/lib/mail-drive-sync";
 
 // Read-only status export -- one Sheet per event, participant name +
 // guardian email + one column per document type (received/missing),
@@ -9,7 +10,9 @@ import { documentDisplayName } from "@/lib/mail-reply-template";
 // Explicitly one-way, app -> Sheet (see design doc "Infrastructure").
 export async function syncStatusSheetExport(eventId: string): Promise<{ sheetId: string } | null> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
-  if (!event?.driveExportFolderId) return null;
+  // The participants folder (Účastníci / Pošta), else the bills' export folder as before.
+  const folderId = event ? participantsRootFolderId(event) : null;
+  if (!event || !folderId) return null;
 
   const documentTypes = await getActiveDocumentTypes(eventId);
   const participants = await prisma.participant.findMany({
@@ -34,7 +37,7 @@ export async function syncStatusSheetExport(eventId: string): Promise<{ sheetId:
   if (sheetId) {
     await writeManifestValues(eventId, sheetId, rows);
   } else {
-    sheetId = await createManifestSheet(eventId, event.driveExportFolderId, `${event.name} – stav dokumentů`, rows);
+    sheetId = await createManifestSheet(eventId, folderId, `${event.name} – stav dokumentů`, rows);
   }
 
   await prisma.event.update({

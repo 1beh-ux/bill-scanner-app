@@ -8,12 +8,13 @@ import { fold } from "@/lib/planning-import";
 
 type Ctx = { params: Promise<{ id: string; txId: string }> };
 const REASONS: BankDifferenceReason[] = ["fx", "fee", "rounding", "partial"];
-const billSelect = { id: true, eventId: true, merchantName: true, billDate: true, amountCzk: true, totalAmount: true, currency: true, notes: true, originalFilename: true, status: true, payerAuthorId: true, paidToAuthor: true, documentMissing: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { amountCzk: true } } } as const;
+const billSelect = { id: true, eventId: true, merchantName: true, billDate: true, amountCzk: true, totalAmount: true, currency: true, notes: true, originalFilename: true, status: true, payerAuthorId: true, paidToAuthor: true, documentMissing: true, paymentChannel: true, bankMatches: { where: { confirmedAt: { not: null } }, select: { id: true, amountCzk: true, setPaidToAuthor: true, transaction: { select: { id: true, bookingDate: true, amount: true, currency: true, counterpartyName: true } } } } } as const;
 
 /**
  * Párování, right pane for one transaction: open suggestions (with reasons), the event's bills not
  * yet covered (searchable: ?q= merchant / amount / date / note), ?other=1 the same from other events
  * the user has Účtenky in, and for a payment to a payer that payer's unreimbursed bills (pre-ticked).
+ * Bills already paid (fully paired, or marked cash / another account) only with ?paid=1, with how.
  */
 export async function GET(req: NextRequest, { params }: Ctx) {
   const { id, txId } = await params;
@@ -26,16 +27,19 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   if (!tx) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const q = fold(req.nextUrl.searchParams.get("q") ?? "");
   const other = req.nextUrl.searchParams.get("other") === "1";
+  const paid = req.nextUrl.searchParams.get("paid") === "1";
 
   const remaining = (b: { amountCzk: unknown; bankMatches: { amountCzk: unknown }[] }) => Math.round((Number(b.amountCzk ?? 0) - b.bankMatches.reduce((s, m) => s + Number(m.amountCzk), 0)) * 100) / 100;
   const shape = (b: Awaited<ReturnType<typeof prisma.bill.findMany<{ select: typeof billSelect }>>>[number]) => ({
     id: b.id, eventId: b.eventId, merchantName: b.merchantName, billDate: b.billDate, amountCzk: b.amountCzk === null ? null : Number(b.amountCzk), totalAmount: b.totalAmount === null ? null : Number(b.totalAmount), currency: b.currency, notes: b.notes, originalFilename: b.originalFilename, status: b.status, documentMissing: b.documentMissing, remaining: remaining(b),
+    paymentChannel: b.paymentChannel,
+    pairedWith: b.bankMatches.map((m) => ({ matchId: m.id, amountCzk: Number(m.amountCzk), setPaidToAuthor: m.setPaidToAuthor, txId: m.transaction.id, bookingDate: m.transaction.bookingDate, amount: Number(m.transaction.amount), currency: m.transaction.currency, counterpartyName: m.transaction.counterpartyName })),
   });
   const matchesQ = (b: { merchantName: string | null; notes: string | null; amountCzk: unknown; billDate: Date | null; originalFilename: string }) =>
     !q || fold([b.merchantName, b.notes, b.originalFilename, String(b.amountCzk ?? ""), b.billDate?.toLocaleDateString("cs-CZ") ?? ""].join(" ")).includes(q);
 
   const bills = (await prisma.bill.findMany({ where: { eventId: id, status: { not: "failed" }, amountCzk: { not: null } }, select: billSelect, orderBy: { billDate: "asc" } }))
-    .filter((b) => remaining(b) > 0.005 && matchesQ(b))
+    .filter((b) => (paid || (remaining(b) > 0.005 && !b.paymentChannel)) && matchesQ(b))
     .slice(0, 200)
     .map(shape);
 

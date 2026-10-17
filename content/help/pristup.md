@@ -8,7 +8,8 @@ Záložka Přístup určuje, který uživatel vidí které moduly u této konkr�
 ![Nastavení akce — Přístup uživatelů](/napoveda/images/pristup-1.jpg)
 
 - Administrátor má přístup ke všemu vždy (šedý text „administrátor — vždy má přístup").
-- U ostatních uživatelů (např. hlavní vedoucí konkrétního tábora) zatrhněte, které moduly (Účtenky, Zdraví, Pošta, Plánování) pro tuto akci mají vidět.
+- U ostatních uživatelů (např. hlavní vedoucí konkrétního tábora) zatrhněte, které moduly (Účtenky, Účastníci, Zdraví, Pošta, Plánování, Banka) pro tuto akci mají vidět.
+- **Účastníci** je samostatný modul: seznam účastníků, dokumenty, odesílání e-mailů a jejich nastavení. Zapnete ho i bez Zdraví a Pošty (třeba pro akci jen s přihláškami). Kdo má Zdraví nebo Poštu, vidí účastníky dál i bez něj — pracují se stejnými dětmi.
 - Nové uživatele (e-mailové účty) přidáváte na úrovni celé organizace pod Organizace → Uživatelé; tady jen určujete jejich přístup k jednotlivým akcím.
 
 Přístup se řídí Google účtem — uživatel se přihlásí svým Google účtem a vidí jen to, co mu tady bylo povoleno.

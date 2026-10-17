@@ -10,7 +10,10 @@ import { billValueIn, money } from "@/lib/bank/currency";
 
 // Banka -> Párování (docs/bank-reconciliation.md A7): left the payments to pair, right the candidates
 // for the selected one; tick bills, see the difference, Spárovat (Enter) -> next payment.
-type Bill = { id: string; eventId: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; notes: string | null; originalFilename: string; status: string; documentMissing: boolean; remaining: number; eventName?: string };
+type Bill = { id: string; eventId: string; merchantName: string | null; billDate: string | null; amountCzk: number | null; totalAmount: number | null; currency: string; notes: string | null; originalFilename: string; status: string; documentMissing: boolean; remaining: number; eventName?: string;
+  paymentChannel: "cash" | "other_account" | null;
+  pairedWith: { matchId: string; amountCzk: number; setPaidToAuthor: boolean; txId: string; bookingDate: string; amount: number; currency: string; counterpartyName: string | null }[];
+};
 type Cand = {
   tx: { id: string; bookingDate: string; amount: number; currency: string; counterpartyName: string | null; message: string | null; vs: string | null; bankType: string | null; originalAmount: number | null; originalCurrency: string | null };
   confirmed: { id: string; amountCzk: number; amountTx: number; setPaidToAuthor: boolean; bill: Bill }[];
@@ -32,17 +35,23 @@ function Pairing({ id }: { id: string }) {
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [q, setQ] = useState("");
   const [other, setOther] = useState(false);
+  // Right side: bills already paid (paired / cash / another account) too, to change how.
+  const [showPaid, setShowPaid] = useState(false);
+  // Left side: which payments (to pair / paired / all spending) and filters, like Pohyby.
+  const [lf, setLf] = useState<Record<string, string>>({ tab: "todo" });
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
 
   const loadList = useCallback(async () => {
-    const r = await fetch(`/api/events/${id}/bank/transactions?tab=todo&cls=expense`);
+    const { tab, ...rest } = lf;
+    const qs = new URLSearchParams({ tab, ...(tab === "todo" ? { cls: "expense" } : { dir: "out" }), ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)) });
+    const r = await fetch(`/api/events/${id}/bank/transactions?${qs}`);
     if (r.status === 403) return setDenied(true);
     const d = r.ok ? await r.json() : { rows: [] };
     setList(d.rows);
     setCurrent((c) => c ?? d.rows[0]?.id ?? null);
-  }, [id]);
+  }, [id, lf]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load
     loadList();
@@ -50,13 +59,13 @@ function Pairing({ id }: { id: string }) {
 
   const loadCand = useCallback(async () => {
     if (!current) return setCand(null);
-    const r = await fetch(`/api/events/${id}/bank/pairing/${current}?${new URLSearchParams({ q, ...(other && { other: "1" }) })}`);
+    const r = await fetch(`/api/events/${id}/bank/pairing/${current}?${new URLSearchParams({ q, ...(other && { other: "1" }), ...(showPaid && { paid: "1" }) })}`);
     if (!r.ok) return setCand(null);
     const d: Cand = await r.json();
     setCand(d);
     // A payment to a payer: their unreimbursed bills ticked.
     setTicked((prev) => (prev.size ? prev : new Set(d.reimbursement?.billIds ?? [])));
-  }, [id, current, q, other]);
+  }, [id, current, q, other, showPaid]);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reload candidates for the selected payment
     loadCand();
@@ -90,6 +99,11 @@ function Pairing({ id }: { id: string }) {
   async function pair() {
     if (!cand || !chosen.length) return;
     if (needsReason && !reason) return setMsg(t("bankPairing.reasonRequired"));
+    // Approved bills are locked elsewhere: changing how they were paid needs a yes.
+    const approved = chosen.filter((b) => b.status === "approved").length;
+    if (approved && !(await confirm({ message: t("bankPairing.approvedConfirm", { count: String(approved) }) }))) return;
+    const marked = chosen.filter((b) => b.paymentChannel);
+    if (marked.length && !(await confirm({ message: t("bankPairing.channelConfirm", { names: marked.map((b) => `${b.merchantName ?? b.originalFilename} (${t(`paymentState.${b.paymentChannel}`)})`).join(", ") }) }))) return;
     const r = await fetch(`/api/events/${id}/bank/pairing/${cand.tx.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ billIds: chosen.map((b) => b.id), differenceReason: reason || null }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return setMsg(t(`bankPairing.error.${d.error ?? "failed"}`));
@@ -108,7 +122,8 @@ function Pairing({ id }: { id: string }) {
     setTicked((s) => new Set(s).add(b.id));
     loadCand();
   }
-  async function unpair(m: Cand["confirmed"][number]) {
+  async function unpair(m: { id: string; amountCzk: number; setPaidToAuthor: boolean; bill?: { status: string } }) {
+    if (m.bill?.status === "approved" && !(await confirm({ message: t("bankPairing.approvedConfirm", { count: "1" }) }))) return;
     if (!(await confirm({ message: t("bankTx.unpairConfirm", { amount: kc(m.amountCzk) }), danger: true }))) return;
     const clearPaid = m.setPaidToAuthor ? await confirm({ message: t("bankTx.unpairClearPaid") }) : false;
     await fetch(`/api/events/${id}/bank/matches/${m.id}?clearPaid=${clearPaid ? 1 : 0}`, { method: "DELETE" });
@@ -133,6 +148,14 @@ function Pairing({ id }: { id: string }) {
       <span className="flex-1">
         <a href={`/events/${b.eventId}/bills/${b.id}`} target="_blank" rel="noreferrer" className="font-medium text-ink hover:underline">{b.merchantName ?? b.originalFilename}</a>
         {b.documentMissing && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("bankPairing.noDocBadge")}</span>}
+        {b.status === "approved" && <span className="ml-1 rounded bg-pine-bg px-1 text-[11px] text-pine">{t("bankPairing.approvedBadge")}</span>}
+        {b.paymentChannel && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px] text-ink-secondary">{t(`paymentState.${b.paymentChannel}`)}</span>}
+        {b.pairedWith.map((m) => (
+          <span key={m.matchId} className="mt-0.5 flex items-center gap-1 text-[11.5px] text-pine">
+            {t("bankPairing.pairedWith", { date: dmy(m.bookingDate), amount: money(m.amount, m.currency), name: m.counterpartyName ?? "" })}
+            <button type="button" onClick={(e) => { e.preventDefault(); unpair({ id: m.matchId, amountCzk: m.amountCzk, setPaidToAuthor: m.setPaidToAuthor, bill: b }); }} aria-label={t("bankTx.unpair")} className="hover:text-red-600">✕</button>
+          </span>
+        ))}
         <span className="block text-[12px] text-ink-secondary">{dmy(b.billDate)}{b.notes && ` · ${b.notes.slice(0, 60)}`}{b.eventName && ` · ${b.eventName}`}</span>
         {extra}
       </span>
@@ -149,6 +172,17 @@ function Pairing({ id }: { id: string }) {
       <BankHeader title={t("bankNav.pairing")} />
       {msg && <p className="mb-2 text-[13px] text-ink">{msg}</p>}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div>
+        <div className="mb-2 flex flex-wrap items-end gap-2 text-[12px] text-ink-secondary">
+          <label>{t("bankPairing.leftShow")}<select value={lf.tab} onChange={(e) => setLf((x) => ({ ...x, tab: e.target.value }))} className="block rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink">
+            {["todo", "paired", "all"].map((k) => <option key={k} value={k}>{t(`bankPairing.left.${k}`)}</option>)}
+          </select></label>
+          <label>{t("bankTx.search")}<input value={lf.q ?? ""} onChange={(e) => setLf((x) => ({ ...x, q: e.target.value }))} className="block w-32 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink" /></label>
+          <label>{t("bankTx.from")}<input type="date" value={lf.from ?? ""} onChange={(e) => setLf((x) => ({ ...x, from: e.target.value }))} className="block rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink" /></label>
+          <label>{t("bankTx.to")}<input type="date" value={lf.to ?? ""} onChange={(e) => setLf((x) => ({ ...x, to: e.target.value }))} className="block rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink" /></label>
+          <label>{t("bankTx.min")}<input inputMode="decimal" value={lf.min ?? ""} onChange={(e) => setLf((x) => ({ ...x, min: e.target.value }))} className="block w-20 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink" /></label>
+          <label>{t("bankTx.max")}<input inputMode="decimal" value={lf.max ?? ""} onChange={(e) => setLf((x) => ({ ...x, max: e.target.value }))} className="block w-20 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink" /></label>
+        </div>
         <div className="max-h-[75vh] overflow-y-auto rounded-lg border border-mist">
           {list.length === 0 && <p className="p-3 text-[13px] text-ink-secondary">{t("bankPairing.nothing")}</p>}
           {list.map((x) => (
@@ -157,9 +191,10 @@ function Pairing({ id }: { id: string }) {
                 <span className="text-ink">{x.counterpartyName ?? x.message ?? "—"}</span>
                 <span className="block text-[12px] text-ink-secondary">{dmy(x.bookingDate)}{x.reimbursementOf && ` · ${t("bankTx.reimbursement", { name: x.reimbursementOf })}`}</span>
               </span>
-              <span className="tabular-nums">{money(x.amount, x.currency)}</span>
+              <span className="tabular-nums">{money(x.amount, x.currency)}{x.matches.some((m) => m.confirmedAt) && <span className="block text-[11px] text-pine">{t("bankPair.paired")}</span>}</span>
             </button>
           ))}
+        </div>
         </div>
 
         <div>
@@ -193,6 +228,7 @@ function Pairing({ id }: { id: string }) {
               <div className="mb-1 mt-3 flex flex-wrap items-center gap-2">
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("bankPairing.search")} className="flex-1 rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px]" />
                 <label className="flex items-center gap-1 text-[13px] text-ink-secondary"><input type="checkbox" checked={other} onChange={(e) => setOther(e.target.checked)} />{t("bankPairing.otherEvents")}</label>
+                <label className="flex items-center gap-1 text-[13px] text-ink-secondary" title={t("bankPairing.showPaidHint")}><input type="checkbox" checked={showPaid} onChange={(e) => setShowPaid(e.target.checked)} />{t("bankPairing.showPaid")}</label>
               </div>
               <div className="max-h-[40vh] overflow-y-auto">
                 {cand.bills.filter((b) => !cand.suggestions.some((s) => s.bill.id === b.id)).map((b) => billRow(b))}

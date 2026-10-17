@@ -23,7 +23,7 @@ export async function PATCH(
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const body = await req.json();
@@ -147,7 +147,7 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const denied = await requireAnyModuleAccess(user, eventId, ["health", "mail"]);
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
   if (existing.kind !== "custom") {
     return NextResponse.json({ error: "fixed_field_not_deletable" }, { status: 400 });
