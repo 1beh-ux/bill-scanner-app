@@ -70,6 +70,17 @@ Migrations `20261020090000_bank_reconciliation` + `20261020090100_bank_module_ro
 Checks: tsc, eslint (no new errors), build, all self-checks, check-org-scope 0 unexplained,
 test-org-isolation 73/73, test-bank 28/28, embed-check.
 
+## Foreign currency (2026-10-17)
+A transaction is in its account's currency (`BankAccount.currency`; Fio sets it from the statement) and
+may carry a card payment's original amount. `BankMatch.amountCzk` = the bill's side at the ČNB rate
+(budgets, Platba state, unchanged everywhere else); `BankMatch.amountTx` = the payment's side in its
+currency (how much of the payment is used; null on older rows = amountCzk). Matching / pairing compare
+in the payment's currency, or by the original amount (src/lib/bank/currency.ts); a Kč payment vs a
+foreign bill falls back to ±3 % in Kč. With a reason other than "částečná platba" the payment is used up.
+Bills from a payment take the ČNB rate (not the bank's); the difference is recorded as "fx". Totals,
+groups and Přehled are per currency. Migration `20261023090000_bank_match_amount_tx`. test-bank 32/32
+(PLN account, card payment with the original amount). Deploy `bill-scanner-app-00114-vrk`.
+
 ## Phase 2 (prompt 5 part B) — open
 Needs from Pavel: a GPC sample from his bank (+ CAMT.053 if available). Note for B3: `Author` has no
 e-mail field today — reminders need one (or "Kopírovat text" only).
