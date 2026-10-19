@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect, use, useRef } from "react";
+import { Fragment, useState, useEffect, use, useRef } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ImportRunResult, { type RunResult, type RunRow } from "@/components/import/ImportRunResult";
 import { driveErrorText } from "@/lib/drive-error-messages";
+import PageSplitter, { type SplitPart } from "@/components/bills/PageSplitter";
 
 type CreatedBill = { id: string; originalFilename: string };
+// A multi-page PDF kept as one bill (bill-ingest.ts); the "Stránky" editor can split it.
+type MultiPage = { pageCount: number; blankPages: number[] };
+type MultiPageRow = { billId: string } & MultiPage;
 type Author = { id: string; canonicalName: string; active: boolean };
 
 // The event's payers (already active-only); `active` kept for the existing selects.
@@ -57,6 +61,8 @@ export default function EventImportPage({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
+  const [multiPage, setMultiPage] = useState<Record<string, MultiPage>>({});
+  const [openSplit, setOpenSplit] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ id: string; name: string; x: number; y: number } | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -121,9 +127,9 @@ export default function EventImportPage({
           (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: t(`importPage.failure.${f.error}`) })
         ),
       ],
-      splits: (data.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
-      blankPages: (data.blankPagesSkipped ?? []).map((b: { originalFilename: string; pageNumbers: number[] }) => ({ name: b.originalFilename, pageNumbers: b.pageNumbers })),
+      multiPage: (data.multiPage ?? []).length,
     });
+    addMultiPage(data.multiPage ?? []);
 
     if (uploadInputRef.current) uploadInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -195,13 +201,14 @@ export default function EventImportPage({
           (f: { filename: string; error: string }): RunRow => ({ name: f.filename, kind: "failed", reason: t("importPage.moveFailed", { reason: driveErrorText(t, f.error, { ...identityInfo, folderLabel: "processed" }) }) })
         ),
       ],
-      splits: (data.ingest.splitInfo ?? []).map((sp: { originalFilename: string; pageCount: number }) => ({ name: sp.originalFilename, pageCount: sp.pageCount })),
-      blankPages: (data.ingest.blankPagesSkipped ?? []).map((b: { originalFilename: string; pageNumbers: number[] }) => ({ name: b.originalFilename, pageNumbers: b.pageNumbers })),
+      multiPage: (data.ingest.multiPage ?? []).length,
       payers: {
         matched: (data.authorsResolved ?? []).filter((a: { created: boolean }) => !a.created).map((a: { authorName: string }) => a.authorName),
         created: (data.authorsResolved ?? []).filter((a: { created: boolean }) => a.created).map((a: { authorName: string }) => a.authorName),
       },
     });
+
+    addMultiPage(data.ingest.multiPage ?? []);
 
     const driveOverrides: Record<string, DraftFields> = {};
     const driveUnlockedIds: string[] = [];
@@ -215,6 +222,20 @@ export default function EventImportPage({
       setOverrides((o) => ({ ...o, ...driveOverrides }));
       setUnlocked((prev) => new Set([...prev, ...driveUnlockedIds]));
     }
+  }
+
+  function addMultiPage(rows: MultiPageRow[]) {
+    setMultiPage((prev) => ({ ...prev, ...Object.fromEntries(rows.map((r) => [r.billId, { pageCount: r.pageCount, blankPages: r.blankPages }])) }));
+  }
+
+  // The editor replaced one bill by its parts: same place in the table, same staged fields.
+  function handleSplit(oldId: string, parts: SplitPart[]) {
+    setOpenSplit(null);
+    setCreatedBills((prev) => prev.flatMap((b) => (b.id === oldId ? parts.map((p) => ({ id: p.id, originalFilename: p.originalFilename })) : [b])));
+    addMultiPage(parts.filter((p) => p.pageCount > 1).map((p) => ({ billId: p.id, pageCount: p.pageCount, blankPages: [] })));
+    if (overrides[oldId]) setOverrides((o) => ({ ...o, ...Object.fromEntries(parts.map((p) => [p.id, o[oldId]])) }));
+    if (unlocked.has(oldId)) setUnlocked((prev) => new Set([...prev, ...parts.map((p) => p.id)]));
+    setSelected((prev) => new Set([...prev].filter((id) => id !== oldId)));
   }
 
   function showPreview(e: React.MouseEvent, bill: CreatedBill) {
@@ -531,8 +552,10 @@ export default function EventImportPage({
                 {createdBills.map((bill) => {
                   const isUnlocked = unlocked.has(bill.id);
                   const values = effectiveFor(bill.id);
+                  const pages = multiPage[bill.id];
                   return (
-                    <tr key={bill.id} className="border-b border-mist/60">
+                    <Fragment key={bill.id}>
+                    <tr className="border-b border-mist/60">
                       <td className="p-2">
                         <input
                           type="checkbox"
@@ -551,6 +574,14 @@ export default function EventImportPage({
                         >
                           {bill.originalFilename}
                         </a>
+                        {pages && (
+                          <button
+                            onClick={() => setOpenSplit(openSplit === bill.id ? null : bill.id)}
+                            className="ml-2 whitespace-nowrap rounded-full border border-mist px-2 py-0.5 text-[12px] text-ink hover:bg-paper-2"
+                          >
+                            {t("pageSplit.button", { count: String(pages.pageCount) })} {openSplit === bill.id ? "▴" : "▾"}
+                          </button>
+                        )}
                       </td>
                       <td className="p-2">
                         <input
@@ -619,6 +650,19 @@ export default function EventImportPage({
                         </button>
                       </td>
                     </tr>
+                    {pages && openSplit === bill.id && (
+                      <tr className="border-b border-mist/60">
+                        <td colSpan={8} className="p-2">
+                          <PageSplitter
+                            billId={bill.id}
+                            pageCount={pages.pageCount}
+                            blankPages={pages.blankPages}
+                            onDone={(parts) => handleSplit(bill.id, parts)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

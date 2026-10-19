@@ -4,7 +4,7 @@ import { Prisma } from "@/generated/prisma";
 import type { Bill, IngestChannel } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { billsBucket, sanitizeFilename } from "@/lib/gcs";
-import { analyseBlankPages, planPdfPages } from "@/lib/pdf-blank";
+import { analyseBlankPages } from "@/lib/pdf-blank";
 
 export interface RawFileInput {
   filename: string;
@@ -27,6 +27,10 @@ interface WorkItem {
   contentHash: string;
   driveSourceFileId?: string;
   payerAuthorId?: string;
+  /** Multi-page PDF: its page count and the 0-based pages that look blank. */
+  pages?: { count: number; blank: number[] };
+  /** Legacy hashes this file's pages got when ingest still split every page (dedup). */
+  legacyHashes?: string[];
 }
 
 export interface DuplicateInfo {
@@ -35,9 +39,12 @@ export interface DuplicateInfo {
   existingCreatedAt: Date;
 }
 
-export interface SplitInfo {
-  originalFilename: string;
+/** A multi-page PDF kept as one bill; the import page offers to split it (bill-pages.ts). */
+export interface MultiPageInfo {
+  billId: string;
   pageCount: number;
+  /** 0-based pages that look blank (pdf-blank.ts) -- pre-removed in the split editor. */
+  blankPages: number[];
 }
 
 export interface FailureInfo {
@@ -45,18 +52,11 @@ export interface FailureInfo {
   error: string;
 }
 
-export interface BlankPagesInfo {
-  originalFilename: string;
-  /** 1-based page numbers in the original file that were skipped as blank. */
-  pageNumbers: number[];
-}
-
 export interface IngestResult {
   created: Bill[];
   duplicates: DuplicateInfo[];
-  splitInfo: SplitInfo[];
+  multiPage: MultiPageInfo[];
   failures: FailureInfo[];
-  blankPagesSkipped: BlankPagesInfo[];
 }
 
 const UPLOAD_CONCURRENCY = 5;
@@ -80,7 +80,7 @@ async function processInBatches<T, R>(
 }
 
 /**
- * Shared ingest pipeline: splits multi-page PDFs, dedupes (within-batch, then
+ * Shared ingest pipeline: dedupes (within-batch, then
  * against the DB), uploads to GCS, and creates Bill rows. Used by direct
  * upload/camera capture AND Drive import — extend here, don't duplicate.
  */
@@ -89,13 +89,13 @@ export async function ingestBillFiles(
   userId: string,
   ingestChannel: IngestChannel,
   rawFiles: RawFileInput[],
-  // false: a multi-page PDF stays one bill (the table import -- one row = one
-  // file = one bill in the source data). Uploads and Drive-folder import split.
+  // false: don't even look at the pages (the table import -- one row = one file =
+  // one bill in the source data). Uploads and Drive-folder import report multi-page
+  // PDFs so the import page can offer to split them -- nothing is split here any more.
   options: { splitPdfs?: boolean } = {}
 ): Promise<IngestResult> {
-  const splitInfo: SplitInfo[] = [];
+  const multiPage: MultiPageInfo[] = [];
   const failures: FailureInfo[] = [];
-  const blankPagesSkipped: BlankPagesInfo[] = [];
   const items: WorkItem[] = [];
 
   for (const file of rawFiles) {
@@ -136,33 +136,18 @@ export async function ingestBillFiles(
       continue;
     }
 
-    splitInfo.push({ originalFilename: file.filename, pageCount });
-    const baseName = file.filename.replace(/\.pdf$/i, "");
     const sourceHash = sha256(buffer);
-
-    // Blank pages (see pdf-blank.ts: no text AND no content image/drawing) don't
-    // become bills. Numbering keeps the ORIGINAL page numbers, so a gap is visible.
     const verdicts = await analyseBlankPages(buffer);
-    const plan = planPdfPages(verdicts.map((v) => v.blank), pageCount);
-    if (plan.skipped.length > 0) {
-      blankPagesSkipped.push({ originalFilename: file.filename, pageNumbers: plan.skipped.map((i) => i + 1) });
-    }
-
-    for (const i of plan.keep) {
-      const subDoc = await PDFDocument.create();
-      const [copiedPage] = await subDoc.copyPages(pdfDoc, [i]);
-      subDoc.addPage(copiedPage);
-      const pageBytes = await subDoc.save();
-
-      items.push({
-        filename: `${baseName} (strana ${i + 1} z ${pageCount}).pdf`,
-        buffer: Buffer.from(pageBytes),
-        contentType: "application/pdf",
-        contentHash: sha256(`${sourceHash}:page:${i + 1}`),
-        driveSourceFileId: file.driveSourceFileId,
-        payerAuthorId: file.payerAuthorId,
-      });
-    }
+    items.push({
+      filename: file.filename,
+      buffer,
+      contentType: "application/pdf",
+      contentHash: sourceHash,
+      driveSourceFileId: file.driveSourceFileId,
+      payerAuthorId: file.payerAuthorId,
+      pages: { count: pageCount, blank: verdicts.flatMap((v, i) => (v.blank ? [i] : [])) },
+      legacyHashes: Array.from({ length: pageCount }, (_, i) => sha256(`${sourceHash}:page:${i + 1}`)),
+    });
   }
 
   const created: Bill[] = [];
@@ -186,8 +171,15 @@ export async function ingestBillFiles(
   }
 
   const checkResults = await processInBatches(toCheck, UPLOAD_CONCURRENCY, async (item) => {
+    // Also the bills this file was split into (split route: "<hash>:<pages>"; old ingest: per-page hashes).
     const existing = await prisma.bill.findFirst({
-      where: { eventId, contentHash: item.contentHash },
+      where: {
+        eventId,
+        OR: [
+          { contentHash: item.contentHash },
+          ...(item.pages ? [{ contentHash: { startsWith: `${item.contentHash}:` } }, { contentHash: { in: item.legacyHashes } }] : []),
+        ],
+      },
     });
     return { item, existing };
   });
@@ -227,6 +219,7 @@ export async function ingestBillFiles(
         },
       });
       created.push(bill);
+      if (item.pages) multiPage.push({ billId, pageCount: item.pages.count, blankPages: item.pages.blank });
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
         await billsBucket.file(objectPath).delete().catch(() => {});
@@ -244,5 +237,5 @@ export async function ingestBillFiles(
     }
   });
 
-  return { created, duplicates, splitInfo, failures, blankPagesSkipped };
+  return { created, duplicates, multiPage, failures };
 }

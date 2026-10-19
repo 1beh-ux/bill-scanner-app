@@ -23,7 +23,9 @@ Které filtry (štítky nad seznamem) se ukazují a v jakém pořadí, nastavít
 
 4. Tlačítkem **Schválit** (nahoře u názvu souboru) účtenku potvrdíte — schválené účtenky se již nepřepočítávají při změně kurzu a jsou připravené k exportu pro účetní (Nastavení akce → Připojení → Exportovat do Drive).
 
-Vícestránkové PDF s více účtenkami se při importu automaticky rozdělí na jednotlivé stránky/účtenky.
+Vícestránkové PDF zůstane při importu vcelku (jedna účtenka). Pokud je v něm víc účtenek, klikněte v tabulce importu na **Stránky (N)**: zobrazí se náhledy všech stran, ✂ mezi stranami určuje, kde začíná další účtenka, stránky jde přetáhnout jinam nebo vynechat (prázdné jsou vynechané předem). Rychlá volba **Po 1 / Po 2 … str.** rozdělí soubor pravidelně.
+
+Když se účtenky rozdělily omylem, vyberte je v seznamu účtenek a dejte **Sloučit do jedné** — stránky se seřadí podle názvu souboru (strana 1, 2, …). Pokud je už přečetla AI, sloučenou přečte znovu. Nejde to u schválených, proplacených a se spárovanou bankovní platbou.
 
 ## Synchronizace s Diskem
 

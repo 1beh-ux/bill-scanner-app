@@ -388,7 +388,7 @@ async function main() {
       { key: "paymentsPage.qrUnavailableZeroAmount", cs: "Částka je 0 Kč — QR kód se negeneruje.", en: "Amount is 0 CZK — no QR code to generate." },
       { key: "paymentsPage.ibanLabel", cs: "IBAN", en: "IBAN" },
       { key: "billModal.unmarkPaidButton", cs: "Zrušit proplacení", en: "Unmark as paid" },
-      { key: "billModal.paidStatusPaid", cs: "Proplaceno {date}", en: "Paid {date}" },
+      { key: "billModal.paidStatusPaid", cs: "Proplaceno", en: "Paid" },
       { key: "billModal.paidStatusUnpaid", cs: "Neproplaceno", en: "Not paid" },
       { key: "billModal.error.no_payer", cs: "Nelze označit — účtenka nemá plátce k proplacení.", en: "Cannot mark as paid — no payer set for this bill." },
       { key: "billModal.error.not_approved", cs: "Nelze označit jako proplaceno — účtenka není schválená.", en: "Cannot mark as paid — bill is not approved." },

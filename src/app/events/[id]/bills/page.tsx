@@ -662,6 +662,44 @@ export default function EventBillsPage({
     load();
   }
 
+  // Re-join bills that were split by mistake (bills/merge). Page order = file name order,
+  // so "(strana 2 z 5)" comes before "(strana 10 z 12)". A bill the AI already read is read again.
+  async function runMerge() {
+    const toMerge = bills
+      .filter((b) => selected.has(b.id))
+      .sort((a, b) => a.originalFilename.localeCompare(b.originalFilename, "cs", { numeric: true }));
+    const ok = await confirm({ message: t("billsPage.confirmMerge", { count: String(toMerge.length), names: toMerge.map((b) => b.originalFilename).join("\n") }) });
+    if (!ok) return;
+
+    setBulkRunning(true);
+    setBulkMessage(null);
+    setBulkFailures([]);
+    setError(null);
+    const res = await fetch(`/api/events/${id}/bills/merge`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ billIds: toMerge.map((b) => b.id) }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setError(`${t(`billPages.error.${data.error ?? "failed"}`)}${data.filename ? ` (${data.filename})` : ""}`);
+      setBulkRunning(false);
+      return;
+    }
+    if (data.reprocess) {
+      await fetch(`/api/events/${id}/bills/bulk-ai`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ billIds: [data.id] }),
+      }).catch(() => {});
+    }
+    setBulkMessage(t("billsPage.mergeDone", { name: data.originalFilename }));
+    setSelected(new Set());
+    setBulkRunning(false);
+    await load();
+    if (data.reprocess) setAiProgressIds(new Set([data.id]));
+  }
+
   async function runBulkAi() {
     if (selected.size === 0) return;
     // No batch-size cap here any more — every bill is queued as its own
@@ -747,7 +785,9 @@ export default function EventBillsPage({
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
   return (
-    <div className="mx-auto max-w-[1088px] p-4 md:p-8">
+    // Normal width up to the default 9 columns; each extra column widens the page by 120 px, up to
+    // the full window -- past that the text columns wrap onto more lines instead of hiding off-screen.
+    <div className="mx-auto p-4 md:p-8" style={{ maxWidth: `min(100%, ${1088 + Math.max(0, columns.length - 9) * 120}px)` }}>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[22px] font-semibold text-ink">
           {event.name} — {t("billsPage.title")}
@@ -890,6 +930,11 @@ export default function EventBillsPage({
           <a href={`/events/${id}/bills/duplicates?ids=${[...selected].join(",")}`} className={btnSecondary}>
             {t("billDup.findSelected")}
           </a>
+          {selected.size >= 2 && (
+            <button onClick={runMerge} disabled={bulkRunning} className={btnSecondary}>
+              {t("billsPage.bulkMerge")}
+            </button>
+          )}
           <button onClick={runBulkAi} disabled={hasActiveAiRun} className={btnPrimary}>
             {hasActiveAiRun ? t("billModal.aiProcessing") : t("billModal.aiReprocess")}
           </button>
@@ -1001,7 +1046,7 @@ export default function EventBillsPage({
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
                 {columns.map((col) => (
-                  <th key={col} className="whitespace-nowrap p-2 text-[12px] font-medium text-ink-secondary" aria-sort={sort?.col === col ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
+                  <th key={col} className="p-2 text-[12px] font-medium text-ink-secondary" aria-sort={sort?.col === col ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}>
                     <button type="button" onClick={() => setSort(nextSort(sort, col))} title={t("billsPage.sortHint")} className={"hover:text-ink " + (sort?.col === col ? "text-ink" : "")}>
                       {t(BILL_COLUMNS.find((c) => c.key === col)!.labelKey)}
                       {sort?.col === col && <span aria-hidden="true"> {sort.dir === "asc" ? "▲" : "▼"}</span>}

@@ -166,19 +166,30 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    fetch("/api/translations")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: { key: string; cs: string; en: string }[]) => {
-        const map: TranslationsMap = {};
-        for (const row of data) {
-          map[row.key] = { cs: row.cs, en: row.en };
-        }
-        setTranslations(map);
-        try {
-          sessionStorage.setItem(TRANSLATIONS_CACHE_KEY, JSON.stringify(map));
-        } catch {}
-      })
-      .catch(() => {});
+    // Retried: a cold start (first visit, new browser) can fail the first request, and
+    // there's no other moment that would fetch again. 401 = logged out, nothing to retry.
+    const load = (attempt: number): Promise<void> =>
+      fetch("/api/translations")
+        .then((res) => {
+          if (res.status === 401) return [];
+          if (!res.ok) throw new Error(String(res.status));
+          return res.json();
+        })
+        .then((data: { key: string; cs: string; en: string }[]) => {
+          if (data.length === 0) return;
+          const map: TranslationsMap = {};
+          for (const row of data) {
+            map[row.key] = { cs: row.cs, en: row.en };
+          }
+          setTranslations(map);
+          try {
+            sessionStorage.setItem(TRANSLATIONS_CACHE_KEY, JSON.stringify(map));
+          } catch {}
+        })
+        .catch(() => {
+          if (attempt < 4) setTimeout(() => load(attempt + 1), 1000 * 2 ** attempt);
+        });
+    load(0);
   }, []);
 
   function t(key: string, vars?: Record<string, string>) {

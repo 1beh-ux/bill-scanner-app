@@ -11,10 +11,8 @@ export type RunRow = {
 export type RunResult = {
   source: "upload" | "camera" | "drive";
   rows: RunRow[];
-  /** Multi-page PDFs that were split into one bill per page. */
-  splits: { name: string; pageCount: number }[];
-  /** Blank pages that were left out when splitting (no bill created for them). */
-  blankPages?: { name: string; pageNumbers: number[] }[];
+  /** Multi-page PDFs kept as one bill each (the table below offers "Stránky" to split them). */
+  multiPage: number;
   /** Payers matched/created from Drive subfolder names (Drive import only). */
   payers?: { matched: string[]; created: string[] };
 };
@@ -57,21 +55,8 @@ export default function ImportRunResult({ result }: { result: RunResult }) {
         </p>
       )}
 
-      {result.splits.length > 0 && (
-        <ul className="mb-2 list-disc pl-5 text-[13px] text-ink-secondary">
-          {result.splits.map((s) => (
-            <li key={s.name}>{t("importPage.result.split", { name: s.name, count: String(s.pageCount) })}</li>
-          ))}
-        </ul>
-      )}
-
-      {result.blankPages && result.blankPages.length > 0 && (
-        <p className="mb-2 text-[13px] text-ink-secondary">
-          {t("importPage.result.blankSkipped", {
-            count: String(result.blankPages.reduce((n, b) => n + b.pageNumbers.length, 0)),
-            details: result.blankPages.map((b) => t("importPage.result.blankDetail", { pages: b.pageNumbers.join(", "), name: b.name })).join("; "),
-          })}
-        </p>
+      {result.multiPage > 0 && (
+        <p className="mb-2 text-[13px] text-ink-secondary">{t("importPage.result.multiPage", { count: String(result.multiPage) })}</p>
       )}
 
       {problems.length > 0 && (

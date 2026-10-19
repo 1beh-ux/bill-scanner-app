@@ -1,5 +1,5 @@
-// Blank-page detection for multi-page PDFs that get split into one bill per page
-// (src/lib/bill-ingest.ts).
+// Blank-page detection for multi-page PDFs: the import page's split editor starts with
+// these pages removed (src/lib/bill-ingest.ts, src/components/bills/PageSplitter.tsx).
 //
 // "No text" is NOT a valid test on its own: scanned receipts and photos-in-a-PDF
 // have no text layer at all. A page counts as blank only if ALL of these hold:

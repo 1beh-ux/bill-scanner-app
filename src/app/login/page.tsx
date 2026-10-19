@@ -1,7 +1,6 @@
 "use client";
 import { getRedirectResult, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
 import { auth, googleProvider, prefersRedirectSignIn } from "@/lib/firebase";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Tent, Receipt, HeartPulse, Mail as MailIcon } from "lucide-react";
 
@@ -24,7 +23,6 @@ const FEATURES = [
 ];
 
 export default function LoginPage() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -81,7 +79,10 @@ export default function LoginPage() {
         const me = await fetch("/api/me")
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null);
-        router.push(me?.landingPath || "/");
+        // A full page load, not router.push: the app-wide translations and /api/me were
+        // fetched (and refused) while still logged out -- a client-side switch would keep
+        // that empty state until the user refreshes (raw keys, missing menu on first login).
+        window.location.assign(me?.landingPath || "/");
       } else {
         setBusy(false);
         setError("Tento účet nemá přístup do aplikace. Přístup uděluje Pavel — napište mu, ať vás přidá.");
