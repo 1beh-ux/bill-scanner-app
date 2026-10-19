@@ -1,14 +1,15 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
-export type MenuSection = "bills" | "bank" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
+export type MenuSection = "bills" | "tickets" | "bank" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
 // roster = the central participant list, reachable with participants, health or mail; bank = roster + the
 // event's automatic bank check on (docs/bank-payments-design.md).
 // bankRecon = the Banka module (bank reconciliation, explicit grant).
-export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon";
+// tickets = Vstupenky of a public event (docs/public-event-tickets-spec.md).
+export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -24,6 +25,7 @@ const ev = (path: string) => (eventId: string | null) => (eventId ? `/events/${e
 
 export const MENU_SECTIONS: { id: MenuSection; labelKey: string | null }[] = [
   { id: "bills", labelKey: "nav.sectionBills" },
+  { id: "tickets", labelKey: "nav.sectionTickets" },
   { id: "bank", labelKey: "nav.sectionBank" },
   { id: "participants", labelKey: "nav.sectionParticipants" },
   { id: "health", labelKey: "nav.sectionHealth" },
@@ -41,6 +43,8 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
   { id: "drive-cleanup", section: "bills", labelKey: "nav.driveCleanup", icon: FolderSearch, href: ev("/bills/drive-cleanup") },
   ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
+  { id: "ticket-orders", section: "tickets", labelKey: "tickets.navOrders", icon: Ticket, href: ev("/tickets"), module: "tickets" },
+  { id: "ticket-scan", section: "tickets", labelKey: "tickets.navScan", icon: ScanLine, href: ev("/tickets/scan"), module: "tickets" },
   { id: "bank-overview", section: "bank", labelKey: "bankNav.overview", icon: LayoutDashboard, href: ev("/bank"), module: "bankRecon" },
   { id: "bank-transactions", section: "bank", labelKey: "bankNav.transactions", icon: ArrowLeftRight, href: ev("/bank/transactions"), module: "bankRecon" },
   { id: "bank-pairing", section: "bank", labelKey: "bankNav.pairing", icon: Link2, href: ev("/bank/pairing"), module: "bankRecon" },

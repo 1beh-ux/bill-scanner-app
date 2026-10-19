@@ -27,7 +27,7 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const denied = await requireAnyModuleAccess(user, id, ["bills", "participants", "health", "mail", "planning", "bank"]);
+  const denied = await requireAnyModuleAccess(user, id, ["bills", "participants", "health", "mail", "planning", "bank", "tickets"]);
   if (denied) return denied;
 
   const event = await prisma.event.findUnique({ where: { id } });
@@ -39,7 +39,8 @@ export async function GET(
   // "Vložit na web": which websites may frame this event's registration host.
   const regHost = await publicHostFor("registration", id, event.organizationId);
   const publicEmbedOrigins = regHost ? ((await embedOriginsOf(regHost)) ?? []) : [];
-  return NextResponse.json({ ...event, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "", event.organizationId), publicEmbedOrigins });
+  // The door link token only through the Vstupenky settings (it lets anyone check people in).
+  return NextResponse.json({ ...event, ticketScanToken: undefined, autoSendReady, publicBaseUrl: await publicUrl("registration", id, "", event.organizationId), publicEmbedOrigins });
 }
 
 export async function PATCH(

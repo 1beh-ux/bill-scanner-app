@@ -14,7 +14,7 @@ import type { CleanSubmission, FormField } from "@/lib/public-registration";
 
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
 
-/** The event a public slug opens: switched on, active, connected or a membership year, before its deadline. Null = 404. */
+/** The event a public slug opens: switched on, active, connected / a membership year / a public event, before its deadline. Null = 404. */
 export async function publicEvent(slug: string) {
   if (!slug || slug.length > 60) return null;
   return prisma.event.findFirst({
@@ -22,7 +22,8 @@ export async function publicEvent(slug: string) {
       publicSlug: slug,
       publicRegistration: true,
       status: "active",
-      OR: [{ registrationConnected: true }, { kind: "membership" }],
+      // public_event: the ticket form instead of the family form (src/lib/tickets-server.ts).
+      OR: [{ registrationConnected: true }, { kind: "membership" }, { kind: "public_event" }],
       AND: [{ OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] }],
     },
   });

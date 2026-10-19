@@ -32,6 +32,8 @@ import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { memberFormFields, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
+import { remaining } from "@/lib/tickets";
+import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
 export type PortalChild = NonNullable<Awaited<ReturnType<typeof loadChild>>>;
@@ -275,6 +277,8 @@ export async function portalData(scope: PortalScope) {
     contacts: scope.kind === "family" ? familyContacts(scope.members).map((g) => ({ name: g.name, email: g.email, phone: g.phone, member: g.member })) : [],
     // "Přidat člena rodiny" (slice 8 #1): family links only.
     addMember: scope.kind === "family" ? { fields: memberFormFields(templates) } : null,
+    // Veřejné akce on sale in the portal (docs/public-event-tickets-spec.md): adults only, the order isn't tied to the person.
+    tickets: await portalTicketEvents(scope),
     available: await Promise.all(
       available.map(async ({ event: e, memberIds }) => ({
         id: e.id,
@@ -594,4 +598,31 @@ export async function addFamilyMember(scope: PortalScope, body: unknown): Promis
   });
   await prisma.family.update({ where: { id: scope.id }, data: { needsReview: true } });
   return child;
+}
+
+/** Public events open in the portal for this link's adults, with their sale state and the buyer prefill. */
+async function portalTicketEvents(scope: PortalScope) {
+  const adult = scope.members.find((m) => m.isAdult && !m.leftAt);
+  if (!adult) return [];
+  const events = await prisma.event.findMany({
+    where: { organizationId: scope.organizationId, kind: "public_event", portalOpen: true, status: "active", OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] },
+    orderBy: { startDate: "asc" },
+  });
+  return Promise.all(
+    events.map(async (e) => {
+      const { types, settings } = eventSaleSetup(e);
+      const left = remaining(types, settings, await soldCounts(e.id));
+      return {
+        id: e.id,
+        name: e.name,
+        startDate: e.startDate,
+        endDate: e.endDate,
+        location: e.location,
+        info: e.portalInfo,
+        maxPerOrder: settings.maxPerOrder,
+        types: types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] })),
+        prefill: { buyerName: adult.name, email: adult.guardians[0]?.email ?? "", phone: adult.guardians[0]?.phone ?? "" },
+      };
+    })
+  );
 }

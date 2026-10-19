@@ -1,6 +1,6 @@
 # Veřejná akce (public event with ticket sales) — decisions, 2026-10-19
 
-Example: a dancing ball. Status: **decided, not built.**
+Example: a dancing ball. Status: **built 2026-10-19** (see "Where it lives" at the end).
 
 ## What it is
 
@@ -45,3 +45,19 @@ Example: a dancing ball. Status: **decided, not built.**
 - Access, both ways:
   - a new event module **"Vstupenky"** (Event settings → Lidé) for people with a login;
   - an optional **secret scan link** for one-off helpers, which can be revoked.
+
+## Where it lives (build 2026-10-19)
+
+- Schema: `EventKind.public_event`, `ModuleKey.tickets`, `TicketOrder`, `Ticket`, `Event.ticketSettings` /
+  `ticketScanToken`, `BankMovement.ticketOrderId` (migration `20261026090000_public_event_tickets`, additive).
+- Rules (pure, self-check `src/lib/tickets.check.ts`): `src/lib/tickets.ts`. Price types = `Event.priceRules`
+  categories with `capacity` (`src/lib/price-rules.ts`).
+- Server: `src/lib/tickets-server.ts` (order under a per-event row lock, the three e-mails, paid, cancel, scan),
+  `src/lib/tickets-pdf.ts` (markdown template -> one A4 page per ticket via the PDF service). Bank check:
+  orders ride along as matcher candidates `order:<id>` in `src/lib/bank/check.ts`.
+- Templates: e-mail purposes `ticket_order`, `ticket_send`, `ticket_cancel`, and `ticket_document` (the ticket page),
+  edited in Nastavení akce -> Vstupenky (`src/components/tickets/TicketSettings.tsx`).
+- Buyer: `/r/<slug>` shows `TicketForm` for public events (`/api/public/r/<slug>/tickets`), payment status
+  `/api/public/tickets/<publicToken>`; portal `/api/portal/<token>/tickets` (adults, prefilled, not linked).
+- Admin: `/events/<id>/tickets` (orders, CSV export, PDF, paid / resend / cancel), `/events/<id>/tickets/scan`;
+  no-login door link `/vstup/<token>` (`/api/public/scan/<token>`). QR reading: `jsqr`.

@@ -46,7 +46,7 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
     if (host) permanentRedirect(`https://${host}/p/${token}`);
   }
   const [rows, org] = await Promise.all([
-    prisma.translation.findMany({ where: { key: { startsWith: "portal." } }, select: { key: true, cs: true } }),
+    prisma.translation.findMany({ where: { OR: [{ key: { startsWith: "portal." } }, { key: { startsWith: "ticketForm." } }] }, select: { key: true, cs: true } }),
     publicOrg(portal.organizationId),
   ]);
   return (

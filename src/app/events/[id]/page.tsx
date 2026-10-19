@@ -21,6 +21,8 @@ import PortalCardLayout from "@/components/events/PortalCardLayout";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
+import TicketSettings from "@/components/tickets/TicketSettings";
+import { modulesOfKind } from "@/lib/module-kinds";
 
 type EventDetail = {
   id: string;
@@ -45,7 +47,7 @@ type EventDetail = {
   mailQuestionnaireUrl: string | null;
   registrationDeadline: string | null;
   senderEmail: string | null;
-  kind: "event" | "membership";
+  kind: "event" | "membership" | "public_event";
   membershipYear: number | null;
   registrationConnected: boolean;
   peopleUnlinked: boolean;
@@ -74,7 +76,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "bank";
+type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "bank" | "tickets";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -85,8 +87,6 @@ type AccessRow = {
   role: "admin" | "accountant" | "user";
   access: Record<ModuleKey, boolean>;
 };
-
-const MODULE_KEYS: ModuleKey[] = ["bills", "participants", "health", "mail", "planning", "bank"];
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -99,8 +99,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
-const SECTION_KEYS: Tab[] = ["akce", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
+type Tab = "akce" | "vstupenky" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
+const SECTION_KEYS: Tab[] = ["akce", "vstupenky", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -330,6 +330,7 @@ export default function EventDetailPage({
 
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
 
+  const isPublicEvent = event.kind === "public_event";
   // help = Nápověda topic (src/content/help-topics.ts) linked from an unmet item.
   const checklist: { labelKey: string; done: boolean; section: Tab; help: string }[] = [
     // Bills: where approved bills go (Synchronizovat s Diskem), and where imported files are filed.
@@ -343,7 +344,14 @@ export default function EventDetailPage({
       ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "dokumenty" as Tab, help: "nastaveni-ucastnici-posta" }]
       : []),
     // Registration: what parents see and pay.
-    ...(event.publicRegistration || event.registrationConnected
+    // Veřejná akce: its own list (prices, account, mailbox, public page) -- see the Vstupenky tab.
+    ...(isPublicEvent
+      ? [
+          { labelKey: "eventDetail.checklistTicketTypes", done: !!event.priceRules, section: "vstupenky" as Tab, help: "vstupenky" },
+          { labelKey: "eventDetail.checklistRegistrationAccount", done: !!event.registrationBankAccountNumber, section: "vstupenky" as Tab, help: "vstupenky" },
+        ]
+      : []),
+    ...(!isPublicEvent && (event.publicRegistration || event.registrationConnected)
       ? [
           { labelKey: "eventDetail.checklistPrice", done: event.memberPriceCzk !== null || event.nonMemberPriceCzk !== null, section: "platba" as Tab, help: "prijeti-registrace" },
           { labelKey: "eventDetail.checklistRegistrationAccount", done: !!event.registrationBankAccountNumber, section: "platba" as Tab, help: "prijeti-registrace" },
@@ -351,7 +359,7 @@ export default function EventDetailPage({
         ]
       : []),
     ...(event.publicRegistration ? [{ labelKey: "eventDetail.checklistPublicSlug", done: !!event.publicSlug, section: "verejna" as Tab, help: "prijeti-registrace" }] : []),
-    ...(event.bankCheckEnabled
+    ...(event.bankCheckEnabled && !isPublicEvent
       ? [
           { labelKey: "eventDetail.checklistBankAccount", done: !!event.bankAccountId, section: "platba" as Tab, help: "prijeti-registrace" },
           { labelKey: "eventDetail.checklistPaymentDoc", done: !!event.paymentDocTypeId, section: "platba" as Tab, help: "prijeti-registrace" },
@@ -364,8 +372,10 @@ export default function EventDetailPage({
   // help = Nápověda topic for the tab (none for Plánování yet).
   const visibleSections: { key: Tab; labelKey: string; help?: string }[] = [
     { key: "akce", labelKey: "eventSettings.tabAkce", help: "uvod" },
-    { key: "platba", labelKey: "eventSettings.tabPayment" },
-    ...(isAdmin ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
+    // Veřejná akce: prices, payment, e-mails and the ticket in one tab; no camp registration tabs.
+    ...(isPublicEvent && moduleAccess.tickets ? [{ key: "vstupenky" as Tab, labelKey: "eventSettings.tabTickets", help: "vstupenky" }] : []),
+    ...(!isPublicEvent ? [{ key: "platba" as Tab, labelKey: "eventSettings.tabPayment" }] : []),
+    ...(isAdmin && !isPublicEvent ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
     { key: "verejna", labelKey: "eventSettings.tabPublic" },
     ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
     { key: "pripojeni", labelKey: "eventSettings.tabPripojeni", help: "pripojeni" },
@@ -523,7 +533,7 @@ export default function EventDetailPage({
               the plain člen/nečlen prices stay under Akce for standard events). */}
           {tab === "verejna" && event && (
             <div className="flex flex-col gap-6">
-              {isAdmin && (event.registrationConnected || event.kind === "membership") ? (
+              {isAdmin && (event.registrationConnected || event.kind === "membership" || event.kind === "public_event") ? (
                 <PublicRegistrationSettings eventId={id} event={event} onSaved={load} t={t} />
               ) : (
                 isAdmin && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
@@ -532,7 +542,9 @@ export default function EventDetailPage({
             </div>
           )}
 
-          {tab === "lide" && isAdmin && <AccessTab eventId={id} t={t} />}
+          {tab === "lide" && isAdmin && <AccessTab eventId={id} kind={event.kind} t={t} />}
+
+          {tab === "vstupenky" && isPublicEvent && <TicketSettings eventId={id} isAdmin={isAdmin} t={t} />}
 
           {tab === "pripojeni" && (
             <div className="flex flex-col gap-6">
@@ -1134,7 +1146,9 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
               ? "accessTab.moduleBank"
               : key === "participants"
                 ? "accessTab.moduleParticipants"
-                : "accessTab.modulePlanning"
+                : key === "tickets"
+                  ? "accessTab.moduleTickets"
+                  : "accessTab.modulePlanning"
     );
 
   return (
@@ -1163,7 +1177,8 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
   );
 }
 
-function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Record<string, string>) => string }) {
+function AccessTab({ eventId, kind, t }: { eventId: string; kind: string; t: (key: string, vars?: Record<string, string>) => string }) {
+  const MODULE_KEYS = modulesOfKind(kind);
   const [rows, setRows] = useState<AccessRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1213,7 +1228,9 @@ function AccessTab({ eventId, t }: { eventId: string; t: (key: string, vars?: Re
               ? "accessTab.moduleBank"
               : key === "participants"
                 ? "accessTab.moduleParticipants"
-                : "accessTab.modulePlanning"
+                : key === "tickets"
+                  ? "accessTab.moduleTickets"
+                  : "accessTab.modulePlanning"
     );
 
   return (

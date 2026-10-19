@@ -16,7 +16,7 @@ import HelpLink from "@/components/HelpLink";
 type EventOption = { id: string; name: string; status: string };
 
 // Nápověda topic per section header ("?" link).
-const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", participants: "ucastnici", health: "zdravi", mail: "posta" };
+const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", tickets: "vstupenky", participants: "ucastnici", health: "zdravi", mail: "posta" };
 
 export default function AppSidebar() {
   const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, isSuperAdmin, hiddenModules } =
@@ -75,7 +75,7 @@ export default function AppSidebar() {
   }, [eventId]);
 
   // The parent portal (/p/<token>) is public and has no app navigation.
-  if (pathname.startsWith("/login") || pathname.startsWith("/p/") || pathname.startsWith("/r/")) return null;
+  if (pathname.startsWith("/login") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/")) return null;
 
   function onEventChange(id: string) {
     setCurrentEventId(id);
@@ -94,7 +94,7 @@ export default function AppSidebar() {
   const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
   const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
   const showParticipants = (moduleAccess.participants && !hiddenModules.includes("participants")) || showHealth || showMail;
-  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank };
+  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank, tickets: !!moduleAccess.tickets };
 
   const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin) && (!i.module || moduleShown[i.module])).map((i) => ({
     ...i,

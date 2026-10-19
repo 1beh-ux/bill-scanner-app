@@ -9,6 +9,10 @@ import { countsAsReceived } from "@/lib/registration-status";
 import { matchMovements, type Candidate } from "@/lib/bank/bank-matching";
 import { fetchFioMovements, fioErrorCode, type FioError } from "@/lib/bank/fio-client";
 import { decryptBankToken } from "@/lib/bank/token-crypto";
+import { markTicketOrderPaid, ticketOrderCandidates } from "@/lib/tickets-server";
+
+// Ticket orders (public events) ride along as candidates with this id prefix.
+const ORDER = "order:";
 
 export type CheckReason = "cron" | "admin" | "event" | "portal" | "token";
 export type CheckResult =
@@ -84,7 +88,12 @@ export async function claimFioSlot(bankAccountId: string): Promise<boolean> {
 }
 
 async function run(bankAccountId: string): Promise<CheckResult> {
-  const candidates = await bankCandidates(bankAccountId);
+  const registrations = await bankCandidates(bankAccountId);
+  const orders = await ticketOrderCandidates(bankAccountId);
+  const candidates: (Candidate & { createdAt: Date })[] = [
+    ...registrations,
+    ...orders.map((o) => ({ participantId: ORDER + o.orderId, acceptedVs: o.vs, currentVs: null, expected: o.expected, paid: o.paid, createdAt: o.createdAt })),
+  ];
   const unpaid = candidates.filter((c) => !c.paid);
   if (!unpaid.length) return { status: "nothing_to_do" };
 
@@ -111,7 +120,7 @@ async function run(bankAccountId: string): Promise<CheckResult> {
   );
   const fresh = movements.filter((m) => !known.has(m.movementId));
   const byId = new Map(fresh.map((m) => [m.movementId, m]));
-  const docType = new Map(candidates.map((c) => [c.participantId, c.paymentDocTypeId]));
+  const docType = new Map(registrations.map((c) => [c.participantId, c.paymentDocTypeId]));
   let settled = 0;
   let review = 0;
   for (const d of matchMovements(fresh, candidates)) {
@@ -120,10 +129,16 @@ async function run(bankAccountId: string): Promise<CheckResult> {
       data: {
         bankAccountId, movementId: m.movementId, bookedAt: m.bookedAt, amount: m.amount, currency: m.currency, variableSymbol: m.variableSymbol,
         counterName: m.counterName, counterAccount: m.counterAccount, message: m.message,
-        status: "review", reason: d.reason ?? null, participantId: d.participantId,
+        status: "review", reason: d.reason ?? null,
+        ...(d.participantId?.startsWith(ORDER) ? { ticketOrderId: d.participantId.slice(ORDER.length) } : { participantId: d.participantId }),
       },
     });
-    if (d.status === "settled" && (await settleMovement(row.id, d.participantId, docType.get(d.participantId)!, null))) settled++;
+    const ok =
+      d.status === "settled" &&
+      (d.participantId.startsWith(ORDER)
+        ? await markTicketOrderPaid(d.participantId.slice(ORDER.length), { via: "bank", userId: null, movementRowId: row.id })
+        : await settleMovement(row.id, d.participantId, docType.get(d.participantId)!, null));
+    if (ok) settled++;
     else review++;
   }
   await prisma.bankAccount.update({ where: { id: bankAccountId }, data: { lastSuccessAt: new Date(), lastError: null } });

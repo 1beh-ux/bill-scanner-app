@@ -8,6 +8,9 @@ import { publicEvent, publicFormContext } from "@/lib/public-registration-server
 import PublicFrame from "@/components/embed/PublicFrame";
 import { embedParams } from "@/components/embed/embed-params";
 import PublicForm from "./PublicForm";
+import TicketPage from "./TicketPage";
+import { remaining } from "@/lib/tickets";
+import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
 // Public registration page (docs/registration-slice3-spec.md D) -- outside the
 // login gate (src/proxy.ts). Landing info + the new-family form. A slug that
@@ -41,6 +44,29 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
   if (scope.kind === "admin") {
     const host = await publicHostFor("registration", event.id, event.organizationId);
     if (host) permanentRedirect(`https://${host}/r/${slug}`);
+  }
+  // Veřejná akce: the ticket form instead of the family registration (docs/public-event-tickets-spec.md).
+  if (event.kind === "public_event") {
+    const { types, settings } = eventSaleSetup(event);
+    const [rows, org, sold] = await Promise.all([
+      prisma.translation.findMany({ where: { OR: [{ key: { startsWith: "ticketForm." } }, { key: { startsWith: "portal." } }] }, select: { key: true, cs: true } }),
+      publicOrg(event.organizationId),
+      soldCounts(event.id),
+    ]);
+    const left = remaining(types, settings, sold);
+    return (
+      <PublicFrame embed={embed} theme={theme} appearance={org}>
+        <TicketPage
+          slug={slug}
+          event={{ name: event.name, startDate: event.startDate.toISOString(), endDate: event.endDate.toISOString(), location: event.location, landingContent: event.landingContent, registrationDeadline: event.registrationDeadline?.toISOString() ?? null }}
+          types={types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] }))}
+          maxPerOrder={settings.maxPerOrder}
+          org={org}
+          embed={embed}
+          strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))}
+        />
+      </PublicFrame>
+    );
   }
   const [ctx, rows, org] = await Promise.all([
     publicFormContext(event),

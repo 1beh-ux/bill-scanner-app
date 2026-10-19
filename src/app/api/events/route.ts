@@ -44,6 +44,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const { name, startDate, endDate } = body;
+  // Veřejná akce (docs/public-event-tickets-spec.md): ticket sales -- no participants, documents or
+  // participant fields; Účtenky + Vstupenky on.
+  const isPublic = body.kind === "public_event";
 
   if (!name || !startDate || !endDate) {
     return NextResponse.json(
@@ -59,6 +62,7 @@ export async function POST(req: NextRequest) {
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         organizationId: await orgIdOfUser(user),
+        ...(isPublic && { kind: "public_event" as const }),
       },
     });
 
@@ -80,7 +84,7 @@ export async function POST(req: NextRequest) {
 
     // plan_activity is the org base library -- imported into PlanActivity on
     // demand, never copied as an event list item.
-    const listTemplates = await tx.listTemplate.findMany({ where: { organizationId: created.organizationId, active: true, kind: { not: "plan_activity" } } });
+    const listTemplates = isPublic ? [] : await tx.listTemplate.findMany({ where: { organizationId: created.organizationId, active: true, kind: { not: "plan_activity" } } });
     if (listTemplates.length > 0) {
       await tx.eventListItem.createMany({
         data: listTemplates.map((lt) => ({
@@ -99,10 +103,11 @@ export async function POST(req: NextRequest) {
       data: [
         { eventId: created.id, moduleKey: "bills", enabled: true },
         { eventId: created.id, moduleKey: "health", enabled: false },
+        ...(isPublic ? [{ eventId: created.id, moduleKey: "tickets" as const, enabled: true }] : []),
       ],
     });
 
-    const fieldTemplates = await tx.participantFieldTemplate.findMany({ where: { organizationId: created.organizationId, active: true } });
+    const fieldTemplates = isPublic ? [] : await tx.participantFieldTemplate.findMany({ where: { organizationId: created.organizationId, active: true } });
     if (fieldTemplates.length > 0) {
       await tx.eventParticipantField.createMany({
         data: fieldTemplates.map((f) => ({
@@ -123,7 +128,7 @@ export async function POST(req: NextRequest) {
     return created;
   });
 
-  await seedFixedParticipantFields(event.id);
+  if (!isPublic) await seedFixedParticipantFields(event.id);
 
   return NextResponse.json(event, { status: 201 });
 }

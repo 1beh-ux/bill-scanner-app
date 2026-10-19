@@ -10,7 +10,7 @@ type EventItem = {
   startDate: string;
   endDate: string;
   status: "active" | "closed";
-  kind: "event" | "membership";
+  kind: "event" | "membership" | "public_event";
   membershipYear: number | null;
 };
 
@@ -25,6 +25,7 @@ export default function EventsPage() {
   const [name, setName] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [kind, setKind] = useState<"event" | "public_event">("event");
   const [error, setError] = useState<string | null>(null);
 
   async function loadEvents() {
@@ -52,7 +53,7 @@ export default function EventsPage() {
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, startDate, endDate }),
+      body: JSON.stringify({ name, startDate, endDate, kind }),
     });
 
     if (!res.ok) {
@@ -62,6 +63,7 @@ export default function EventsPage() {
     }
 
     setName("");
+    setKind("event");
     setStartDate("");
     setEndDate("");
     loadEvents();
@@ -109,6 +111,11 @@ export default function EventsPage() {
           onChange={(e) => setEndDate(e.target.value)}
           className={inputClass}
         />
+        {/* Veřejná akce = ticket sales (ples, koncert), docs/public-event-tickets-spec.md. */}
+        <select value={kind} onChange={(e) => setKind(e.target.value as "event" | "public_event")} className={inputClass} aria-label={t("events.kindLabel")}>
+          <option value="event">{t("events.kindEvent")}</option>
+          <option value="public_event">{t("events.kindPublic")}</option>
+        </select>
         <button
           type="submit"
           className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
@@ -142,6 +149,9 @@ export default function EventsPage() {
                     <a href={`/events/${ev.id}`} className="text-ink underline hover:text-ember">
                       {ev.name}
                     </a>
+                    {ev.kind === "public_event" && (
+                      <span className="ml-2 rounded bg-ember/15 px-1.5 py-0.5 text-[12px] text-ink">{t("events.kindPublicChip")}</span>
+                    )}
                     {ev.kind === "membership" && (
                       <span className="ml-2 rounded bg-pine-bg px-1.5 py-0.5 text-[12px] text-pine">
                         {t("children.membershipChip", { year: String(ev.membershipYear ?? "?") })}

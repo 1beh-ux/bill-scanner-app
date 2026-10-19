@@ -14,6 +14,7 @@ import PersonPrice, { type CategoryOption, type OddilField } from "@/components/
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 import { appliesTo } from "@/lib/registration-fields";
 import type { FormField } from "@/lib/public-registration";
+import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
 // docs/registration-slice3-spec.md F). Two columns on desktop -- the person /
@@ -78,6 +79,8 @@ type Data = {
   available: (EventRef & { id: string; registrationDeadline: string | null; location: string | null; info: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
   // "Přidat člena rodiny" (slice 8 #1): family links only.
   addMember: { fields: FormField[] } | null;
+  // Veřejné akce with tickets on sale (adults' links only).
+  tickets: { id: string; name: string; startDate: string; endDate: string; location: string | null; info: string | null; maxPerOrder: number; types: SaleType[]; prefill: { buyerName: string; email: string; phone: string } }[];
 };
 type T = (key: string, vars?: Record<string, string>) => string;
 
@@ -207,6 +210,26 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
                 </>
               )}
               {registered && <p className="rounded-lg border border-pine/40 bg-pine/10 px-3 py-2 text-[14px] text-pine">{registered}</p>}
+              {data.tickets.length > 0 && (
+                <>
+                  <h2 className={h2}>{t("ticketForm.portalTitle")}</h2>
+                  {data.tickets.map((e) => (
+                    <details key={e.id} className={eventCard}>
+                      <summary className="cursor-pointer">
+                        <span className="text-[16px] font-semibold text-ink">{e.name}</span>
+                        <span className="ml-2 text-[13px] text-ink-secondary">
+                          {range(e)}
+                          {e.location && ` · ${e.location}`}
+                        </span>
+                      </summary>
+                      <div className="mt-3 flex flex-col gap-3">
+                        {e.info && <EventInfo text={e.info} t={t} />}
+                        <TicketForm types={e.types} maxPerOrder={e.maxPerOrder} submitUrl={`${api}/tickets`} extraBody={{ eventId: e.id }} prefill={e.prefill} embed={embed} fetcher={portalApiFetch} t={t} />
+                      </div>
+                    </details>
+                  ))}
+                </>
+              )}
               <h2 className={h2}>{t("portal.tab.registrations")}</h2>
               {shownRegs.length === 0 && <p className="text-[14px] text-ink-secondary">{t("portal.noRegistrations")}</p>}
               {shownRegs.length > 0 && (

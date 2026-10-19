@@ -6,8 +6,34 @@ import {
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
   PORTAL_INVITATION_PURPOSE_KEY,
+  TICKET_ORDER_PURPOSE_KEY,
+  TICKET_SEND_PURPOSE_KEY,
+  TICKET_CANCEL_PURPOSE_KEY,
+  TICKET_DOCUMENT_PURPOSE_KEY,
   isCustomPurpose,
 } from "@/lib/email-template-purpose-keys";
+
+// Veřejná akce: every ticket e-mail / the ticket page (src/lib/tickets-server.ts ticketVars).
+const ORDER_VARS = ["event_name", "event_date", "event_place", "buyer_name", "order_number", "order_items", "order_total", "ticket_count", "sender_email", "signature", "organization_name"] as const;
+const ORDER_DUMMY = {
+  event_name: "Ples 2027",
+  event_date: "13. 2. 2027",
+  event_place: "Sokolovna Brno",
+  buyer_name: "Jana Nováková",
+  order_number: "12",
+  order_items: "2× Vstupné (300 Kč), 1× Student (150 Kč)",
+  order_total: "750 Kč",
+  ticket_count: "3",
+  sender_email: "ples@example.com",
+  signature: "S pozdravem\nPořadatelé plesu",
+  organization_name: "Turistický oddíl Sluníčko",
+  payment_account: "123456789/2010",
+  variable_symbol: "2790012",
+  ticket_no: "1",
+  ticket_code: "K7QW-3MZP-X9TD",
+  price_type: "Vstupné",
+  ticket_qr: "[QR kód vstupenky]",
+};
 
 // The participant's family / own portal link (slice 4 #11, src/lib/document-variables.ts
 // portalLinkVars) -- in every participant e-mail; empty for events not using the module.
@@ -35,6 +61,10 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
   // Yearly invitation (slice 4 #12): same variables as the link e-mail.
   [PORTAL_INVITATION_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
+  [TICKET_ORDER_PURPOSE_KEY]: [...ORDER_VARS, "payment_account", "variable_symbol"],
+  [TICKET_SEND_PURPOSE_KEY]: [...ORDER_VARS],
+  [TICKET_CANCEL_PURPOSE_KEY]: [...ORDER_VARS],
+  [TICKET_DOCUMENT_PURPOSE_KEY]: ["ticket_qr", "ticket_code", "ticket_no", "price_type", ...ORDER_VARS],
 };
 
 const PORTAL_DUMMY = {
@@ -44,6 +74,10 @@ const PORTAL_DUMMY = {
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
+  [TICKET_ORDER_PURPOSE_KEY]: ORDER_DUMMY,
+  [TICKET_SEND_PURPOSE_KEY]: ORDER_DUMMY,
+  [TICKET_CANCEL_PURPOSE_KEY]: ORDER_DUMMY,
+  [TICKET_DOCUMENT_PURPOSE_KEY]: ORDER_DUMMY,
   [MAIL_HELPER_REPLY_PURPOSE_KEY]: {
     ...PORTAL_DUMMY,
     participant_name: "Anna Nováková",

@@ -28,3 +28,11 @@ export const PORTAL_INVITATION_PURPOSE_KEY = "portal_invitation";
 // to picked participants like the open e-mail -- same variables, same send.
 export const CUSTOM_PURPOSE_PREFIX = "custom_";
 export const isCustomPurpose = (purposeKey: string) => purposeKey.startsWith(CUSTOM_PURPOSE_PREFIX);
+// Veřejná akce (docs/public-event-tickets-spec.md): sent automatically to the buyer -- the order with
+// payment details + QR, the tickets PDF once paid, a cancellation. TICKET_DOCUMENT is the ticket page
+// itself (markdown, one page per ticket, src/lib/tickets-pdf.ts) -- body only.
+export const TICKET_ORDER_PURPOSE_KEY = "ticket_order";
+export const TICKET_SEND_PURPOSE_KEY = "ticket_send";
+export const TICKET_CANCEL_PURPOSE_KEY = "ticket_cancel";
+export const TICKET_DOCUMENT_PURPOSE_KEY = "ticket_document";
+export const isTicketPurpose = (purposeKey: string) => purposeKey.startsWith("ticket_");

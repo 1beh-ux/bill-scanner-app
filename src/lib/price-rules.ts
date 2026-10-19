@@ -21,6 +21,8 @@ export type PriceCategory = {
   householdDiscountCzk?: number;
   // The registration form asks the event's "Oddíl" field (oddilFieldKey) for this category.
   asksOddil?: boolean;
+  // Veřejná akce (src/lib/tickets.ts): at most this many tickets of this type; unset = no limit.
+  capacity?: number;
 };
 
 export type PriceRules = {
@@ -68,6 +70,7 @@ export function readPriceRules(raw: unknown): PriceRules | null {
     if (money(r.schoolYearPriceCzk) !== undefined) cat.schoolYearPriceCzk = money(r.schoolYearPriceCzk);
     if (money(r.householdDiscountCzk)) cat.householdDiscountCzk = money(r.householdDiscountCzk);
     if (r.asksOddil === true) cat.asksOddil = true;
+    if (money(r.capacity)) cat.capacity = money(r.capacity);
     categories.push(cat);
   }
   if (categories.length === 0) return null;

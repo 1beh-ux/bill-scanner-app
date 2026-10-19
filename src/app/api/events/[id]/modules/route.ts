@@ -5,8 +5,9 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { syncParticipantFieldsForEvent } from "@/lib/participant-field-sync";
 import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
+import { modulesOfKind } from "@/lib/module-kinds";
 
-const MANAGEABLE_MODULES: ModuleKey[] = ["bills", "participants", "health", "mail", "planning", "bank"];
+
 
 export async function GET(
   req: NextRequest,
@@ -20,11 +21,11 @@ export async function GET(
   const denied = await requireModuleAccess(user, eventId, "bills");
   if (denied) return denied;
 
-  const rows = await prisma.eventModule.findMany({ where: { eventId } });
+  const [rows, event] = await Promise.all([prisma.eventModule.findMany({ where: { eventId } }), prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { kind: true } })]);
   const enabledByKey = new Map(rows.map((r) => [r.moduleKey, r.enabled]));
 
   return NextResponse.json(
-    MANAGEABLE_MODULES.map((key) => ({
+    modulesOfKind(event.kind).map((key) => ({
       moduleKey: key,
       enabled: enabledByKey.get(key) ?? false,
     }))
@@ -49,7 +50,7 @@ export async function PATCH(
   const moduleKey: ModuleKey | undefined = body.moduleKey;
   const enabled: unknown = body.enabled;
 
-  if (!moduleKey || !MANAGEABLE_MODULES.includes(moduleKey) || typeof enabled !== "boolean") {
+  if (!moduleKey || !modulesOfKind(inOrg.event.kind).includes(moduleKey) || typeof enabled !== "boolean") {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 

@@ -6,6 +6,7 @@ import type { ModuleKey, ParticipantFieldSurface } from "@/generated/prisma";
 // fields whose surfaces are entirely for a module that's still off.
 const MODULE_SURFACES: Record<ModuleKey, ParticipantFieldSurface[]> = {
   bills: [],
+  tickets: [],
   health: ["health_list", "health_detail"],
   mail: ["mail_list"],
   planning: [],

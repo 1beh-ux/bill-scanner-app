@@ -9,7 +9,12 @@ import {
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
   PORTAL_INVITATION_PURPOSE_KEY,
+  TICKET_ORDER_PURPOSE_KEY,
+  TICKET_SEND_PURPOSE_KEY,
+  TICKET_CANCEL_PURPOSE_KEY,
+  TICKET_DOCUMENT_PURPOSE_KEY,
   isCustomPurpose,
+  isTicketPurpose,
 } from "@/lib/email-template-purpose-keys";
 
 // Re-exported for existing server-side callers -- client components must
@@ -27,6 +32,65 @@ export {
 // Exported for scripts/fix-registration-acceptance-template.ts, which needs to know
 // the real default text without duplicating it.
 export const PURPOSE_DEFAULTS: Record<string, { subject: string; body: string }> = {
+  // Veřejná akce (docs/public-event-tickets-spec.md), sent automatically from src/lib/tickets-server.ts.
+  [TICKET_ORDER_PURPOSE_KEY]: {
+    subject: "Objednávka vstupenek č. {{order_number}} – {{event_name}}",
+    body: `Dobrý den,
+
+děkujeme za objednávku vstupenek na {{event_name}} ({{event_date}}, {{event_place}}).
+
+Objednáno: {{order_items}}
+Celkem k úhradě: {{order_total}}
+
+Platba převodem:
+Číslo účtu: {{payment_account}}
+Variabilní symbol: {{variable_symbol}}
+Částka: {{order_total}}
+
+QR kód pro platbu z mobilní aplikace banky je v příloze. Jakmile platba dorazí, pošleme vám vstupenky e-mailem.
+
+{{signature}}`,
+  },
+  [TICKET_SEND_PURPOSE_KEY]: {
+    subject: "Vaše vstupenky – {{event_name}}",
+    body: `Dobrý den,
+
+platba za objednávku č. {{order_number}} dorazila, děkujeme. V příloze posíláme vstupenky ({{ticket_count}}) – každá strana PDF je jedna vstupenka s vlastním QR kódem. Ukažte je u vchodu vytištěné nebo v telefonu; každý kód platí pro jeden vstup.
+
+{{event_name}}, {{event_date}}, {{event_place}}
+
+Těšíme se na vás.
+{{signature}}`,
+  },
+  [TICKET_CANCEL_PURPOSE_KEY]: {
+    subject: "Zrušení objednávky č. {{order_number}} – {{event_name}}",
+    body: `Dobrý den,
+
+vaše objednávka vstupenek č. {{order_number}} na {{event_name}} ({{order_items}}) byla zrušena a vstupenky z ní už neplatí.
+
+Pokud jste už platili, ozvěte se nám prosím na {{sender_email}} kvůli vrácení peněz.
+
+{{signature}}`,
+  },
+  // The ticket page: markdown, {{ticket_qr}} = the check-in QR image (on a line of its own).
+  [TICKET_DOCUMENT_PURPOSE_KEY]: {
+    subject: "Vstupenka",
+    body: `# {{event_name}}
+
+**{{event_date}}** · {{event_place}}
+
+## Vstupenka {{ticket_no}}/{{ticket_count}} – {{price_type}}
+
+{{ticket_qr}}
+
+Kód: **{{ticket_code}}**
+
+Objednávka č. {{order_number}} · {{buyer_name}}
+
+Vstupenku ukažte u vchodu (vytištěnou nebo v telefonu). Každý kód platí pro jeden vstup.
+
+{{organization_name}}`,
+  },
   // Parent portal link (src/app/api/children/portal-email/route.ts) -- org level, no event.
   [PORTAL_LINK_PURPOSE_KEY]: {
     subject: "Odkaz do portálu rodičů – {{child_name}}",
@@ -154,6 +218,7 @@ export function senderIdentity(
 // Acceptance / open e-mails belong to the central participant roster, which
 // health or mail access reaches (same as the bulk-email send route).
 export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
+  if (isTicketPurpose(purposeKey)) return ["tickets"];
   if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY || purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) return ["mail"];
   if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
   return ["health"];

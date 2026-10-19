@@ -31,6 +31,8 @@ const ALLOW: Record<string, string> = {
   "src/app/api/mail-oauth/authorize/route.ts": "starts Google OAuth for an event the user has module access to (checked again in the callback)",
   "src/app/(public)/not-found.tsx": "public 404 page: translations only",
   "src/app/(public)/public-landing/page.tsx": "public landing page: translations only",
+  "src/app/(public)/vstup/[token]/page.tsx": "door link of a public event: the event is the one its secret ticketScanToken names, nothing else",
+  "src/app/api/public/scan/[token]/route.ts": "door link API: the event its secret ticketScanToken names; scans only that event's tickets",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

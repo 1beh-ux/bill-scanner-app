@@ -24,6 +24,8 @@ enum EventStatus {
 enum EventKind {
   event
   membership
+  // Veřejná akce (docs/public-event-tickets-spec.md): ticket sales, no participants.
+  public_event
 }
 
 // pending: just entered the roster (manually, pasted, or imported from a
@@ -94,6 +96,8 @@ enum ModuleKey {
   // Účastníci (central roster, documents, sending): on its own, without Zdraví / Pošta. Those two
   // still reach the roster too (they work on the same participants).
   participants
+  // Vstupenky (public events, docs/public-event-tickets-spec.md): orders + the check-in scan page.
+  tickets
 }
 
 enum IncidentCategory {
@@ -412,6 +416,11 @@ model Event {
   bankCheckEnabled              Boolean        @default(false) @map("bank_check_enabled")
   bankAccountId                 String?        @map("bank_account_id")
   bankAccount                   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  // Veřejná akce (kind public_event): src/lib/tickets.ts TicketSettings (max per order, total limit,
+  // VS prefix). Price types = priceRules categories (+ capacity). null = defaults.
+  ticketSettings                Json?          @map("ticket_settings")
+  // Secret link for the door check-in without a login (/vstup/<token>); null = no link.
+  ticketScanToken               String?        @unique @map("ticket_scan_token")
   createdAt                     DateTime       @default(now()) @map("created_at")
   closedAt                      DateTime?      @map("closed_at")
 
@@ -437,6 +446,7 @@ model Event {
   bankLinks              EventBankAccount[]
   bankTransactions       BankTransaction[]
   bankImportBatches      BankImportBatch[]
+  ticketOrders           TicketOrder[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -1688,6 +1698,8 @@ model BankMovement {
   reason                String?
   participantId         String?            @map("participant_id")
   participantDocumentId String?            @unique @map("participant_document_id")
+  // A ticket order this payment settled (public events) instead of a participant.
+  ticketOrderId         String?            @map("ticket_order_id")
   decidedByUserId       String?            @map("decided_by_user_id")
   createdAt             DateTime           @default(now()) @map("created_at")
   updatedAt             DateTime           @updatedAt @map("updated_at")
@@ -1695,10 +1707,12 @@ model BankMovement {
   bankAccount         BankAccount          @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
   participant         Participant?         @relation(fields: [participantId], references: [id], onDelete: SetNull)
   participantDocument ParticipantDocument? @relation(fields: [participantDocumentId], references: [id], onDelete: SetNull)
+  ticketOrder         TicketOrder?         @relation(fields: [ticketOrderId], references: [id], onDelete: SetNull)
   decidedBy           User?                @relation("BankMovementDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([bankAccountId, movementId])
   @@index([participantId])
+  @@index([ticketOrderId])
   @@map("bank_movements")
 }
 
@@ -1975,4 +1989,71 @@ model BillDuplicateDismissal {
   @@unique([billAId, billBId])
   @@index([billBId])
   @@map("bill_duplicate_dismissals")
+}
+
+enum TicketOrderStatus {
+  pending
+  paid
+  cancelled
+}
+
+// Veřejná akce (docs/public-event-tickets-spec.md): one purchase -- a buyer, no person / family.
+model TicketOrder {
+  id             String            @id @default(uuid())
+  eventId        String            @map("event_id")
+  // 1, 2, 3 ... per event: the order number people see, and the end of the variable symbol.
+  number         Int
+  variableSymbol String            @map("variable_symbol")
+  buyerName      String            @map("buyer_name")
+  email          String
+  phone          String?
+  // [{ key, label, priceCzk, count }] as bought (prices frozen at order time).
+  items          Json
+  totalCzk       Int               @map("total_czk")
+  status         TicketOrderStatus @default(pending)
+  // public | portal
+  source         String
+  // Status link for the buyer (confirmation screen "Zkontrolovat platbu").
+  publicToken    String            @unique @map("public_token")
+  paidAt         DateTime?         @map("paid_at")
+  // bank | manual
+  paidVia        String?           @map("paid_via")
+  paidByUserId   String?           @map("paid_by_user_id")
+  ticketsSentAt  DateTime?         @map("tickets_sent_at")
+  // Last send problem (no sender, PDF / Gmail error); null = fine.
+  sendError      String?           @map("send_error")
+  cancelledAt    DateTime?         @map("cancelled_at")
+  cancelledById  String?           @map("cancelled_by_id")
+  note           String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  event         Event          @relation(fields: [eventId], references: [id])
+  tickets       Ticket[]
+  bankMovements BankMovement[]
+
+  @@unique([eventId, number])
+  @@index([eventId, status])
+  @@index([variableSymbol])
+  @@map("ticket_orders")
+}
+
+// One ticket = one page of the order's PDF with its own check-in QR.
+model Ticket {
+  id         String    @id @default(uuid())
+  orderId    String    @map("order_id")
+  eventId    String    @map("event_id")
+  // Random, not guessable (src/lib/tickets.ts newTicketCode) -- what the QR holds.
+  code       String    @unique
+  // 1..n within the order ("vstupenka 2/4").
+  seq        Int
+  priceKey   String    @map("price_key")
+  priceLabel String    @map("price_label")
+  usedAt     DateTime? @map("used_at")
+  // User id, or "link" (the secret scan link).
+  usedBy     String?   @map("used_by")
+
+  order TicketOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("tickets")
 }
