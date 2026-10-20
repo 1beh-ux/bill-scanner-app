@@ -18,7 +18,7 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -26,6 +26,7 @@ export default function PublicRegistrationSettings({
   const [slug, setSlug] = useState(event.publicSlug ?? "");
   const [embedOpen, setEmbedOpen] = useState(false);
   const [content, setContent] = useState(event.landingContent ?? "");
+  const [hideHeader, setHideHeader] = useState(event.publicHideHeader);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -36,7 +37,7 @@ export default function PublicRegistrationSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content }),
+      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader }),
     });
     setSaving(false);
     const err = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string }).error;
@@ -92,6 +93,11 @@ export default function PublicRegistrationSettings({
         <MarkdownEditor value={content} onChange={setContent} rows={8} className={inputClass + " font-mono text-[13px]"} t={t} />
         <span className="mt-1 block text-[11.5px]">{t("publicSettings.landingHint")}</span>
       </label>
+      <label className="flex items-center gap-2 text-[14px] text-ink">
+        <input type="checkbox" checked={hideHeader} onChange={(e) => setHideHeader(e.target.checked)} className="h-4 w-4 accent-ember" />
+        {t("publicSettings.hideHeader")}
+      </label>
+      <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("publicSettings.hideHeaderHint")}</span>
       {message && <p className="text-[13px] text-ink">{message}</p>}
       <div className="flex justify-end">
         <button type="button" onClick={save} disabled={saving} className={btnPrimary}>

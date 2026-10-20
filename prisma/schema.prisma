@@ -401,6 +401,8 @@ model Event {
   publicRegistration            Boolean        @default(false) @map("public_registration")
   publicSlug                    String?        @unique @map("public_slug")
   landingContent                String?        @map("landing_content")
+  // Public page without the organization name, title and dates (embedded on a page that has its own).
+  publicHideHeader              Boolean        @default(false) @map("public_hide_header")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?

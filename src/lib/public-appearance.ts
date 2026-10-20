@@ -94,7 +94,7 @@ export function appearanceCss(a: Partial<Appearance> | null, scope: string, page
   if (typeof a.publicContentWidth === "number") rules.push(`${scope} .pub-container{max-width:${a.publicContentWidth === 0 ? "none" : `${a.publicContentWidth}px`}}`);
   // No background: page and cards transparent (form fields keep theirs, so they stay visible).
   if (a.publicTransparent) {
-    if (page) rules.push("html,body{background:transparent!important}");
+    if (page) rules.push("html,body,[data-shell]{background:transparent!important}");
     rules.push(`${scope} :is(.bg-paper,.bg-paper-2):not(input,select,textarea){background-color:transparent!important}`);
   }
   // A sanity bound: only our own values reach this string, never free text.

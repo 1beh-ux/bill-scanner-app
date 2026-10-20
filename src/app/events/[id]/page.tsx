@@ -58,6 +58,7 @@ type EventDetail = {
   publicRegistration: boolean;
   publicSlug: string | null;
   landingContent: string | null;
+  publicHideHeader: boolean;
   autoAccept: "manual" | "accept" | "accept_send";
   autoSendReady?: boolean | null;
   publicBaseUrl?: string | null;

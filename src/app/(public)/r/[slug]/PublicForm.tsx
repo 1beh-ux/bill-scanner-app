@@ -38,6 +38,7 @@ type EventInfo = {
   endDate: string;
   registrationDeadline: string | null;
   landingContent: string | null;
+  hideHeader: boolean;
   memberPriceCzk: number | null;
   nonMemberPriceCzk: number | null;
 };
@@ -147,9 +148,13 @@ export default function PublicForm({
     return (
       <div className="pub-container mx-auto w-full max-w-2xl p-4 pb-16">
         <ThemeToggle label={t("portal.toggleTheme")} />
-        <OrgName org={org} />
-        <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
-        <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{title}</h1>
+        {!event.hideHeader && (
+          <>
+            <OrgName org={org} />
+            <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
+            <h1 className="mb-4 mt-1 text-[24px] font-semibold text-ink">{title}</h1>
+          </>
+        )}
         <div className={card + " flex flex-col gap-2"}>
           <p className="text-[16px] font-semibold text-ink">{t("public.doneTitle")}</p>
           {portalLink ? (
@@ -184,13 +189,18 @@ export default function PublicForm({
   return (
     <div className="pub-container mx-auto w-full max-w-4xl p-4 pb-16">
       <ThemeToggle label={t("portal.toggleTheme")} />
-      <OrgName org={org} />
-      <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
-      <h1 className="mt-1 text-[24px] font-semibold text-ink">{title}</h1>
-      <p className="mb-4 text-[13px] text-ink-secondary">
-        {date(event.startDate)} – {date(event.endDate)}
-        {event.registrationDeadline && ` · ${t("portal.deadline", { date: date(event.registrationDeadline) })}`}
-      </p>
+      {/* "Skrýt nadpis" (event setting): the embedding page has its own. */}
+      {!event.hideHeader && (
+        <>
+          <OrgName org={org} />
+          <p className="text-[12px] uppercase tracking-wide text-ink-secondary">{t("public.title")}</p>
+          <h1 className="mt-1 text-[24px] font-semibold text-ink">{title}</h1>
+          <p className="mb-4 text-[13px] text-ink-secondary">
+            {date(event.startDate)} – {date(event.endDate)}
+            {event.registrationDeadline && ` · ${t("portal.deadline", { date: date(event.registrationDeadline) })}`}
+          </p>
+        </>
+      )}
       {event.landingContent && (
         <MarkdownText text={event.landingContent} className={card + " mb-6 text-[15px] leading-relaxed text-ink"} />
       )}

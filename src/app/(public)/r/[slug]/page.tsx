@@ -43,7 +43,9 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
   if (!hostAllowsRegistration(scope, event)) notFound();
   if (scope.kind === "admin") {
     const host = await publicHostFor("registration", event.id, event.organizationId);
-    if (host) permanentRedirect(`https://${host}/r/${slug}`);
+    // Keep ?embed / ?theme, or an embedded form lands as the full page.
+    const q = new URLSearchParams({ ...(embed && { embed: "1" }), ...(theme && { theme }) }).toString();
+    if (host) permanentRedirect(`https://${host}/r/${slug}${q ? `?${q}` : ""}`);
   }
   // Veřejná akce: the ticket form instead of the family registration (docs/public-event-tickets-spec.md).
   if (event.kind === "public_event") {
@@ -58,7 +60,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       <PublicFrame embed={embed} theme={theme} appearance={org}>
         <TicketPage
           slug={slug}
-          event={{ name: event.name, startDate: event.startDate.toISOString(), endDate: event.endDate.toISOString(), location: event.location, landingContent: event.landingContent, registrationDeadline: event.registrationDeadline?.toISOString() ?? null }}
+          event={{ name: event.name, startDate: event.startDate.toISOString(), endDate: event.endDate.toISOString(), location: event.location, landingContent: event.landingContent, hideHeader: event.publicHideHeader, registrationDeadline: event.registrationDeadline?.toISOString() ?? null }}
           types={types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] }))}
           maxPerOrder={settings.maxPerOrder}
           org={org}
@@ -85,6 +87,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
         endDate: event.endDate.toISOString(),
         registrationDeadline: event.registrationDeadline?.toISOString() ?? null,
         landingContent: event.landingContent,
+        hideHeader: event.publicHideHeader,
         memberPriceCzk: event.memberPriceCzk,
         nonMemberPriceCzk: event.nonMemberPriceCzk,
       }}

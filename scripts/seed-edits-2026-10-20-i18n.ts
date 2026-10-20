@@ -1,4 +1,4 @@
-// Edits 2026-10-20: event name + dates in Nastavení akce -> Akce. cs + en.
+// Edits 2026-10-20: event name + dates in Nastavení akce -> Akce; hiding the public page heading. cs + en.
 import { config } from "dotenv";
 config({ path: ".env" });
 config({ path: ".env.local", override: true });
@@ -13,6 +13,8 @@ const rows: Row[] = [
   r("eventBasics.end", "Konec", "End"),
   r("eventBasics.hint", "Nový termín se použije v e-mailech, dokumentech a vstupenkách vytvořených od teď; už odeslané zůstávají, jak byly.", "The new dates apply to e-mails, documents and tickets made from now on; ones already sent stay as they were."),
   r("eventBasics.saved", "Uloženo.", "Saved."),
+  r("publicSettings.hideHeader", "Skrýt nadpis a údaje o akci", "Hide the heading and event details"),
+  r("publicSettings.hideHeaderHint", "Formulář začne rovnou textem a políčky – bez názvu organizace, názvu akce a termínu. Hodí se, když stránka, kam ho vkládáte, má vlastní nadpis.", "The form starts straight with the text and fields – no organization name, event name or dates. Useful when the page you embed it on has its own heading."),
   r("eventBasics.badDates", "Konec nesmí být před začátkem.", "The end can't be before the start."),
 ];
 

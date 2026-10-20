@@ -85,6 +85,7 @@ export async function PATCH(
     publicRegistration,
     publicSlug,
     landingContent,
+    publicHideHeader,
     autoAccept,
     location,
     portalInfo,
@@ -105,6 +106,7 @@ export async function PATCH(
     publicRegistration !== undefined ||
     publicSlug !== undefined ||
     landingContent !== undefined ||
+    publicHideHeader !== undefined ||
     autoAccept !== undefined ||
     location !== undefined ||
     portalInfo !== undefined ||
@@ -116,6 +118,7 @@ export async function PATCH(
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
   if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
+  if (publicHideHeader !== undefined && typeof publicHideHeader !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (landingContent !== undefined && landingContent !== null && !(typeof landingContent === "string" && landingContent.length <= 20000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug && (await prisma.event.findFirst({ where: { publicSlug, id: { not: id } }, select: { id: true } }))) return NextResponse.json({ error: "slug_taken" }, { status: 409 });
   // "Dokument platby" (slice 4 #5): one of this event's document types, or null.
@@ -262,6 +265,7 @@ export async function PATCH(
       ...(publicRegistration !== undefined && { publicRegistration }),
       ...(publicSlug !== undefined && { publicSlug: publicSlug || null }),
       ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
+      ...(publicHideHeader !== undefined && { publicHideHeader }),
       ...(autoAccept !== undefined && { autoAccept }),
       // Portal registration card basics (slice 3 F).
       ...(location !== undefined && { location: location?.trim() || null }),

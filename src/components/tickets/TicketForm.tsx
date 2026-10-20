@@ -148,15 +148,8 @@ export default function TicketForm({
         {types.map((ty) => {
           const max = Math.min(maxPerOrder, ty.left ?? maxPerOrder);
           return (
-            <div key={ty.key} className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-[15px] text-ink">{ty.label}</p>
-                <p className="text-[13px] text-ink-secondary">
-                  {ty.priceCzk} Kč
-                  {ty.left !== null && ` · ${ty.left === 0 ? t("ticketForm.typeSoldOut") : t("ticketForm.left", { left: String(ty.left) })}`}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
+            <div key={ty.key} className="flex items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2">
                 <button type="button" aria-label="−" disabled={!counts[ty.key]} onClick={() => setCounts((c) => ({ ...c, [ty.key]: Math.max(0, (c[ty.key] ?? 0) - 1) }))} className={btn + " w-10"}>
                   −
                 </button>
@@ -166,6 +159,13 @@ export default function TicketForm({
                 <button type="button" aria-label="+" disabled={(counts[ty.key] ?? 0) >= max || count >= maxPerOrder} onClick={() => setCounts((c) => ({ ...c, [ty.key]: (c[ty.key] ?? 0) + 1 }))} className={btn + " w-10"}>
                   +
                 </button>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[15px] text-ink">{ty.label}</p>
+                <p className="text-[13px] text-ink-secondary">
+                  {ty.priceCzk} Kč
+                  {ty.left !== null && ` · ${ty.left === 0 ? t("ticketForm.typeSoldOut") : t("ticketForm.left", { left: String(ty.left) })}`}
+                </p>
               </div>
             </div>
           );

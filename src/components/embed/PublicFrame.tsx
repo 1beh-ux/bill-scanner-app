@@ -90,7 +90,7 @@ export default function PublicFrame({ embed, theme, appearance, children }: { em
   return (
     <EmbedContext.Provider value={embed}>
       {themeScript && <script dangerouslySetInnerHTML={{ __html: themeScript }} />}
-      {embed && <style>{"html,body{background:transparent!important}[data-embed] .pb-16{padding-bottom:1rem!important}"}</style>}
+      {embed && <style>{"html,body,[data-shell]{background:transparent!important}[data-embed] .pb-16{padding-bottom:1rem!important}"}</style>}
       {css && <style>{css}</style>}
       <div ref={ref} data-embed={embed ? "" : undefined} className="flow-root">
         <div className={`pub ${publicFontVariables}`}>{children}</div>

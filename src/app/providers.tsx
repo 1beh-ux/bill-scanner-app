@@ -9,7 +9,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <I18nProvider>
       <ConfirmProvider>
-        <div className="flex min-h-screen flex-col bg-paper text-ink md:flex-row">
+        <div data-shell="" className="flex min-h-screen flex-col bg-paper text-ink md:flex-row">
           <AppSidebar />
           {/* Desktop: main is the scroll container (full height), so position:sticky
               inside pages sticks while scrolling -- with overflow-x set and no
