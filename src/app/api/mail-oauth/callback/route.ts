@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
       ? eventId === "-"
         ? null
         : await requireModuleAccess(user, eventId, "bills")
-      : await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
+      : await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail", "tickets"]);
   if (denied) return denied;
 
   const oauth2Client = new google.auth.OAuth2(MAIL_OAUTH_CLIENT_ID, MAIL_OAUTH_CLIENT_SECRET, redirectUri);

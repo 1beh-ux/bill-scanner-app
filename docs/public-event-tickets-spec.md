@@ -61,3 +61,6 @@ Example: a dancing ball. Status: **built 2026-10-19** (see "Where it lives" at t
   `/api/public/tickets/<publicToken>`; portal `/api/portal/<token>/tickets` (adults, prefilled, not linked).
 - Admin: `/events/<id>/tickets` (orders, CSV export, PDF, paid / resend / cancel), `/events/<id>/tickets/scan`;
   no-login door link `/vstup/<token>` (`/api/public/scan/<token>`). QR reading: `jsqr`.
+- 2026-10-20: optional Google Doc ticket template (`ticketSettings.docTemplate`; one merged copy per ticket via
+  `mergeAndExportDocument`, joined with pdf-lib); a public event also offers Plánování; the Vstupenky module
+  can set the sender mailbox (Připojení na Google).

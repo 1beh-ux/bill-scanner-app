@@ -3,7 +3,9 @@
 // Markdown never passes raw HTML through (micromark default), and the values go in before it, so a
 // buyer's name can't inject markup; {{ticket_qr}} becomes the QR image afterwards.
 import { micromark } from "micromark";
+import { PDFDocument } from "pdf-lib";
 import QRCode from "qrcode";
+import { mergeAndExportDocument } from "@/lib/document-merge";
 import { substituteVariables } from "@/lib/email-template";
 import { renderPdf } from "@/lib/pdf-service";
 
@@ -30,8 +32,25 @@ export function ticketPageHtml(template: string, vars: Record<string, string>, q
 
 export const ticketQrDataUrl = (code: string) => QRCode.toDataURL(code, { errorCorrectionLevel: "M", margin: 1, width: 480 });
 
-/** One PDF, a page per ticket: its template variables + the code its QR holds. */
-export async function renderTicketsPdf(template: string, pages: { vars: Record<string, string>; code: string }[]): Promise<Buffer> {
+/**
+ * One PDF, a page per ticket: its template variables + the code its QR holds. With `doc` (a Google Doc
+ * template, Nastavení akce -> Vstupenky) each ticket is a merged copy of that doc instead, put together.
+ */
+export async function renderTicketsPdf(
+  template: string,
+  pages: { vars: Record<string, string>; code: string }[],
+  doc?: { eventId: string; docId: string }
+): Promise<Buffer> {
+  if (doc) {
+    const out = await PDFDocument.create();
+    // ponytail: one Drive copy + export per ticket, in turn (~3 s each); fine for orders of up to MAX_PER_ORDER_LIMIT.
+    for (const p of pages) {
+      const qr = await QRCode.toBuffer(p.code, { errorCorrectionLevel: "M", margin: 1, width: 480 });
+      const part = await PDFDocument.load(await mergeAndExportDocument(doc.eventId, doc.docId, p.vars, { ticket_qr: qr }, undefined, { ticket_qr: 50 }));
+      for (const page of await out.copyPages(part, part.getPageIndices())) out.addPage(page);
+    }
+    return Buffer.from(await out.save());
+  }
   const sections = await Promise.all(pages.map(async (p) => `<section class="ticket">${ticketPageHtml(template, p.vars, await ticketQrDataUrl(p.code))}</section>`));
   return renderPdf(`<!doctype html><html><head><meta charset="utf-8"><style>${STYLE}</style></head><body>${sections.join("")}</body></html>`, "A4");
 }

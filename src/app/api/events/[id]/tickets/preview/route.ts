@@ -6,9 +6,10 @@ import { resolveEmailTemplate } from "@/lib/email-template";
 import { TICKET_DOCUMENT_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { renderTicketsPdf } from "@/lib/tickets-pdf";
 import { formatTicketCode, newTicketCode } from "@/lib/tickets-server";
+import { readTicketSettings } from "@/lib/tickets";
 
 // Ticket template preview: a sample ticket of this event as the real PDF (body = the template being
-// edited, else the saved one). The sample QR holds a random code that matches no ticket.
+// edited, else the saved one; the Google Doc template when one is set). The sample QR holds a random code that matches no ticket.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const e = await prisma.event.findUniqueOrThrow({ where: { id }, include: { organization: { select: { name: true } } } });
   const { body } = (await req.json().catch(() => ({}))) as { body?: unknown };
   const template = typeof body === "string" && body.trim() ? body : (await resolveEmailTemplate(id, TICKET_DOCUMENT_PURPOSE_KEY)).body;
+  const { docTemplate } = readTicketSettings(e.ticketSettings, e.startDate);
   const code = newTicketCode();
   const d = (x: Date) => x.toLocaleDateString("cs-CZ", { timeZone: "UTC" });
   const pdf = await renderTicketsPdf(template, [
@@ -40,6 +42,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         signature: e.organization.name,
       },
     },
-  ]);
+  ], docTemplate ? { eventId: id, docId: docTemplate } : undefined);
   return new NextResponse(new Uint8Array(pdf), { headers: { "Content-Type": "application/pdf", "Cache-Control": "no-store" } });
 }

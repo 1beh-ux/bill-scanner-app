@@ -562,7 +562,7 @@ export default function EventDetailPage({
               {/* One control for both modules now (Part 5: "not repeated elsewhere") -- the
                   gmail.modify scope warning only matters when Mail is enabled (it reads/
                   moves inbound mail; Health only ever sends), so purpose follows that. */}
-              {roster && (
+              {(roster || moduleAccess.tickets) && (
                 <>
                   <SenderEmailField eventId={id} purpose={moduleAccess.mail ? "mail" : "health"} />
                   {mySignature && (

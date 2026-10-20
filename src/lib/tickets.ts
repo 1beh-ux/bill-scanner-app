@@ -11,6 +11,8 @@ export type TicketSettings = {
   totalCapacity: number | null;
   // Digits the variable symbol starts with; the order number (4 digits) follows.
   vsPrefix: string;
+  // Google Doc the ticket is made from (logo, fonts, design); null = the markdown template.
+  docTemplate: string | null;
 };
 
 export type TicketType = { key: string; label: string; priceCzk: number; capacity: number | null };
@@ -32,6 +34,7 @@ export function readTicketSettings(raw: unknown, eventStart: Date): TicketSettin
     maxPerOrder: int(o.maxPerOrder, 1, MAX_PER_ORDER_LIMIT) ?? 10,
     totalCapacity: int(o.totalCapacity, 1, 1_000_000),
     vsPrefix: typeof o.vsPrefix === "string" && /^\d{1,6}$/.test(o.vsPrefix) ? o.vsPrefix : defaultVsPrefix(eventStart),
+    docTemplate: typeof o.docTemplate === "string" && /^[\w-]{20,}$/.test(o.docTemplate) ? o.docTemplate : null,
   };
 }
 

@@ -41,9 +41,11 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [docLink, setDocLink] = useState("");
 
   function apply(v: View) {
     setView(v);
+    setDocLink(v.settings.docTemplate ? `https://docs.google.com/document/d/${v.settings.docTemplate}/edit` : "");
     setRows(v.types.length ? v.types.map((x) => ({ key: x.key, label: x.label, priceCzk: String(x.priceCzk), capacity: x.capacity ? String(x.capacity) : "" })) : [{ key: "", label: t("ticketSettings.defaultType"), priceCzk: "", capacity: "" }]);
     setForm({
       maxPerOrder: String(v.settings.maxPerOrder),
@@ -257,7 +259,20 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
         <EmailTemplateAdmin scope="event" eventId={eventId} purposeKey={TICKET_CANCEL_PURPOSE_KEY} label={t("ticketSettings.tplCancel")} />
         <div>
           <p className="mb-2 text-[12px] text-ink-secondary">{t("ticketSettings.tplTicketHint")}</p>
-          <EmailTemplateAdmin scope="event" eventId={eventId} purposeKey={TICKET_DOCUMENT_PURPOSE_KEY} label={t("ticketSettings.tplTicket")} bodyOnly />
+          {/* Google Doc template (logo, fonts, design) wins over the text one when set. */}
+          <label className={label}>
+            {t("ticketSettings.docTemplate")}
+            <div className="mt-1 flex gap-2">
+              <input value={docLink} onChange={(e) => setDocLink(e.target.value)} disabled={!isAdmin} placeholder="https://docs.google.com/document/d/…" className={inputClass} />
+              {isAdmin && (
+                <button type="button" onClick={() => patch({ docTemplate: docLink })} disabled={saving} className={btn}>
+                  {t("common.save")}
+                </button>
+              )}
+            </div>
+          </label>
+          <p className="mb-3 mt-1 text-[12px] text-ink-secondary">{t("ticketSettings.docTemplateHint")}</p>
+          {!view.settings.docTemplate && <EmailTemplateAdmin scope="event" eventId={eventId} purposeKey={TICKET_DOCUMENT_PURPOSE_KEY} label={t("ticketSettings.tplTicket")} bodyOnly />}
           <button type="button" onClick={preview} className={btn + " mt-2"}>
             {t("ticketSettings.previewPdf")}
           </button>

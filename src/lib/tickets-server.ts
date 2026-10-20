@@ -119,9 +119,11 @@ async function orderContext(orderId: string) {
 export async function ticketsPdfOf(orderId: string): Promise<Buffer> {
   const { order, vars } = await orderContext(orderId);
   const template = (await resolveEmailTemplate(order.eventId, TICKET_DOCUMENT_PURPOSE_KEY)).body;
+  const { docTemplate } = readTicketSettings(order.event.ticketSettings, order.event.startDate);
   return renderTicketsPdf(
     template,
-    order.tickets.map((t) => ({ code: t.code, vars: { ...vars, ticket_no: String(t.seq), ticket_code: formatTicketCode(t.code), price_type: t.priceLabel } }))
+    order.tickets.map((t) => ({ code: t.code, vars: { ...vars, ticket_no: String(t.seq), ticket_code: formatTicketCode(t.code), price_type: t.priceLabel } })),
+    docTemplate ? { eventId: order.eventId, docId: docTemplate } : undefined
   );
 }
 

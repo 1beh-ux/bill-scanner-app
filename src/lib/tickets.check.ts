@@ -7,6 +7,8 @@ const start = new Date("2027-02-13");
 const settings = readTicketSettings({ maxPerOrder: 6, totalCapacity: 10 }, start);
 assert.equal(settings.vsPrefix, "279");
 assert.equal(readTicketSettings({ vsPrefix: "12a" }, start).vsPrefix, "279");
+assert.equal(readTicketSettings({ docTemplate: "1AbC-def_ghijklmnopqrstuv" }, start).docTemplate, "1AbC-def_ghijklmnopqrstuv");
+assert.equal(readTicketSettings({ docTemplate: "x/../y" }, start).docTemplate, null);
 assert.equal(readTicketSettings(null, start).maxPerOrder, 10);
 assert.equal(orderVs("279", 12), "2790012");
 

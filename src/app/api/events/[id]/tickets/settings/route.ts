@@ -6,6 +6,7 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { isOrgAdmin } from "@/lib/org-scope";
 import { readPriceRules } from "@/lib/price-rules";
 import { MAX_PER_ORDER_LIMIT, readTicketSettings, ticketTypes } from "@/lib/tickets";
+import { extractGoogleDocId } from "@/lib/document-merge";
 
 // Vstupenky settings of a public event (docs/public-event-tickets-spec.md): price types + limits
 // (stored as the event's price rules, src/lib/price-rules.ts), max per order, total limit, VS prefix,
@@ -60,6 +61,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json(await view(id));
   }
 
+  // Google Doc ticket template on its own (a link or an id; "" = back to the text template).
+  if (typeof b.docTemplate === "string") {
+    const docTemplate = b.docTemplate.trim() ? extractGoogleDocId(b.docTemplate) : null;
+    if (docTemplate && !/^[\w-]{20,}$/.test(docTemplate)) return NextResponse.json({ error: "bad_doc" }, { status: 400 });
+    await prisma.event.update({ where: { id }, data: { ticketSettings: { ...readTicketSettings(event.ticketSettings, event.startDate), docTemplate } } });
+    return NextResponse.json(await view(id));
+  }
+
   // Price types: label + price + optional limit; the key stays (sold tickets refer to it).
   const rawTypes = Array.isArray(b.types) ? b.types.slice(0, 20) : [];
   const categories = rawTypes.map((raw, i) => {
@@ -98,7 +107,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: {
       priceRules: { categories: categories.map(({ capacity, ...c }) => (capacity ? { ...c, capacity } : c)), schoolYearFrom: "09-01", householdMinMembers: 2 },
-      ticketSettings: { maxPerOrder, totalCapacity, vsPrefix },
+      ticketSettings: { maxPerOrder, totalCapacity, vsPrefix, docTemplate: readTicketSettings(event.ticketSettings, event.startDate).docTemplate },
       registrationDeadline: deadline ? new Date(deadline) : null,
       location: text(b.location, 300) || null,
       portalInfo: text(b.portalInfo, 2000) || null,
