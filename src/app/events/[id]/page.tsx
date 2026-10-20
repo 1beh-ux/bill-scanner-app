@@ -487,6 +487,7 @@ export default function EventDetailPage({
         <div className="min-w-0 flex-1">
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
+              {isAdmin && <EventBasicsForm event={event} onSaved={load} t={t} />}
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
               <div>
@@ -1097,6 +1098,56 @@ function PeopleUnlink({ eventId, unlinked, onDone, t }: { eventId: string; unlin
           </button>
         </>
       )}
+    </div>
+  );
+}
+
+// Name and dates, changeable after creating the event (e.g. a test date put in by mistake).
+function EventBasicsForm({ event, onSaved, t }: { event: { id: string; name: string; startDate: string; endDate: string }; onSaved: () => void; t: (key: string, vars?: Record<string, string>) => string }) {
+  const day = (iso: string) => iso.slice(0, 10);
+  const [name, setName] = useState(event.name);
+  const [start, setStart] = useState(day(event.startDate));
+  const [end, setEnd] = useState(day(event.endDate));
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const changed = name.trim() !== event.name || start !== day(event.startDate) || end !== day(event.endDate);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setMsg(null);
+    const res = await fetch(`/api/events/${event.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim(), startDate: start, endDate: end }) });
+    setSaving(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return setMsg({ ok: false, text: t(data.error === "bad_dates" ? "eventBasics.badDates" : "feeSettings.errorSaveFailed") });
+    setMsg({ ok: true, text: t("eventBasics.saved") });
+    onSaved();
+  }
+
+  return (
+    <div>
+      <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventBasics.title")}</h3>
+      <form onSubmit={save} className="flex max-w-md flex-col gap-2">
+        <label className="text-[13px] text-ink-secondary">
+          {t("eventBasics.name")}
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} className={inputClass + " mt-1"} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-[13px] text-ink-secondary">
+            {t("eventBasics.start")}
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} required className={inputClass + " mt-1"} />
+          </label>
+          <label className="text-[13px] text-ink-secondary">
+            {t("eventBasics.end")}
+            <input type="date" value={end} min={start} onChange={(e) => setEnd(e.target.value)} required className={inputClass + " mt-1"} />
+          </label>
+        </div>
+        <p className="text-[12px] text-ink-secondary">{t("eventBasics.hint")}</p>
+        {msg && <p className={`text-[13px] ${msg.ok ? "text-pine" : "text-red-600"}`}>{msg.text}</p>}
+        <button type="submit" disabled={saving || !changed || !name.trim()} className="self-start rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
+          {t("common.save")}
+        </button>
+      </form>
     </div>
   );
 }

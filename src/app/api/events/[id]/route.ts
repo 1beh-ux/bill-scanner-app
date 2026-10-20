@@ -154,6 +154,15 @@ export async function PATCH(
   }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (touchesRegistration && !isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  // Name and dates (Nastavení akce -> Akce): admins; the end never before the start.
+  if (name !== undefined || startDate !== undefined || endDate !== undefined) {
+    if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+    if (name !== undefined && !(typeof name === "string" && name.trim() && name.length <= 200)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+    const isDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v));
+    if ((startDate !== undefined && !isDate(startDate)) || (endDate !== undefined && !isDate(endDate))) return NextResponse.json({ error: "bad_dates" }, { status: 400 });
+    const cur = await prisma.event.findUniqueOrThrow({ where: { id }, select: { startDate: true, endDate: true } });
+    if (new Date(endDate ?? cur.endDate) < new Date(startDate ?? cur.startDate)) return NextResponse.json({ error: "bad_dates" }, { status: 400 });
+  }
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
     return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
@@ -210,7 +219,7 @@ export async function PATCH(
     data: {
       ...(exportFolderChanged && { driveManifestSpreadsheetId: null }),
       ...(savesDrive && { driveConfiguredByUserId: user.id }),
-      ...(name !== undefined && { name }),
+      ...(name !== undefined && { name: name.trim() }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
       ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),
