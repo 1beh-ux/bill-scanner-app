@@ -69,6 +69,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json(await view(id));
   }
 
+  // Texts on the public form + "zbývá N" switch, on their own (cleaned by readTicketSettings).
+  if (b.texts !== undefined) {
+    const next = readTicketSettings({ ...readTicketSettings(event.ticketSettings, event.startDate), texts: b.texts, showLeft: b.showLeft !== false }, event.startDate);
+    await prisma.event.update({ where: { id }, data: { ticketSettings: next } });
+    return NextResponse.json(await view(id));
+  }
+
   // Price types: label + price + optional limit; the key stays (sold tickets refer to it).
   const rawTypes = Array.isArray(b.types) ? b.types.slice(0, 20) : [];
   const categories = rawTypes.map((raw, i) => {
@@ -107,7 +114,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: {
       priceRules: { categories: categories.map(({ capacity, ...c }) => (capacity ? { ...c, capacity } : c)), schoolYearFrom: "09-01", householdMinMembers: 2 },
-      ticketSettings: { maxPerOrder, totalCapacity, vsPrefix, docTemplate: readTicketSettings(event.ticketSettings, event.startDate).docTemplate },
+      ticketSettings: { ...readTicketSettings(event.ticketSettings, event.startDate), maxPerOrder, totalCapacity, vsPrefix },
       registrationDeadline: deadline ? new Date(deadline) : null,
       location: text(b.location, 300) || null,
       portalInfo: text(b.portalInfo, 2000) || null,

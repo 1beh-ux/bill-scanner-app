@@ -13,7 +13,36 @@ export type TicketSettings = {
   vsPrefix: string;
   // Google Doc the ticket is made from (logo, fonts, design); null = the markdown template.
   docTemplate: string | null;
+  // Show "zbývá N" next to each price type (sold out is shown either way).
+  showLeft: boolean;
+  // The event's own wording of the public form texts (TICKET_TEXT_KEYS, without "ticketForm."); missing = default.
+  texts: Record<string, string>;
 };
+
+// Public ticket form texts an event may reword (Nastavení akce -> Vstupenky -> Texty na webu), in screen order.
+export const TICKET_TEXT_KEYS = [
+  "kicker", "salesUntil", "ticketsTitle", "total", "maxHint", "name", "email", "phone", "note", "submit", "soldOut", "notReady",
+  "doneTitle", "payHint", "emailHint", "checkPayment", "checkHint", "paidNow", "doneFree",
+] as const;
+export const TICKET_TEXT_MAX = 1000;
+
+/** The translator with an event's own texts on top ({var}s filled in the same way). */
+export function withTicketTexts(t: (key: string, vars?: Record<string, string>) => string, texts: Record<string, string> | undefined) {
+  return (key: string, vars?: Record<string, string>) => {
+    const own = key.startsWith("ticketForm.") ? texts?.[key.slice("ticketForm.".length)] : undefined;
+    if (!own) return t(key, vars);
+    let s = own;
+    for (const [k, v] of Object.entries(vars ?? {})) s = s.split(`{${k}}`).join(v);
+    return s;
+  };
+}
+
+function readTexts(raw: unknown): Record<string, string> {
+  const o = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const k of TICKET_TEXT_KEYS) if (typeof o[k] === "string" && (o[k] as string).trim()) out[k] = (o[k] as string).trim().slice(0, TICKET_TEXT_MAX);
+  return out;
+}
 
 export type TicketType = { key: string; label: string; priceCzk: number; capacity: number | null };
 export type OrderItem = { key: string; label: string; priceCzk: number; count: number };
@@ -35,6 +64,8 @@ export function readTicketSettings(raw: unknown, eventStart: Date): TicketSettin
     totalCapacity: int(o.totalCapacity, 1, 1_000_000),
     vsPrefix: typeof o.vsPrefix === "string" && /^\d{1,6}$/.test(o.vsPrefix) ? o.vsPrefix : defaultVsPrefix(eventStart),
     docTemplate: typeof o.docTemplate === "string" && /^[\w-]{20,}$/.test(o.docTemplate) ? o.docTemplate : null,
+    showLeft: o.showLeft !== false,
+    texts: readTexts(o.texts),
   };
 }
 

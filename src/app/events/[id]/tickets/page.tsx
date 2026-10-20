@@ -49,7 +49,7 @@ const when = (d: string | null) => (d ? new Date(d).toLocaleString("cs-CZ", { da
 
 export default function TicketOrdersPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
   const confirm = useConfirm();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +90,17 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
     setBusy(null);
     if (!res.ok) setError(t(`tickets.error.${r.error ?? "failed"}`));
     else if (r.sendError) setError(t("tickets.sendFailed", { error: r.sendError }));
+    load();
+  }
+
+  async function remove(o: Order) {
+    if (!(await confirm({ message: t("tickets.confirmDelete", { number: String(o.number), name: o.buyerName }), danger: true }))) return;
+    setBusy(o.id);
+    setError(null);
+    const res = await fetch(`/api/events/${id}/tickets/${o.id}`, { method: "DELETE" });
+    const r = await res.json().catch(() => ({}));
+    setBusy(null);
+    if (!res.ok) setError(t(`tickets.error.${r.error ?? "failed"}`));
     load();
   }
 
@@ -220,6 +231,9 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
                           <a href={`/api/events/${id}/tickets/${o.id}/pdf`} target="_blank" rel="noreferrer" className={btn}>PDF</a>
                           <button onClick={() => act(o, "cancel")} disabled={busy === o.id} className={btn + " text-red-700"}>{t("tickets.actCancel")}</button>
                         </>
+                      )}
+                      {o.status === "cancelled" && role === "admin" && (
+                        <button onClick={() => remove(o)} disabled={busy === o.id} className={btn + " text-red-700"}>{t("tickets.actDelete")}</button>
                       )}
                     </div>
                   </td>

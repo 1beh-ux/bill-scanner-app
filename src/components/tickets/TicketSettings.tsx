@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
-import { MAX_PER_ORDER_LIMIT, orderVs, type TicketSettings as Settings, type TicketType } from "@/lib/tickets";
+import { MAX_PER_ORDER_LIMIT, TICKET_TEXT_KEYS, TICKET_TEXT_MAX, orderVs, type TicketSettings as Settings, type TicketType } from "@/lib/tickets";
 import { TICKET_CANCEL_PURPOSE_KEY, TICKET_DOCUMENT_PURPOSE_KEY, TICKET_ORDER_PURPOSE_KEY, TICKET_SEND_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 // Nastavení akce -> Vstupenky (public events, docs/public-event-tickets-spec.md): price types with
@@ -42,9 +42,13 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [docLink, setDocLink] = useState("");
+  const [texts, setTexts] = useState<Record<string, string>>({});
+  const [showLeft, setShowLeft] = useState(true);
 
   function apply(v: View) {
     setView(v);
+    setTexts(v.settings.texts);
+    setShowLeft(v.settings.showLeft);
     setDocLink(v.settings.docTemplate ? `https://docs.google.com/document/d/${v.settings.docTemplate}/edit` : "");
     setRows(v.types.length ? v.types.map((x) => ({ key: x.key, label: x.label, priceCzk: String(x.priceCzk), capacity: x.capacity ? String(x.capacity) : "" })) : [{ key: "", label: t("ticketSettings.defaultType"), priceCzk: "", capacity: "" }]);
     setForm({
@@ -249,6 +253,38 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
           </div>
         ) : (
           isAdmin && <button type="button" className={btn + " self-start"} disabled={saving} onClick={() => patch({ scanLink: "new" })}>{t("ticketSettings.scanCreate")}</button>
+        )}
+      </section>
+
+      {/* The public form's own wording: empty = the default text (shown grey). */}
+      <section className="flex max-w-2xl flex-col gap-3">
+        <h3 className={h3}>{t("ticketSettings.textsTitle")}</h3>
+        <p className="-mt-1 text-[12px] text-ink-secondary">{t("ticketSettings.textsHint")}</p>
+        <label className="flex items-center gap-2 text-[14px] text-ink">
+          <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} disabled={!isAdmin} className="h-4 w-4 accent-ember" />
+          {t("ticketSettings.showLeft")}
+        </label>
+        {TICKET_TEXT_KEYS.map((k, i) => {
+          const long = ["payHint", "emailHint", "checkHint", "paidNow", "doneFree", "soldOut", "notReady"].includes(k);
+          const props = {
+            value: texts[k] ?? "",
+            onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setTexts((x) => ({ ...x, [k]: e.target.value })),
+            placeholder: t(`ticketForm.${k}`),
+            maxLength: TICKET_TEXT_MAX,
+            disabled: !isAdmin,
+            className: inputClass,
+          };
+          return (
+            <div key={k}>
+              {i === TICKET_TEXT_KEYS.indexOf("doneTitle") && <p className="mb-2 mt-2 text-[13px] font-semibold text-ink">{t("ticketSettings.textsAfter")}</p>}
+              {long ? <textarea rows={2} {...props} /> : <input {...props} />}
+            </div>
+          );
+        })}
+        {isAdmin && (
+          <button type="button" onClick={() => patch({ texts, showLeft })} disabled={saving} className={btnPrimary + " self-start"}>
+            {t("common.save")}
+          </button>
         )}
       </section>
 

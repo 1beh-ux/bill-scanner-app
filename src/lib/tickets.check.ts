@@ -1,6 +1,6 @@
 // Self-check for the ticket helpers: `npx tsx src/lib/tickets.check.ts`
 import assert from "node:assert/strict";
-import { normalizeTicketCode, orderVs, readTicketSettings, remaining, ticketTypes, validateOrder } from "@/lib/tickets";
+import { normalizeTicketCode, orderVs, readTicketSettings, remaining, ticketTypes, validateOrder, withTicketTexts } from "@/lib/tickets";
 import { readPriceRules } from "@/lib/price-rules";
 
 const start = new Date("2027-02-13");
@@ -9,6 +9,13 @@ assert.equal(settings.vsPrefix, "279");
 assert.equal(readTicketSettings({ vsPrefix: "12a" }, start).vsPrefix, "279");
 assert.equal(readTicketSettings({ docTemplate: "1AbC-def_ghijklmnopqrstuv" }, start).docTemplate, "1AbC-def_ghijklmnopqrstuv");
 assert.equal(readTicketSettings({ docTemplate: "x/../y" }, start).docTemplate, null);
+assert.equal(settings.showLeft, true);
+assert.deepEqual(readTicketSettings({ texts: { payHint: " Platba ", bogus: "x", note: "  " }, showLeft: false }, start), { ...readTicketSettings({}, start), showLeft: false, texts: { payHint: "Platba" } });
+{
+  const tt = withTicketTexts((k, v) => `${k}|${v?.number ?? ""}`, { doneTitle: "Díky, objednávka {number}" });
+  assert.equal(tt("ticketForm.doneTitle", { number: "5" }), "Díky, objednávka 5");
+  assert.equal(tt("ticketForm.payHint"), "ticketForm.payHint|");
+}
 assert.equal(readTicketSettings(null, start).maxPerOrder, 10);
 assert.equal(orderVs("279", 12), "2790012");
 

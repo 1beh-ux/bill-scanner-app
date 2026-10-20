@@ -15,6 +15,14 @@ const rows: Row[] = [
   r("eventBasics.saved", "Uloženo.", "Saved."),
   r("publicSettings.hideHeader", "Skrýt nadpis a údaje o akci", "Hide the heading and event details"),
   r("publicSettings.hideHeaderHint", "Formulář začne rovnou textem a políčky – bez názvu organizace, názvu akce a termínu. Hodí se, když stránka, kam ho vkládáte, má vlastní nadpis.", "The form starts straight with the text and fields – no organization name, event name or dates. Useful when the page you embed it on has its own heading."),
+  r("ticketSettings.textsTitle", "Texty na webu", "Texts on the web"),
+  r("ticketSettings.textsHint", "Vlastní znění textů formuláře vstupenek a potvrzení po objednání (na veřejné stránce i v portálu). Prázdné pole = výchozí text, který je v něm vidět šedě. Údaje ve složených závorkách, např. {number}, {total}, {max}, {left}, {date}, {email}, se doplní samy.", "Your own wording of the ticket form and the confirmation after ordering (on the public page and in the portal). Empty = the default text shown grey in it. Values in curly braces, e.g. {number}, {total}, {max}, {left}, {date}, {email}, are filled in."),
+  r("ticketSettings.textsAfter", "Po odeslání objednávky", "After the order is sent"),
+  r("ticketSettings.showLeft", "Ukazovat, kolik vstupenek zbývá („zbývá 12“)", "Show how many tickets are left (“12 left”)"),
+  r("tickets.actDelete", "Smazat", "Delete"),
+  r("tickets.confirmDelete", "Smazat zrušenou objednávku č. {number} ({name}) natrvalo, i s jejími vstupenkami? Vrátit to nejde. Pokud je to poslední objednávka, další nová dostane znovu její číslo a variabilní symbol.", "Delete the cancelled order no. {number} ({name}) for good, with its tickets? This can't be undone. If it's the latest order, the next new one gets its number and variable symbol again."),
+  r("tickets.error.not_cancelled", "Smazat jde jen zrušenou objednávku.", "Only a cancelled order can be deleted."),
+  r("tickets.error.admin_only", "Mazat může jen administrátor organizace.", "Only an organization admin can delete."),
   r("eventBasics.badDates", "Konec nesmí být před začátkem.", "The end can't be before the start."),
 ];
 

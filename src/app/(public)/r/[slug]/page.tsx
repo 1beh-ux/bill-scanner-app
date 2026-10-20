@@ -63,6 +63,8 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
           event={{ name: event.name, startDate: event.startDate.toISOString(), endDate: event.endDate.toISOString(), location: event.location, landingContent: event.landingContent, hideHeader: event.publicHideHeader, registrationDeadline: event.registrationDeadline?.toISOString() ?? null }}
           types={types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] }))}
           maxPerOrder={settings.maxPerOrder}
+          texts={settings.texts}
+          showLeft={settings.showLeft}
           org={org}
           embed={embed}
           strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))}

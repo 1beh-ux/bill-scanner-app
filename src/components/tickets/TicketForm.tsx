@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import { postScrollTop } from "@/components/embed/embed-client";
+import { withTicketTexts } from "@/lib/tickets";
 
 // The ticket order form of a public event (docs/public-event-tickets-spec.md), on the public page
 // /r/<slug> and in the parent portal: buyer + how many tickets of each price type, then how to pay
@@ -27,7 +28,9 @@ export default function TicketForm({
   prefill,
   embed,
   fetcher = fetch,
-  t,
+  texts,
+  showLeft = true,
+  t: tBase,
 }: {
   types: SaleType[];
   maxPerOrder: number;
@@ -37,8 +40,12 @@ export default function TicketForm({
   embed?: boolean;
   // The portal's fetch (adds the gate header when embedded).
   fetcher?: (url: string, init?: RequestInit) => Promise<Response>;
+  // The event's own wording (Nastavení akce -> Vstupenky -> Texty na webu) and the "zbývá N" switch.
+  texts?: Record<string, string>;
+  showLeft?: boolean;
   t: T;
 }) {
+  const t = withTicketTexts(tBase, texts);
   const [counts, setCounts] = useState<Record<string, number>>(() => (types.length === 1 ? { [types[0].key]: 1 } : {}));
   const [buyer, setBuyer] = useState(prefill ?? { buyerName: "", email: "", phone: "" });
   const [note, setNote] = useState("");
@@ -164,7 +171,7 @@ export default function TicketForm({
                 <p className="text-[15px] text-ink">{ty.label}</p>
                 <p className="text-[13px] text-ink-secondary">
                   {ty.priceCzk} Kč
-                  {ty.left !== null && ` · ${ty.left === 0 ? t("ticketForm.typeSoldOut") : t("ticketForm.left", { left: String(ty.left) })}`}
+                  {ty.left === 0 ? ` · ${t("ticketForm.typeSoldOut")}` : ty.left !== null && showLeft && ` · ${t("ticketForm.left", { left: String(ty.left) })}`}
                 </p>
               </div>
             </div>

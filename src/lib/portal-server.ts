@@ -620,6 +620,8 @@ async function portalTicketEvents(scope: PortalScope) {
         location: e.location,
         info: e.portalInfo,
         maxPerOrder: settings.maxPerOrder,
+        texts: settings.texts,
+        showLeft: settings.showLeft,
         types: types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] })),
         prefill: { buyerName: adult.name, email: adult.guardians[0]?.email ?? "", phone: adult.guardians[0]?.phone ?? "" },
       };

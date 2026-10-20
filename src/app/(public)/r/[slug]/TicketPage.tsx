@@ -5,6 +5,7 @@ import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
+import { withTicketTexts } from "@/lib/tickets";
 
 // /r/<slug> of a public event (docs/public-event-tickets-spec.md): the event info + the ticket form.
 const date = (d: string) => new Date(d).toLocaleDateString("cs-CZ", { timeZone: "UTC" });
@@ -14,6 +15,8 @@ export default function TicketPage({
   event,
   types,
   maxPerOrder,
+  texts,
+  showLeft,
   org,
   embed,
   strings,
@@ -22,17 +25,20 @@ export default function TicketPage({
   event: { name: string; startDate: string; endDate: string; location: string | null; landingContent: string | null; hideHeader: boolean; registrationDeadline: string | null };
   types: SaleType[];
   maxPerOrder: number;
+  texts: Record<string, string>;
+  showLeft: boolean;
   org: PublicOrg;
   embed: boolean;
   strings: Record<string, string>;
 }) {
   const t = useCallback(
-    (key: string, vars?: Record<string, string>) => {
-      let s = strings[key] ?? key;
-      for (const [k, v] of Object.entries(vars ?? {})) s = s.replace(`{${k}}`, v);
-      return s;
-    },
-    [strings]
+    (key: string, vars?: Record<string, string>) =>
+      withTicketTexts((k, v) => {
+        let s = strings[k] ?? k;
+        for (const [n, x] of Object.entries(v ?? {})) s = s.replace(`{${n}}`, x);
+        return s;
+      }, texts)(key, vars),
+    [strings, texts]
   );
   const when = date(event.startDate) === date(event.endDate) ? date(event.startDate) : `${date(event.startDate)} – ${date(event.endDate)}`;
   return (
@@ -52,7 +58,7 @@ export default function TicketPage({
         </>
       )}
       {event.landingContent && <MarkdownText text={event.landingContent} className="mb-6 rounded-lg border border-mist bg-paper p-4 text-[15px] leading-relaxed text-ink" />}
-      <TicketForm types={types} maxPerOrder={maxPerOrder} submitUrl={`/api/public/r/${slug}/tickets`} embed={embed} t={t} />
+      <TicketForm types={types} maxPerOrder={maxPerOrder} submitUrl={`/api/public/r/${slug}/tickets`} embed={embed} showLeft={showLeft} t={t} />
       <OrgFooter org={org} label={t("portal.contact")} />
     </div>
   );
