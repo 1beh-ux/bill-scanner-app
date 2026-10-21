@@ -813,3 +813,20 @@ export async function testFolder(
     return { ok: false, folderId, error: err instanceof DriveError ? err : await toDriveError(eventId, err, { folderId, folderLabel: label }) };
   }
 }
+
+/**
+ * The sheet `title` in `folderId`, rewritten with `rows` (created when missing) -- the participant and
+ * ticket exports next to the bills manifest. Text starting like a formula should be passed through sheetText.
+ */
+export async function upsertSheetByName(eventId: string, folderId: string, title: string, rows: (string | number)[][]): Promise<string> {
+  // ponytail: found by name each time; two exports at the very same moment could create two sheets.
+  const existing = await findFileInFolder(eventId, folderId, title, SHEET_MIME_TYPE, "export");
+  if (existing) {
+    await writeManifestValues(eventId, existing.id, rows);
+    return existing.id;
+  }
+  return createManifestSheet(eventId, folderId, title, rows);
+}
+
+// Values go in as USER_ENTERED (like the manifest): text someone typed that starts like a formula stays text.
+export const sheetText = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);

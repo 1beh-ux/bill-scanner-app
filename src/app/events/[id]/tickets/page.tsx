@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import { driveErrorText } from "@/lib/drive-error-messages";
 import { itemsLine, scanTime, type OrderItem } from "@/lib/tickets";
 
 // Vstupenky -> Objednávky (docs/public-event-tickets-spec.md): sales per price type, the door count,
@@ -54,6 +55,20 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
   const confirm = useConfirm();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [driveDone, setDriveDone] = useState<{ count: number; url: string } | null>(null);
+  const [driveBusy, setDriveBusy] = useState(false);
+
+  // The orders -> Google Sheet in the export folder (next to the bills manifest).
+  async function exportToDrive() {
+    setDriveBusy(true);
+    setError(null);
+    setDriveDone(null);
+    const res = await fetch(`/api/events/${id}/tickets/export`, { method: "POST" });
+    const r = await res.json().catch(() => ({}));
+    setDriveBusy(false);
+    if (res.ok) setDriveDone({ count: r.count, url: r.url });
+    else setError(r.error === "no_export_folder" ? t("participantsPage.driveExportNoFolder") : driveErrorText(t, r.error ?? "unexpected", r));
+  }
   const [filter, setFilter] = useState<Status | "all" | "entered">("all");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -124,6 +139,9 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
           <a href={`/api/events/${id}/tickets/export`} className={btn + " text-[13px]"}>
             {t("tickets.export")}
           </a>
+          <button onClick={exportToDrive} disabled={driveBusy} title={t("tickets.driveExportHint")} className={btn + " text-[13px]"}>
+            {driveBusy ? t("participantsPage.driveExporting") : t("participantsPage.driveExport")}
+          </button>
           <Link href={`/events/${id}?tab=vstupenky`} className={btn + " text-[13px]"}>
             {t("tickets.settings")}
           </Link>
@@ -133,6 +151,14 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
       {!data.hasSender && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">{t("ticketSettings.noSender")}</p>}
       {!data.bankCheck && <p className="mb-3 text-[13px] text-ink-secondary">{t("tickets.noBankCheck")}</p>}
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+      {driveDone && (
+        <p className="mb-3 text-[13px] text-pine">
+          {t("tickets.driveExportDone", { count: String(driveDone.count) })}{" "}
+          <a href={driveDone.url} target="_blank" rel="noreferrer" className="underline">
+            {t("participantsPage.driveExportOpen")}
+          </a>
+        </p>
+      )}
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {data.types.map((ty) => (

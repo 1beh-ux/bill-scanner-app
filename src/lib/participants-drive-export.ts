@@ -7,12 +7,7 @@ import { allowedParticipantFieldKeys } from "@/lib/module-access";
 import { withMembers } from "@/lib/children";
 import { fieldTextValues } from "@/lib/document-variables";
 import { compareParticipantsBySurname } from "@/lib/participant-name";
-import { createManifestSheet, findFileInFolder, writeManifestValues } from "@/lib/drive";
-
-const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
-
-// Values go in as USER_ENTERED (like the manifest): text a parent typed that starts like a formula stays text.
-export const sheetText = (v: string) => (/^[=+\-@]/.test(v) ? `'${v}` : v);
+import { sheetText, upsertSheetByName } from "@/lib/drive";
 
 export async function exportParticipantsToDrive(eventId: string, user: User): Promise<{ count: number; spreadsheetId: string } | { error: "no_export_folder" }> {
   const event = await withMembers(await prisma.event.findUniqueOrThrow({ where: { id: eventId } }));
@@ -31,9 +26,6 @@ export async function exportParticipantsToDrive(eventId: string, user: User): Pr
       return [p.registrationStatus === "accepted" ? "přijatá" : "čeká", ...shown.map((f) => sheetText(values[f.key] ?? ""))];
     }),
   ];
-  const title = `Účastníci – ${event.name}`;
-  // ponytail: found by name each time; two exports at the very same moment could create two sheets.
-  const existing = await findFileInFolder(eventId, event.driveExportFolderId, title, SHEET_MIME, "export");
-  const spreadsheetId = existing ? (await writeManifestValues(eventId, existing.id, rows), existing.id) : await createManifestSheet(eventId, event.driveExportFolderId, title, rows);
+  const spreadsheetId = await upsertSheetByName(eventId, event.driveExportFolderId, `Účastníci – ${event.name}`, rows);
   return { count: participants.length, spreadsheetId };
 }

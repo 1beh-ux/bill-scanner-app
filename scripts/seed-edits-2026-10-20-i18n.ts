@@ -32,6 +32,8 @@ const rows: Row[] = [
   r("participantsPage.driveExportNoFolder", "Akce nemá nastavenou složku pro export (Nastavení akce → Připojení na Google).", "The event has no export folder (Event settings → Google connection)."),
   r("tickets.status.entered", "Prošli u vchodu", "Checked in"),
   r("tickets.scanLine", "{seq}. {type} – {when}", "{seq}. {type} – {when}"),
+  r("tickets.driveExportHint", "Uloží objednávky (kupující, kontakty, vstupenky, stav, platba, odeslání a vstup u vchodu) jako tabulku „Vstupenky – název akce“ do složky pro export na Google Disku (kde je i přehled účtenek). Další export ji přepíše.", "Saves the orders (buyers, contacts, tickets, state, payment, sending and check-in) as the sheet “Vstupenky – event name” in the Google Drive export folder (next to the bills overview). The next export overwrites it."),
+  r("tickets.driveExportDone", "Exportováno objednávek: {count}.", "Orders exported: {count}."),
   r("eventBasics.badDates", "Konec nesmí být před začátkem.", "The end can't be before the start."),
 ];
 
