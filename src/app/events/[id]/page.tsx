@@ -535,10 +535,11 @@ export default function EventDetailPage({
               the plain člen/nečlen prices stay under Akce for standard events). */}
           {tab === "verejna" && event && (
             <div className="flex flex-col gap-6">
-              {isAdmin && (event.registrationConnected || event.kind === "membership" || event.kind === "public_event") ? (
+              {/* The public page: admins, and people with Účastníci / Vstupenky (the shared look stays admin-only). */}
+              {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && (event.registrationConnected || event.kind === "membership" || event.kind === "public_event") ? (
                 <PublicRegistrationSettings eventId={id} event={event} onSaved={load} t={t} />
               ) : (
-                isAdmin && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
+                (isAdmin || moduleAccess.participants) && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
               )}
               {isAdmin && <AppearanceEditor embedded />}
             </div>

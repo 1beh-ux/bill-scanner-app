@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { itemsLine, type OrderItem } from "@/lib/tickets";
+import { itemsLine, scanTime, type OrderItem } from "@/lib/tickets";
 
 const STATUS = { pending: "čeká na platbu", paid: "zaplaceno", cancelled: "zrušeno" } as const;
 const cell = (v: unknown) => {
@@ -17,9 +17,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id: eventId } = await params;
   const denied = await requireModuleAccess(user, eventId, "tickets");
   if (denied) return denied;
-  const orders = await prisma.ticketOrder.findMany({ where: { eventId }, orderBy: { number: "asc" }, include: { tickets: { select: { usedAt: true } } } });
+  const orders = await prisma.ticketOrder.findMany({ where: { eventId }, orderBy: { number: "asc" }, include: { tickets: { select: { seq: true, usedAt: true }, orderBy: { seq: "asc" } } } });
   const rows = [
-    ["Číslo", "Vytvořeno", "Jméno", "E-mail", "Telefon", "Vstupenky", "Počet", "Celkem Kč", "VS", "Stav", "Zaplaceno", "Odesláno", "U vchodu", "Poznámka"],
+    ["Číslo", "Vytvořeno", "Jméno", "E-mail", "Telefon", "Vstupenky", "Počet", "Celkem Kč", "VS", "Stav", "Zaplaceno", "Odesláno", "U vchodu", "Čas vstupu", "Poznámka"],
     ...orders.map((o) => [
       o.number,
       o.createdAt.toLocaleString("cs-CZ", { timeZone: "Europe/Prague" }),
@@ -34,6 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       o.paidAt?.toLocaleString("cs-CZ", { timeZone: "Europe/Prague" }),
       o.ticketsSentAt?.toLocaleString("cs-CZ", { timeZone: "Europe/Prague" }),
       o.tickets.filter((t) => t.usedAt).length,
+      o.tickets.filter((t) => t.usedAt).map((t) => `${t.seq}: ${scanTime(t.usedAt!)}`).join(", "),
       o.note,
     ]),
   ];

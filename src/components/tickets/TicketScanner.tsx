@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { scanTime } from "@/lib/tickets";
 import jsQR from "jsqr";
 import type { ScanResult } from "@/lib/tickets";
 
@@ -130,7 +131,7 @@ export default function TicketScanner({ api, t, initialCounts }: { api: string; 
           )}
           {result.status === "used" && (
             <p className="text-[16px]">
-              {result.buyerName} · {result.priceLabel} · {t("scan.usedAt", { when: new Date(result.usedAt).toLocaleTimeString("cs-CZ", { hour: "2-digit", minute: "2-digit" }) })}
+              {result.buyerName} · {result.priceLabel} · {t("scan.usedAt", { when: scanTime(result.usedAt) })}
             </p>
           )}
           {(result.status === "unpaid" || result.status === "cancelled") && <p className="text-[16px]">{result.buyerName}</p>}

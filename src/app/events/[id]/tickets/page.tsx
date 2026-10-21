@@ -4,7 +4,7 @@ import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { itemsLine, type OrderItem } from "@/lib/tickets";
+import { itemsLine, scanTime, type OrderItem } from "@/lib/tickets";
 
 // Vstupenky -> Objednávky (docs/public-event-tickets-spec.md): sales per price type, the door count,
 // every order with its state and actions (paid by hand, send again, PDF, cancel), the CSV export and
@@ -29,6 +29,7 @@ type Order = {
   note: string | null;
   ticketCount: number;
   usedCount: number;
+  scans: { seq: number; priceLabel: string; usedAt: string }[];
 };
 type Data = {
   eventName: string;
@@ -53,7 +54,7 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
   const confirm = useConfirm();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Status | "all">("all");
+  const [filter, setFilter] = useState<Status | "all" | "entered">("all");
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -71,7 +72,7 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return (data?.orders ?? []).filter(
-      (o) => (filter === "all" || o.status === filter) && (!q || [o.buyerName, o.email, o.phone ?? "", o.variableSymbol, String(o.number)].some((x) => x.toLowerCase().includes(q)))
+      (o) => (filter === "all" || (filter === "entered" ? o.usedCount > 0 : o.status === filter)) && (!q || [o.buyerName, o.email, o.phone ?? "", o.variableSymbol, String(o.number)].some((x) => x.toLowerCase().includes(q)))
     );
   }, [data, filter, query]);
 
@@ -107,7 +108,8 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
   if (error && !data) return <div className="p-8 text-[14px] text-ink-secondary">{error}</div>;
   if (!data) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
-  const count = (s: Status | "all") => (s === "all" ? data.orders.length : data.orders.filter((o) => o.status === s).length);
+  const count = (s: Status | "all" | "entered") =>
+    s === "all" ? data.orders.length : data.orders.filter((o) => (s === "entered" ? o.usedCount > 0 : o.status === s)).length;
 
   return (
     <div className="mx-auto max-w-[1200px] p-4 md:p-8">
@@ -164,7 +166,7 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {(["all", "pending", "paid", "cancelled"] as const).map((s) => (
+        {(["all", "pending", "paid", "cancelled", "entered"] as const).map((s) => (
           <button key={s} onClick={() => setFilter(s)} className={"rounded-full px-3 py-1 text-[13px] " + (filter === s ? "bg-ember text-white" : "bg-paper-2 text-ink hover:bg-mist")}>
             {t(`tickets.status.${s}`)} ({count(s)})
           </button>
@@ -216,6 +218,12 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
                   </td>
                   <td className="whitespace-nowrap p-2 text-ink">
                     {o.usedCount} / {o.ticketCount}
+                    {/* Each ticket that went through the door, to the second. */}
+                    {o.scans.map((s) => (
+                      <div key={s.seq} className="text-[11.5px] text-ink-secondary">
+                        {t("tickets.scanLine", { seq: String(s.seq), type: s.priceLabel, when: scanTime(s.usedAt) })}
+                      </div>
+                    ))}
                   </td>
                   <td className="p-2">
                     <div className="flex flex-wrap justify-end gap-1.5">

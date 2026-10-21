@@ -137,3 +137,7 @@ export type ScanResult =
 
 /** The code from a scan: the QR holds it bare, a hand-typed one may have spaces / lowercase. */
 export const normalizeTicketCode = (raw: unknown) => (typeof raw === "string" ? raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 32) : "");
+
+/** When a ticket went through the door, to the second (Czech time): "21. 10. 2026 20:15:03". */
+export const scanTime = (iso: string | Date) =>
+  new Date(iso).toLocaleString("cs-CZ", { timeZone: "Europe/Prague", day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });

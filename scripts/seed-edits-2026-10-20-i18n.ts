@@ -23,6 +23,15 @@ const rows: Row[] = [
   r("tickets.confirmDelete", "Smazat zrušenou objednávku č. {number} ({name}) natrvalo, i s jejími vstupenkami? Vrátit to nejde. Pokud je to poslední objednávka, další nová dostane znovu její číslo a variabilní symbol.", "Delete the cancelled order no. {number} ({name}) for good, with its tickets? This can't be undone. If it's the latest order, the next new one gets its number and variable symbol again."),
   r("tickets.error.not_cancelled", "Smazat jde jen zrušenou objednávku.", "Only a cancelled order can be deleted."),
   r("tickets.error.admin_only", "Mazat může jen administrátor organizace.", "Only an organization admin can delete."),
+  r("ticketSettings.textDefault", "Výchozí: {text}", "Default: {text}"),
+  r("participantsPage.driveExport", "Export na Disk", "Export to Drive"),
+  r("participantsPage.driveExporting", "Exportuji…", "Exporting…"),
+  r("participantsPage.driveExportHint", "Uloží seznam účastníků se všemi údaji, které vidíte, jako tabulku „Účastníci – název akce“ do složky pro export na Google Disku (kde je i přehled účtenek). Další export ji přepíše.", "Saves the participant list with every detail you can see as the sheet “Účastníci – event name” in the Google Drive export folder (next to the bills overview). The next export overwrites it."),
+  r("participantsPage.driveExportDone", "Exportováno účastníků: {count}.", "Participants exported: {count}."),
+  r("participantsPage.driveExportOpen", "Otevřít tabulku", "Open the sheet"),
+  r("participantsPage.driveExportNoFolder", "Akce nemá nastavenou složku pro export (Nastavení akce → Připojení na Google).", "The event has no export folder (Event settings → Google connection)."),
+  r("tickets.status.entered", "Prošli u vchodu", "Checked in"),
+  r("tickets.scanLine", "{seq}. {type} – {when}", "{seq}. {type} – {when}"),
   r("eventBasics.badDates", "Konec nesmí být před začátkem.", "The end can't be before the start."),
 ];
 

@@ -278,6 +278,8 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
             <div key={k}>
               {i === TICKET_TEXT_KEYS.indexOf("doneTitle") && <p className="mb-2 mt-2 text-[13px] font-semibold text-ink">{t("ticketSettings.textsAfter")}</p>}
               {long ? <textarea rows={2} {...props} /> : <input {...props} />}
+              {/* The default stays readable while typing (the placeholder disappears). */}
+              <p className="mt-0.5 text-[11.5px] text-ink-secondary">{t("ticketSettings.textDefault", { text: t(`ticketForm.${k}`) })}</p>
             </div>
           );
         })}

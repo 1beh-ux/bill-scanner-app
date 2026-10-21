@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     prisma.ticketOrder.findMany({
       where: { eventId },
       orderBy: { number: "desc" },
-      include: { tickets: { select: { usedAt: true } } },
+      include: { tickets: { select: { seq: true, priceLabel: true, usedAt: true }, orderBy: { seq: "asc" } } },
     }),
     soldCounts(eventId),
     doorCounts(eventId),
@@ -52,7 +52,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     totalLeft: left.total,
     door,
     // publicToken is the buyer's own status link -- not shown here.
-    orders: orders.map(({ tickets, ...o }) => ({ ...o, publicToken: undefined, ticketCount: tickets.length, usedCount: tickets.filter((t) => t.usedAt).length })),
+    orders: orders.map(({ tickets, ...o }) => ({ ...o, publicToken: undefined, ticketCount: tickets.length, usedCount: tickets.filter((t) => t.usedAt).length, scans: tickets.filter((t) => t.usedAt).map((t) => ({ seq: t.seq, priceLabel: t.priceLabel, usedAt: t.usedAt!.toISOString() })) })),
     review: review.map((m) => ({ ...m, amount: Number(m.amount) })),
   });
 }

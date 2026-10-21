@@ -52,10 +52,13 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const denied = await requireModuleAccess(user, id, "bills");
+  const body = await req.json();
+  // Veřejná přihláška (the public page) on its own: Účastníci / Vstupenky holders may change it too.
+  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader"];
+  const publicPageOnly = !isOrgAdmin(user) && Object.keys(body ?? {}).length > 0 && Object.keys(body).every((k) => PUBLIC_PAGE_KEYS.includes(k));
+  const denied = publicPageOnly ? await requireAnyModuleAccess(user, id, ["participants", "tickets"]) : await requireModuleAccess(user, id, "bills");
   if (denied) return denied;
 
-  const body = await req.json();
   const {
     name,
     startDate,
@@ -156,7 +159,7 @@ export async function PATCH(
     bankCheckOff = !!error;
   }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  if (touchesRegistration && !isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
+  if (touchesRegistration && !isOrgAdmin(user) && !publicPageOnly) return NextResponse.json({ error: "admin_only" }, { status: 403 });
   // Name and dates (Nastavení akce -> Akce): admins; the end never before the start.
   if (name !== undefined || startDate !== undefined || endDate !== undefined) {
     if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });

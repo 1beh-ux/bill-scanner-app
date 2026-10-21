@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 import { portalComposeHref } from "@/components/children/portal-link";
+import { driveErrorText } from "@/lib/drive-error-messages";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
@@ -117,7 +118,19 @@ export default function EventParticipantsPage({
   // After "Propojit s Lidmi" (slice 8 #3): the linked people's portal-link targets, offered for the compose page.
   const [linkTargets, setLinkTargets] = useState<string[]>([]);
 
-  const [notice, setNotice] = useState<{ warn: boolean; text: string } | null>(null);
+  const [notice, setNotice] = useState<{ warn: boolean; text: string; href?: string } | null>(null);
+  const [driveExporting, setDriveExporting] = useState(false);
+
+  // Seznam -> Google Sheet in the export folder (next to the bills manifest).
+  async function exportToDrive() {
+    setDriveExporting(true);
+    setNotice(null);
+    const res = await fetch(`/api/events/${id}/participants/drive-export`, { method: "POST" });
+    const r = await res.json().catch(() => ({}));
+    setDriveExporting(false);
+    if (res.ok) setNotice({ warn: false, text: t("participantsPage.driveExportDone", { count: String(r.count) }), href: r.url });
+    else setNotice({ warn: true, text: r.error === "no_export_folder" ? t("participantsPage.driveExportNoFolder") : driveErrorText(t, r.error ?? "unexpected", r) });
+  }
 
   async function load() {
     setLoading(true);
@@ -333,7 +346,17 @@ export default function EventParticipantsPage({
             (notice.warn ? "border-amber-300 bg-amber-50 text-amber-800" : "border-pine/40 bg-pine/10 text-pine")
           }
         >
-          <span>{notice.text}</span>
+          <span>
+            {notice.text}
+            {notice.href && (
+              <>
+                {" "}
+                <a href={notice.href} target="_blank" rel="noreferrer" className="underline">
+                  {t("participantsPage.driveExportOpen")}
+                </a>
+              </>
+            )}
+          </span>
           <button onClick={() => setNotice(null)} className="shrink-0 hover:underline">
             {t("common.close")}
           </button>
@@ -410,6 +433,14 @@ export default function EventParticipantsPage({
           className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50"
         >
           {t("participantsPage.writeEmailButton")}
+        </button>
+        <button
+          onClick={exportToDrive}
+          disabled={driveExporting}
+          title={t("participantsPage.driveExportHint")}
+          className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50"
+        >
+          {driveExporting ? t("participantsPage.driveExporting") : t("participantsPage.driveExport")}
         </button>
         {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
         <UploadReviewLink eventId={id} />
