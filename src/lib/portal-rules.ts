@@ -239,3 +239,27 @@ export function uploadContentType(bytes: Uint8Array): "application/pdf" | "image
   if (starts([0xff, 0xd8, 0xff])) return "image/jpeg";
   return null;
 }
+
+// ---- Profile page sections (2026-10-22). Built-in: basic + detailed (by the field's level); after them
+// the organization's own, e.g. "Zdravotní údaje", "Výchovné poznámky" (Organization.portalProfileSections).
+export type ProfileSection = { key: string; label: string };
+export const MAX_PROFILE_SECTIONS = 12;
+const SECTION_KEY = /^s[a-z0-9]{2,24}$/;
+
+/** Stored / sent JSON -> clean sections (labels trimmed, keys kept or made; at most MAX_PROFILE_SECTIONS). */
+export function readProfileSections(raw: unknown, newKey: () => string = () => `s${Math.random().toString(36).slice(2, 10)}`): ProfileSection[] {
+  const out: ProfileSection[] = [];
+  for (const item of Array.isArray(raw) ? raw : []) {
+    const o = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+    const label = typeof o.label === "string" ? o.label.trim().slice(0, 80) : "";
+    if (!label) continue;
+    const key = typeof o.key === "string" && SECTION_KEY.test(o.key) && !out.some((s) => s.key === o.key) ? o.key : newKey();
+    out.push({ key, label });
+    if (out.length === MAX_PROFILE_SECTIONS) break;
+  }
+  return out;
+}
+
+/** The section a field shows in: its own section while that still exists, else basic / detailed by level. */
+export const sectionOf = (f: { profileSection: string | null; level: "basic" | "detailed" }, sections: ProfileSection[]): string =>
+  f.profileSection && sections.some((s) => s.key === f.profileSection) ? f.profileSection : f.level;

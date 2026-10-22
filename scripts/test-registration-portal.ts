@@ -1,6 +1,6 @@
 // Self-check for the parent portal rules (no DB). npx tsx scripts/test-registration-portal.ts
 import assert from "node:assert/strict";
-import { isEligible, readEligibility, pushPatch, gateThrottle, afterGateFailure, birthDateMatches, portalAccessOf, profileValues, GATE_MAX_FAILURES } from "../src/lib/portal-rules";
+import { isEligible, readEligibility, pushPatch, gateThrottle, afterGateFailure, birthDateMatches, portalAccessOf, profileValues, GATE_MAX_FAILURES, readProfileSections, sectionOf } from "../src/lib/portal-rules";
 import { newPortalToken, gateCookieValue, gateCookieValid } from "../src/lib/portal-gate";
 
 // Eligibility: everyone / listed / all set criteria must match / empty = nobody.
@@ -68,4 +68,14 @@ assert.equal(gateCookieValid(cookie, "c1", "tokenA", "other-secret-0123456"), fa
 assert.equal(gateCookieValid(undefined, "c1", "tokenA", secret), false);
 assert.equal(gateCookieValid(cookie.slice(1), "c1", "tokenA", secret), false);
 
+// Profile page sections (2026-10-22).
+{
+  let n = 0;
+  const secs = readProfileSections([{ key: "shealth01", label: " Zdraví " }, { label: "" }, { key: "bad key", label: "Škola" }, { key: "shealth01", label: "Dup" }], () => `snew${n++}xx`);
+  assert.deepEqual(secs, [{ key: "shealth01", label: "Zdraví" }, { key: "snew0xx", label: "Škola" }, { key: "snew1xx", label: "Dup" }]);
+  assert.equal(sectionOf({ profileSection: "shealth01", level: "detailed" }, secs), "shealth01");
+  assert.equal(sectionOf({ profileSection: "sgone0001", level: "detailed" }, secs), "detailed"); // a deleted section falls back
+  assert.equal(sectionOf({ profileSection: null, level: "basic" }, secs), "basic");
+  assert.equal(readProfileSections("nonsense").length, 0);
+}
 console.log("ok");

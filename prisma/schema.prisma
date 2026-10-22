@@ -1027,6 +1027,11 @@ model ParticipantFieldTemplate {
   // front (basic) or only when an event needs it (detailed).
   audience               FieldAudience             @default(both)
   level                  FieldLevel                @default(basic)
+  // Parent portal profile page (2026-10-22): the organization's own section the field sits in
+  // (Organization.portalProfileSections key; null / unknown = by level), and whether it's on the
+  // family overview next to the name and birth date.
+  profileSection         String?                   @map("profile_section")
+  portalSummary          Boolean                   @default(false) @map("portal_summary")
 
   // Owner (docs/organizations-change-notes.md).
   organizationId   String?                    @map("organization_id")
@@ -1614,6 +1619,9 @@ model Organization {
   // pageAppearance): pages embedded with ?embed=1, and the standalone Veřejná přihláška page.
   appearanceEmbed         Json?    @map("appearance_embed")
   appearanceRegistration  Json?    @map("appearance_registration")
+  // The parent portal profile's own sections after Základní / Podrobné údaje: [{ key, label }] in order
+  // (src/lib/portal-rules.ts readProfileSections), e.g. health details, educational notes.
+  portalProfileSections   Json?    @map("portal_profile_sections")
   createdAt               DateTime @default(now()) @map("created_at")
 
   users                     User[]

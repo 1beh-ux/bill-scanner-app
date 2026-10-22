@@ -66,7 +66,6 @@ export default function AppearanceEditor({ eventId }: { eventId?: string }) {
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => d && take(d, "base"))
       .catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url]);
 
   async function save(values: object) {

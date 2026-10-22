@@ -22,9 +22,10 @@ import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
 // Data from /api/portal/<token> (src/lib/portal-server.ts); every request
 // carries the birth-date cookie.
 type Access = "edit" | "approval" | "read" | "hidden";
-// level (slice 5 #4): basic = on the profile, detailed = the "Podrobné údaje" sub-screen.
+// section (2026-10-22): the profile page card it sits in -- basic / detailed (by level) or one of the
+// organization's own (Data.profileSections); summary: shown on the family overview card.
 // requiredBy: the name of an upcoming registration's event that requires this field.
-type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; requiredBy: string | null };
+type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; section: string; summary: boolean; requiredBy: string | null };
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
 type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type DocFile = { id: string | null; date: string; person?: boolean } | null;
@@ -75,6 +76,7 @@ type Data = {
   kind: "child" | "family";
   name: string;
   members: Member[];
+  profileSections: { key: string; label: string }[];
   contacts: { name: string | null; email: string; phone: string | null; member: string | null }[];
   available: (EventRef & { id: string; registrationDeadline: string | null; location: string | null; info: string | null; memberIds: string[]; pricing: Pricing; steps: Record<string, Step> })[];
   // "Přidat člena rodiny" (slice 8 #1): family links only.
@@ -116,6 +118,25 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
   const [stateFilter, setStateFilter] = useState<RegistrationState | "all">("all");
   // Shown after a portal registration (slice 4 #10): pending / accepted / accepted + sent.
   const [registered, setRegistered] = useState<string | null>(null);
+  // A person's profile page (#profil-<id>): the browser's back button returns to the overview.
+  const [profileId, setProfileId] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => setProfileId(/^#profil-(.+)$/.exec(location.hash)?.[1] ?? null);
+    read();
+    window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, []);
+  const openProfile = (id: string) => {
+    history.pushState({ portalProfile: true }, "", `#profil-${id}`);
+    setProfileId(id);
+  };
+  const closeProfile = () => {
+    if (history.state?.portalProfile) history.back();
+    else {
+      history.replaceState(null, "", location.pathname + location.search);
+      setProfileId(null);
+    }
+  };
 
   const load = useCallback(async () => {
     const res = await portalApiFetch(api, { cache: "no-store" }).catch(() => null);
@@ -130,7 +151,8 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
   // Embedded: every "page" change (gate -> portal, registered, another member) scrolls the frame into view.
   useEffect(() => {
     if (embed && phase !== "loading") postScrollTop();
-  }, [embed, phase, registered, memberId]);
+  }, [embed, phase, registered, memberId, profileId]);
+  const profileMember = data?.members.find((m) => m.id === profileId) ?? null;
 
   const evName = (e: EventRef) => (e.kind === "membership" ? t("portal.membership", { year: String(e.membershipYear ?? "") }) : e.name);
   // Inactive people (slice 8 #2) sit in the folded "Neaktivní" section, not among the chips.
@@ -150,7 +172,10 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
       {phase === "loading" && <p className="mt-6 text-[14px] text-ink-secondary">{t("portal.loading")}</p>}
       {phase === "unavailable" && <p className="mt-6 text-[15px] text-ink">{t("portal.unavailable")}</p>}
       {phase === "gate" && <Gate api={api} t={t} onPassed={load} />}
-      {phase === "ready" && data && member && (
+      {phase === "ready" && data && profileMember && (
+        <ProfilePage key={profileMember.id} api={api} member={profileMember} sections={data.profileSections} t={t} onSaved={load} onBack={closeProfile} />
+      )}
+      {phase === "ready" && data && member && !profileMember && (
         <>
           <h1 className="mb-5 mt-1 text-[24px] font-semibold text-ink">{data.name}</h1>
           <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -189,8 +214,11 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
                 </section>
               )}
               {inactive.length > 0 && <Inactive api={api} members={inactive} t={t} onChanged={load} />}
-              <h2 className={h2}>{t("portal.profileOf", { name: member.name })}</h2>
-              <Profile key={member.id} api={api} member={member} t={t} onSaved={load} />
+              {/* Each person in short (name, birth date, the organization's overview fields); details on their profile page. */}
+              <h2 className={h2}>{t(many ? "portal.members" : "portal.profileOf", { name: member.name })}</h2>
+              {(active.length ? active : [member]).map((m) => (
+                <MemberCard key={m.id} member={m} t={t} onOpen={() => openProfile(m.id)} />
+              ))}
             </div>
 
             <div className="flex flex-col gap-4">
@@ -306,78 +334,111 @@ function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void })
   );
 }
 
-function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: T; onSaved: () => void }) {
+// A person on the overview (2026-10-22): name, birth date and the fields the organization put on the
+// overview; what's waiting (approval, a field an event needs) and the way to the profile page.
+function MemberCard({ member, t, onOpen }: { member: Member; t: T; onOpen: () => void }) {
+  const fields = member.profile.fields;
+  const birth = fields.find((f) => f.key === "datum_narozeni")?.value;
+  const extra = fields.filter((f) => f.summary && !["participant_first_name", "participant_last_name", "datum_narozeni"].includes(f.key) && f.value);
+  const pending = fields.filter((f) => f.pending !== null).length + (member.profile.guardiansPending ? 1 : 0);
+  const missing = fields.filter((f) => !!f.requiredBy && !(f.pending ?? f.value).trim()).length;
+  return (
+    <section className={card + " flex flex-wrap items-center justify-between gap-3"}>
+      <div className="min-w-0">
+        <h3 className="text-[16px] font-semibold text-ink">{member.name}</h3>
+        <p className="text-[13px] text-ink-secondary">
+          {[birth && /^\d{4}-\d{2}-\d{2}$/.test(birth) ? t("portal.bornOn", { date: date(birth) }) : null, ...extra.map((f) => `${f.label}: ${showValue(f, f.value, t)}`)].filter(Boolean).join(" · ")}
+        </p>
+        {(pending > 0 || missing > 0) && (
+          <p className="text-[12.5px] text-amber-700">
+            {[pending > 0 && t("portal.pendingCount", { n: String(pending) }), missing > 0 && t("portal.missingCount", { n: String(missing) })].filter(Boolean).join(" · ")}
+          </p>
+        )}
+      </div>
+      <button type="button" onClick={onOpen} className={btn}>
+        {t("portal.openProfile")}
+      </button>
+    </section>
+  );
+}
+
+// A value as shown (Ano/Ne, a Czech date), "—" when empty.
+function showValue(f: Field, v: string, t: T) {
+  if (!v) return "—";
+  if (f.fieldType === "boolean") return toBoolean(v, f.options) === "true" ? t("portal.yes") : toBoolean(v, f.options) === "false" ? t("portal.no") : v;
+  if (f.fieldType === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return date(v);
+  return v;
+}
+
+// The profile page of one person (2026-10-22): every section -- Základní, Podrobné, the organization's
+// own (Šablony -> Účastníci) -- then the guardians and "Už nebude chodit". One save covers all fields.
+function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: string; member: Member; sections: { key: string; label: string }[]; t: T; onSaved: () => void; onBack: () => void }) {
   const fields = member.profile.fields;
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, f.pending ?? f.value])));
   const [guardians, setGuardians] = useState<Guardian[]>(member.profile.guardiansPending ?? member.profile.guardians);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  // "Podrobné údaje" sub-screen (slice 5 #4).
-  const [detailed, setDetailed] = useState(false);
-  const detailedFields = fields.filter((f) => f.level === "detailed");
+  const [message, setMessage] = useState<{ section: string; text: string } | null>(null);
   // Required by an upcoming registration and still empty -> highlighted.
   const missing = (f: Field) => !!f.requiredBy && !(f.pending ?? f.value).trim();
-  const missingDetailed = detailedFields.filter(missing).length;
+  const cards = [
+    { key: "basic", title: t("portal.basicTitle"), hint: t("portal.profileHint") },
+    { key: "detailed", title: t("portal.detailedTitle"), hint: t("portal.detailedHint") },
+    ...sections.map((s) => ({ key: s.key, title: s.label, hint: null as string | null })),
+  ].filter((c) => fields.some((f) => f.section === c.key));
 
-  async function patch(body: object) {
+  async function patch(body: object, section: string) {
     setBusy(true);
     setMessage(null);
     const res = await portalApiFetch(`${api}/profile`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, memberId: member.id }) }).catch(() => null);
     setBusy(false);
-    setMessage(t(res?.ok ? "portal.saved" : "portal.saveFailed"));
+    setMessage({ section, text: t(res?.ok ? "portal.saved" : "portal.saveFailed") });
     if (res?.ok) onSaved();
   }
-  function saveFields() {
+  function saveFields(section: string) {
     // Only what changed against what's shown (live value, or the pending one).
     const changed = Object.fromEntries(fields.filter((f) => (f.access === "edit" || f.access === "approval") && values[f.key] !== (f.pending ?? f.value)).map((f) => [f.key, values[f.key]]));
-    if (Object.keys(changed).length) patch({ values: changed });
+    if (Object.keys(changed).length) patch({ values: changed }, section);
+    else setMessage({ section, text: t("portal.nothingChanged") });
   }
-  const show = (f: Field, v: string) => {
-    if (!v) return "—";
-    if (f.fieldType === "boolean") return toBoolean(v, f.options) === "true" ? t("portal.yes") : toBoolean(v, f.options) === "false" ? t("portal.no") : v;
-    if (f.fieldType === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return date(v);
-    return v;
-  };
 
   return (
-    <div className="flex flex-col gap-4">
-      <section className={card + " flex flex-col gap-3"}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-[16px] font-semibold text-ink">{t(detailed ? "portal.detailedTitle" : "portal.basicTitle")}</h3>
-          {(detailed || detailedFields.length > 0 || !member.leftAt) && (
-            <button type="button" onClick={() => setDetailed(!detailed)} className={btn}>
-              {detailed ? t("portal.backToBasic") : t("portal.openDetailed")}
-              {!detailed && missingDetailed > 0 && <span className="ml-1.5 text-amber-700">({t("portal.detailedMissing", { n: String(missingDetailed) })})</span>}
+    <div className="mt-2 flex flex-col gap-4">
+      <button type="button" onClick={onBack} className="self-start text-[14px] text-ember hover:underline">
+        ← {t("portal.backToOverview")}
+      </button>
+      <h1 className="text-[24px] font-semibold text-ink">{member.name}</h1>
+      {cards.map((c) => (
+        <section key={c.key} className={card + " flex flex-col gap-3"}>
+          <h3 className="text-[16px] font-semibold text-ink">{c.title}</h3>
+          {c.hint && <p className="text-[13px] text-ink-secondary">{c.hint}</p>}
+          {fields
+            .filter((f) => f.section === c.key)
+            .map((f) => {
+              const editable = f.access === "edit" || f.access === "approval";
+              return (
+                <div key={f.key} className={"flex flex-col gap-1 " + (missing(f) ? "rounded-lg border border-amber-500/70 bg-amber-500/10 p-2" : "")}>
+                  <span className="text-[13px] text-ink-secondary">
+                    {f.label}
+                    {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
+                  </span>
+                  {editable ? (
+                    <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
+                  ) : (
+                    <span className="text-[15px] text-ink">{showValue(f, f.value, t)}</span>
+                  )}
+                  {f.pending !== null && <span className="text-[12.5px] text-amber-700">{t("portal.pendingApproval", { value: showValue(f, f.pending, t), old: showValue(f, f.value, t) })}</span>}
+                  {missing(f) && <span className="text-[12.5px] text-amber-700">{t("portal.requiredBy", { event: f.requiredBy! })}</span>}
+                </div>
+              );
+            })}
+          {message?.section === c.key && <p className="text-[14px] text-ink">{message.text}</p>}
+          {fields.some((f) => f.section === c.key && (f.access === "edit" || f.access === "approval")) && (
+            <button onClick={() => saveFields(c.key)} disabled={busy} className={btnPrimary + " self-start"}>
+              {t("portal.save")}
             </button>
           )}
-        </div>
-        <p className="text-[13px] text-ink-secondary">{t(detailed ? "portal.detailedHint" : "portal.profileHint")}</p>
-        {fields.filter((f) => (f.level === "detailed") === detailed).map((f) => {
-          const editable = f.access === "edit" || f.access === "approval";
-          return (
-            <div key={f.key} className={"flex flex-col gap-1 " + (missing(f) ? "rounded-lg border border-amber-500/70 bg-amber-500/10 p-2" : "")}>
-              <span className="text-[13px] text-ink-secondary">
-                {f.label}
-                {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
-              </span>
-              {editable ? (
-                <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
-              ) : (
-                <span className="text-[15px] text-ink">{show(f, f.value)}</span>
-              )}
-              {f.pending !== null && <span className="text-[12.5px] text-amber-700">{t("portal.pendingApproval", { value: show(f, f.pending), old: show(f, f.value) })}</span>}
-              {missing(f) && <span className="text-[12.5px] text-amber-700">{t("portal.requiredBy", { event: f.requiredBy! })}</span>}
-            </div>
-          );
-        })}
-        {message && <p className="text-[14px] text-ink">{message}</p>}
-        {fields.some((f) => (f.level === "detailed") === detailed) && (
-          <button onClick={saveFields} disabled={busy} className={btnPrimary}>
-            {t("portal.save")}
-          </button>
-        )}
-        {detailed && !member.leftAt && <Leave key={`leave-${member.id}`} api={api} member={member} t={t} onDone={onSaved} />}
-      </section>
+        </section>
+      ))}
 
       <section className={card + " flex flex-col gap-3"}>
         <h3 className="text-[16px] font-semibold text-ink">{t("portal.guardians")}</h3>
@@ -411,10 +472,17 @@ function Profile({ api, member, t, onSaved }: { api: string; member: Member; t: 
         <button type="button" onClick={() => setGuardians((p) => [...p, { name: "", email: "", relationship: "", phone: "", receivesCommunications: true }])} className="self-start text-[13px] text-ember hover:underline">
           + {t("portal.addGuardian")}
         </button>
-        <button type="button" onClick={() => patch({ guardians: guardians.filter((g) => g.email.trim()) })} disabled={busy} className={btnPrimary}>
+        <button type="button" onClick={() => patch({ guardians: guardians.filter((g) => g.email.trim()) }, "guardians")} disabled={busy} className={btnPrimary}>
           {t("portal.saveGuardians")}
         </button>
+        {message?.section === "guardians" && <p className="text-[14px] text-ink">{message.text}</p>}
       </section>
+
+      {!member.leftAt && (
+        <section className={card + " flex flex-col gap-3"}>
+          <Leave key={`leave-${member.id}`} api={api} member={member} t={t} onDone={onSaved} />
+        </section>
+      )}
     </div>
   );
 }

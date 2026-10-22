@@ -6,7 +6,8 @@ import TemplateCheckModal from "@/components/participants/TemplateCheckModal";
 import { useLevelUrl, useTemplateLevel } from "@/lib/template-level";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
-import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel } from "@/lib/portal-rules";
+import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel, type ProfileSection } from "@/lib/portal-rules";
+import ProfileSectionsEditor from "@/components/participants/ProfileSectionsEditor";
 import { FIELD_AUDIENCES, FIELD_LEVELS, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
@@ -35,9 +36,11 @@ type Field = {
   requiredInRegistration?: boolean; // org scope only (public registration form, slice 3 D)
   audience?: FieldAudience; // org scope only (slice 5 #1)
   level?: FieldLevel; // org scope only (slice 5 #1)
+  profileSection?: string | null; // org scope only: the portal profile section (null = by level)
+  portalSummary?: boolean; // org scope only: on the portal's family overview
   requiredOnRegistration?: boolean; // event scope only (slice 5 #2)
 };
-type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level">;
+type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level" | "profileSection" | "portalSummary">;
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -90,6 +93,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // the portal rule lives on the template, so editing it here edits the template.
   const [templates, setTemplates] = useState<Map<string, TemplateMeta>>(new Map());
   const [enabledModules, setEnabledModules] = useState<Set<ModuleKey>>(new Set());
+  // The organization's own portal profile sections (the "Sekce v portálu" select); none on the app level.
+  const [sections, setSections] = useState<ProfileSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -154,6 +159,11 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
           .catch(() => [])
       );
     }
+    if (!appLevel)
+      fetch("/api/organizations/profile-sections")
+        .then((r) => (r.ok ? r.json() : { sections: [] }))
+        .then((d) => setSections(d.sections))
+        .catch(() => {});
     const [fieldsData, moduleAccess, templateData] = await Promise.all(requests);
     if (isEvent) setTemplates(new Map((templateData as Field[]).filter((f) => f.active).map((f) => [f.key, f])));
     // Org templates carry no `kind` -- they're all custom fields; without it every
@@ -662,6 +672,32 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
 
   // "Pro koho" / "Údaje" (slice 5 #1): template rules like the portal column.
+  // Portal profile page (2026-10-22): the section the field sits in + "on the family overview".
+  function profileCell(field: Field) {
+    const tpl = isEvent ? templates.get(field.key) : field;
+    if (field.kind !== "custom" || !tpl || appLevel || (tpl.portalAccess ?? "hidden") === "hidden") return null;
+    return (
+      <>
+        <select
+          value={tpl.profileSection && sections.some((s) => s.key === tpl.profileSection) ? tpl.profileSection : ""}
+          disabled={role !== "admin"}
+          onChange={(e) => setPortalAccess(field, { profileSection: e.target.value || null })}
+          aria-label={t("profileSections.column")}
+          className="rounded border border-mist bg-paper-2 px-1.5 py-0.5 text-[12px] text-ink disabled:opacity-60"
+        >
+          <option value="">{t("profileSections.byLevel")}</option>
+          {sections.map((s) => (
+            <option key={s.key} value={s.key}>{s.label}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
+          <input type="checkbox" disabled={role !== "admin"} checked={!!tpl.portalSummary} onChange={(e) => setPortalAccess(field, { portalSummary: e.target.checked })} />
+          {t("profileSections.summary")}
+        </label>
+      </>
+    );
+  }
+
   function metaCell(field: Field, which: "audience" | "level") {
     // Both selects share one cell -- show a single dash, not two.
     if (field.kind !== "custom") return which === "level" ? null : <span className="text-[12px] text-ink-secondary">—</span>;
@@ -745,6 +781,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             <div className="flex flex-col gap-1">
               {metaCell(field, "audience")}
               {metaCell(field, "level")}
+              {profileCell(field)}
             </div>
           </td>
           <td className="whitespace-nowrap p-2 text-right">
@@ -772,6 +809,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
   return (
     <div>
+      {!isEvent && !appLevel && <ProfileSectionsEditor sections={sections} onSaved={setSections} canEdit={role === "admin"} t={t} />}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
         <div className="flex items-center gap-3">
@@ -929,7 +967,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   {t("portalColumn.title")}
                 </th>
                 <th className="sticky top-0 z-10 bg-paper p-2 text-[11px] font-medium uppercase tracking-wide text-ink-secondary">
-                  {t("fieldMeta.audience.title")} / {t("fieldMeta.level.title")}
+                  {t("fieldMeta.audience.title")} / {t("fieldMeta.level.title")}{!appLevel && ` / ${t("profileSections.column")}`}
                 </th>
                 <th className="sticky top-0 z-10 bg-paper p-2"></th>
               </tr>

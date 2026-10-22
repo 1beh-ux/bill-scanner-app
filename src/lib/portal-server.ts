@@ -18,8 +18,7 @@ import {
   isEligible,
   profileValues,
   readEligibility,
-  type PortalAccessLevel,
-} from "@/lib/portal-rules";
+  type PortalAccessLevel, readProfileSections, sectionOf } from "@/lib/portal-rules";
 import { eligibilityFacts, profileFieldLabels, proposeChange, updateProfile } from "@/lib/child-profile";
 import { buildVariableSymbol, effectivePriceCzk, fieldTextValues, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
 import { readParticipantLayout, resolvePortalLayout } from "@/lib/participant-layout";
@@ -181,7 +180,7 @@ export async function availableEvents(organizationId: string, memberIds: string[
 /** Everything the portal shows for a scope (after the gate). */
 export async function portalData(scope: PortalScope) {
   const memberIds = scope.members.map((m) => m.id);
-  const [templates, labels, pending, available, participations, rules] = await Promise.all([
+  const [templates, labels, pending, available, participations, rules, org] = await Promise.all([
     visibleTemplates(scope.organizationId),
     profileFieldLabels(scope.organizationId),
     prisma.childChange.findMany({ where: { childId: { in: memberIds }, status: "pending" } }),
@@ -192,7 +191,10 @@ export async function portalData(scope: PortalScope) {
       orderBy: { event: { startDate: "desc" } },
     }),
     templateRules(scope.organizationId),
+    prisma.organization.findUniqueOrThrow({ where: { id: scope.organizationId }, select: { portalProfileSections: true } }),
   ]);
+  // The profile page's own sections after Základní / Podrobné údaje (2026-10-22).
+  const sections = readProfileSections(org.portalProfileSections);
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
   // Upcoming/current registrations only of events using the module; the rest is history.
@@ -220,13 +222,16 @@ export async function portalData(scope: PortalScope) {
         if (f.source === "profile" && !requiredBy.has(f.key)) requiredBy.set(f.key, p.event.name);
       }
     }
-    const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown, level: FieldLevel) => ({
+    // section: basic / detailed / an organization section key; summary: on the family overview.
+    const field = (key: string, access: PortalAccessLevel, fieldType: string, options: unknown, level: FieldLevel, section: string, summary: boolean) => ({
       key,
       label: labels[key] ?? key,
       access,
       fieldType,
       options,
       level,
+      section,
+      summary,
       value: values[key] ?? "",
       pending: pendingBy.has(key) ? pendingBy.get(key)! : null,
       requiredBy: requiredBy.get(key) ?? null,
@@ -254,8 +259,8 @@ export async function portalData(scope: PortalScope) {
       leftNote: child.leftNote,
       profile: {
         fields: [
-          ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic")),
-          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options, t.level)),
+          ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic", "basic", true)),
+          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options, t.level, sectionOf(t, sections), t.portalSummary)),
         ],
         guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
         // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
@@ -273,6 +278,7 @@ export async function portalData(scope: PortalScope) {
     kind: scope.kind,
     name: scope.name,
     members,
+    profileSections: sections,
     // A family's contacts, each once (an adult member's own e-mail = that member).
     contacts: scope.kind === "family" ? familyContacts(scope.members).map((g) => ({ name: g.name, email: g.email, phone: g.phone, member: g.member })) : [],
     // "Přidat člena rodiny" (slice 8 #1): family links only.
