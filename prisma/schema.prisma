@@ -405,6 +405,8 @@ model Event {
   publicHideHeader              Boolean        @default(false) @map("public_hide_header")
   // This event's own look of its /r page (a partial layer over the organization's), embedded or not.
   appearance                    Json?          @map("appearance")
+  // This event's own wording of its registration page texts, over the organization's (Organization.publicTexts).
+  publicTexts                   Json?          @map("public_texts")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?
@@ -1011,6 +1013,9 @@ model ParticipantFieldTemplate {
   label                  String
   fieldType              ParticipantFieldType      @map("field_type")
   options                Json?
+  // A select's own options for adult members (e.g. Žena / Muž next to the children's Dívka / Chlapec);
+  // null = the same as `options`. src/lib/registration-fields.ts optionsFor.
+  adultOptions           Json?                     @map("adult_options")
   // Suggested surfaces applied when this template is synced into an event
   // (manually, at event creation, or when a module the surfaces belong to
   // gets enabled -- see .../participant-fields/sync/route.ts and the
@@ -1622,6 +1627,9 @@ model Organization {
   // The parent portal profile's own sections after Základní / Podrobné údaje: [{ key, label }] in order
   // (src/lib/portal-rules.ts readProfileSections), e.g. health details, educational notes.
   portalProfileSections   Json?    @map("portal_profile_sections")
+  // Own wording of the public registration form and parent portal texts ({ "public.doneTitle": "…" }),
+  // over the translations (src/lib/public-texts.ts); an event's own (Event.publicTexts) wins on its page.
+  publicTexts             Json?    @map("public_texts")
   createdAt               DateTime @default(now()) @map("created_at")
 
   users                     User[]

@@ -13,9 +13,22 @@ export const FIELD_LEVELS: FieldLevel[] = ["basic", "detailed"];
 export const appliesTo = (audience: FieldAudience | undefined, isAdult: boolean | null) =>
   !audience || audience === "both" || (isAdult != null && audience === (isAdult ? "adults" : "children"));
 
+/**
+ * A select's options for one person (2026-10-22): adults get the field's own adult list when it has one
+ * (Žena / Muž instead of Dívka / Chlapec). isAdult unknown (admin screens, event copies) = both lists.
+ */
+export function optionsFor(f: { options: unknown; adultOptions?: unknown }, isAdult?: boolean | null): unknown {
+  const list = (o: unknown) => (Array.isArray(o) ? o.filter((x): x is string => typeof x === "string") : []);
+  const adult = list(f.adultOptions);
+  if (!adult.length) return f.options;
+  if (isAdult === true) return adult;
+  if (isAdult === false) return f.options;
+  return [...new Set([...list(f.options), ...adult])];
+}
+
 // --- Asked at registration (spec 2-3) --------------------------------------
 
-export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel };
+export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel };
 export type EventFieldRule = { key: string; label: string; fieldType: string; options: unknown; kind: string; requiredOnRegistration: boolean };
 
 /**
@@ -52,7 +65,7 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
     }
     if (t.portalAccess !== "edit" && t.portalAccess !== "approval") continue;
     if (isAdult !== undefined && !appliesTo(t.audience, isAdult)) continue;
-    out.push({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, source: "profile", access: t.portalAccess, level: t.level, audience: t.audience });
+    out.push({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, isAdult), source: "profile", access: t.portalAccess, level: t.level, audience: t.audience });
   }
   return out;
 }

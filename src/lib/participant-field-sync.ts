@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import type { ModuleKey, ParticipantFieldSurface } from "@/generated/prisma";
+import type { ModuleKey, ParticipantFieldSurface, Prisma } from "@/generated/prisma";
+import { optionsFor } from "@/lib/registration-fields";
 
 // Which surfaces "belong" to which module -- used to scope the sync to
 // just-enabled modules (see the modules PATCH route) without re-adding
@@ -43,7 +44,7 @@ export async function syncParticipantFieldsForEvent(eventId: string, moduleFilte
         key: t.key,
         label: t.label,
         fieldType: t.fieldType,
-        options: t.options ?? undefined,
+        options: (optionsFor(t) as Prisma.InputJsonValue | null) ?? undefined,
         surfaces: t.defaultSurfaces,
         isFromTemplate: true,
       })),

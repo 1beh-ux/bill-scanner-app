@@ -43,7 +43,7 @@ export async function publicFormContext(event: PublicEvent) {
   const fields: FormField[] = [
     ...templates
       .filter((t) => t.level === "basic" || askedKeys.has(t.key))
-      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
+      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
     ...asked.filter((f) => f.source === "event").map((f) => ({ key: f.key, label: f.label, fieldType: f.fieldType, options: f.options, required: true, eventOnly: true })),
   ];
   return { fields, rules, oddil: await oddilField(event.id, rules) };

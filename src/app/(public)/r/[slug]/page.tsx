@@ -12,6 +12,7 @@ import PublicForm from "./PublicForm";
 import TicketPage from "./TicketPage";
 import { remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
+import { withPublicTexts } from "@/lib/public-texts";
 
 // Public registration page (docs/registration-slice3-spec.md D) -- outside the
 // login gate (src/proxy.ts). Landing info + the new-family form. A slug that
@@ -68,7 +69,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
           showLeft={settings.showLeft}
           org={org}
           embed={embed}
-          strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))}
+          strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}
         />
       </PublicFrame>
     );
@@ -98,7 +99,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       rules={ctx.rules}
       oddil={ctx.oddil}
       org={org}
-      strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))}
+      strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}
     />
     </PublicFrame>
   );

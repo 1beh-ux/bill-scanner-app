@@ -103,6 +103,7 @@ export const publicOrg = perRequest((organizationId: string) =>
       publicContentWidth: true,
       appearanceEmbed: true,
       appearanceRegistration: true,
+      publicTexts: true,
     },
   })
 );

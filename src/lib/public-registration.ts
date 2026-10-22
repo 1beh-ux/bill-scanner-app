@@ -4,7 +4,7 @@
 // The server never trusts the client: everything is re-checked here.
 import { isIsoDate } from "@/lib/portal-rules";
 import { categoryFor, type PriceRules } from "@/lib/price-rules";
-import { appliesTo, cleanFieldValue, type FieldAudience } from "@/lib/registration-fields";
+import { appliesTo, cleanFieldValue, optionsFor, type FieldAudience } from "@/lib/registration-fields";
 
 export const MAX_PERSONS = 10;
 export const SUBMIT_LIMIT_PER_HOUR = 5;
@@ -12,7 +12,7 @@ export const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])$/;
 
 // audience (slice 5 #1): a field only for children / adults is neither shown to nor accepted from the others.
 // eventOnly (slice 5 #3): an event question -- stored on the registration only, never in the profile.
-export type FormField = { key: string; label: string; fieldType: string; options: unknown; required: boolean; audience?: FieldAudience; eventOnly?: boolean };
+export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; required: boolean; audience?: FieldAudience; eventOnly?: boolean };
 export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null };
 export type PersonIn = {
   firstName: string;
@@ -40,11 +40,11 @@ const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length 
  * required, per audience (validateSubmission filters by the person).
  */
 export const memberFormFields = (
-  templates: { key: string; label: string; fieldType: string; options: unknown; portalAccess: string; level: string; requiredInRegistration: boolean; audience: FieldAudience }[]
+  templates: { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: string; level: string; requiredInRegistration: boolean; audience: FieldAudience }[]
 ): FormField[] =>
   templates
     .filter((t) => t.level === "basic" && (t.portalAccess === "edit" || t.portalAccess === "approval"))
-    .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, required: t.requiredInRegistration, audience: t.audience }));
+    .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, required: t.requiredInRegistration, audience: t.audience }));
 
 /** The honeypot ("website") was filled = a bot; the route answers OK and stores nothing. */
 export const isSpam = (body: unknown) => !!body && typeof body === "object" && str((body as Record<string, unknown>).website) !== "";
@@ -89,7 +89,7 @@ export function validateSubmission(
     for (const [key, v] of Object.entries(values)) {
       const f = fieldsByKey.get(key);
       if (!f || !appliesTo(f.audience, p.isAdult)) continue;
-      const value = cleanFieldValue(f, v);
+      const value = cleanFieldValue({ ...f, options: optionsFor(f, p.isAdult) }, v);
       if (value === null) errors.push(`p${i}.${key}`);
       else if (value) p.values[key] = value;
     }

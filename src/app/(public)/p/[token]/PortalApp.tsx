@@ -12,7 +12,7 @@ import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
-import { appliesTo } from "@/lib/registration-fields";
+import { appliesTo, optionsFor } from "@/lib/registration-fields";
 import type { FormField } from "@/lib/public-registration";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
 
@@ -642,7 +642,7 @@ function AddMember({ api, data, fields, t, onAdded }: { api: string; data: Data;
             {f.label}
             {f.required && " *"}
           </span>
-          <FieldInput field={f} value={values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
+          <FieldInput field={{ ...f, options: optionsFor(f, person.isAdult) }} value={values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
         </label>
       ))}
       {!person.isAdult && (

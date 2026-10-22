@@ -5,6 +5,7 @@ import { decideChange, profileFieldLabels, readGuardians, setGuardians, updatePr
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { leftData, profileValues } from "@/lib/portal-rules";
 import { getActingOrgId, isOrgAdmin, notFound } from "@/lib/org-scope";
+import { optionsFor } from "@/lib/registration-fields";
 
 // Admin of the acting organization, and the person is in it (anyone else's person: 404).
 async function requireAdmin(id: string): Promise<{ user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; organizationId: string; error?: undefined } | { user?: undefined; organizationId?: undefined; error: NextResponse }> {
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json({
     ...rest,
     values: profileValues(child),
-    fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, active: t.active, portalAccess: t.portalAccess, audience: t.audience, level: t.level })),
+    fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, child.isAdult), active: t.active, portalAccess: t.portalAccess, audience: t.audience, level: t.level })),
     pendingChanges: changes.map((c) => ({ ...c, childName: child.name, fieldLabel: labels[c.fieldKey] ?? c.fieldKey })),
     portalUrl: portalToken ? await portalUrl(portalToken, req) : null,
   });

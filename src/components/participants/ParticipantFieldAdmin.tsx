@@ -27,6 +27,7 @@ type Field = {
   label: string;
   fieldType: FieldType;
   options: string[] | null;
+  adultOptions?: string[] | null; // org scope only: a select's own options for adults (null = the same)
   surfaces?: Surface[]; // event scope only
   defaultSurfaces?: Surface[]; // org scope only
   kind: FieldKind;
@@ -110,6 +111,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   const [fieldLabel, setFieldLabel] = useState("");
   const [fieldType, setFieldType] = useState<FieldType>("text");
   const [optionsText, setOptionsText] = useState("");
+  const [adultOptionsText, setAdultOptionsText] = useState("");
   // A new field's switches (same as the row pills); import too unless composite.
   const [newSurfaces, setNewSurfaces] = useState<Surface[]>(["email", "documents"]);
   // Composite ("Složené pole") being added/edited: part keys in order + separator.
@@ -253,6 +255,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setFieldLabel(field.label);
     setFieldType(field.fieldType);
     setOptionsText(Array.isArray(field.options) ? field.options.join(", ") : "");
+    setAdultOptionsText(Array.isArray(field.adultOptions) ? field.adultOptions.join(", ") : "");
     setBoolValues([]);
     setBoolSaved(null);
     if (isEvent && field.kind === "custom" && field.fieldType === "boolean") {
@@ -365,6 +368,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
         label: fieldLabel.trim(),
         fieldType,
         options,
+        // Templates: a select's adult options ("" = the same as the options).
+        ...(!isEvent && { adultOptions: fieldType === "select" ? adultOptionsText.split(",").map((o) => o.trim()).filter(Boolean) : [] }),
       }),
     });
     setSaving(false);
@@ -610,6 +615,12 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
                   onChange={(e) => setOptionsText(e.target.value)}
                   className={inputClass}
                 />
+              )}
+              {fieldType === "select" && !isEvent && (
+                <label className="text-[12.5px] text-ink-secondary">
+                  {t("participantFieldAdmin.adultOptionsLabel")}
+                  <input type="text" placeholder={t("participantFieldAdmin.adultOptionsPlaceholder")} value={adultOptionsText} onChange={(e) => setAdultOptionsText(e.target.value)} className={inputClass + " mt-1"} />
+                </label>
               )}
               {isEvent && field.fieldType === "boolean" && fieldType === "boolean" && boolValuesEditor(field)}
               {fieldType === "composite" && compositeEditor(field.key)}

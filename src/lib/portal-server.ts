@@ -30,7 +30,7 @@ import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { memberFormFields, validateSubmission } from "@/lib/public-registration";
-import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
+import { appliesTo, optionsFor, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 import { remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
@@ -260,7 +260,7 @@ export async function portalData(scope: PortalScope) {
       profile: {
         fields: [
           ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic", "basic", true)),
-          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, t.options, t.level, sectionOf(t, sections), t.portalSummary)),
+          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, optionsFor(t, child.isAdult), t.level, sectionOf(t, sections), t.portalSummary)),
         ],
         guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
         // The parent's proposed list while it waits for approval (live list above still gets the e-mails).

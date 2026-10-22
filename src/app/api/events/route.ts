@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
+import type { Prisma } from "@/generated/prisma";
+import { optionsFor } from "@/lib/registration-fields";
 
 // ?module=bills -> only events where the user may work with bills (what a
 // "move to another event" picker needs); without it, every event the user holds
@@ -115,7 +117,7 @@ export async function POST(req: NextRequest) {
           key: f.key,
           label: f.label,
           fieldType: f.fieldType,
-          options: f.options ?? undefined,
+          options: (optionsFor(f) as Prisma.InputJsonValue | null) ?? undefined,
           // Was hardcoded to ["list"], ignoring the template's own
           // defaultSurfaces -- inconsistent with syncParticipantFieldsForEvent,
           // which already gets this right.

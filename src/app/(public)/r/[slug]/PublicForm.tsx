@@ -9,7 +9,7 @@ import FieldInput, { portalInputClass as inputClass } from "@/components/registr
 import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
-import { appliesTo } from "@/lib/registration-fields";
+import { appliesTo, optionsFor } from "@/lib/registration-fields";
 
 // The public new-family form (docs/registration-slice3-spec.md D): 1+ adults
 // and/or children, each with the org fields the portal shows (required ones
@@ -267,7 +267,7 @@ export default function PublicForm({
                       {f.label}
                       {f.required && " *"}
                     </span>
-                    <FieldInput field={f} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
+                    <FieldInput field={{ ...f, options: optionsFor(f, p.isAdult) }} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
                   </label>
                 ))}
               </div>

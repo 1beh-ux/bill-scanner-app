@@ -1,5 +1,6 @@
 "use client";
 
+import PublicTextsEditor from "@/components/PublicTextsEditor";
 import AppearanceEditor from "@/components/AppearanceEditor";
 import { useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
@@ -543,6 +544,7 @@ export default function EventDetailPage({
               )}
               {/* This event's own look of its page, over the organization's (Organizace -> Vzhled). */}
               {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && <AppearanceEditor eventId={id} />}
+              {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && event.kind !== "public_event" && <PublicTextsEditor eventId={id} />}
             </div>
           )}
 

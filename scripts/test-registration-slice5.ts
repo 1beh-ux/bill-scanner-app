@@ -2,7 +2,7 @@
 // fields per person, the review tick, answer routing, status "missing".
 // npx tsx scripts/test-registration-slice5.ts
 import assert from "node:assert/strict";
-import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type TemplateRule } from "../src/lib/registration-fields";
+import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, optionsFor, routeAnswers, type TemplateRule } from "../src/lib/registration-fields";
 import { registrationState } from "../src/lib/registration-status";
 import { validateSubmission } from "../src/lib/public-registration";
 
@@ -92,4 +92,12 @@ assert.deepEqual(res.ok && res.data.persons[0].values, { autobus: "ano", alergie
 const noAllergy = validateSubmission({ persons: [{ ...person, isAdult: true, email: "a@b.cz", values: { autobus: "ano" } }] }, ctx);
 assert.deepEqual(!noAllergy.ok && noAllergy.errors, ["p0.povoleni"], "an adult isn't asked children-only fields, but adults-only ones");
 
+// A select's adult options (2026-10-22).
+{
+  const f = { options: ["Dívka", "Chlapec"], adultOptions: ["Žena", "Muž"] };
+  assert.deepEqual(optionsFor(f, true), ["Žena", "Muž"]);
+  assert.deepEqual(optionsFor(f, false), ["Dívka", "Chlapec"]);
+  assert.deepEqual(optionsFor(f), ["Dívka", "Chlapec", "Žena", "Muž"]);
+  assert.deepEqual(optionsFor({ options: ["A"], adultOptions: null }, true), ["A"]);
+}
 console.log("ok");

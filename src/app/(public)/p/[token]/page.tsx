@@ -9,6 +9,7 @@ import PublicFrame from "@/components/embed/PublicFrame";
 import { pageAppearance } from "@/lib/public-appearance";
 import { embedParams } from "@/components/embed/embed-params";
 import PortalApp from "./PortalApp";
+import { withPublicTexts } from "@/lib/public-texts";
 
 // Parent portal (docs/registration-portal-spec.md G) -- public, outside the login
 // gate (src/proxy.ts). Unknown token = the plain 404 page. The UI strings come
@@ -52,7 +53,7 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
   ]);
   return (
     <PublicFrame embed={embed} theme={theme} appearance={pageAppearance(org, "portal", embed)}>
-      <PortalApp token={token} org={org} embed={embed} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />
+      <PortalApp token={token} org={org} embed={embed} strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts)} />
     </PublicFrame>
   );
 }
