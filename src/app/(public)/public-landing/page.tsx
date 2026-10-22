@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { OrgFooter } from "@/components/registration/OrgBrand";
 import PublicFrame from "@/components/embed/PublicFrame";
+import { pageAppearance } from "@/lib/public-appearance";
 import { embedParams } from "@/components/embed/embed-params";
 
 // "/" on a public host (src/proxy.ts rewrites it here): whose host it is, nothing
@@ -34,7 +35,7 @@ export default async function PublicLandingPage({ searchParams }: { searchParams
   const { embed, theme } = embedParams((await searchParams) ?? {});
   // Embedded (the portal snippet without a token in the address): say how to get in.
   return (
-    <PublicFrame embed={embed} theme={theme} appearance={org}>
+    <PublicFrame embed={embed} theme={theme} appearance={pageAppearance(org, "portal", embed)}>
       <main data-public-landing className={"flex items-center justify-center p-6 " + (embed ? "" : "min-h-screen bg-paper")}>
         <div className="max-w-md text-center">
           <p className="mb-1 text-[14px] font-semibold text-ink">{org.name}</p>

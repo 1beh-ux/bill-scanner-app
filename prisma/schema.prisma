@@ -403,6 +403,8 @@ model Event {
   landingContent                String?        @map("landing_content")
   // Public page without the organization name, title and dates (embedded on a page that has its own).
   publicHideHeader              Boolean        @default(false) @map("public_hide_header")
+  // This event's own look of its /r page (a partial layer over the organization's), embedded or not.
+  appearance                    Json?          @map("appearance")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?
@@ -1608,6 +1610,10 @@ model Organization {
   publicTransparent       Boolean  @default(false) @map("public_transparent")
   // Content width in px; 0 = the full width (100 %); null = today's (form 672 / 896 px, portal 896 px).
   publicContentWidth      Int?     @map("public_content_width")
+  // The columns above = the base (the parent portal). Partial layers on top (src/lib/public-appearance.ts
+  // pageAppearance): pages embedded with ?embed=1, and the standalone Veřejná přihláška page.
+  appearanceEmbed         Json?    @map("appearance_embed")
+  appearanceRegistration  Json?    @map("appearance_registration")
   createdAt               DateTime @default(now()) @map("created_at")
 
   users                     User[]

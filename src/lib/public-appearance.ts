@@ -100,3 +100,48 @@ export function appearanceCss(a: Partial<Appearance> | null, scope: string, page
   // A sanity bound: only our own values reach this string, never free text.
   return rules.join("\n").replace(/[<>]/g, "");
 }
+
+// ---- Layers (2026-10-22): the organization's columns above = the base, used by the parent portal.
+// On top: the organization's "Vložené na web" layer (?embed=1 pages) or "Veřejná přihláška" layer
+// (the standalone /r page and the landing), then the event's own layer (its /r page, embedded or not).
+// A layer is a partial set: a key that's there wins (null = the default value), a missing key inherits.
+export type AppearanceLayer = Partial<Appearance>;
+export const APPEARANCE_KEYS: (keyof Appearance)[] = [
+  "publicFontFamily",
+  "publicHeadingFontFamily",
+  "publicBaseFontSize",
+  "publicHeadingScale",
+  "publicLineHeight",
+  "publicTheme",
+  "publicTransparent",
+  "publicContentWidth",
+];
+
+/** Stored or sent JSON -> a clean layer (keys present only); null when a present value isn't an option. */
+export function cleanLayer(raw: unknown): AppearanceLayer | null {
+  const o = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const present = APPEARANCE_KEYS.filter((k) => k in o && o[k] !== undefined);
+  const full = cleanAppearance(Object.fromEntries(present.map((k) => [k, o[k]])));
+  if (!full) return null;
+  return Object.fromEntries(present.map((k) => [k, full[k]])) as AppearanceLayer;
+}
+/** Like cleanLayer, but a bad stored layer counts as empty (a page always renders). */
+export const readLayer = (raw: unknown): AppearanceLayer => cleanLayer(raw) ?? {};
+
+/** The base with the layers on top, later layers winning. */
+export function layered(base: Partial<Appearance> | null, ...layers: (AppearanceLayer | null | undefined)[]): Partial<Appearance> {
+  const out: Partial<Appearance> = Object.fromEntries(APPEARANCE_KEYS.filter((k) => base && k in base).map((k) => [k, base![k]]));
+  for (const l of layers) if (l) for (const k of APPEARANCE_KEYS) if (k in l) (out as Record<string, unknown>)[k] = l[k];
+  return out;
+}
+
+/** The look of one public page: the portal = base (+ embed layer), the registration page = base + its layer + the event's. */
+export function pageAppearance(
+  org: Partial<Appearance> & { appearanceEmbed?: unknown; appearanceRegistration?: unknown },
+  page: "portal" | "registration",
+  embed: boolean,
+  eventLayer?: unknown
+): Partial<Appearance> {
+  const surface = embed ? readLayer(org.appearanceEmbed) : page === "registration" ? readLayer(org.appearanceRegistration) : null;
+  return layered(org, surface, page === "registration" ? readLayer(eventLayer) : null);
+}

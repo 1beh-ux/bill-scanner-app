@@ -101,6 +101,8 @@ export const publicOrg = perRequest((organizationId: string) =>
       publicTheme: true,
       publicTransparent: true,
       publicContentWidth: true,
+      appearanceEmbed: true,
+      appearanceRegistration: true,
     },
   })
 );

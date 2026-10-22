@@ -6,6 +6,7 @@ import { hostAllowsPortal, publicHostFor, publicOrg, resolvePublicHost } from "@
 import { prisma } from "@/lib/prisma";
 import { loadScope } from "@/lib/portal-server";
 import PublicFrame from "@/components/embed/PublicFrame";
+import { pageAppearance } from "@/lib/public-appearance";
 import { embedParams } from "@/components/embed/embed-params";
 import PortalApp from "./PortalApp";
 
@@ -50,7 +51,7 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
     publicOrg(portal.organizationId),
   ]);
   return (
-    <PublicFrame embed={embed} theme={theme} appearance={org}>
+    <PublicFrame embed={embed} theme={theme} appearance={pageAppearance(org, "portal", embed)}>
       <PortalApp token={token} org={org} embed={embed} strings={Object.fromEntries(rows.map((r) => [r.key, r.cs]))} />
     </PublicFrame>
   );

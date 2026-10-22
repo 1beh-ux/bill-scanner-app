@@ -541,7 +541,8 @@ export default function EventDetailPage({
               ) : (
                 (isAdmin || moduleAccess.participants) && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
               )}
-              {isAdmin && <AppearanceEditor embedded />}
+              {/* This event's own look of its page, over the organization's (Organizace -> Vzhled). */}
+              {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && <AppearanceEditor eventId={id} />}
             </div>
           )}
 
