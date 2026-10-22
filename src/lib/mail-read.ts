@@ -1,5 +1,5 @@
 import { getGmailClient } from "@/lib/gmail-client";
-import { chunk76, base64UrlEncode, encodeHeaderValue } from "@/lib/mail-mime";
+import { base64UrlEncode, encodeHeaderValue, textBodyPart } from "@/lib/mail-mime";
 
 export type GmailAttachmentMeta = {
   attachmentId: string;
@@ -215,7 +215,6 @@ export async function replyToMessage(
   const threadId = original.data.threadId || undefined;
 
   const subject = /^re:/i.test(opts.subject) ? opts.subject : `Re: ${opts.subject}`;
-  const bodyBase64 = chunk76(Buffer.from(opts.body, "utf-8").toString("base64"));
 
   const headerLines = [
     `From: ${encodeHeaderValue(opts.fromName)} <${senderEmail}>`,
@@ -228,10 +227,7 @@ export async function replyToMessage(
   }
   headerLines.push(
     `MIME-Version: 1.0`,
-    `Content-Type: text/plain; charset="UTF-8"`,
-    `Content-Transfer-Encoding: base64`,
-    ``,
-    bodyBase64
+    ...textBodyPart(opts.body)
   );
 
   const raw = base64UrlEncode(Buffer.from(headerLines.join("\r\n"), "utf-8"));

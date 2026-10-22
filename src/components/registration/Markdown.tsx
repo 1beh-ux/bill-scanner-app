@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type RefObject } from "react";
 import ReactMarkdown from "react-markdown";
 
 // Formatted text for parents (public page landing content, portal event info):
@@ -23,7 +23,26 @@ export function MarkdownText({ text, className = "" }: { text: string; className
 type T = (key: string) => string;
 
 // Textarea + a small toolbar that inserts the markdown, and a preview toggle.
-export function MarkdownEditor({ value, onChange, rows, className, t }: { value: string; onChange: (v: string) => void; rows: number; className: string; t: T }) {
+// textareaRef / onFocus: for callers that insert {{variables}} at the cursor (the e-mail editors).
+export function MarkdownEditor({
+  value,
+  onChange,
+  rows,
+  className,
+  t,
+  textareaRef,
+  onFocus,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  rows: number;
+  className: string;
+  t: T;
+  textareaRef?: RefObject<HTMLTextAreaElement | null>;
+  onFocus?: () => void;
+  placeholder?: string;
+}) {
   const id = useId();
   const [preview, setPreview] = useState(false);
 
@@ -67,7 +86,7 @@ export function MarkdownEditor({ value, onChange, rows, className, t }: { value:
       {preview ? (
         <MarkdownText text={value} className="min-h-[60px] rounded-lg border border-mist bg-paper px-3 py-2 text-[14px] text-ink" />
       ) : (
-        <textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} rows={rows} className={className} />
+        <textarea id={id} ref={textareaRef} value={value} onChange={(e) => onChange(e.target.value)} onFocus={onFocus} placeholder={placeholder} rows={rows} className={className} />
       )}
     </div>
   );

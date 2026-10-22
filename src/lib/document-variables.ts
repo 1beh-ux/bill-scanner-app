@@ -8,8 +8,12 @@ import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } fr
 import { readPriceRules, rulePrice } from "@/lib/price-rules";
 import { newPortalToken, portalLinkLine } from "@/lib/portal-gate";
 import { portalLinkFor } from "@/lib/public-host";
+import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
+import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
 
 export type ParticipantForMerge = {
+  // Set for a real participant: {{document_checklist}} reads their received documents.
+  id?: string;
   name: string;
   firstName?: string | null;
   lastName?: string | null;
@@ -42,6 +46,8 @@ export type EventForMerge = {
   id: string;
   name: string;
   startDate: Date;
+  endDate?: Date;
+  senderEmail?: string | null;
   memberPriceCzk: number | null;
   nonMemberPriceCzk: number | null;
   registrationBankAccountNumber: string | null;
@@ -218,6 +224,12 @@ export async function portalLinkVars(
 /** Whether a template text uses the portal link (a send then creates a missing token). */
 export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link"));
 
+export function formatDateRange(startDate: Date, endDate: Date): string {
+  const start = startDate.toLocaleDateString("cs-CZ");
+  const end = endDate.toLocaleDateString("cs-CZ");
+  return start === end ? start : `${start} – ${end}`;
+}
+
 export async function resolveVariables(
   participant: ParticipantForMerge,
   event: EventForMerge,
@@ -235,7 +247,13 @@ export async function resolveVariables(
   // src/lib/email-template-preview.ts, so {{camp_name}}/{{questionnaire_url}}
   // resolve the same way in both document merge and email templates.
   const text: Record<string, string> = {
+    // Every participant e-mail and document offers the same values (2026-10-22).
+    participant_name: participant.name,
     camp_name: event.name,
+    date_range: event.endDate ? formatDateRange(event.startDate, event.endDate) : "",
+    // The event's tracked documents, received or still missing (as in the status e-mail).
+    sender_email: event.senderEmail ?? "",
+    document_checklist: participant.id ? buildDocumentChecklistText(await getActiveDocumentTypes(event.id), await getReceivedItemIds(participant.id)) : "",
     questionnaire_url: event.mailQuestionnaireUrl ?? "",
     // Same "whole clause, vanishes cleanly when unset" trick as registration_deadline
     // below -- Part 8: "questionnaire URL line is omitted when the event has none",

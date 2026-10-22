@@ -41,22 +41,33 @@ const PORTAL_VARS = ["portal_link", "portal_link_line"] as const;
 // The organization's name (organizations step 5) -- in every e-mail, never typed into a template.
 const ORG_VARS = ["organization_name"] as const;
 
+// Every e-mail to a participant's people offers the same values (2026-10-22) -- all filled by
+// resolveVariables (src/lib/document-variables.ts) + the sender; attachments_list = what got attached.
+const PARTICIPANT_VARS = [
+  "participant_name",
+  "camp_name",
+  "date_range",
+  "document_checklist",
+  "attachments_list",
+  "questionnaire_url",
+  "questionnaire_line",
+  "registration_deadline",
+  "registration_deadline_line",
+  "health_notes",
+  "sender_email",
+  "sender_name",
+  "signature",
+  ...PORTAL_VARS,
+  ...ORG_VARS,
+] as const;
+
 const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
-  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", "camp_name", "date_range", "health_notes", "sender_name", "signature", ...PORTAL_VARS, ...ORG_VARS],
-  [MAIL_HELPER_BULK_STATUS_PURPOSE_KEY]: [
-    "participant_name",
-    "camp_name",
-    "document_checklist",
-    "questionnaire_url",
-    "sender_name",
-    "signature",
-    ...PORTAL_VARS,
-    ...ORG_VARS,
-  ],
-  [MAIL_HELPER_REPLY_PURPOSE_KEY]: ["participant_name", "camp_name", "document_checklist", "questionnaire_line", "questionnaire_url", "note", "sender_name", "signature", ...PORTAL_VARS, ...ORG_VARS],
-  // Free e-mail to participants (compose page, "Napsat e-mail").
-  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: ["participant_name", "camp_name", "health_notes", "sender_email", "sender_name", "signature", ...PORTAL_VARS, ...ORG_VARS],
-  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: ["participant_name", "camp_name", "attachments_list", "registration_deadline", "registration_deadline_line", "sender_email", "sender_name", "signature", ...PORTAL_VARS, ...ORG_VARS],
+  [PARENT_SUMMARY_PURPOSE_KEY]: ["child_name", ...PARTICIPANT_VARS],
+  [MAIL_HELPER_BULK_STATUS_PURPOSE_KEY]: PARTICIPANT_VARS,
+  [MAIL_HELPER_REPLY_PURPOSE_KEY]: [...PARTICIPANT_VARS, "note"],
+  // Free e-mail to participants (compose page, "Napsat e-mail") and the own templates.
+  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: PARTICIPANT_VARS,
+  [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: PARTICIPANT_VARS,
   // Child-level, no event: the child's own profile fields are the other {{key}}s.
   [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
   // Yearly invitation (slice 4 #12): same variables as the link e-mail.
@@ -68,12 +79,27 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
 };
 
 const PORTAL_DUMMY = {
+  // The shared participant values (PARTICIPANT_VARS) for every participant e-mail's sample preview.
+  participant_name: "Anna Nováková",
+  camp_name: "Letní tábor 2026",
+  date_range: "1. 8. 2026 – 7. 8. 2026",
+  document_checklist: "- ✅ Přihláška,\n- ❌ Potvrzení od lékaře,",
+  attachments_list: "Přihláška, Bezinfekčnost",
+  questionnaire_url: "https://forms.example.com/dotaznik",
+  questionnaire_line: "Odkaz na vyplnění dotazníku: https://forms.example.com/dotaznik.",
+  registration_deadline: "15. 6. 2026",
+  registration_deadline_line: "Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do 15. 6. 2026.",
+  health_notes: "Alergie: pyl\nLéky: Zyrtec 1× denně",
+  sender_email: "tabor@example.com",
+  sender_name: "Pavel",
+  signature: "S pozdravem\nPavel, hlavní vedoucí",
   organization_name: "Turistický oddíl Sluníčko",
   portal_link: "https://example.com/p/…",
   portal_link_line: "Vaše přihlášky, dokumenty a platby najdete v rodinném portálu: https://example.com/p/… (při prvním otevření se zeptá na datum narození).",
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
+  [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: PORTAL_DUMMY,
   [TICKET_ORDER_PURPOSE_KEY]: ORDER_DUMMY,
   [TICKET_SEND_PURPOSE_KEY]: ORDER_DUMMY,
   [TICKET_CANCEL_PURPOSE_KEY]: ORDER_DUMMY,

@@ -407,6 +407,9 @@ model Event {
   appearance                    Json?          @map("appearance")
   // This event's own wording of its registration page texts, over the organization's (Organization.publicTexts).
   publicTexts                   Json?          @map("public_texts")
+  // Documents attached to each participant e-mail of this event: { purposeKey: [document type ids] }
+  // (Nastavení akce -> Pošta; src/lib/email-attachments.ts). Fixed ones go as they are, others are generated per person.
+  emailAttachments              Json?          @map("email_attachments")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?

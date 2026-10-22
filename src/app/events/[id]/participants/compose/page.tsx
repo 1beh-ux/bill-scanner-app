@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
+import { MarkdownEditor, MarkdownText } from "@/components/registration/Markdown";
 import { readComposeIds, type ComposeMode } from "@/lib/compose-handoff";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY, PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { templateVariablesFor } from "@/lib/email-template-preview";
@@ -12,7 +13,7 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
-type DocType = { id: string; name: string };
+type DocType = { id: string; name: string; fixed: boolean };
 type Recipient = { id: string; name: string; email: string | null };
 type Outcome = { sentCount: number; failedCount: number; documentsGenerated: number; documentFailures: string[]; emailSkipped: boolean };
 
@@ -101,15 +102,21 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
         setTemplateSource(data.hasOverride ? "event" : "org");
       })
       .finally(() => setLoading(false));
-    fetch(`/api/events/${eventId}/list-items?kind=document&all=false`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((items: { id: string; name: string; data?: { templateGoogleDocId?: string; autoAttachOnAccept?: boolean } | null }[]) => {
-        const eligible = items.filter((i) => i.data?.templateGoogleDocId);
-        setDocTypes(eligible.map((i) => ({ id: i.id, name: i.name })));
-        setSelectedDocs(new Set(eligible.filter((i) => i.data?.autoAttachOnAccept).map((i) => i.id)));
+  }, [eventId, mode, purposeKey]);
+
+  // Documents to attach, any e-mail (2026-10-22): ticked as set for this template in Nastavení akce ->
+  // Pošta (+ on acceptance the ones marked "attach on acceptance").
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/email-attachments`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { documents: { id: string; name: string; fixed: boolean; autoAttachOnAccept: boolean }[]; attachments: Record<string, string[]> } | null) => {
+        if (!d) return;
+        setDocTypes(d.documents.map((i) => ({ id: i.id, name: i.name, fixed: i.fixed })));
+        const preset = d.attachments[templateKey ?? purposeKey] ?? [];
+        setSelectedDocs(new Set([...preset, ...(mode === "acceptance" ? d.documents.filter((i) => i.autoAttachOnAccept).map((i) => i.id) : [])]));
       })
       .catch(() => {});
-  }, [eventId, mode, purposeKey]);
+  }, [eventId, mode, purposeKey, templateKey]);
 
   useEffect(() => {
     if (!templateKey) return;
@@ -137,7 +144,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
           subject,
           body,
           markAccepted: mode === "acceptance",
-          autoAttachDocumentTypeIds: mode === "acceptance" ? docKey.split(",").filter(Boolean) : undefined,
+          autoAttachDocumentTypeIds: docKey.split(",").filter(Boolean),
         }),
       })
         .then((r) => (r.ok ? r.json() : null))
@@ -167,7 +174,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
     form.set("purposeKey", purposeKey);
     form.set("markAccepted", String(mode === "acceptance"));
     form.set("sendEmail", String(emailOn));
-    if (mode === "acceptance") form.set("autoAttachDocumentTypeIds", JSON.stringify([...selectedDocs]));
+    form.set("autoAttachDocumentTypeIds", JSON.stringify([...selectedDocs]));
     if (attachment) form.set("attachment", attachment);
     try {
       const res = await fetch(`/api/events/${eventId}/participants/bulk-email`, { method: "POST", body: form });
@@ -292,25 +299,27 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                     placeholder={t("composeEmailModal.subjectPlaceholder")}
                     className={inputClass}
                   />
-                  <textarea
-                    ref={bodyRef}
+                  <MarkdownEditor
                     value={body}
-                    onChange={(e) => setBody(e.target.value)}
+                    onChange={setBody}
+                    textareaRef={bodyRef}
                     onFocus={() => (activeField.current = "body")}
                     placeholder={t("composeEmailModal.bodyPlaceholder")}
                     className={inputClass + " font-mono text-[13px]"}
                     rows={16}
+                    t={t}
                   />
                   <p className="text-[12px] text-ink-secondary">{t("composeEmailModal.variablesHint")}</p>
                 </section>
               )}
-              {mode === "acceptance" && docTypes.length > 0 && (
+              {docTypes.length > 0 && (
                 <section className="flex flex-col gap-1.5">
                   <p className="text-[13px] text-ink-secondary">{t("composeEmailModal.autoAttachDocumentsLabel")}</p>
                   {docTypes.map((d) => (
                     <label key={d.id} className="flex items-center gap-2 text-[14px] text-ink">
                       <input type="checkbox" checked={selectedDocs.has(d.id)} onChange={() => toggleDoc(d.id)} />
                       {d.name}
+                      <span className="text-[11.5px] text-ink-secondary">({t(d.fixed ? "templateAttachments.fixed" : "templateAttachments.generated")})</span>
                     </label>
                   ))}
                 </section>
@@ -378,7 +387,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
               </p>
             )}
             <div className="border-b border-mist pb-2 text-[15px] font-semibold text-ink">{shown.subject || "—"}</div>
-            <div className="whitespace-pre-wrap text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]">{shown.body || "—"}</div>
+            <MarkdownText text={shown.body || "—"} className="text-[14px] leading-relaxed text-ink [overflow-wrap:anywhere]" />
             {view === "filled" && <p className="text-[11.5px] text-ink-secondary">{t("compose.previewHint")}</p>}
           </aside>
         )}

@@ -5,6 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email-template-preview";
 import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { MarkdownEditor, MarkdownText } from "@/components/registration/Markdown";
+import TemplateAttachments from "@/components/health/TemplateAttachments";
+import { takesAttachments } from "@/lib/email-attachments";
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -265,14 +268,13 @@ export default function EmailTemplateAdmin({
       )}
 
       <label className="mb-1 block text-[12px] text-ink-secondary">{t("emailTemplateAdmin.bodyLabel")}</label>
-      <textarea
-        ref={bodyRef}
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onFocus={() => (activeFieldRef.current = "body")}
-        rows={10}
-        className={inputClass + " mb-3"}
-      />
+      {/* Formatted like the public pages' texts; sent as HTML + plain text (src/lib/mail-mime.ts). */}
+      <div className="mb-3">
+        <MarkdownEditor value={body} onChange={setBody} textareaRef={bodyRef} onFocus={() => (activeFieldRef.current = "body")} rows={10} className={inputClass} t={t} />
+      </div>
+
+      {/* The event's documents this e-mail carries (participant e-mails only; the documents are per event). */}
+      {scope === "event" && !bodyOnly && takesAttachments(purposeKey) && <TemplateAttachments eventId={eventId!} purposeKey={purposeKey} t={t} />}
 
       <div className="mb-4 rounded-lg border border-mist bg-paper-2 p-3">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
@@ -290,7 +292,7 @@ export default function EmailTemplateAdmin({
         {scope === "event" && realPreview ? (
           <>
             {!bodyOnly && <p className="mb-2 text-[14px] font-medium text-ink">{realPreview.subject}</p>}
-            <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{realPreview.body}</p>
+            <MarkdownText text={realPreview.body} className="text-[13px] text-ink-secondary" />
           </>
         ) : (
           <>
@@ -298,7 +300,7 @@ export default function EmailTemplateAdmin({
               <p className="mb-1 text-[11.5px] text-amber-700">{t("emailTemplateAdmin.previewSampleNoParticipants")}</p>
             )}
             <p className="mb-2 text-[14px] font-medium text-ink">{substituteDummyTemplateValues(subject, purposeKey, extraDummyValues)}</p>
-            <p className="whitespace-pre-wrap text-[13px] text-ink-secondary">{substituteDummyTemplateValues(body, purposeKey, extraDummyValues)}</p>
+            <MarkdownText text={substituteDummyTemplateValues(body, purposeKey, extraDummyValues)} className="text-[13px] text-ink-secondary" />
           </>
         )}
       </div>

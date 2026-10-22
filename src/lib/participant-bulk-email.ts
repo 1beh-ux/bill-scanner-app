@@ -168,6 +168,22 @@ async function buildAutoAttachDocuments(
   return { attachments, failedDocuments, generatedCount, attachedDocumentNames };
 }
 
+/**
+ * The documents a participant e-mail carries (2026-10-22): the given document types -- fixed ones as
+ * they are (exported once per send via `staticPdfs`), templates generated for this participant -- for
+ * the status e-mail and the health summary (Nastavení akce -> Pošta, src/lib/email-attachments.ts).
+ */
+export async function documentAttachmentsFor(
+  participantId: string,
+  event: Parameters<typeof buildAutoAttachDocuments>[1],
+  documentTypeIds: string[],
+  generatedByUserId: string,
+  staticPdfs: Map<string, Promise<Buffer>>
+) {
+  if (!documentTypeIds.length) return { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
+  return buildAutoAttachDocuments(await loadParticipant(participantId), event, documentTypeIds, generatedByUserId, staticPdfs);
+}
+
 // The send dialog's ticked documents decide; autoAttachOnAccept is only the
 // default when no explicit choice is sent. (Previously both had to hold, so
 // ticking a document not flagged autoAttachOnAccept silently did nothing.)
@@ -229,7 +245,7 @@ export async function previewParticipantEmail(opts: {
 
   let docNames: string[] = [];
   let forVars = participant;
-  if (opts.markAccepted) {
+  if (opts.markAccepted || opts.autoAttachDocumentTypeIds?.length) {
     const documentTypes = await prisma.eventListItem.findMany({ where: { eventId: event.id, kind: "document", active: true } });
     docNames = documentTypes
       .filter((d) => willGenerate(d.id, d.data as DocumentTypeData | null, opts.autoAttachDocumentTypeIds))
@@ -301,7 +317,8 @@ export async function sendBulkParticipantEmail(opts: {
 
     // Built before `vars` -- {{attachments_list}} depends on what actually got
     // attached (Part 11-I), not a static guess made before generation runs.
-    const generated = opts.markAccepted
+    // Acceptance: the ticked ones (else autoAttachOnAccept); any other e-mail: only the ticked ones.
+    const generated = opts.markAccepted || opts.autoAttachDocumentTypeIds?.length
       ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId, staticPdfs)
       : { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
     const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];

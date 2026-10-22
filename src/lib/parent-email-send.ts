@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, senderIdentity, substituteVariables, PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template";
 import { generateParticipantSummaryPdf } from "@/lib/parent-summary-pdf";
-import { sendParentSummaryEmail } from "@/lib/mail";
-import { resolveVariables, resolveContactEmail, usesPortalLink } from "@/lib/document-variables";
+import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { attachmentIdsFor } from "@/lib/email-attachments";
+import { documentAttachmentsFor } from "@/lib/participant-bulk-email";
+import { formatDateRange, resolveVariables, resolveContactEmail, usesPortalLink } from "@/lib/document-variables";
 
 export interface GuardianSendResult {
   guardianId: string;
@@ -11,11 +13,7 @@ export interface GuardianSendResult {
   errorMessage?: string;
 }
 
-export function formatDateRange(startDate: Date, endDate: Date): string {
-  const start = startDate.toLocaleDateString("cs-CZ");
-  const end = endDate.toLocaleDateString("cs-CZ");
-  return start === end ? start : `${start} – ${end}`;
-}
+export { formatDateRange };
 
 /** Resolved subject + body with the same variable substitution the real send uses, for a pre-send preview. */
 export async function resolveEmailPreview(
@@ -111,6 +109,8 @@ export async function sendSummaryToGuardians(
     "email",
     usesPortalLink(templateSubject, templateBody)
   );
+  // Documents set for this e-mail in Nastavení akce -> Pošta, next to the summary PDF.
+  const docs = await documentAttachmentsFor(participantId, participant.event, attachmentIdsFor(participant.event, PARENT_SUMMARY_PURPOSE_KEY), sentByUserId, new Map());
   const vars = {
     ...fieldVars,
     child_name: participant.name,
@@ -119,6 +119,7 @@ export async function sendSummaryToGuardians(
     sender_name: sender.name,
     signature: sender.signature,
     contact_email: resolveContactEmail(participant),
+    attachments_list: docs.attachedDocumentNames.join(", "),
   };
   const subject = substituteVariables(templateSubject, vars);
   const body = substituteVariables(templateBody, vars);
@@ -150,14 +151,13 @@ export async function sendSummaryToGuardians(
     }
 
     try {
-      await sendParentSummaryEmail({
+      await sendEmailWithOptionalAttachment({
         to: guardian.email,
         fromName: sender.name,
         senderEmail,
         subject,
         body,
-        pdfBuffer: pdf.buffer,
-        pdfFilename: pdf.filename,
+        attachments: [{ buffer: pdf.buffer, filename: pdf.filename, mimeType: "application/pdf" }, ...docs.attachments],
       });
       await prisma.parentEmailLog.create({
         data: {
