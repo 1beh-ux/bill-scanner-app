@@ -18,7 +18,7 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicContactEmail?: string | null; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -27,6 +27,7 @@ export default function PublicRegistrationSettings({
   const [embedOpen, setEmbedOpen] = useState(false);
   const [content, setContent] = useState(event.landingContent ?? "");
   const [hideHeader, setHideHeader] = useState(event.publicHideHeader);
+  const [contact, setContact] = useState(event.publicContactEmail ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -37,11 +38,11 @@ export default function PublicRegistrationSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader }),
+      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader, publicContactEmail: contact.trim() || null }),
     });
     setSaving(false);
     const err = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string }).error;
-    setMessage(res.ok ? t("portalSettings.saved") : err === "slug_taken" ? t("publicSettings.slugTaken") : err === "bad_slug" ? t("publicSettings.slugInvalid") : t("registrationSettings.saveFailed"));
+    setMessage(res.ok ? t("portalSettings.saved") : err === "bad_email" ? t("publicSettings.contactInvalid") : err === "slug_taken" ? t("publicSettings.slugTaken") : err === "bad_slug" ? t("publicSettings.slugInvalid") : t("registrationSettings.saveFailed"));
     if (res.ok) onSaved();
   }
 
@@ -98,6 +99,11 @@ export default function PublicRegistrationSettings({
         {t("publicSettings.hideHeader")}
       </label>
       <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("publicSettings.hideHeaderHint")}</span>
+      <label className="text-[13px] text-ink-secondary">
+        {t("publicSettings.contact")}
+        <input type="email" value={contact} onChange={(e) => setContact(e.target.value)} className={inputClass + " mt-1"} />
+        <span className="mt-1 block text-[11.5px]">{t("publicSettings.contactHint")}</span>
+      </label>
       {message && <p className="text-[13px] text-ink">{message}</p>}
       <div className="flex justify-end">
         <button type="button" onClick={save} disabled={saving} className={btnPrimary}>

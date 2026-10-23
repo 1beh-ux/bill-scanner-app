@@ -10,6 +10,7 @@ import { pageAppearance } from "@/lib/public-appearance";
 import { embedParams } from "@/components/embed/embed-params";
 import PortalApp from "./PortalApp";
 import { withPublicTexts } from "@/lib/public-texts";
+import { portalJoinHref } from "@/lib/portal-join";
 
 // Parent portal (docs/registration-portal-spec.md G) -- public, outside the login
 // gate (src/proxy.ts). Unknown token = the plain 404 page. The UI strings come
@@ -47,13 +48,16 @@ export default async function PortalPage({ params, searchParams }: { params: Pro
     const host = await publicHostFor("portal", null, portal.organizationId);
     if (host) permanentRedirect(`https://${host}/p/${token}`);
   }
-  const [rows, org] = await Promise.all([
+  const [rows, org, portalOrg] = await Promise.all([
     prisma.translation.findMany({ where: { OR: [{ key: { startsWith: "portal." } }, { key: { startsWith: "ticketForm." } }] }, select: { key: true, cs: true } }),
     publicOrg(portal.organizationId),
+    prisma.organization.findUniqueOrThrow({ where: { id: portal.organizationId }, select: { id: true, portalRecoverySenderEmail: true, portalJoinUrl: true, portalJoinEventId: true } }),
   ]);
+  // "Zapomněl(a) jsem odkaz" / "Ještě nejsem členem" under the sign-in screens (only a yes/no and a link reach the page).
+  const help = { recovery: !!portalOrg.portalRecoverySenderEmail, joinHref: await portalJoinHref(portalOrg) };
   return (
     <PublicFrame embed={embed} theme={theme} appearance={pageAppearance(org, "portal", embed)}>
-      <PortalApp token={token} org={org} embed={embed} strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts)} />
+      <PortalApp token={token} org={org} embed={embed} help={help} strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts)} />
     </PublicFrame>
   );
 }

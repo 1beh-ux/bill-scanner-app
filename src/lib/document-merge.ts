@@ -70,7 +70,7 @@ function collectRemainingPlaceholders(content: docs_v1.Schema$StructuralElement[
  * object once the merge is done (see the `finally` in
  * mergeAndExportDocument).
  */
-async function uploadTempImage(buffer: Buffer): Promise<{ path: string; url: string }> {
+export async function uploadTempImage(buffer: Buffer): Promise<{ path: string; url: string }> {
   const path = `merge-temp/${randomUUID()}.png`;
   const file = billsBucket.file(path);
   await file.save(buffer, { contentType: "image/png" });
@@ -86,7 +86,8 @@ async function uploadTempImage(buffer: Buffer): Promise<{ path: string; url: str
 // user would paste from their browser bar. Mirrors extractSpreadsheetId in
 // src/lib/sheet-import.ts.
 export function extractGoogleDocId(input: string): string {
-  const urlMatch = input.match(/\/document\/d\/([a-zA-Z0-9-_]+)/);
+  // A Google Slides link works the same (the ticket template can be a presentation).
+  const urlMatch = input.match(/\/(?:document|presentation)\/d\/([a-zA-Z0-9-_]+)/);
   return (urlMatch ? urlMatch[1] : input).trim();
 }
 

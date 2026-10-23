@@ -60,6 +60,7 @@ type EventDetail = {
   publicSlug: string | null;
   landingContent: string | null;
   publicHideHeader: boolean;
+  publicContactEmail: string | null;
   autoAccept: "manual" | "accept" | "accept_send";
   autoSendReady?: boolean | null;
   publicBaseUrl?: string | null;

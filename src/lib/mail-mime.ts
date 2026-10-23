@@ -39,9 +39,33 @@ export function markdownToHtml(text: string): string {
   return `<!doctype html><html><body><div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;color:#1a1a1a">${html}</div></body></html>`;
 }
 
-/** MIME lines of a message body part (headers + content): plain + HTML alternatives. */
-export function textBodyPart(body: string): string[] {
+// An image shown inside the text (e.g. the payment QR): the body holds INLINE_MARK(cid) where it goes.
+export type InlineImage = { cid: string; buffer: Buffer; mimeType: string; alt: string };
+export const inlineMark = (cid: string) => `[[inline:${cid}]]`;
+const INLINE_RE = /\[\[inline:([a-z0-9_]+)\]\]/g;
+
+/** MIME lines of a message body part (headers + content): plain + HTML alternatives, with any inline images. */
+export function textBodyPart(body: string, inline: InlineImage[] = []): string[] {
   const alt = newMimeBoundary("alt");
   const part = (type: string, content: string) => [`--${alt}`, `Content-Type: ${type}; charset="UTF-8"`, `Content-Transfer-Encoding: base64`, ``, chunk76(Buffer.from(content, "utf-8").toString("base64")), ``];
-  return [`Content-Type: multipart/alternative; boundary="${alt}"`, ``, ...part("text/plain", markdownToPlain(body)), ...part("text/html", markdownToHtml(body)), `--${alt}--`];
+  const byCid = new Map(inline.map((i) => [i.cid, i]));
+  const plain = markdownToPlain(body).replace(INLINE_RE, "");
+  const html = markdownToHtml(body).replace(INLINE_RE, (_, cid: string) => {
+    const img = byCid.get(cid);
+    return img ? `<img src="cid:${cid}" alt="${img.alt.replace(/"/g, "")}" width="200" height="200" style="display:block;margin:8px 0">` : "";
+  });
+  const alternative = [`Content-Type: multipart/alternative; boundary="${alt}"`, ``, ...part("text/plain", plain), ...part("text/html", html), `--${alt}--`];
+  const used = inline.filter((i) => body.includes(inlineMark(i.cid)));
+  if (!used.length) return alternative;
+  // multipart/related: the HTML refers to the images by Content-ID.
+  const rel = newMimeBoundary("rel");
+  return [
+    `Content-Type: multipart/related; boundary="${rel}"`,
+    ``,
+    `--${rel}`,
+    ...alternative,
+    ``,
+    ...used.flatMap((i) => [`--${rel}`, `Content-Type: ${i.mimeType}`, `Content-Transfer-Encoding: base64`, `Content-ID: <${i.cid}>`, `Content-Disposition: inline; filename="${i.cid}.png"`, ``, chunk76(i.buffer.toString("base64")), ``]),
+    `--${rel}--`,
+  ];
 }

@@ -78,9 +78,9 @@ export async function loadTarget(id: string): Promise<Target | null> {
   return { id, name: child.name, token: child.portalToken, emails: child.guardians.map((g) => g.email), values: profileValues(child), organizationName: child.organization.name, logChildIds: () => [child.id] };
 }
 
-/** Creates the target's link when it has none yet. */
-async function ensureToken(target: Target): Promise<string> {
-  if (target.token) return target.token;
+/** Creates the target's link when it has none yet -- or always a new one (`fresh`: the old link stops working). */
+export async function ensureToken(target: Target, fresh = false): Promise<string> {
+  if (target.token && !fresh) return target.token;
   const token = newPortalToken();
   if (target.id.startsWith(FAMILY_TARGET_PREFIX)) await prisma.family.update({ where: { id: target.id.slice(FAMILY_TARGET_PREFIX.length) }, data: { portalToken: token } });
   else await prisma.child.update({ where: { id: target.id }, data: { portalToken: token } });

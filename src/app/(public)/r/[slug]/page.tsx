@@ -67,7 +67,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
           maxPerOrder={settings.maxPerOrder}
           texts={settings.texts}
           showLeft={settings.showLeft}
-          org={org}
+          org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}
           embed={embed}
           strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}
         />
@@ -98,7 +98,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       fields={ctx.fields}
       rules={ctx.rules}
       oddil={ctx.oddil}
-      org={org}
+      org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}
       strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}
     />
     </PublicFrame>

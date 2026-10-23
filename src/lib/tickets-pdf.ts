@@ -6,6 +6,8 @@ import { micromark } from "micromark";
 import { PDFDocument } from "pdf-lib";
 import QRCode from "qrcode";
 import { mergeAndExportDocument } from "@/lib/document-merge";
+import { getDriveFileMeta } from "@/lib/drive";
+import { renderTicketsSlides, SLIDES_MIME } from "@/lib/tickets-slides";
 import { substituteVariables } from "@/lib/email-template";
 import { renderPdf } from "@/lib/pdf-service";
 
@@ -42,6 +44,8 @@ export async function renderTicketsPdf(
   doc?: { eventId: string; docId: string }
 ): Promise<Buffer> {
   if (doc) {
+    // A Google Slides template: one copy per order, a slide per ticket (src/lib/tickets-slides.ts).
+    if ((await getDriveFileMeta(doc.eventId, doc.docId)).mimeType === SLIDES_MIME) return renderTicketsSlides(doc.eventId, doc.docId, pages);
     const out = await PDFDocument.create();
     // ponytail: one Drive copy + export per ticket, in turn (~3 s each); fine for orders of up to MAX_PER_ORDER_LIMIT.
     for (const p of pages) {

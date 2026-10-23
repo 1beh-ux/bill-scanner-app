@@ -177,6 +177,11 @@ export async function getSheetsClient(eventId: string) {
   return google.sheets({ version: "v4", auth });
 }
 
+export async function getSlidesClient(eventId: string) {
+  const { auth } = await resolveDriveAuth(eventId);
+  return google.slides({ version: "v1", auth });
+}
+
 export async function getDocsClient(eventId: string) {
   const { auth } = await resolveDriveAuth(eventId);
   return google.docs({ version: "v1", auth });

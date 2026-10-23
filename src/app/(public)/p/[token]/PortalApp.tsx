@@ -15,6 +15,7 @@ import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-
 import { appliesTo, optionsFor } from "@/lib/registration-fields";
 import type { FormField } from "@/lib/public-registration";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
+import PortalHelp from "@/components/registration/PortalHelp";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
 // docs/registration-slice3-spec.md F). Two columns on desktop -- the person /
@@ -100,7 +101,19 @@ const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) 
 // with something missing shows under both "Chybí…" and "Čeká…" (the states themselves are exclusive).
 const inState = (r: { state: RegistrationState; status: string }, st: RegistrationState) => r.state === st || (st === "waiting" && r.status === "pending");
 
-export default function PortalApp({ token, org, embed = false, strings }: { token: string; org: PublicOrg; embed?: boolean; strings: Record<string, string> }) {
+export default function PortalApp({
+  token,
+  org,
+  embed = false,
+  help,
+  strings,
+}: {
+  token: string;
+  org: PublicOrg;
+  embed?: boolean;
+  help?: { recovery: boolean; joinHref: string | null };
+  strings: Record<string, string>;
+}) {
   const t = useCallback(
     (key: string, vars?: Record<string, string>) => {
       let s = strings[key] ?? key;
@@ -172,6 +185,7 @@ export default function PortalApp({ token, org, embed = false, strings }: { toke
       {phase === "loading" && <p className="mt-6 text-[14px] text-ink-secondary">{t("portal.loading")}</p>}
       {phase === "unavailable" && <p className="mt-6 text-[15px] text-ink">{t("portal.unavailable")}</p>}
       {phase === "gate" && <Gate api={api} t={t} onPassed={load} />}
+      {(phase === "gate" || phase === "unavailable") && help && <PortalHelp token={token} recovery={help.recovery} joinHref={help.joinHref} t={t} />}
       {phase === "ready" && data && profileMember && (
         <ProfilePage key={profileMember.id} api={api} member={profileMember} sections={data.profileSections} t={t} onSaved={load} onBack={closeProfile} />
       )}

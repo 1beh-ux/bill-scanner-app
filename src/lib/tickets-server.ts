@@ -11,6 +11,7 @@ import { resolveEmailTemplate, senderIdentity, substituteVariables } from "@/lib
 import { TICKET_CANCEL_PURPOSE_KEY, TICKET_DOCUMENT_PURPOSE_KEY, TICKET_ORDER_PURPOSE_KEY, TICKET_SEND_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { eventSender } from "@/lib/auto-accept";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { inlineMark, type InlineImage } from "@/lib/mail-mime";
 import { buildSpaydString, czechAccountToIban } from "@/lib/qr-platba";
 import { renderTicketsPdf } from "@/lib/tickets-pdf";
 
@@ -111,6 +112,14 @@ async function orderContext(orderId: string) {
     organization_name: order.event.organization.name,
     payment_account: pay.account ?? "",
     variable_symbol: order.variableSymbol,
+    // Payment details for the e-mail text (2026-10-23); {{payment_qr}} = the QR image right in the text.
+    payment_amount: `${order.totalCzk} Kč`,
+    payment_message: `${order.event.name} obj ${order.number}`,
+    payment_iban: pay.account ? (czechAccountToIban(order.event.registrationBankAccountNumber ?? "", order.event.registrationBankCode ?? "") ?? "") : "",
+    payment_qr: pay.spayd ? inlineMark("payment_qr") : "",
+    payment_details: pay.account
+      ? [`Číslo účtu: ${pay.account}`, `Částka: ${order.totalCzk} Kč`, `Variabilní symbol: ${order.variableSymbol}`].join("\n")
+      : "",
   };
   return { order, sender, vars, pay };
 }
@@ -137,7 +146,14 @@ export async function sendOrderMail(orderId: string, purposeKey: string): Promis
     if (!sender) throw new Error("no_sender");
     const template = await resolveEmailTemplate(order.eventId, purposeKey);
     const attachments: { buffer: Buffer; filename: string; mimeType: string }[] = [];
-    if (purposeKey === TICKET_ORDER_PURPOSE_KEY && pay.spayd) attachments.push({ buffer: await QRCode.toBuffer(pay.spayd, { width: 400, margin: 2 }), filename: "qr-platba.png", mimeType: "image/png" });
+    const inline: InlineImage[] = [];
+    // The payment QR: inside the text where the template has {{payment_qr}}, else attached (order e-mail).
+    const wantsQr = pay.spayd && (template.body.includes("{{payment_qr}}") || purposeKey === TICKET_ORDER_PURPOSE_KEY);
+    if (wantsQr) {
+      const qr = await QRCode.toBuffer(pay.spayd!, { width: 400, margin: 2 });
+      if (template.body.includes("{{payment_qr}}")) inline.push({ cid: "payment_qr", buffer: qr, mimeType: "image/png", alt: "QR platba" });
+      else attachments.push({ buffer: qr, filename: "qr-platba.png", mimeType: "image/png" });
+    }
     if (purposeKey === TICKET_SEND_PURPOSE_KEY) attachments.push({ buffer: await ticketsPdfOf(orderId), filename: `vstupenky-${order.number}.pdf`, mimeType: "application/pdf" });
     await sendEmailWithOptionalAttachment({
       to: order.email,
@@ -146,6 +162,7 @@ export async function sendOrderMail(orderId: string, purposeKey: string): Promis
       subject: substituteVariables(template.subject, vars),
       body: substituteVariables(template.body, vars),
       attachments,
+      inline,
     });
     await prisma.ticketOrder.update({ where: { id: orderId }, data: { sendError: null, ...(purposeKey === TICKET_SEND_PURPOSE_KEY && { ticketsSentAt: new Date() }) } });
     return true;

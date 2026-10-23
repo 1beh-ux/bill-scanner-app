@@ -1,5 +1,5 @@
 import { getGmailClient } from "@/lib/gmail-client";
-import { encodeHeaderValue, base64UrlEncode, chunk76, newMimeBoundary, textBodyPart } from "@/lib/mail-mime";
+import { encodeHeaderValue, base64UrlEncode, chunk76, newMimeBoundary, textBodyPart, type InlineImage } from "@/lib/mail-mime";
 
 // Gmail sending was originally meant to go through Workspace domain-wide
 // delegation (one service account impersonating any mailbox via a signed
@@ -18,13 +18,15 @@ function buildPlainTextRawMessage(opts: {
   senderEmail: string;
   subject: string;
   body: string;
+  // Images shown inside the text (src/lib/mail-mime.ts inlineMark).
+  inline?: InlineImage[];
 }): string {
   const message = [
     `From: ${encodeHeaderValue(opts.fromName)} <${opts.senderEmail}>`,
     `To: ${opts.to}`,
     `Subject: ${encodeHeaderValue(opts.subject)}`,
     `MIME-Version: 1.0`,
-    ...textBodyPart(opts.body),
+    ...textBodyPart(opts.body, opts.inline),
   ].join("\r\n");
 
   return base64UrlEncode(Buffer.from(message, "utf-8"));
@@ -55,6 +57,8 @@ function buildAttachmentsRawMessage(opts: {
   subject: string;
   body: string;
   attachments: { buffer: Buffer; filename: string; mimeType: string }[];
+  // Images shown inside the text (src/lib/mail-mime.ts inlineMark).
+  inline?: InlineImage[];
 }): string {
   const boundary = newMimeBoundary("mixed");
 
@@ -76,7 +80,7 @@ function buildAttachmentsRawMessage(opts: {
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     ``,
     `--${boundary}`,
-    ...textBodyPart(opts.body),
+    ...textBodyPart(opts.body, opts.inline),
     ``,
     ...attachmentParts,
     `--${boundary}--`,
@@ -93,6 +97,8 @@ export async function sendEmailWithOptionalAttachment(opts: {
   subject: string;
   body: string;
   attachments?: { buffer: Buffer; filename: string; mimeType: string }[];
+  // Images shown inside the text (src/lib/mail-mime.ts inlineMark).
+  inline?: InlineImage[];
 }): Promise<void> {
   const gmail = await getGmailClient(opts.senderEmail);
   const raw =

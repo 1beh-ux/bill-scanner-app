@@ -7,6 +7,7 @@ import { isOrgAdmin } from "@/lib/org-scope";
 import { readPriceRules } from "@/lib/price-rules";
 import { MAX_PER_ORDER_LIMIT, readTicketSettings, ticketTypes } from "@/lib/tickets";
 import { extractGoogleDocId } from "@/lib/document-merge";
+import { intervalOf } from "@/lib/bank/check-schedule";
 
 // Vstupenky settings of a public event (docs/public-event-tickets-spec.md): price types + limits
 // (stored as the event's price rules, src/lib/price-rules.ts), max per order, total limit, VS prefix,
@@ -25,6 +26,7 @@ async function view(eventId: string) {
     accountNumber: e.registrationBankAccountNumber ?? "",
     bankCode: e.registrationBankCode ?? "",
     bankCheckEnabled: e.bankCheckEnabled,
+    bankCheckIntervalMin: intervalOf(e.bankCheckIntervalMin),
     bankAccountId: e.bankAccountId,
     portalOpen: e.portalOpen,
     senderEmail: e.senderEmail,
@@ -121,6 +123,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       registrationBankAccountNumber: accountNumber || null,
       registrationBankCode: bankCode || null,
       bankCheckEnabled: wantCheck,
+      ...(b.bankCheckIntervalMin !== undefined && { bankCheckIntervalMin: intervalOf(Number(b.bankCheckIntervalMin)) }),
       bankAccountId: account?.id ?? null,
       portalOpen: b.portalOpen === true,
     },

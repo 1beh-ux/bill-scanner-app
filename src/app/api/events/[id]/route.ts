@@ -54,7 +54,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
   // Veřejná přihláška (the public page) on its own: Účastníci / Vstupenky holders may change it too.
-  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader"];
+  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader", "publicContactEmail"];
   const publicPageOnly = !isOrgAdmin(user) && Object.keys(body ?? {}).length > 0 && Object.keys(body).every((k) => PUBLIC_PAGE_KEYS.includes(k));
   const denied = publicPageOnly ? await requireAnyModuleAccess(user, id, ["participants", "tickets"]) : await requireModuleAccess(user, id, "bills");
   if (denied) return denied;
@@ -89,6 +89,7 @@ export async function PATCH(
     publicSlug,
     landingContent,
     publicHideHeader,
+    publicContactEmail,
     autoAccept,
     location,
     portalInfo,
@@ -110,6 +111,7 @@ export async function PATCH(
     publicSlug !== undefined ||
     landingContent !== undefined ||
     publicHideHeader !== undefined ||
+    publicContactEmail !== undefined ||
     autoAccept !== undefined ||
     location !== undefined ||
     portalInfo !== undefined ||
@@ -122,6 +124,7 @@ export async function PATCH(
   if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
   if (publicHideHeader !== undefined && typeof publicHideHeader !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  if (publicContactEmail !== undefined && publicContactEmail !== null && !(typeof publicContactEmail === "string" && (publicContactEmail.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(publicContactEmail.trim())))) return NextResponse.json({ error: "bad_email" }, { status: 400 });
   if (landingContent !== undefined && landingContent !== null && !(typeof landingContent === "string" && landingContent.length <= 20000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug && (await prisma.event.findFirst({ where: { publicSlug, id: { not: id } }, select: { id: true } }))) return NextResponse.json({ error: "slug_taken" }, { status: 409 });
   // "Dokument platby" (slice 4 #5): one of this event's document types, or null.
@@ -269,6 +272,7 @@ export async function PATCH(
       ...(publicSlug !== undefined && { publicSlug: publicSlug || null }),
       ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
       ...(publicHideHeader !== undefined && { publicHideHeader }),
+      ...(publicContactEmail !== undefined && { publicContactEmail: publicContactEmail?.trim().toLowerCase() || null }),
       ...(autoAccept !== undefined && { autoAccept }),
       // Portal registration card basics (slice 3 F).
       ...(location !== undefined && { location: location?.trim() || null }),

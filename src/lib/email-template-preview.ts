@@ -29,11 +29,19 @@ const ORDER_DUMMY = {
   organization_name: "Turistický oddíl Sluníčko",
   payment_account: "123456789/2010",
   variable_symbol: "2790012",
+  payment_amount: "750 Kč",
+  payment_message: "Ples 2027 obj 12",
+  payment_iban: "CZ65 2010 0000 0001 2345 6789",
+  payment_qr: "[QR kód pro platbu]",
+  payment_details: "Číslo účtu: 123456789/2010\nČástka: 750 Kč\nVariabilní symbol: 2790012",
   ticket_no: "1",
   ticket_code: "K7QW-3MZP-X9TD",
   price_type: "Vstupné",
   ticket_qr: "[QR kód vstupenky]",
 };
+
+// The order's payment (src/lib/tickets-server.ts orderContext); {{payment_qr}} = the QR image in the text.
+const PAYMENT_VARS = ["payment_details", "payment_qr", "payment_account", "payment_iban", "payment_amount", "variable_symbol", "payment_message"] as const;
 
 // The participant's family / own portal link (slice 4 #11, src/lib/document-variables.ts
 // portalLinkVars) -- in every participant e-mail; empty for events not using the module.
@@ -72,9 +80,9 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
   // Yearly invitation (slice 4 #12): same variables as the link e-mail.
   [PORTAL_INVITATION_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
-  [TICKET_ORDER_PURPOSE_KEY]: [...ORDER_VARS, "payment_account", "variable_symbol"],
-  [TICKET_SEND_PURPOSE_KEY]: [...ORDER_VARS],
-  [TICKET_CANCEL_PURPOSE_KEY]: [...ORDER_VARS],
+  [TICKET_ORDER_PURPOSE_KEY]: [...ORDER_VARS, ...PAYMENT_VARS],
+  [TICKET_SEND_PURPOSE_KEY]: [...ORDER_VARS, ...PAYMENT_VARS],
+  [TICKET_CANCEL_PURPOSE_KEY]: [...ORDER_VARS, ...PAYMENT_VARS],
   [TICKET_DOCUMENT_PURPOSE_KEY]: ["ticket_qr", "ticket_code", "ticket_no", "price_type", ...ORDER_VARS],
 };
 

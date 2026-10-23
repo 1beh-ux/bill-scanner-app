@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
+import { CHECK_INTERVALS_MIN } from "@/lib/bank/check-schedule";
 import { MAX_PER_ORDER_LIMIT, TICKET_TEXT_KEYS, TICKET_TEXT_MAX, orderVs, type TicketSettings as Settings, type TicketType } from "@/lib/tickets";
 import { TICKET_CANCEL_PURPOSE_KEY, TICKET_DOCUMENT_PURPOSE_KEY, TICKET_ORDER_PURPOSE_KEY, TICKET_SEND_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
@@ -18,6 +19,7 @@ type View = {
   accountNumber: string;
   bankCode: string;
   bankCheckEnabled: boolean;
+  bankCheckIntervalMin: number;
   bankAccountId: string | null;
   portalOpen: boolean;
   senderEmail: string | null;
@@ -36,7 +38,7 @@ const num = (s: string) => (s.trim() === "" ? null : Number(s));
 export default function TicketSettings({ eventId, isAdmin, t }: { eventId: string; isAdmin: boolean; t: T }) {
   const [view, setView] = useState<View | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
-  const [form, setForm] = useState({ maxPerOrder: "10", totalCapacity: "", vsPrefix: "", registrationDeadline: "", location: "", portalInfo: "", accountNumber: "", bankCode: "", bankCheckEnabled: false, bankAccountId: "", portalOpen: false });
+  const [form, setForm] = useState({ maxPerOrder: "10", totalCapacity: "", vsPrefix: "", registrationDeadline: "", location: "", portalInfo: "", accountNumber: "", bankCode: "", bankCheckEnabled: false, bankAccountId: "", portalOpen: false, bankCheckIntervalMin: 30 });
   const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber: string; bankCode: string; tokenSetAt: string | null }[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -49,7 +51,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
     setView(v);
     setTexts(v.settings.texts);
     setShowLeft(v.settings.showLeft);
-    setDocLink(v.settings.docTemplate ? `https://docs.google.com/document/d/${v.settings.docTemplate}/edit` : "");
+    setDocLink(v.settings.docTemplate ? `https://drive.google.com/open?id=${v.settings.docTemplate}` : "");
     setRows(v.types.length ? v.types.map((x) => ({ key: x.key, label: x.label, priceCzk: String(x.priceCzk), capacity: x.capacity ? String(x.capacity) : "" })) : [{ key: "", label: t("ticketSettings.defaultType"), priceCzk: "", capacity: "" }]);
     setForm({
       maxPerOrder: String(v.settings.maxPerOrder),
@@ -61,6 +63,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
       accountNumber: v.accountNumber,
       bankCode: v.bankCode,
       bankCheckEnabled: v.bankCheckEnabled,
+      bankCheckIntervalMin: v.bankCheckIntervalMin,
       bankAccountId: v.bankAccountId ?? "",
       portalOpen: v.portalOpen,
     });
@@ -106,6 +109,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
       accountNumber: form.accountNumber,
       bankCode: form.bankCode,
       bankCheckEnabled: form.bankCheckEnabled && !!form.bankAccountId,
+      bankCheckIntervalMin: form.bankCheckIntervalMin,
       bankAccountId: form.bankAccountId || null,
       portalOpen: form.portalOpen,
     });
@@ -209,6 +213,17 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
           ) : (
             <span className="text-[12px] text-ink-secondary">{t("bankCheck.noMatchingAccount")}</span>
           )}
+          {form.bankCheckEnabled && (
+            <label className={label}>
+              {t("ticketSettings.bankCheckInterval")}
+              <select value={form.bankCheckIntervalMin} onChange={(e) => set({ bankCheckIntervalMin: Number(e.target.value) })} disabled={!isAdmin} className={inputClass + " mt-1"}>
+                {CHECK_INTERVALS_MIN.map((m) => (
+                  <option key={m} value={m}>{t("ticketSettings.everyMinutes", { n: String(m) })}</option>
+                ))}
+              </select>
+              <span className="mt-1 block text-[11.5px]">{t("ticketSettings.bankCheckIntervalHint")}</span>
+            </label>
+          )}
           <p className="text-[12px] text-ink-secondary">{t("ticketSettings.bankCheckHint")}</p>
         </section>
 
@@ -301,7 +316,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
           <label className={label}>
             {t("ticketSettings.docTemplate")}
             <div className="mt-1 flex gap-2">
-              <input value={docLink} onChange={(e) => setDocLink(e.target.value)} disabled={!isAdmin} placeholder="https://docs.google.com/document/d/…" className={inputClass} />
+              <input value={docLink} onChange={(e) => setDocLink(e.target.value)} disabled={!isAdmin} placeholder="https://docs.google.com/… (dokument nebo prezentace)" className={inputClass} />
               {isAdmin && (
                 <button type="button" onClick={() => patch({ docTemplate: docLink })} disabled={saving} className={btn}>
                   {t("common.save")}

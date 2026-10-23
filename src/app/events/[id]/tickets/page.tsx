@@ -57,6 +57,21 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
   const [error, setError] = useState<string | null>(null);
   const [driveDone, setDriveDone] = useState<{ count: number; url: string } | null>(null);
   const [driveBusy, setDriveBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+
+  // "Zkontrolovat platby teď": the Fio check right away, then the list again.
+  async function checkNow() {
+    setChecking(true);
+    setCheckNote(null);
+    const res = await fetch(`/api/events/${id}/tickets/bank-check`, { method: "POST" });
+    const r = await res.json().catch(() => ({}));
+    setChecking(false);
+    setCheckNote(
+      !res.ok ? t("tickets.checkFailed") : r.status === "ok" ? t("tickets.checkDone", { n: String(r.settled ?? 0), review: String(r.review ?? 0) }) : r.status === "throttled" ? t("tickets.checkThrottled") : r.status === "nothing_to_do" ? t("tickets.checkNothing") : t("tickets.checkError", { code: r.code ?? "" })
+    );
+    load();
+  }
 
   // The orders -> Google Sheet in the export folder (next to the bills manifest).
   async function exportToDrive() {
@@ -139,6 +154,11 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
           <a href={`/api/events/${id}/tickets/export`} className={btn + " text-[13px]"}>
             {t("tickets.export")}
           </a>
+          {data.bankCheck && (
+            <button onClick={checkNow} disabled={checking} className={btn + " text-[13px]"}>
+              {checking ? t("tickets.checking") : t("tickets.checkNow")}
+            </button>
+          )}
           <button onClick={exportToDrive} disabled={driveBusy} title={t("tickets.driveExportHint")} className={btn + " text-[13px]"}>
             {driveBusy ? t("participantsPage.driveExporting") : t("participantsPage.driveExport")}
           </button>
@@ -151,6 +171,7 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
       {!data.hasSender && <p className="mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">{t("ticketSettings.noSender")}</p>}
       {!data.bankCheck && <p className="mb-3 text-[13px] text-ink-secondary">{t("tickets.noBankCheck")}</p>}
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
+      {checkNote && <p className="mb-3 text-[13px] text-ink">{checkNote}</p>}
       {driveDone && (
         <p className="mb-3 text-[13px] text-pine">
           {t("tickets.driveExportDone", { count: String(driveDone.count) })}{" "}

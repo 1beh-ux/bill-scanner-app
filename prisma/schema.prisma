@@ -423,6 +423,11 @@ model Event {
   // Automatic payment check (docs/bank-payments-design.md): settled bank
   // movements on this account create the paymentDocTypeId document.
   bankCheckEnabled              Boolean        @default(false) @map("bank_check_enabled")
+  // Minutes between automatic payment checks of this event (cron every minute; the account is
+  // checked when its most frequent event is due). Null = 30. Fio allows one call per token per 30 s.
+  bankCheckIntervalMin          Int?           @map("bank_check_interval_min")
+  // The contact on this event's public page (else the organization's contactEmail).
+  publicContactEmail            String?        @map("public_contact_email")
   bankAccountId                 String?        @map("bank_account_id")
   bankAccount                   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   // Veřejná akce (kind public_event): src/lib/tickets.ts TicketSettings (max per order, total limit,
@@ -919,11 +924,12 @@ model ChildEmailLog {
   sentAt       DateTime          @default(now()) @map("sent_at")
   status       ParentEmailStatus
   errorMessage String?           @map("error_message")
-  sentByUserId String            @map("sent_by_user_id")
+  // Null = sent on the parent's own request ("Zapomněl(a) jsem odkaz", src/lib/portal-recovery.ts).
+  sentByUserId String?           @map("sent_by_user_id")
   subject      String?
 
   child  Child @relation(fields: [childId], references: [id], onDelete: Cascade)
-  sentBy User  @relation("ChildEmailSentBy", fields: [sentByUserId], references: [id])
+  sentBy User? @relation("ChildEmailSentBy", fields: [sentByUserId], references: [id])
 
   @@index([childId])
   @@map("child_email_log")
@@ -1608,6 +1614,13 @@ model Organization {
   name                    String
   shortName               String   @map("short_name")
   contactEmail            String?  @map("contact_email")
+  // Parent portal "Zapomněl(a) jsem odkaz" (2026-10-23): the mailbox it sends from (a connected
+  // MailSenderAccount; null = the feature is off), and whether a new link replaces the old one.
+  portalRecoverySenderEmail String? @map("portal_recovery_sender_email")
+  portalRecoveryNewLink   Boolean  @default(false) @map("portal_recovery_new_link")
+  // "Ještě nejsem členem" next to it: an event's public registration, or any web address.
+  portalJoinEventId       String?  @map("portal_join_event_id")
+  portalJoinUrl           String?  @map("portal_join_url")
   active                  Boolean  @default(true)
   // Look of the public pages (/r, /p, landing; docs/custom-domain.md "Appearance"). Null = today's look.
   publicFontFamily        String?  @map("public_font_family")
