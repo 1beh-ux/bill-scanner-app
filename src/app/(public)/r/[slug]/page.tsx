@@ -8,6 +8,7 @@ import { publicEvent, publicFormContext } from "@/lib/public-registration-server
 import PublicFrame from "@/components/embed/PublicFrame";
 import { embedParams } from "@/components/embed/embed-params";
 import { pageAppearance } from "@/lib/public-appearance";
+import { readAudience } from "@/lib/public-registration";
 import PublicForm from "./PublicForm";
 import TicketPage from "./TicketPage";
 import { remaining } from "@/lib/tickets";
@@ -92,6 +93,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
         registrationDeadline: event.registrationDeadline?.toISOString() ?? null,
         landingContent: event.landingContent,
         hideHeader: event.publicHideHeader,
+        audience: readAudience(event.publicAudience),
         memberPriceCzk: event.memberPriceCzk,
         nonMemberPriceCzk: event.nonMemberPriceCzk,
       }}

@@ -18,7 +18,7 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicContactEmail?: string | null; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicContactEmail?: string | null; publicAudience?: string | null; kind?: string; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -28,6 +28,7 @@ export default function PublicRegistrationSettings({
   const [content, setContent] = useState(event.landingContent ?? "");
   const [hideHeader, setHideHeader] = useState(event.publicHideHeader);
   const [contact, setContact] = useState(event.publicContactEmail ?? "");
+  const [audience, setAudience] = useState(event.publicAudience ?? "any");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -38,7 +39,7 @@ export default function PublicRegistrationSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader, publicContactEmail: contact.trim() || null }),
+      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader, publicContactEmail: contact.trim() || null, ...(event.kind !== "public_event" && { publicAudience: audience }) }),
     });
     setSaving(false);
     const err = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string }).error;
@@ -94,6 +95,16 @@ export default function PublicRegistrationSettings({
         <MarkdownEditor value={content} onChange={setContent} rows={8} className={inputClass + " font-mono text-[13px]"} t={t} />
         <span className="mt-1 block text-[11.5px]">{t("publicSettings.landingHint")}</span>
       </label>
+      {event.kind !== "public_event" && (
+        <label className="text-[13px] text-ink-secondary">
+          {t("publicSettings.audience")}
+          <select value={audience} onChange={(e) => setAudience(e.target.value)} className={inputClass + " mt-1"}>
+            {["children", "children_adults", "any"].map((a) => (
+              <option key={a} value={a}>{t(`publicSettings.audience.${a}`)}</option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="flex items-center gap-2 text-[14px] text-ink">
         <input type="checkbox" checked={hideHeader} onChange={(e) => setHideHeader(e.target.checked)} className="h-4 w-4 accent-ember" />
         {t("publicSettings.hideHeader")}

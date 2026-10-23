@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import DuplicateEventWizard from "@/components/events/DuplicateEventWizard";
 import { useConfirm } from "@/components/ConfirmDialog";
 
 type EventItem = {
@@ -27,6 +28,7 @@ export default function EventsPage() {
   const [endDate, setEndDate] = useState("");
   const [kind, setKind] = useState<"event" | "public_event">("event");
   const [error, setError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   async function loadEvents() {
     setLoading(true);
@@ -89,7 +91,15 @@ export default function EventsPage() {
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <h1 className="mb-4 text-[22px] font-semibold text-ink">{t("events.title")}</h1>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-[22px] font-semibold text-ink">{t("events.title")}</h1>
+        {events.length > 0 && !duplicating && (
+          <button type="button" onClick={() => setDuplicating(true)} className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2">
+            {t("duplicate.open")}
+          </button>
+        )}
+      </div>
+      {duplicating && <DuplicateEventWizard events={events} t={t} onClose={() => setDuplicating(false)} />}
 
       <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input

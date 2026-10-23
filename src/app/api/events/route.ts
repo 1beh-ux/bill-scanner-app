@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 import { isOrgAdmin, orgWhere } from "@/lib/org-scope";
-import type { Prisma } from "@/generated/prisma";
-import { optionsFor } from "@/lib/registration-fields";
+import { createEventWithDefaults } from "@/lib/event-create";
 
 // ?module=bills -> only events where the user may work with bills (what a
 // "move to another event" picker needs); without it, every event the user holds
@@ -57,80 +55,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const event = await prisma.$transaction(async (tx) => {
-    const created = await tx.event.create({
-      data: {
-        name,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        organizationId: await orgIdOfUser(user),
-        ...(isPublic && { kind: "public_event" as const }),
-      },
-    });
-
-    // The organization's category templates (app-level NULL rows: later, step 4).
-    const templates = await tx.categoryTemplate.findMany({ where: { organizationId: created.organizationId } });
-
-    if (templates.length > 0) {
-      await tx.eventCategory.createMany({
-        data: templates.map((t) => ({
-          eventId: created.id,
-          name: t.name,
-          description: t.description,
-          budgetAmount: 0,
-          isFromTemplate: true,
-          categoryTemplateId: t.id,
-        })),
-      });
-    }
-
-    // plan_activity is the org base library -- imported into PlanActivity on
-    // demand, never copied as an event list item.
-    const listTemplates = isPublic ? [] : await tx.listTemplate.findMany({ where: { organizationId: created.organizationId, active: true, kind: { not: "plan_activity" } } });
-    if (listTemplates.length > 0) {
-      await tx.eventListItem.createMany({
-        data: listTemplates.map((lt) => ({
-          eventId: created.id,
-          kind: lt.kind,
-          key: lt.key,
-          name: lt.name,
-          sortOrder: lt.sortOrder,
-          data: lt.data ?? undefined,
-          isFromTemplate: true,
-        })),
-      });
-    }
-
-    await tx.eventModule.createMany({
-      data: [
-        { eventId: created.id, moduleKey: "bills", enabled: true },
-        { eventId: created.id, moduleKey: "health", enabled: false },
-        ...(isPublic ? [{ eventId: created.id, moduleKey: "tickets" as const, enabled: true }] : []),
-      ],
-    });
-
-    const fieldTemplates = isPublic ? [] : await tx.participantFieldTemplate.findMany({ where: { organizationId: created.organizationId, active: true } });
-    if (fieldTemplates.length > 0) {
-      await tx.eventParticipantField.createMany({
-        data: fieldTemplates.map((f) => ({
-          eventId: created.id,
-          key: f.key,
-          label: f.label,
-          fieldType: f.fieldType,
-          options: (optionsFor(f) as Prisma.InputJsonValue | null) ?? undefined,
-          // Was hardcoded to ["list"], ignoring the template's own
-          // defaultSurfaces -- inconsistent with syncParticipantFieldsForEvent,
-          // which already gets this right.
-          surfaces: f.defaultSurfaces,
-          isFromTemplate: true,
-        })),
-      });
-    }
-
-    return created;
-  });
-
-  if (!isPublic) await seedFixedParticipantFields(event.id);
+  const event = await createEventWithDefaults({ name, startDate, endDate, organizationId: await orgIdOfUser(user), isPublic });
 
   return NextResponse.json(event, { status: 201 });
 }

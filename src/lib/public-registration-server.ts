@@ -11,6 +11,7 @@ import { readPriceRules } from "@/lib/price-rules";
 import { fullNameFrom } from "@/lib/participant-name";
 import { newPortalToken } from "@/lib/portal-gate";
 import type { CleanSubmission, FormField } from "@/lib/public-registration";
+import { readProfileSections, sectionOf } from "@/lib/portal-rules";
 
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
 
@@ -37,13 +38,21 @@ export type PublicEvent = NonNullable<Awaited<ReturnType<typeof publicEvent>>>;
  */
 export async function publicFormContext(event: PublicEvent) {
   const rules = readPriceRules(event.priceRules);
-  const [templates, eventFields, tplRules] = await Promise.all([visibleTemplates(event.organizationId), requiredEventFields([event.id]), templateRules(event.organizationId)]);
+  const [templates, eventFields, tplRules, org] = await Promise.all([
+    visibleTemplates(event.organizationId),
+    requiredEventFields([event.id]),
+    templateRules(event.organizationId),
+    prisma.organization.findUniqueOrThrow({ where: { id: event.organizationId }, select: { portalProfileSections: true } }),
+  ]);
+  // Headings: the profile parts (only the organization's own ones -- basic / detailed stay unnamed).
+  const sections = readProfileSections(org.portalProfileSections);
+  const groupOf = (t: { profileSection: string | null; level: "basic" | "detailed" }) => sections.find((s) => s.key === sectionOf(t, sections))?.label;
   const asked = askedFields(eventFields, tplRules);
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
   const fields: FormField[] = [
     ...templates
       .filter((t) => t.level === "basic" || askedKeys.has(t.key))
-      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
+      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, group: groupOf(t), required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
     ...asked.filter((f) => f.source === "event").map((f) => ({ key: f.key, label: f.label, fieldType: f.fieldType, options: f.options, required: true, eventOnly: true })),
   ];
   return { fields, rules, oddil: await oddilField(event.id, rules) };

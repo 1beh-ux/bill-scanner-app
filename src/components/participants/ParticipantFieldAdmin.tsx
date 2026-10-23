@@ -8,6 +8,7 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import { readBooleanMapping, readComposite, toBoolean } from "@/lib/participant-fields";
 import { PORTAL_ACCESS_LEVELS, type PortalAccessLevel, type ProfileSection } from "@/lib/portal-rules";
 import ProfileSectionsEditor from "@/components/participants/ProfileSectionsEditor";
+import PortalFieldOrder from "@/components/participants/PortalFieldOrder";
 import { FIELD_AUDIENCES, FIELD_LEVELS, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
 
 type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
@@ -821,6 +822,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   return (
     <div>
       {!isEvent && !appLevel && <ProfileSectionsEditor sections={sections} onSaved={setSections} canEdit={role === "admin"} t={t} />}
+      {!isEvent && !appLevel && role === "admin" && <PortalFieldOrder sections={sections} t={t} />}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
         <div className="flex items-center gap-3">

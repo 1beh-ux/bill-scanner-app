@@ -428,6 +428,9 @@ model Event {
   bankCheckIntervalMin          Int?           @map("bank_check_interval_min")
   // The contact on this event's public page (else the organization's contactEmail).
   publicContactEmail            String?        @map("public_contact_email")
+  // Who the public form registers (2026-10-23): children | children_adults (adults only with a child) |
+  // any (adults alone too). Null = any. The form starts with a child either way.
+  publicAudience                String?        @map("public_audience")
   bankAccountId                 String?        @map("bank_account_id")
   bankAccount                   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   // Veřejná akce (kind public_event): src/lib/tickets.ts TicketSettings (max per order, total limit,
@@ -1046,6 +1049,9 @@ model ParticipantFieldTemplate {
   // family overview next to the name and birth date.
   profileSection         String?                   @map("profile_section")
   portalSummary          Boolean                   @default(false) @map("portal_summary")
+  // Order for parents (2026-10-23): the portal profile, the public form and the registration step
+  // list fields by this (null = after the ordered ones, by label). Šablony -> Účastníci -> Pořadí polí.
+  portalSortOrder        Int?                      @map("portal_sort_order")
 
   // Owner (docs/organizations-change-notes.md).
   organizationId   String?                    @map("organization_id")

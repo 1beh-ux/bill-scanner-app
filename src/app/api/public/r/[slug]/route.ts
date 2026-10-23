@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicRegistration, publicEvent, publicFormContext } from "@/lib/public-registration-server";
-import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission } from "@/lib/public-registration";
+import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission, readAudience } from "@/lib/public-registration";
 import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
 import { autoAcceptRegistrations } from "@/lib/auto-accept";
 import { portalUrl } from "@/lib/portal-gate";
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const body = await req.json().catch(() => null);
   if (isSpam(body)) return NextResponse.json({ ok: true }, { status: 201 });
   const ctx = await publicFormContext(event);
-  const result = validateSubmission(body, { ...ctx, today: new Date() });
+  const result = validateSubmission(body, { ...ctx, today: new Date(), audience: readAudience(event.publicAudience) });
   if (!result.ok) return NextResponse.json({ error: "invalid", fields: result.errors }, { status: 400 });
   // Counted per valid submit (a parent fixing typos isn't locked out); invalid ones store nothing.
   if (!(await takeRateSlot(`submit:${hashedIp(req)}`, SUBMIT_LIMIT_PER_HOUR, 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });

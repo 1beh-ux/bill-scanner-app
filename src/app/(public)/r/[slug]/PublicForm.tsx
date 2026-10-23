@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Fragment } from "react";
 import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
@@ -39,6 +39,8 @@ type EventInfo = {
   registrationDeadline: string | null;
   landingContent: string | null;
   hideHeader: boolean;
+  // Event.publicAudience (null = any).
+  audience?: "children" | "children_adults" | "any";
   memberPriceCzk: number | null;
   nonMemberPriceCzk: number | null;
 };
@@ -84,7 +86,9 @@ export default function PublicForm({
     },
     [strings]
   );
-  const [persons, setPersons] = useState<Person[]>([newPerson(true, false), newPerson(false, false)]);
+  // Starts with a child (the main case); adults only as the event allows (Event.publicAudience).
+  const audience = event.audience ?? "any";
+  const [persons, setPersons] = useState<Person[]>([newPerson(false, false)]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [note, setNote] = useState("");
   const [website, setWebsite] = useState("");
@@ -261,14 +265,18 @@ export default function PublicForm({
             )}
             {fieldsOf(p).some((f) => !(i > 0 && shared(p, f))) && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {fieldsOf(p).filter((f) => !(i > 0 && shared(p, f))).map((f) => (
-                  <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+                {fieldsOf(p).filter((f) => !(i > 0 && shared(p, f))).map((f, j, list) => (
+                  <Fragment key={f.key}>
+                  {/* A heading where the organization's own profile part starts (e.g. "Adresa"). */}
+                  {f.group && f.group !== list[j - 1]?.group && <h4 className="mt-2 text-[14px] font-semibold text-ink sm:col-span-2">{f.group}</h4>}
+                  <label className="flex flex-col gap-1 text-[13px] text-ink-secondary">
                     <span>
                       {f.label}
                       {f.required && " *"}
                     </span>
                     <FieldInput field={{ ...f, options: optionsFor(f, p.isAdult) }} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
                   </label>
+                  </Fragment>
                 ))}
               </div>
             )}
@@ -290,9 +298,11 @@ export default function PublicForm({
             <button type="button" onClick={() => setPersons((x) => [...x, newPerson(false, x.length > 0)])} className={btn}>
               + {t("public.addChild")}
             </button>
-            <button type="button" onClick={() => setPersons((x) => [...x, newPerson(true, false)])} className={btn}>
-              + {t("public.addAdult")}
-            </button>
+            {audience !== "children" && (
+              <button type="button" onClick={() => setPersons((x) => [...x, newPerson(true, false)])} className={btn}>
+                + {t(audience === "children_adults" ? "public.addAdultWithChild" : "public.addAdult")}
+              </button>
+            )}
           </div>
         )}
 

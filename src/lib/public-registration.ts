@@ -12,7 +12,13 @@ export const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])$/;
 
 // audience (slice 5 #1): a field only for children / adults is neither shown to nor accepted from the others.
 // eventOnly (slice 5 #3): an event question -- stored on the registration only, never in the profile.
-export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; required: boolean; audience?: FieldAudience; eventOnly?: boolean };
+// Who an event's public form registers (Event.publicAudience; null = any).
+export type PublicAudience = "children" | "children_adults" | "any";
+export const PUBLIC_AUDIENCES: PublicAudience[] = ["children", "children_adults", "any"];
+export const readAudience = (v: unknown): PublicAudience => (PUBLIC_AUDIENCES as unknown[]).includes(v) ? (v as PublicAudience) : "any";
+
+// group: the profile part's name (Šablony -> Účastníci), shown as a heading when a form has several.
+export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; group?: string; required: boolean; audience?: FieldAudience; eventOnly?: boolean };
 export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null };
 export type PersonIn = {
   firstName: string;
@@ -57,7 +63,7 @@ export const isSpam = (body: unknown) => !!body && typeof body === "object" && s
  */
 export function validateSubmission(
   body: unknown,
-  ctx: { fields: FormField[]; rules: PriceRules | null; oddil: { key: string; options: string[] } | null; today: Date }
+  ctx: { fields: FormField[]; rules: PriceRules | null; oddil: { key: string; options: string[] } | null; today: Date; audience?: PublicAudience }
 ): { ok: true; data: CleanSubmission } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
@@ -124,6 +130,9 @@ export function validateSubmission(
   const childGuardians: GuardianIn[] = [];
   for (const g of [...adultGuardians, ...extra]) if (!childGuardians.some((x) => x.email.toLowerCase() === g.email.toLowerCase())) childGuardians.push(g);
   if (persons.some((p) => !p.isAdult) && childGuardians.length === 0) errors.push("guardians");
+  // The event's "Koho lze přihlásit" (Event.publicAudience).
+  if (ctx.audience === "children" && persons.some((p) => p.isAdult)) errors.push("audience_children");
+  if (ctx.audience === "children_adults" && !persons.some((p) => !p.isAdult)) errors.push("audience_child_needed");
 
   if (errors.length) return { ok: false, errors };
   return {

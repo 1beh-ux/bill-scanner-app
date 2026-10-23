@@ -110,7 +110,7 @@ export async function saveGateThrottle(scope: PortalScope, failures: number, win
 
 /** Org fields a parent may see, with their access level (hidden + inactive ones never leave the server). */
 export async function visibleTemplates(organizationId: string) {
-  const templates = await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true, portalAccess: { not: "hidden" } }, orderBy: { label: "asc" } });
+  const templates = await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true, portalAccess: { not: "hidden" } }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }] });
   return templates;
 }
 
@@ -123,7 +123,8 @@ export async function portalAccessMap(organizationId: string): Promise<Map<strin
 
 /** Active org templates by key -- what an event field marked "Vyžadovat při přihlášce" resolves against (slice 5 #2). */
 export async function templateRules(organizationId: string): Promise<Map<string, TemplateRule>> {
-  return new Map((await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true } })).map((t) => [t.key, t]));
+  // In the parents' order (askedFields lists profile fields by it).
+  return new Map((await prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }] })).map((t) => [t.key, t]));
 }
 
 /** The events' fields marked "Vyžadovat při přihlášce", in the event's field order. */

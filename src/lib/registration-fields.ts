@@ -52,7 +52,8 @@ export type AskedField = {
  * "Vyžadovat při přihlášce". A template field only while parents may edit it
  * (edit / approval) and only for its audience; an event-only field is asked of
  * everyone. `isAdult` undefined = don't filter by audience (the public form
- * filters per person itself). Event field order.
+ * filters per person itself). Profile fields in the parents' order (the templates map's
+ * order, Šablony -> Účastníci -> Pořadí polí), then the event's own questions in event order.
  */
 export function askedFields(eventFields: EventFieldRule[], templates: Map<string, TemplateRule>, isAdult?: boolean | null): AskedField[] {
   const out: AskedField[] = [];
@@ -67,7 +68,10 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
     if (isAdult !== undefined && !appliesTo(t.audience, isAdult)) continue;
     out.push({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, isAdult), source: "profile", access: t.portalAccess, level: t.level, audience: t.audience });
   }
-  return out;
+  const rank = new Map([...templates.keys()].map((k, i) => [k, i]));
+  const at = (f: AskedField) => (f.source === "event" ? Number.MAX_SAFE_INTEGER : (rank.get(f.key) ?? Number.MAX_SAFE_INTEGER));
+  // Array.sort is stable: event questions keep their event order after the profile fields.
+  return out.sort((a, b) => at(a) - at(b));
 }
 
 const selectOptions = (options: unknown) => (Array.isArray(options) ? options.filter((o): o is string => typeof o === "string") : []);
