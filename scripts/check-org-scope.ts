@@ -25,6 +25,7 @@ const ALLOW: Record<string, string> = {
   "src/app/api/cron/mail-drive-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/mail-sheets-sync/route.ts": "cron (CRON_SECRET): one event at a time, that event's own data",
   "src/app/api/cron/participant-sync/route.ts": "cron (CRON_SECRET): one event at a time; linking via the org-safe linkChildren",
+  "src/app/api/public/u/[token]/upload/route.ts": "a participant's own page: the participant's token + birth date (participantGate), only that participant's event's document types",
   "src/app/api/cron/bank-check/route.ts": "cron (CRON_SECRET): one bank account at a time, its own organization's events",
   "src/app/api/cron/requeue-stuck-bills/route.ts": "cron (CRON_SECRET): re-queues stuck bills, no cross-event data",
   "src/app/api/tasks/process-bill-ai/[id]/route.ts": "Cloud Tasks (TASKS_SECRET): one bill; merchant aliases per its event's organization",

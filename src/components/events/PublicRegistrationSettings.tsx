@@ -18,7 +18,7 @@ export default function PublicRegistrationSettings({
   t,
 }: {
   eventId: string;
-  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicContactEmail?: string | null; publicAudience?: string | null; kind?: string; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
+  event: { publicRegistration: boolean; publicSlug: string | null; landingContent: string | null; publicHideHeader: boolean; publicContactEmail?: string | null; publicAudience?: string | null; detailsAfterAcceptance?: boolean; kind?: string; publicBaseUrl?: string | null; publicEmbedOrigins?: string[] };
   onSaved: () => void;
   t: (key: string, vars?: Record<string, string>) => string;
 }) {
@@ -29,6 +29,7 @@ export default function PublicRegistrationSettings({
   const [hideHeader, setHideHeader] = useState(event.publicHideHeader);
   const [contact, setContact] = useState(event.publicContactEmail ?? "");
   const [audience, setAudience] = useState(event.publicAudience ?? "any");
+  const [later, setLater] = useState(!!event.detailsAfterAcceptance);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -39,7 +40,7 @@ export default function PublicRegistrationSettings({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader, publicContactEmail: contact.trim() || null, ...(event.kind !== "public_event" && { publicAudience: audience }) }),
+      body: JSON.stringify({ publicRegistration: on, publicSlug: slug.trim() || null, landingContent: content, publicHideHeader: hideHeader, publicContactEmail: contact.trim() || null, ...(event.kind !== "public_event" && { publicAudience: audience, detailsAfterAcceptance: later }) }),
     });
     setSaving(false);
     const err = res.ok ? null : ((await res.json().catch(() => ({}))) as { error?: string }).error;
@@ -104,6 +105,15 @@ export default function PublicRegistrationSettings({
             ))}
           </select>
         </label>
+      )}
+      {event.kind !== "public_event" && (
+        <>
+          <label className="flex items-center gap-2 text-[14px] text-ink">
+            <input type="checkbox" checked={later} onChange={(e) => setLater(e.target.checked)} className="h-4 w-4 accent-ember" />
+            {t("publicSettings.detailsLater")}
+          </label>
+          <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("publicSettings.detailsLaterHint")}</span>
+        </>
       )}
       <label className="flex items-center gap-2 text-[14px] text-ink">
         <input type="checkbox" checked={hideHeader} onChange={(e) => setHideHeader(e.target.checked)} className="h-4 w-4 accent-ember" />

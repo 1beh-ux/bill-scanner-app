@@ -94,6 +94,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
         landingContent: event.landingContent,
         hideHeader: event.publicHideHeader,
         audience: readAudience(event.publicAudience),
+        detailsLater: event.detailsAfterAcceptance,
         memberPriceCzk: event.memberPriceCzk,
         nonMemberPriceCzk: event.nonMemberPriceCzk,
       }}

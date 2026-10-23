@@ -30,7 +30,7 @@ import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { memberFormFields, validateSubmission } from "@/lib/public-registration";
-import { appliesTo, optionsFor, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
+import { appliesTo, optionsFor, askedNow, askedLater, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 import { remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
@@ -144,8 +144,9 @@ const shownValues = (child: PortalChild, pending: { childId: string; fieldKey: s
  * fields, profile ones pre-filled with what the parent sees, event questions
  * empty; + whether the "Údaje jsou aktuální" tick is needed.
  */
-function registrationStep(eventFields: Awaited<ReturnType<typeof requiredEventFields>>, rules: Map<string, TemplateRule>, child: PortalChild, shown: Record<string, string>) {
-  const asked = askedFields(eventFields, rules, child.isAdult);
+function registrationStep(eventFields: Awaited<ReturnType<typeof requiredEventFields>>, rules: Map<string, TemplateRule>, child: PortalChild, shown: Record<string, string>, later = false) {
+  // Two-step events: only the basic profile fields now, the rest after acceptance (askedNow).
+  const asked = askedNow(askedFields(eventFields, rules, child.isAdult), later);
   return { asked, fields: asked.map((f) => ({ ...f, value: f.source === "profile" ? (shown[f.key] ?? "") : "" })), reviewTick: needsReviewTick(asked, shown) };
 }
 
@@ -248,7 +249,13 @@ export async function portalData(scope: PortalScope) {
       // Slice 5 #5: also an empty field this event requires of this person.
       const asked = askedFields(eventFields.filter((x) => x.eventId === p.eventId), rules, child.isAdult);
       const own = (p.customFieldValues as Record<string, string> | null) ?? {};
-      registrations.push(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }, fromProfile.get(p.id) ?? []));
+      // Two-step events: after acceptance, the rest of the asked fields on the card ("Doplňte údaje").
+      const shownNow = shownValues(child, pending);
+      const later = p.event.detailsAfterAcceptance && p.registrationStatus === "accepted" ? askedLater(asked, true) : [];
+      const details = later.length
+        ? { fields: later.map((f) => ({ ...f, value: f.source === "profile" ? (shownNow[f.key] ?? "") : (own[f.key] ?? "") })), missing: later.filter((f) => !(f.source === "profile" ? shownNow[f.key] : own[f.key])?.trim()).length }
+        : null;
+      registrations.push({ ...(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }, fromProfile.get(p.id) ?? [])), details });
     }
 
     members.push({
@@ -304,7 +311,7 @@ export async function portalData(scope: PortalScope) {
           scope.members
             .filter((m) => memberIds.includes(m.id))
             .map((m) => {
-              const { fields, reviewTick } = registrationStep(eventFields.filter((f) => f.eventId === e.id), rules, m, shownValues(m, pending));
+              const { fields, reviewTick } = registrationStep(eventFields.filter((f) => f.eventId === e.id), rules, m, shownValues(m, pending), e.detailsAfterAcceptance);
               return [m.id, { fields, reviewTick }];
             })
         ),
@@ -553,7 +560,7 @@ export async function registerFromPortal(
     const extras = await pickExtras(eventId, open.event.priceRules, m.isAdult, pick);
     if (!extras) return { error: "not_available" };
     const shown = shownValues(m, pending);
-    const { asked } = registrationStep(eventFields, rules, m, shown);
+    const { asked } = registrationStep(eventFields, rules, m, shown, open.event.detailsAfterAcceptance);
     const checked = checkAnswers(asked, pick.answers, { prefill: shown, reviewed: pick.reviewed === true });
     if (!checked.ok) errors.push(...checked.errors.map((e) => `${m.id}.${e}`));
     else chosen.push({ child: m, extras, routed: routeAnswers(asked, checked.values, profileValues(m), shown) });
@@ -634,4 +641,24 @@ async function portalTicketEvents(scope: PortalScope) {
       };
     })
   );
+}
+
+/**
+ * "Doplňte údaje" (2026-10-23): the answers to a two-step event's remaining fields after acceptance --
+ * checked like the registration step, then routed the same way (participant always, profile per rule).
+ */
+export async function saveRegistrationDetails(scope: PortalScope, participantId: unknown, answers: unknown): Promise<{ ok: true } | { error: "not_found" } | { error: "invalid"; fields: string[] }> {
+  const p = typeof participantId === "string" ? await prisma.participant.findUnique({ where: { id: participantId }, include: { event: true } }) : null;
+  const child = p ? scope.members.find((m) => m.id === p.childId) : undefined;
+  if (!p || !child || !p.event.detailsAfterAcceptance || p.registrationStatus !== "accepted" || p.event.status !== "active") return { error: "not_found" };
+  const [eventFields, rules, pending] = await Promise.all([requiredEventFields([p.eventId]), templateRules(scope.organizationId), prisma.childChange.findMany({ where: { childId: child.id, status: "pending" } })]);
+  const later = askedLater(askedFields(eventFields, rules, child.isAdult), true);
+  const shown = shownValues(child, pending);
+  const checked = checkAnswers(later, answers, { prefill: shown, reviewed: true });
+  if (!checked.ok) return { error: "invalid", fields: checked.errors };
+  const routed = routeAnswers(later, checked.values, profileValues(child), shown);
+  await prisma.participant.update({ where: { id: p.id }, data: { customFieldValues: { ...((p.customFieldValues as Record<string, string> | null) ?? {}), ...routed.participant } } });
+  if (Object.keys(routed.profile).length) await updateProfile(child.id, routed.profile);
+  for (const c of routed.proposals) await proposeChange(child.id, c.key, c.oldValue, c.newValue);
+  return { ok: true };
 }

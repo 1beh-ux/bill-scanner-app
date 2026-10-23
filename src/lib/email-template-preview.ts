@@ -45,7 +45,7 @@ const PAYMENT_VARS = ["payment_details", "payment_qr", "payment_account", "payme
 
 // The participant's family / own portal link (slice 4 #11, src/lib/document-variables.ts
 // portalLinkVars) -- in every participant e-mail; empty for events not using the module.
-const PORTAL_VARS = ["portal_link", "portal_link_line"] as const;
+const PORTAL_VARS = ["portal_link", "portal_link_line", "details_link", "details_link_line"] as const;
 // The organization's name (organizations step 5) -- in every e-mail, never typed into a template.
 const ORG_VARS = ["organization_name"] as const;
 
@@ -104,6 +104,8 @@ const PORTAL_DUMMY = {
   organization_name: "Turistický oddíl Sluníčko",
   portal_link: "https://example.com/p/…",
   portal_link_line: "Vaše přihlášky, dokumenty a platby najdete v rodinném portálu: https://example.com/p/… (při prvním otevření se zeptá na datum narození).",
+  details_link: "https://example.com/p/…",
+  details_link_line: "Podrobné údaje, dokumenty a platbu najdete zde: https://example.com/p/… (při otevření se zeptá na datum narození).",
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {

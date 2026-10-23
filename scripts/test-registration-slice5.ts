@@ -2,7 +2,7 @@
 // fields per person, the review tick, answer routing, status "missing".
 // npx tsx scripts/test-registration-slice5.ts
 import assert from "node:assert/strict";
-import { appliesTo, askedFields, askedMissing, checkAnswers, needsReviewTick, optionsFor, routeAnswers, type TemplateRule } from "../src/lib/registration-fields";
+import { appliesTo, askedFields, askedLater, askedMissing, askedNow, checkAnswers, needsReviewTick, optionsFor, routeAnswers, type AskedField, type TemplateRule } from "../src/lib/registration-fields";
 import { registrationState } from "../src/lib/registration-status";
 import { validateSubmission } from "../src/lib/public-registration";
 
@@ -99,5 +99,14 @@ assert.deepEqual(!noAllergy.ok && noAllergy.errors, ["p0.povoleni"], "an adult i
   assert.deepEqual(optionsFor(f, false), ["Dívka", "Chlapec"]);
   assert.deepEqual(optionsFor(f), ["Dívka", "Chlapec", "Žena", "Muž"]);
   assert.deepEqual(optionsFor({ options: ["A"], adultOptions: null }, true), ["A"]);
+}
+// Two-step registration (2026-10-23).
+{
+  const f = (key: string, source: "profile" | "event", level: "basic" | "detailed"): AskedField => ({ key, label: key, fieldType: "text", options: null, source, access: source === "profile" ? "edit" : null, level, audience: "both" });
+  const all = [f("adresa", "profile", "basic"), f("alergie", "profile", "detailed"), f("triko", "event", "basic")];
+  assert.deepEqual(askedNow(all, false).map((x) => x.key), ["adresa", "alergie", "triko"]);
+  assert.deepEqual(askedLater(all, false), []);
+  assert.deepEqual(askedNow(all, true).map((x) => x.key), ["adresa"]);
+  assert.deepEqual(askedLater(all, true).map((x) => x.key), ["alergie", "triko"]); // event questions wait too
 }
 console.log("ok");

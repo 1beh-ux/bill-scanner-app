@@ -62,6 +62,7 @@ type EventDetail = {
   publicHideHeader: boolean;
   publicContactEmail: string | null;
   publicAudience: string | null;
+  detailsAfterAcceptance: boolean;
   autoAccept: "manual" | "accept" | "accept_send";
   autoSendReady?: boolean | null;
   publicBaseUrl?: string | null;

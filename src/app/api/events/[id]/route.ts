@@ -54,7 +54,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json();
   // Veřejná přihláška (the public page) on its own: Účastníci / Vstupenky holders may change it too.
-  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader", "publicContactEmail", "publicAudience"];
+  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader", "publicContactEmail", "publicAudience", "detailsAfterAcceptance"];
   const publicPageOnly = !isOrgAdmin(user) && Object.keys(body ?? {}).length > 0 && Object.keys(body).every((k) => PUBLIC_PAGE_KEYS.includes(k));
   const denied = publicPageOnly ? await requireAnyModuleAccess(user, id, ["participants", "tickets"]) : await requireModuleAccess(user, id, "bills");
   if (denied) return denied;
@@ -91,6 +91,7 @@ export async function PATCH(
     publicHideHeader,
     publicContactEmail,
     publicAudience,
+    detailsAfterAcceptance,
     autoAccept,
     location,
     portalInfo,
@@ -114,6 +115,7 @@ export async function PATCH(
     publicHideHeader !== undefined ||
     publicContactEmail !== undefined ||
     publicAudience !== undefined ||
+    detailsAfterAcceptance !== undefined ||
     autoAccept !== undefined ||
     location !== undefined ||
     portalInfo !== undefined ||
@@ -125,6 +127,7 @@ export async function PATCH(
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
   if (publicRegistration !== undefined && typeof publicRegistration !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicSlug !== undefined && publicSlug !== null && !(typeof publicSlug === "string" && SLUG_PATTERN.test(publicSlug))) return NextResponse.json({ error: "bad_slug" }, { status: 400 });
+  if (detailsAfterAcceptance !== undefined && typeof detailsAfterAcceptance !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicAudience !== undefined && publicAudience !== null && !["children", "children_adults", "any"].includes(publicAudience)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicHideHeader !== undefined && typeof publicHideHeader !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (publicContactEmail !== undefined && publicContactEmail !== null && !(typeof publicContactEmail === "string" && (publicContactEmail.trim() === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(publicContactEmail.trim())))) return NextResponse.json({ error: "bad_email" }, { status: 400 });
@@ -276,6 +279,7 @@ export async function PATCH(
       ...(landingContent !== undefined && { landingContent: landingContent?.trim() || null }),
       ...(publicHideHeader !== undefined && { publicHideHeader }),
       ...(publicAudience !== undefined && { publicAudience }),
+      ...(detailsAfterAcceptance !== undefined && { detailsAfterAcceptance }),
       ...(publicContactEmail !== undefined && { publicContactEmail: publicContactEmail?.trim().toLowerCase() || null }),
       ...(autoAccept !== undefined && { autoAccept }),
       // Portal registration card basics (slice 3 F).

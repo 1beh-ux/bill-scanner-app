@@ -74,6 +74,15 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
   return out.sort((a, b) => at(a) - at(b));
 }
 
+/**
+ * Two-step registration (2026-10-23, Event.detailsAfterAcceptance): registering asks only the basic
+ * profile fields; the detailed ones and the event's own questions are filled after acceptance (portal
+ * registration card, or the participant's own link). Off = everything at once, as before.
+ */
+export const isBasicAsk = (f: AskedField) => f.source === "profile" && f.level === "basic";
+export const askedNow = (asked: AskedField[], later: boolean) => (later ? asked.filter(isBasicAsk) : asked);
+export const askedLater = (asked: AskedField[], later: boolean) => (later ? asked.filter((f) => !isBasicAsk(f)) : []);
+
 const selectOptions = (options: unknown) => (Array.isArray(options) ? options.filter((o): o is string => typeof o === "string") : []);
 
 /** One submitted value by the field's type: "" = empty, null = invalid (unknown select option, bad date). */

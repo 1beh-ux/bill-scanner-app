@@ -431,6 +431,9 @@ model Event {
   // Who the public form registers (2026-10-23): children | children_adults (adults only with a child) |
   // any (adults alone too). Null = any. The form starts with a child either way.
   publicAudience                String?        @map("public_audience")
+  // Two-step registration (2026-10-23): registering asks only the basic profile fields; detailed ones and
+  // the event's questions after acceptance (portal card / the participant's link). src/lib/registration-fields.ts askedNow.
+  detailsAfterAcceptance        Boolean        @default(false) @map("details_after_acceptance")
   bankAccountId                 String?        @map("bank_account_id")
   bankAccount                   BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   // Veřejná akce (kind public_event): src/lib/tickets.ts TicketSettings (max per order, total limit,
@@ -732,6 +735,9 @@ model Participant {
   // Camp-fee variable symbol -- assigned once, at acceptance (see
   // src/lib/document-variables.ts), stable afterwards. Null until accepted.
   registrationNumber     Int?               @map("registration_number")
+  // The participant's own page /u/<token> (2026-10-23): details, documents and payment for one
+  // registration when it isn't linked to a person in Členové (src/lib/participant-link.ts).
+  detailsToken           String?            @unique @map("details_token")
   // The persistent child profile this event's row belongs to (null = not
   // linked; everything works as before). See src/lib/children.ts.
   childId                String?            @map("child_id")

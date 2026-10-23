@@ -41,6 +41,8 @@ type EventInfo = {
   hideHeader: boolean;
   // Event.publicAudience (null = any).
   audience?: "children" | "children_adults" | "any";
+  // Two-step registration: detailed details only after acceptance (a note under the form's hint).
+  detailsLater?: boolean;
   memberPriceCzk: number | null;
   nonMemberPriceCzk: number | null;
 };
@@ -212,6 +214,7 @@ export default function PublicForm({
       <form onSubmit={submit} className="flex flex-col gap-4">
         <h2 className="text-[18px] font-semibold text-ink">{t("public.formTitle")}</h2>
         <p className="text-[13px] text-ink-secondary">{t("public.formHint")}</p>
+        {event.detailsLater && <p className="text-[13px] text-ink-secondary">{t("public.detailsLaterNote")}</p>}
         {/* Honeypot: invisible to people, bots fill it in. */}
         <input type="text" name="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
 

@@ -6,7 +6,7 @@
 // afterwards in the route.
 import { prisma } from "@/lib/prisma";
 import { createRegistration, oddilField, requiredEventFields, templateRules, visibleTemplates } from "@/lib/portal-server";
-import { askedFields } from "@/lib/registration-fields";
+import { askedFields, askedNow } from "@/lib/registration-fields";
 import { readPriceRules } from "@/lib/price-rules";
 import { fullNameFrom } from "@/lib/participant-name";
 import { newPortalToken } from "@/lib/portal-gate";
@@ -47,7 +47,8 @@ export async function publicFormContext(event: PublicEvent) {
   // Headings: the profile parts (only the organization's own ones -- basic / detailed stay unnamed).
   const sections = readProfileSections(org.portalProfileSections);
   const groupOf = (t: { profileSection: string | null; level: "basic" | "detailed" }) => sections.find((s) => s.key === sectionOf(t, sections))?.label;
-  const asked = askedFields(eventFields, tplRules);
+  // Two-step events: the detailed fields and the event's questions come after acceptance.
+  const asked = askedNow(askedFields(eventFields, tplRules), event.detailsAfterAcceptance);
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
   const fields: FormField[] = [
     ...templates

@@ -222,7 +222,19 @@ export async function portalLinkVars(
 }
 
 /** Whether a template text uses the portal link (a send then creates a missing token). */
-export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link"));
+export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link") || t.includes("{{details_link"));
+
+/**
+ * The portal link + {{details_link}} (2026-10-23): where to fill in the rest of the details, upload the
+ * documents and pay -- the family portal when the participant is linked to a person, else the
+ * participant's own page (src/lib/participant-link.ts). {{details_link_line}}: a whole sentence or "".
+ */
+async function detailsLinkVars(participant: { id?: string; childId?: string | null }, event: { registrationConnected?: boolean; kind?: string }, create: boolean) {
+  const portal = await portalLinkVars(participant, event, create);
+  const { participantLinkUrl } = await import("@/lib/participant-link");
+  const link = portal.portal_link || (participant.id ? await participantLinkUrl(participant.id, create) : "");
+  return { ...portal, details_link: link, details_link_line: link ? `Podrobné údaje, dokumenty a platbu najdete zde: ${link} (při otevření se zeptá na datum narození).` : "" };
+}
 
 export function formatDateRange(startDate: Date, endDate: Date): string {
   const start = startDate.toLocaleDateString("cs-CZ");
@@ -268,7 +280,7 @@ export async function resolveVariables(
     registration_deadline_line: event.registrationDeadline
       ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
       : "",
-    ...(await portalLinkVars(participant, event, createPortalLink)),
+    ...(await detailsLinkVars(participant, event, createPortalLink)),
     // {{organization_name}} (organizations step 5): the event's organization, never a hard-coded name.
     organization_name: (await prisma.organization.findFirst({ where: { events: { some: { id: event.id } } }, select: { name: true } }))?.name ?? "",
   };

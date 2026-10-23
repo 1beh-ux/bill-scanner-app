@@ -21,7 +21,8 @@ export function isAdminHost(host: string): boolean {
 }
 
 // /r and /p use no files from public/ (fonts are self-hosted under /_next/, like everything else).
-const PUBLIC_HOST_PREFIXES = ["/r/", "/p/", "/api/public/", "/api/portal/", "/_next/"];
+// /u/: a participant's own page (src/lib/participant-link.ts), on the portal host.
+const PUBLIC_HOST_PREFIXES = ["/r/", "/p/", "/u/", "/api/public/", "/api/portal/", "/_next/"];
 
 /** What a public host serves: the registration page, the portal, their APIs and Next's assets. "/" is the landing page. */
 export function publicHostAllows(pathname: string): boolean {

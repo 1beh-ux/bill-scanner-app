@@ -46,6 +46,8 @@ type Registration = {
   documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
+  // Two-step events, after acceptance: the rest of the event's fields ("Doplňte údaje").
+  details?: { fields: StepField[]; missing: number } | null;
 };
 // One person of the link (a child link has one, a family link every member).
 type Member = {
@@ -859,6 +861,40 @@ function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: {
   );
 }
 
+// "Doplňte údaje" (2026-10-23): a two-step event's remaining fields after acceptance -- open while
+// something is missing, folded ("Údaje doplněny") once everything is filled in.
+function LaterDetails({ api, r, details, t, onChanged }: { api: string; r: Registration; details: { fields: StepField[]; missing: number }; t: T; onChanged: () => void }) {
+  const [open, setOpen] = useState(details.missing > 0);
+  const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(details.fields.map((f) => [f.key, f.value])));
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    const res = await portalApiFetch(`${api}/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId, answers: values }) }).catch(() => null);
+    setBusy(false);
+    setMessage(t(res?.ok ? "portal.saved" : res?.status === 400 ? "portal.laterInvalid" : "portal.saveFailed"));
+    if (res?.ok) onChanged();
+  }
+  if (!open)
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="self-start text-[13px] text-pine hover:underline">
+        ✓ {t("portal.laterDone")}
+      </button>
+    );
+  return (
+    <div className="rounded-lg border border-amber-500/60 bg-amber-500/10 p-3">
+      <p className="text-[14px] font-semibold text-ink">{t("portal.laterTitle")}</p>
+      <p className="text-[13px] text-ink-secondary">{t("portal.laterHint")}</p>
+      <RegistrationStep step={{ fields: details.fields, reviewTick: false }} values={values} onChange={(k, v) => setValues((x) => ({ ...x, [k]: v }))} reviewed onReviewed={() => {}} t={t} />
+      {message && <p className="mt-2 text-[13px] text-ink">{message}</p>}
+      <button type="button" onClick={save} disabled={busy} className={btnPrimary + " mt-2"}>
+        {t("portal.save")}
+      </button>
+    </div>
+  );
+}
+
 // One registration, its blocks in the event's card layout (src/lib/participant-layout.ts "portal").
 function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; r: Registration; who: string | null; t: T; evName: (e: EventRef) => string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -1083,6 +1119,7 @@ function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; 
           )}
         </div>
       )}
+      {r.details && <LaterDetails api={api} r={r} details={r.details} t={t} onChanged={onChanged} />}
       {message && <p className="text-[13px] text-ink">{message}</p>}
       {/* Only a registration not yet accepted can be cancelled here; after that, the event's admin does it. */}
       {r.status === "pending" &&
