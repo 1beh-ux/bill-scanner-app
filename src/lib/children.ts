@@ -71,10 +71,17 @@ export function planLinks(participants: LinkCandidate[], children: LinkChild[]):
  */
 // ponytail: no DB constraint on the match key -- two links running at the same
 // instant could create a duplicate Child; the Děti page's merge fixes that.
+/** 18 or older on `at`. */
+export const adultAt = (dob: Date | null, at: Date) => {
+  if (!dob) return false;
+  const years = at.getUTCFullYear() - dob.getUTCFullYear() - (at.getUTCMonth() * 100 + at.getUTCDate() < dob.getUTCMonth() * 100 + dob.getUTCDate() ? 1 : 0);
+  return years >= 18;
+};
+
 export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { createMissing?: boolean } = {}): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
     where: { ...where, childId: null, dateOfBirth: { not: null } },
-    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true, organizationId: true } } },
+    select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true, organizationId: true, startDate: true } } },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };
 
@@ -102,7 +109,8 @@ export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { 
         const ps = step.participantIds.map((id) => byId.get(id)!);
         const src = ps.find((p) => p.lastName) ?? ps[0];
         const child = await prisma.child.create({
-          data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth, organizationId },
+          // 18+ at the event's start = an adult member (an imported leader isn't a child).
+          data: { name: participantDisplayName(src), firstName: src.firstName, lastName: src.lastName, dateOfBirth: src.dateOfBirth, organizationId, isAdult: adultAt(src.dateOfBirth, src.event.startDate) },
         });
         childId = child.id;
         created++;

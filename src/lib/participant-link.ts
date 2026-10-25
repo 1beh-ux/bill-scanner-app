@@ -13,6 +13,7 @@ import { birthDateMatches } from "@/lib/portal-rules";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { requiredEventFields, templateRules } from "@/lib/portal-server";
 import { takeRateSlot } from "@/lib/portal-rate";
+import { adultAt } from "@/lib/children";
 
 /** The page's address for a participant (made on a real send: `create`), "" when there's none. */
 export async function participantLinkUrl(participantId: string, create: boolean): Promise<string> {
@@ -26,12 +27,6 @@ export async function participantLinkUrl(participantId: string, create: boolean)
   if (!token) return create ? "" : "https://…/u/…";
   return (await publicUrl("portal", null, `/u/${token}`, p.event.organizationId)) ?? "";
 }
-
-const adultAt = (dob: Date | null, at: Date) => {
-  if (!dob) return false;
-  const years = at.getUTCFullYear() - dob.getUTCFullYear() - (at.getUTCMonth() * 100 + at.getUTCDate() < dob.getUTCMonth() * 100 + dob.getUTCDate() ? 1 : 0);
-  return years >= 18;
-};
 
 const loadByToken = (token: string) =>
   token && token.length <= 64 ? prisma.participant.findUnique({ where: { detailsToken: token }, include: { event: true, documents: true } }) : Promise.resolve(null);

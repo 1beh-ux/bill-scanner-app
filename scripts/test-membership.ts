@@ -4,13 +4,17 @@ import { config } from "dotenv";
 config({ path: ".env" });
 
 async function main() {
-  const { childKey, nameKey, planLinks } = await import("../src/lib/children");
+  const { childKey, nameKey, planLinks, adultAt } = await import("../src/lib/children");
   const { isMember, effectivePriceCzk, buildVariableSymbol } = await import("../src/lib/document-variables");
   const dob = new Date("2015-03-02");
   assert.equal(childKey("Jan  Novák", dob), childKey("jan novak", dob));
   assert.notEqual(childKey("Jan Novák", dob), childKey("Jan Novák", new Date("2015-03-03")));
   assert.equal(childKey("Jan Novák", null), null);
   assert.equal(nameKey("Šárka Dvořáková"), "sarka dvorakova");
+  // Auto-created people: 18 on the event's first day is an adult, the day before isn't.
+  assert.equal(adultAt(new Date("2008-11-01"), new Date("2026-11-01")), true);
+  assert.equal(adultAt(new Date("2008-11-02"), new Date("2026-11-01")), false);
+  assert.equal(adultAt(null, new Date("2026-11-01")), false);
 
   // Same name + birth date: never merged when that would join two different kids.
   const cand = (id: string, eventId: string) => ({ id, eventId, name: "Jan Novák", dateOfBirth: dob });
