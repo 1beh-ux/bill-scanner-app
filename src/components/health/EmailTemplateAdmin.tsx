@@ -7,6 +7,7 @@ import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email
 import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { MarkdownEditor, MarkdownText } from "@/components/registration/Markdown";
 import TemplateAttachments from "@/components/health/TemplateAttachments";
+import EmailFiles from "@/components/health/EmailFiles";
 import { takesAttachments } from "@/lib/email-attachments";
 
 const inputClass =
@@ -275,6 +276,7 @@ export default function EmailTemplateAdmin({
 
       {/* The event's documents this e-mail carries (participant e-mails only; the documents are per event). */}
       {scope === "event" && !bodyOnly && takesAttachments(purposeKey) && <TemplateAttachments eventId={eventId!} purposeKey={purposeKey} t={t} />}
+      {!bodyOnly && <EmailFiles eventId={scope === "event" ? eventId : undefined} purposeKey={purposeKey} t={t} />}
 
       <div className="mb-4 rounded-lg border border-mist bg-paper-2 p-3">
         <div className="mb-1 flex flex-wrap items-center justify-between gap-2">

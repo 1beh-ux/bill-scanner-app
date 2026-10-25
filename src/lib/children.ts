@@ -204,15 +204,18 @@ export async function linkChildrenIfConnected(eventId: string): Promise<void> {
   if (event?.registrationConnected || event?.kind === "membership") await linkChildren({ eventId });
 }
 
+/** The membership year a regular event checks: its own setting, else the calendar year it starts in. */
+export const membershipYearOf = (e: { membershipCheckYear: number | null; startDate: Date }) => e.membershipCheckYear ?? e.startDate.getUTCFullYear();
+
 /**
- * Child ids with an ACCEPTED registration in the membership event for this
- * event's start year. Undefined = the event isn't connected (or is itself the
- * membership event): pricing then uses only the manual membership field.
+ * Child ids with an ACCEPTED registration in the organization's membership event
+ * of this event's membership year (membershipYearOf). Undefined = the event isn't
+ * connected (or is itself the membership event): pricing then uses only the manual membership field.
  */
 export async function memberChildIds(eventId: string): Promise<Set<string> | undefined> {
   const event = await prisma.event.findUnique({
     where: { id: eventId },
-    select: { kind: true, registrationConnected: true, startDate: true },
+    select: { kind: true, registrationConnected: true, startDate: true, membershipCheckYear: true, organizationId: true },
   });
   if (!event || event.kind !== "event" || !event.registrationConnected) return undefined;
   const rows = await prisma.participant.findMany({
@@ -220,7 +223,7 @@ export async function memberChildIds(eventId: string): Promise<Set<string> | und
       childId: { not: null },
       active: true,
       registrationStatus: "accepted",
-      event: { kind: "membership", membershipYear: event.startDate.getUTCFullYear() },
+      event: { kind: "membership", membershipYear: membershipYearOf(event), organizationId: event.organizationId },
     },
     select: { childId: true },
   });

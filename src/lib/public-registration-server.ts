@@ -12,6 +12,7 @@ import { fullNameFrom } from "@/lib/participant-name";
 import { newPortalToken } from "@/lib/portal-gate";
 import type { CleanSubmission, FormField } from "@/lib/public-registration";
 import { readProfileSections, sectionOf } from "@/lib/portal-rules";
+import { linkChildren } from "@/lib/children";
 
 const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
 
@@ -67,6 +68,33 @@ export async function publicFormContext(event: PublicEvent) {
 export async function createPublicRegistration(event: PublicEvent, data: CleanSubmission, fields: FormField[]): Promise<{ ids: string[]; portalToken: string | null }> {
   // Event questions (slice 5 #3) go onto the registration only, never into the profile.
   const eventOnly = new Set(fields.filter((f) => f.eventOnly).map((f) => f.key));
+  // "Jen existující" (peopleLinkMode existing, 2026-10-25): the portal is for members -- a public registration
+  // creates only the participant (no person, no family, no portal link); the details come through its own
+  // /u link after acceptance ({{details_link}}). Someone already in Členové (name + birth date) is linked.
+  // A membership year always creates people: that's how one becomes a member.
+  if (event.peopleLinkMode === "existing" && event.kind !== "membership") {
+    const keys = new Set((await prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true, kind: "custom" }, select: { key: true } })).map((f) => f.key));
+    const ids: string[] = [];
+    for (const p of data.persons) {
+      const row = await prisma.participant.create({
+        data: {
+          eventId: event.id,
+          name: fullNameFrom(p.firstName, p.lastName),
+          firstName: p.firstName,
+          lastName: p.lastName,
+          dateOfBirth: new Date(p.birthDate),
+          customFieldValues: Object.fromEntries(Object.entries(p.values).filter(([k, v]) => keys.has(k) && v)),
+          portalNote: data.note.trim().slice(0, 2000) || null,
+          priceCategory: p.category,
+          guardians: { create: p.guardians.map((g) => ({ ...g, receivesCommunications: true })) },
+        },
+        select: { id: true },
+      });
+      ids.push(row.id);
+    }
+    await linkChildren({ id: { in: ids } });
+    return { ids, portalToken: null };
+  }
   const first = data.persons[0];
   const portalToken = event.autoAccept === "accept_send" ? newPortalToken() : null;
   const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true, portalToken, organizationId: event.organizationId } });

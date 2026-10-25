@@ -9,7 +9,7 @@ import { toDriveError } from "@/lib/drive";
 import type { DriveErrorCode } from "@/lib/drive-errors";
 import { readSheetTable } from "@/lib/sheet-import";
 import { fieldTextValues } from "@/lib/document-variables";
-import { linkChildrenIfConnected } from "@/lib/children";
+import { linkChildrenIfConnected, withMembers } from "@/lib/children";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
 import {
   MATCH_BY_NAME,
@@ -87,7 +87,7 @@ export function restrictSettings(s: SyncSettings, fields: FieldInfo[]): SyncSett
 async function loadExisting(eventId: string): Promise<ExistingParticipant[]> {
   const [ps, event, fields] = await Promise.all([
     prisma.participant.findMany({ where: { eventId }, include: { guardians: true } }),
-    prisma.event.findUniqueOrThrow({ where: { id: eventId } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
   ]);
   return ps.map((p) => ({

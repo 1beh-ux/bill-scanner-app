@@ -144,6 +144,15 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     defaultSurfaces: ["documents", "email"],
   },
   {
+    // Ano / Ne for the event's membership year (Nastavení akce -> Akce -> Členství).
+    key: "clenstvi_rok",
+    kind: "computed",
+    fieldType: "text",
+    label: "Členství (rok akce)",
+    computedType: "membership_status",
+    defaultSurfaces: ["list", "mail_list", "documents", "email"],
+  },
+  {
     key: "picture",
     kind: "computed",
     fieldType: "image",

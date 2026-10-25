@@ -365,6 +365,8 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
         values[f.key] = buildVariableSymbol(participant, event);
       } else if (f.computedType === "contact_email") {
         values[f.key] = resolveContactEmail(participant);
+      } else if (f.computedType === "membership_status") {
+        values[f.key] = isMember(participant, event) ? "Ano" : "Ne";
       }
     }
   }

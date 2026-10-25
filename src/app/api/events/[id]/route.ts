@@ -80,6 +80,7 @@ export async function PATCH(
     registrationDeadline,
     kind,
     membershipYear,
+    membershipCheckYear,
     registrationConnected,
     peopleLinkMode,
     portalOpen,
@@ -105,6 +106,7 @@ export async function PATCH(
   const touchesRegistration =
     kind !== undefined ||
     membershipYear !== undefined ||
+    membershipCheckYear !== undefined ||
     registrationConnected !== undefined ||
     peopleLinkMode !== undefined ||
     portalOpen !== undefined ||
@@ -180,6 +182,9 @@ export async function PATCH(
   }
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
+    return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
+  }
+  if (membershipCheckYear !== undefined && membershipCheckYear !== null && !(Number.isInteger(membershipCheckYear) && membershipCheckYear >= 2000 && membershipCheckYear <= 2100)) {
     return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
   }
   if (registrationConnected !== undefined && typeof registrationConnected !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
@@ -266,6 +271,7 @@ export async function PATCH(
       ...(registrationDeadline !== undefined && { registrationDeadline: registrationDeadline ? new Date(registrationDeadline) : null }),
       ...(kind !== undefined && { kind }),
       ...(membershipYear !== undefined && { membershipYear }),
+      ...(membershipCheckYear !== undefined && { membershipCheckYear }),
       ...(registrationConnected !== undefined && { registrationConnected }),
       ...((registrationConnected === true || kind === "membership") && { peopleUnlinked: false }),
       ...(peopleLinkMode !== undefined && { peopleLinkMode }),

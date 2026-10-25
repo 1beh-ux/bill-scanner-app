@@ -4,7 +4,8 @@ import { config } from "dotenv";
 config({ path: ".env" });
 
 async function main() {
-  const { childKey, nameKey, planLinks, adultAt } = await import("../src/lib/children");
+  const { childKey, nameKey, planLinks, adultAt, membershipYearOf } = await import("../src/lib/children");
+  const { readEmailFiles } = await import("../src/lib/email-files");
   const { isMember, effectivePriceCzk, buildVariableSymbol } = await import("../src/lib/document-variables");
   const dob = new Date("2015-03-02");
   assert.equal(childKey("Jan  Novák", dob), childKey("jan novak", dob));
@@ -15,6 +16,12 @@ async function main() {
   assert.equal(adultAt(new Date("2008-11-01"), new Date("2026-11-01")), true);
   assert.equal(adultAt(new Date("2008-11-02"), new Date("2026-11-01")), false);
   assert.equal(adultAt(null, new Date("2026-11-01")), false);
+  // The membership year an event checks: its setting, else its start year.
+  assert.equal(membershipYearOf({ membershipCheckYear: null, startDate: new Date("2027-03-24") }), 2027);
+  assert.equal(membershipYearOf({ membershipCheckYear: 2026, startDate: new Date("2027-03-24") }), 2026);
+  // Stored e-mail files: bad rows dropped, empty keys gone.
+  const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
+  assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });
 
   // Same name + birth date: never merged when that would join two different kids.
   const cand = (id: string, eventId: string) => ({ id, eventId, name: "Jan Novák", dateOfBirth: dob });

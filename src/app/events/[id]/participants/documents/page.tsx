@@ -7,6 +7,8 @@ import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fi
 import ColumnPicker from "@/components/ColumnPicker";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import DocumentSyncPanel from "@/components/participants/DocumentSyncPanel";
+import DriveExportButton from "@/components/participants/DriveExportButton";
+import { UploadReviewLink } from "@/components/participants/UploadReview";
 import { formatCzk } from "@/lib/format";
 
 type EventBasic = { id: string; name: string; documentsListColumns: string[] | null; bankCheckEnabled: boolean; bankAccountId: string | null };
@@ -183,6 +185,8 @@ export default function MailParticipantsPage({
         />
       )}
       <StatusUpdateButton eventId={id} />
+      <UploadReviewLink eventId={id} />
+      <DriveExportButton eventId={id} />
       </div>
 
       {filteredParticipants.length === 0 ? (

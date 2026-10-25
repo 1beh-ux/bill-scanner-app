@@ -18,6 +18,7 @@ import PaymentSettings from "@/components/events/PaymentSettings";
 import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
 import { EMAIL_KINDS, kindAllowed, templateEditHref } from "@/lib/email-kinds";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
+import MembershipYearCard from "@/components/events/MembershipYearCard";
 import PortalCardLayout from "@/components/events/PortalCardLayout";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -50,6 +51,7 @@ type EventDetail = {
   senderEmail: string | null;
   kind: "event" | "membership" | "public_event";
   membershipYear: number | null;
+  membershipCheckYear: number | null;
   registrationConnected: boolean;
   peopleUnlinked: boolean;
   peopleLinkMode: "all" | "existing";
@@ -493,6 +495,7 @@ export default function EventDetailPage({
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
               {isAdmin && <EventBasicsForm event={event} onSaved={load} t={t} />}
+              {isAdmin && event.kind === "event" && <MembershipYearCard event={event} onSaved={load} t={t} />}
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
               <div>

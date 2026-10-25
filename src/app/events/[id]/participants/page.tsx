@@ -12,9 +12,9 @@ import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { UploadReviewLink } from "@/components/participants/UploadReview";
+import DriveExportButton from "@/components/participants/DriveExportButton";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 import { portalComposeHref } from "@/components/children/portal-link";
-import { driveErrorText } from "@/lib/drive-error-messages";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
@@ -117,20 +117,6 @@ export default function EventParticipantsPage({
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
   // After "Propojit s Lidmi" (slice 8 #3): the linked people's portal-link targets, offered for the compose page.
   const [linkTargets, setLinkTargets] = useState<string[]>([]);
-
-  const [notice, setNotice] = useState<{ warn: boolean; text: string; href?: string } | null>(null);
-  const [driveExporting, setDriveExporting] = useState(false);
-
-  // Seznam -> Google Sheet in the export folder (next to the bills manifest).
-  async function exportToDrive() {
-    setDriveExporting(true);
-    setNotice(null);
-    const res = await fetch(`/api/events/${id}/participants/drive-export`, { method: "POST" });
-    const r = await res.json().catch(() => ({}));
-    setDriveExporting(false);
-    if (res.ok) setNotice({ warn: false, text: t("participantsPage.driveExportDone", { count: String(r.count) }), href: r.url });
-    else setNotice({ warn: true, text: r.error === "no_export_folder" ? t("participantsPage.driveExportNoFolder") : driveErrorText(t, r.error ?? "unexpected", r) });
-  }
 
   async function load() {
     setLoading(true);
@@ -292,6 +278,18 @@ export default function EventParticipantsPage({
     load();
   }
 
+  // "Nabídnout portál": the picked ones become people in Členové (when not yet), then the portal invitation e-mail.
+  async function offerPortal() {
+    setBulkRunning(true);
+    setBulkMessage(null);
+    const res = await fetch(`/api/events/${id}/offer-portal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantIds: Array.from(selected) }) }).catch(() => null);
+    setBulkRunning(false);
+    const data = res?.ok ? await res.json() : null;
+    if (!data) return setBulkMessage(t("children.errorFailed"));
+    if (data.childIds.length === 0) return setBulkMessage(t("participantsPage.offerPortalNone"));
+    router.push(portalComposeHref(data.childIds, "invitation"));
+  }
+
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   if (!event) return <div className="p-8 text-[14px] text-ink-secondary">{t("eventDetail.notFound")}</div>;
 
@@ -339,29 +337,6 @@ export default function EventParticipantsPage({
         {event.name} — {t("participantsPage.centralTitle")} ({participants.length})
       </h1>
 
-      {notice && (
-        <div
-          className={
-            "mb-4 flex items-start justify-between gap-3 rounded-lg border px-3 py-2 text-[13px] " +
-            (notice.warn ? "border-amber-300 bg-amber-50 text-amber-800" : "border-pine/40 bg-pine/10 text-pine")
-          }
-        >
-          <span>
-            {notice.text}
-            {notice.href && (
-              <>
-                {" "}
-                <a href={notice.href} target="_blank" rel="noreferrer" className="underline">
-                  {t("participantsPage.driveExportOpen")}
-                </a>
-              </>
-            )}
-          </span>
-          <button onClick={() => setNotice(null)} className="shrink-0 hover:underline">
-            {t("common.close")}
-          </button>
-        </div>
-      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <div className="relative max-w-sm flex-1">
@@ -434,14 +409,7 @@ export default function EventParticipantsPage({
         >
           {t("participantsPage.writeEmailButton")}
         </button>
-        <button
-          onClick={exportToDrive}
-          disabled={driveExporting}
-          title={t("participantsPage.driveExportHint")}
-          className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50"
-        >
-          {driveExporting ? t("participantsPage.driveExporting") : t("participantsPage.driveExport")}
-        </button>
+        <DriveExportButton eventId={id} />
         {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
         <UploadReviewLink eventId={id} />
         <button onClick={openAdd} className={btnPrimary}>
@@ -480,6 +448,16 @@ export default function EventParticipantsPage({
               className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
             >
               {t("participantsPage.bulkLinkButton")}
+            </button>
+          )}
+          {role === "admin" && !event.peopleUnlinked && event.kind === "event" && (
+            <button
+              onClick={offerPortal}
+              disabled={bulkRunning}
+              title={t("participantsPage.offerPortalHint")}
+              className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
+            >
+              {t("participantsPage.offerPortal")}
             </button>
           )}
           <button

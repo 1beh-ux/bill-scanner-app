@@ -60,6 +60,8 @@ export async function duplicateEvent(sourceId: string, o: { name: string; startD
       });
     }
 
+    // A set year (VS year, membership year checked) moves with the dates: Registrace 2027 (starts in 2026, VS 27) -> its copy 28.
+    const yearShift = new Date(o.startDate).getUTCFullYear() - src.startDate.getUTCFullYear();
     const mapIds = (ids: string[]) => ids.map((x) => itemIds.get(x)).filter((x): x is string => !!x);
     const attachments = has("emails") && has("documents") ? Object.fromEntries(Object.entries(readEmailAttachments(src.emailAttachments)).map(([k, v]) => [k, mapIds(v)]).filter(([, v]) => v.length)) : {};
     await tx.event.update({
@@ -74,14 +76,13 @@ export async function duplicateEvent(sourceId: string, o: { name: string; startD
         }),
         ...(has("payment") && {
           memberPriceCzk: src.memberPriceCzk, nonMemberPriceCzk: src.nonMemberPriceCzk, priceRules: json(src.priceRules), registrationBankAccountNumber: src.registrationBankAccountNumber, registrationBankCode: src.registrationBankCode,
-          // A set VS year moves with the dates (Registrace 2027 starts in 2026 and has 27; its copy gets 28).
-          vsYear: src.vsYear == null ? null : (src.vsYear + new Date(o.startDate).getUTCFullYear() - src.startDate.getUTCFullYear()) % 100,
+          vsYear: src.vsYear == null ? null : (src.vsYear + yearShift) % 100,
           vsEventType: src.vsEventType, vsMembershipFieldKey: src.vsMembershipFieldKey, vsMemberValues: json(src.vsMemberValues), autoAccept: src.autoAccept,
           bankAccountId: src.bankAccountId, bankCheckEnabled: src.bankCheckEnabled && (!src.paymentDocTypeId || itemIds.has(src.paymentDocTypeId)), bankCheckIntervalMin: src.bankCheckIntervalMin,
           paymentDocTypeId: src.paymentDocTypeId ? (itemIds.get(src.paymentDocTypeId) ?? null) : null,
         }),
         ...(has("registration") && {
-          registrationConnected: src.registrationConnected, peopleLinkMode: src.peopleLinkMode, eligibility: json(src.eligibility), landingContent: src.landingContent, publicHideHeader: src.publicHideHeader,
+          registrationConnected: src.registrationConnected, peopleLinkMode: src.peopleLinkMode, membershipCheckYear: src.membershipCheckYear == null ? null : src.membershipCheckYear + yearShift, eligibility: json(src.eligibility), landingContent: src.landingContent, publicHideHeader: src.publicHideHeader,
           appearance: json(src.appearance), publicTexts: json(src.publicTexts), publicContactEmail: src.publicContactEmail, publicAudience: src.publicAudience, detailsAfterAcceptance: src.detailsAfterAcceptance,
         }),
         ...(has("tickets") && src.kind === "public_event" && { ticketSettings: json(src.ticketSettings), ...(!has("payment") && { priceRules: json(src.priceRules) }) }),

@@ -16,12 +16,13 @@
 // page says so before anything happens).
 import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
-import { sendPlainTextEmail } from "@/lib/mail";
+import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { templateFiles } from "@/lib/email-files";
 import { newPortalToken, portalUrl } from "@/lib/portal-gate";
 import { PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { isActivePerson, linkRecipients, profileValues } from "@/lib/portal-rules";
 
-type User = { id: string; email: string; displayName: string; emailSignature: string | null; emailBodySignature: string | null };
+type User = { id: string; organizationId: string; email: string; displayName: string; emailSignature: string | null; emailBodySignature: string | null };
 
 export const FAMILY_TARGET_PREFIX = "family:";
 
@@ -120,6 +121,7 @@ export async function sendPortalLinks(opts: { childIds: string[]; subject: strin
   const senderEmail = await orgSenderEmail(opts.user);
   if (!senderEmail) throw new Error("sender_not_connected");
   const sender = senderIdentity(opts.user, "Tábor");
+  const attachments = await templateFiles(opts.user.organizationId, null, opts.purposeKey ?? PORTAL_LINK_PURPOSE_KEY);
   let sent = 0;
   let failed = 0;
   let noRecipients = 0;
@@ -137,7 +139,7 @@ export async function sendPortalLinks(opts: { childIds: string[]; subject: strin
       const log = { email, purposeKey: opts.purposeKey ?? PORTAL_LINK_PURPOSE_KEY, sentByUserId: opts.user.id, subject };
       const childIds = target.logChildIds(email);
       try {
-        await sendPlainTextEmail({ to: email, fromName: sender.name, senderEmail, subject, body });
+        await sendEmailWithOptionalAttachment({ to: email, fromName: sender.name, senderEmail, subject, body, attachments });
         await prisma.childEmailLog.createMany({ data: childIds.map((childId) => ({ ...log, childId, status: "sent" as const })) });
         sent++;
       } catch (err) {

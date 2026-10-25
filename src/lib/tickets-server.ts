@@ -11,6 +11,7 @@ import { resolveEmailTemplate, senderIdentity, substituteVariables } from "@/lib
 import { TICKET_CANCEL_PURPOSE_KEY, TICKET_DOCUMENT_PURPOSE_KEY, TICKET_ORDER_PURPOSE_KEY, TICKET_SEND_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { eventSender } from "@/lib/auto-accept";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { templateFiles } from "@/lib/email-files";
 import { inlineMark, type InlineImage } from "@/lib/mail-mime";
 import { buildSpaydString, czechAccountToIban } from "@/lib/qr-platba";
 import { renderTicketsPdf } from "@/lib/tickets-pdf";
@@ -155,6 +156,7 @@ export async function sendOrderMail(orderId: string, purposeKey: string): Promis
       else attachments.push({ buffer: qr, filename: "qr-platba.png", mimeType: "image/png" });
     }
     if (purposeKey === TICKET_SEND_PURPOSE_KEY) attachments.push({ buffer: await ticketsPdfOf(orderId), filename: `vstupenky-${order.number}.pdf`, mimeType: "application/pdf" });
+    attachments.push(...(await templateFiles(order.event.organizationId, order.eventId, purposeKey)));
     await sendEmailWithOptionalAttachment({
       to: order.email,
       fromName: order.event.organization.name,

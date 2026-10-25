@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, senderIdentity, substituteVariables, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { templateFiles } from "@/lib/email-files";
 import { attachmentIdsFor } from "@/lib/email-attachments";
 import { documentAttachmentsFor } from "@/lib/participant-bulk-email";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
@@ -89,6 +90,7 @@ export async function sendBulkStatusUpdates(
   // Documents set for this e-mail in Nastavení akce -> Pošta (fixed ones exported once).
   const attachIds = attachmentIdsFor(event, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
   const staticPdfs = new Map<string, Promise<Buffer>>();
+  const files = senderEmail ? await templateFiles(event.organizationId, eventId, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) : [];
 
   for (const participantId of participantIds) {
     const participant = await prisma.participant.findUnique({
@@ -99,7 +101,7 @@ export async function sendBulkStatusUpdates(
     if (!participant || participant.eventId !== eventId || participant.guardians.length === 0) continue;
 
     const docs = senderEmail ? await documentAttachmentsFor(participantId, event, attachIds, sentByUserId, staticPdfs) : null;
-    const vars = { ...(await bulkStatusVars(participant, event, sender, documentTypes, usesPortalLink(templateSubject, templateBody))), attachments_list: docs?.attachedDocumentNames.join(", ") ?? "" };
+    const vars = { ...(await bulkStatusVars(participant, event, sender, documentTypes, usesPortalLink(templateSubject, templateBody))), attachments_list: [...(docs?.attachedDocumentNames ?? []), ...files.map((f) => f.filename)].join(", ") };
     const subject = substituteVariables(templateSubject, vars);
     const body = substituteVariables(templateBody, vars);
 
@@ -121,7 +123,7 @@ export async function sendBulkStatusUpdates(
       }
 
       try {
-        await sendEmailWithOptionalAttachment({ to: guardian.email, fromName: sender.name, senderEmail, subject, body, attachments: docs?.attachments });
+        await sendEmailWithOptionalAttachment({ to: guardian.email, fromName: sender.name, senderEmail, subject, body, attachments: [...(docs?.attachments ?? []), ...files] });
         await prisma.parentEmailLog.create({
           data: {
             participantId,

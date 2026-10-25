@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { senderIdentity, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { templateFiles } from "@/lib/email-files";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
@@ -309,6 +310,8 @@ export async function sendBulkParticipantEmail(opts: {
   let documentsGenerated = 0;
   const failedDocs = new Set<string>();
   const staticPdfs = new Map<string, Promise<Buffer>>();
+  // The e-mail's uploaded files (organization + event, src/lib/email-files.ts), downloaded once.
+  const files = sendEmail ? await templateFiles(event.organizationId, event.id, opts.purposeKey) : [];
 
   for (const participantId of opts.participantIds) {
     const participant = await loadParticipant(participantId);
@@ -321,13 +324,13 @@ export async function sendBulkParticipantEmail(opts: {
     const generated = opts.markAccepted || opts.autoAttachDocumentTypeIds?.length
       ? await buildAutoAttachDocuments(participant, event, opts.autoAttachDocumentTypeIds, opts.sentByUserId, staticPdfs)
       : { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
-    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments];
+    const attachments = [...(opts.attachment ? [opts.attachment] : []), ...generated.attachments, ...files];
     documentsGenerated += generated.generatedCount;
     generated.failedDocuments.forEach((d) => failedDocs.add(d));
 
     // Re-read: the acceptance send may just have assigned the registration number.
     const fresh = (await loadParticipant(participantId)) ?? participant;
-    const vars = await participantEmailVars(fresh, event, sender, generated.attachedDocumentNames, usesPortalLink(opts.subject, opts.body));
+    const vars = await participantEmailVars(fresh, event, sender, [...generated.attachedDocumentNames, ...files.map((f) => f.filename)], usesPortalLink(opts.subject, opts.body));
     const subject = substituteVariables(opts.subject, vars);
     const body = substituteVariables(opts.body, vars);
 

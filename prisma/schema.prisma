@@ -374,6 +374,9 @@ model Event {
   kind                          EventKind      @default(event)
   // Only for kind = membership: the calendar year the membership counts for.
   membershipYear                Int?           @map("membership_year")
+  // Which membership year a regular event checks (Nastavení akce -> Akce -> Členství); null = the
+  // calendar year of its start (src/lib/children.ts memberChildIds).
+  membershipCheckYear           Int?           @map("membership_check_year")
   // On: participants get linked to Child profiles, and member pricing reads
   // the child's accepted membership for the event's start year.
   registrationConnected         Boolean        @default(false) @map("registration_connected")
@@ -410,6 +413,9 @@ model Event {
   // Documents attached to each participant e-mail of this event: { purposeKey: [document type ids] }
   // (Nastavení akce -> Pošta; src/lib/email-attachments.ts). Fixed ones go as they are, others are generated per person.
   emailAttachments              Json?          @map("email_attachments")
+  // Uploaded files each e-mail of this event carries, on top of the organization's: { purposeKey: EmailFile[] }
+  // (src/lib/email-files.ts).
+  emailFiles                    Json?          @map("email_files")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?
@@ -1017,6 +1023,8 @@ enum ComputedFieldType {
   // First guardian with receivesCommunications = true, else the first
   // guardian -- see resolveContactEmail() in document-variables.ts.
   contact_email
+  // Ano / Ne: a member for the event's membership year (isMember() in document-variables.ts).
+  membership_status
 }
 
 // Org-wide field definition, synced into EventParticipantField the same
@@ -1629,6 +1637,8 @@ model Organization {
   // Parent portal "Zapomněl(a) jsem odkaz" (2026-10-23): the mailbox it sends from (a connected
   // MailSenderAccount; null = the feature is off), and whether a new link replaces the old one.
   portalRecoverySenderEmail String? @map("portal_recovery_sender_email")
+  // Uploaded files every e-mail of a kind carries (Šablony -> E-maily): { purposeKey: EmailFile[] } (src/lib/email-files.ts).
+  emailFiles                Json?   @map("email_files")
   portalRecoveryNewLink   Boolean  @default(false) @map("portal_recovery_new_link")
   // "Ještě nejsem členem" next to it: an event's public registration, or any web address.
   portalJoinEventId       String?  @map("portal_join_event_id")

@@ -15,7 +15,7 @@ type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 type ModuleKey = "bills" | "health" | "mail" | "planning";
 type FieldKind = "custom" | "builtin" | "guardian" | "computed";
-type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image";
+type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image" | "contact_email" | "membership_status";
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select", "composite"];
 const SEPARATORS = [" ", ", ", " – ", "\n"];

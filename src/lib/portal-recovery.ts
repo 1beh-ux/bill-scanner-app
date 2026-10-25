@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma";
 import { getOrCreateOrgEmailTemplate, substituteVariables } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
+import { templateFiles } from "@/lib/email-files";
 import { portalUrl } from "@/lib/portal-gate";
 import { FAMILY_TARGET_PREFIX, ensureToken, loadTarget } from "@/lib/portal-email";
 import { PORTAL_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
@@ -34,7 +35,7 @@ export async function recoverPortalLink(o: { organizationId: string; email: stri
     const subject = substituteVariables(template.subject, vars);
     const log = { email, purposeKey: PORTAL_LINK_PURPOSE_KEY, sentByUserId: null, subject };
     try {
-      await sendEmailWithOptionalAttachment({ to: email, fromName: org.name, senderEmail: org.portalRecoverySenderEmail, subject, body: substituteVariables(template.body, vars) });
+      await sendEmailWithOptionalAttachment({ to: email, fromName: org.name, senderEmail: org.portalRecoverySenderEmail, subject, body: substituteVariables(template.body, vars), attachments: await templateFiles(o.organizationId, null, PORTAL_LINK_PURPOSE_KEY) });
       await prisma.childEmailLog.createMany({ data: target.logChildIds(email).map((childId) => ({ ...log, childId, status: "sent" as const })) });
       sent++;
     } catch (err) {

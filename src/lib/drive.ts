@@ -825,12 +825,13 @@ export async function testFolder(
  */
 export async function upsertSheetByName(eventId: string, folderId: string, title: string, rows: (string | number)[][]): Promise<string> {
   // ponytail: found by name each time; two exports at the very same moment could create two sheets.
-  const existing = await findFileInFolder(eventId, folderId, title, SHEET_MIME_TYPE, "export");
-  if (existing) {
-    await writeManifestValues(eventId, existing.id, rows);
-    return existing.id;
-  }
-  return createManifestSheet(eventId, folderId, title, rows);
+  // `?.id ?? null` on purpose: the production minifier dropped the "create" branch of the plain
+  // `if (existing) {...} return create()` form (2026-10-25: the first export into a folder failed with
+  // "null.id"), like getOrCreateSubfolder's. Check the built chunk after touching this.
+  const existingId = (await findFileInFolder(eventId, folderId, title, SHEET_MIME_TYPE, "export"))?.id ?? null;
+  if (existingId === null) return createManifestSheet(eventId, folderId, title, rows);
+  await writeManifestValues(eventId, existingId, rows);
+  return existingId;
 }
 
 // Values go in as USER_ENTERED (like the manifest): text someone typed that starts like a formula stays text.
