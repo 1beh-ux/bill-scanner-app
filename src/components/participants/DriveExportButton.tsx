@@ -16,7 +16,12 @@ export default function DriveExportButton({ eventId }: { eventId: string }) {
     const res = await fetch(`/api/events/${eventId}/participants/drive-export`, { method: "POST" }).catch(() => null);
     const r = await res?.json().catch(() => ({}));
     setBusy(false);
-    if (res?.ok) setNotice({ warn: false, text: t("participantsPage.driveExportDone", { count: String(r.count) }), href: r.url });
+    if (res?.ok)
+      setNotice({
+        warn: !!r.files?.skipped,
+        text: t("participantsPage.driveExportDone", { count: String(r.count) }) + (r.files ? " " + t("participantsPage.driveExportFiles", { synced: String(r.files.synced), skipped: String(r.files.skipped) }) : ""),
+        href: r.url,
+      });
     else setNotice({ warn: true, text: r?.error === "no_export_folder" ? t("participantsPage.driveExportNoFolder") : driveErrorText(t, r?.error ?? "unexpected", r ?? {}) });
   }
 

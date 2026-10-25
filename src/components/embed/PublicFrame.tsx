@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef } from "react";
-import { gateHeaders } from "@/components/embed/embed-client";
+import { apiToken, gateHeaders } from "@/components/embed/embed-client";
 import { publicFontVariables } from "@/components/embed/public-fonts";
 import { appearanceCss, type Appearance } from "@/lib/public-appearance";
 
@@ -53,9 +53,9 @@ export default function PublicFrame({ embed, theme, appearance, children }: { em
       const a = (e.target as HTMLElement | null)?.closest?.("a");
       if (!a || !a.href || e.defaultPrevented || a.target === "_blank") return;
       const url = new URL(a.href, location.href);
-      if (url.origin === location.origin && url.pathname.startsWith("/api/portal/")) {
+      if (url.origin === location.origin && (url.pathname.startsWith("/api/portal/") || url.pathname.startsWith("/api/public/u/"))) {
         // A portal file: the cookie isn't there inside a frame -- fetch with the gate header.
-        const token = url.pathname.split("/")[3] ?? "";
+        const token = apiToken(url.pathname);
         const headers = gateHeaders(token);
         if (!headers["x-portal-gate"]) return;
         e.preventDefault();
@@ -70,7 +70,7 @@ export default function PublicFrame({ embed, theme, appearance, children }: { em
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
         return;
       }
-      if (url.origin === location.origin && (url.pathname.startsWith("/r/") || url.pathname.startsWith("/p/"))) {
+      if (url.origin === location.origin && (url.pathname.startsWith("/r/") || url.pathname.startsWith("/p/") || url.pathname.startsWith("/u/"))) {
         if (url.searchParams.get("embed") !== "1") {
           url.searchParams.set("embed", "1");
           if (theme) url.searchParams.set("theme", theme);

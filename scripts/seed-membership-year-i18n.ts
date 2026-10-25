@@ -27,6 +27,9 @@ const rows: Row[] = [
   r("emailFiles.remove", "Odebrat", "Remove"),
   r("emailFiles.tooLarge", "Soubor je větší než 10 MB.", "The file is larger than 10 MB."),
   r("emailFiles.tooMany", "Víc než 10 souborů u jednoho e-mailu nejde.", "No more than 10 files per e-mail."),
+  // 2026-10-25 b: the participant export also mirrors the received files.
+  r("participantsPage.driveExportHint", "Uloží seznam účastníků se všemi údaji, které vidíte, a se stavem dokumentů jako tabulku „Účastníci – název akce“ do složky pro export na Google Disku (kde je i přehled účtenek); další export ji přepíše. Přijaté soubory (e-mailem, ručně, schválené z portálu) nahraje do složky účastníků – každý účastník má svou složku, soubor má v názvu „_prijato“.", "Saves the participant list with every detail you see and the documents' state as the sheet “Účastníci – event name” in the export folder on Google Drive (next to the bills overview); the next export overwrites it. Received files (by e-mail, by hand, approved from the portal) go to the participants folder – a folder per participant, “_prijato” in the file name."),
+  r("participantsPage.driveExportFiles", "Soubory na Disk: nově {synced}, nepovedlo se {skipped}.", "Files to Drive: {synced} new, {skipped} failed."),
 ];
 
 async function main() {

@@ -255,7 +255,7 @@ export async function portalData(scope: PortalScope) {
       const details = later.length
         ? { fields: later.map((f) => ({ ...f, value: f.source === "profile" ? (shownNow[f.key] ?? "") : (own[f.key] ?? "") })), missing: later.filter((f) => !(f.source === "profile" ? shownNow[f.key] : own[f.key])?.trim()).length }
         : null;
-      registrations.push({ ...(await registrationCard(p, child, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }, fromProfile.get(p.id) ?? [])), details });
+      registrations.push({ ...(await registrationCard(p, child.isAdult, cards, { ...person, requiredEmpty: person.requiredEmpty || askedMissing(asked, values, own) }, fromProfile.get(p.id) ?? [])), details });
     }
 
     members.push({
@@ -403,9 +403,10 @@ export const RESEND_PER_DAY = 3;
  * status, price category, per document type what was sent / received /
  * is missing (+ upload where allowed), re-send, payment, chosen fields.
  */
-async function registrationCard(
+export async function registrationCard(
   p: Awaited<ReturnType<typeof prisma.participant.findFirstOrThrow<{ include: { event: true; guardians: true; documents: true } }>>>,
-  child: PortalChild,
+  // The person's age group (price category label); the participant's own page passes its age at the event.
+  isAdult: boolean,
   cards: Map<string, Promise<EventCard>>,
   person: { requiredEmpty: boolean; pendingChange: boolean },
   fromProfile: ProfileDoc[]
@@ -459,7 +460,7 @@ async function registrationCard(
       pendingProfileChange: person.pendingChange,
     }),
     note: p.portalNote,
-    category: rules ? (categoryFor(rules, p.priceCategory, child.isAdult)?.label ?? null) : null,
+    category: rules ? (categoryFor(rules, p.priceCategory, isAdult)?.label ?? null) : null,
     payment,
     // Per tracked document type: sent to you (generated) / received from you /
     // missing; an upload waits for review or was rejected (slice 4 #6) -- those

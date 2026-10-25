@@ -1,19 +1,19 @@
-// The participant's own page /u/<token> (2026-10-23): for a registration NOT linked to a person in
-// Členové (imported, typed in), the parent fills in the event's fields, uploads its documents and sees
-// the payment -- for that one event only. Behind the participant's birth date, like the portal.
+// The participant's own page /u/<token> (2026-10-23, redone 2026-10-25): for a registration NOT linked to a
+// person in Členové (a public registration of an "existing people only" event, an import, a manual add)
+// -- the same registration card as the parent portal (src/lib/portal-server.ts registrationCard: card
+// layout, payment + bank check, documents, re-send, "Doplňte údaje"), for that one event only, no profile.
+// The same birth-date gate as the portal: a signed cookie (or x-portal-gate in a frame) per participant.
 // {{details_link}} in e-mails: the family portal when the person is linked, else this page.
 import crypto from "crypto";
+import { cookies, headers } from "next/headers";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { publicUrl } from "@/lib/public-host";
-import { withMembers } from "@/lib/children";
-import { buildVariableSymbol, effectivePriceCzk, resolvePaymentQrImage } from "@/lib/document-variables";
-import { askedFields, checkAnswers } from "@/lib/registration-fields";
-import { countsAsReceived, docState } from "@/lib/registration-status";
-import { birthDateMatches } from "@/lib/portal-rules";
-import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
-import { requiredEventFields, templateRules } from "@/lib/portal-server";
-import { takeRateSlot } from "@/lib/portal-rate";
+import { hostAllowsPortal, publicUrl, resolvePublicHost } from "@/lib/public-host";
 import { adultAt } from "@/lib/children";
+import { askedFields, askedLater, askedMissing, checkAnswers } from "@/lib/registration-fields";
+import { birthDateMatches } from "@/lib/portal-rules";
+import { registrationCard, requiredEventFields, templateRules } from "@/lib/portal-server";
+import { gateCookieName, gateCookieValid, portalSecret } from "@/lib/portal-gate";
 
 /** The page's address for a participant (made on a real send: `create`), "" when there's none. */
 export async function participantLinkUrl(participantId: string, create: boolean): Promise<string> {
@@ -29,69 +29,61 @@ export async function participantLinkUrl(participantId: string, create: boolean)
 }
 
 const loadByToken = (token: string) =>
-  token && token.length <= 64 ? prisma.participant.findUnique({ where: { detailsToken: token }, include: { event: true, documents: true } }) : Promise.resolve(null);
+  token && token.length <= 64 ? prisma.participant.findUnique({ where: { detailsToken: token }, include: { event: true, guardians: true, documents: true } }) : Promise.resolve(null);
+export type LinkParticipant = NonNullable<Awaited<ReturnType<typeof loadByToken>>>;
 
-/** The birth-date gate: null = passed; else the HTTP status (403 wrong, 429 too many wrong ones). */
-export async function participantGate(token: string, birthDate: string | null): Promise<{ p: NonNullable<Awaited<ReturnType<typeof loadByToken>>> } | { status: 403 | 404 | 429 }> {
+/** Gate cookie subject of a participant's page (never a person's / family's). */
+export const participantGateSubject = (participantId: string) => `u_${participantId}`;
+export const GATE_FAILURES_PER_HOUR = 10;
+
+/**
+ * Every /api/public/u route: the token's participant in an active event, on a portal host of its
+ * organization; `gated` = the birth-date gate passed (cookie, or x-portal-gate when embedded).
+ */
+export async function participantScope(token: string, gated: boolean): Promise<{ p: LinkParticipant; error?: undefined } | { p?: undefined; error: NextResponse }> {
+  const secret = portalSecret();
+  if (!secret) return { error: NextResponse.json({ error: "portal_not_configured" }, { status: 503 }) };
   const p = await loadByToken(token);
-  if (!p || p.event.status !== "active") return { status: 404 };
-  if (p.dateOfBirth && !birthDateMatches(birthDate, p.dateOfBirth)) {
-    return (await takeRateSlot(`ugate:${p.id}`, 10, 3600_000)) ? { status: 403 } : { status: 429 };
+  if (!p || p.event.status !== "active" || !hostAllowsPortal(await resolvePublicHost(await headers()), p.event.organizationId)) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
+  if (gated) {
+    const subject = participantGateSubject(p.id);
+    const value = (await cookies()).get(gateCookieName(subject))?.value ?? (await headers()).get("x-portal-gate") ?? undefined;
+    if (!gateCookieValid(value, subject, token, secret)) return { error: NextResponse.json({ error: "gate" }, { status: 401 }) };
   }
   return { p };
 }
 
-async function askedFor(p: { eventId: string; dateOfBirth: Date | null; event: { organizationId: string; startDate: Date } }) {
+/** The birth date typed at the gate: true = right. No birth date on the registration = always right. */
+export const birthDatePasses = (p: LinkParticipant, birthDate: unknown) => !p.dateOfBirth || birthDateMatches(typeof birthDate === "string" ? birthDate : null, p.dateOfBirth);
+
+/**
+ * What the page asks (the portal's rules, src/lib/registration-fields.ts): two-step events after acceptance
+ * the detailed fields + the event's questions ("Doplňte údaje"); otherwise every field the event requires
+ * (an import or a manual add never answered them). The org's field order, for this person's age group.
+ */
+async function askedFor(p: LinkParticipant) {
   const [eventFields, rules] = await Promise.all([requiredEventFields([p.eventId]), templateRules(p.event.organizationId)]);
-  return askedFields(eventFields, rules, adultAt(p.dateOfBirth, p.event.startDate));
+  const asked = askedFields(eventFields, rules, adultAt(p.dateOfBirth, p.event.startDate));
+  const shown = p.event.detailsAfterAcceptance ? (p.registrationStatus === "accepted" ? askedLater(asked, true) : []) : asked;
+  return { asked, shown };
 }
 
-/** What the page shows: the event, the fields with their values, the payment, the documents. */
-export async function participantPageData(p: NonNullable<Awaited<ReturnType<typeof loadByToken>>>) {
-  const e = p.event;
-  const values = (p.customFieldValues as Record<string, string> | null) ?? {};
-  const asked = await askedFor(p);
-  const accepted = p.registrationStatus === "accepted";
-  const types = await prisma.eventListItem.findMany({ where: { eventId: e.id, kind: "document", active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
-  let payment = null;
-  if (accepted && p.registrationNumber != null) {
-    const priced = await withMembers(e);
-    const forMerge = { ...p, customFieldValues: values, guardians: [] };
-    const qr = await resolvePaymentQrImage(forMerge, priced);
-    const paid = e.paymentDocTypeId ? docState(p.documents, e.paymentDocTypeId).state === "received" : null;
-    payment = {
-      priceCzk: effectivePriceCzk(forMerge, priced),
-      account: e.registrationBankAccountNumber && e.registrationBankCode ? `${e.registrationBankAccountNumber}/${e.registrationBankCode}` : null,
-      variableSymbol: buildVariableSymbol(forMerge, priced),
-      qrDataUrl: qr ? `data:image/png;base64,${qr.toString("base64")}` : null,
-      paid,
-    };
-  }
+/** The page: the participant's name and its registration card exactly as the portal builds it. */
+export async function participantPageData(p: LinkParticipant) {
+  const { asked, shown } = await askedFor(p);
+  const own = (p.customFieldValues as Record<string, string> | null) ?? {};
+  const missing = shown.filter((f) => !own[f.key]?.trim()).length;
+  const card = await registrationCard(p, adultAt(p.dateOfBirth, p.event.startDate), new Map(), { requiredEmpty: askedMissing(asked, null, own), pendingChange: false }, []);
   return {
-    event: { name: e.name, startDate: e.startDate, endDate: e.endDate, location: e.location, info: e.portalInfo },
     name: p.name,
-    accepted,
-    fields: asked.map((f) => ({ ...f, value: values[f.key] ?? "" })),
-    payment,
-    documents: types
-      .filter((t) => t.id !== e.paymentDocTypeId && !(t.data as DocumentTypeData | null)?.staticAttachment)
-      .map((t) => {
-        const mine = p.documents.filter((d) => d.eventListItemId === t.id);
-        return {
-          typeId: t.id,
-          name: documentDisplayName({ ...t, data: t.data as DocumentTypeData | null }),
-          received: mine.some(countsAsReceived),
-          pending: mine.some((d) => d.reviewStatus === "pending"),
-          canUpload: (t.data as DocumentTypeData | null)?.allowPortalUpload === true,
-        };
-      }),
+    registration: { ...card, details: shown.length ? { fields: shown.map((f) => ({ ...f, value: own[f.key] ?? "" })), missing } : null },
   };
 }
 
-/** Saves the answers (all onto the participant -- there is no profile). */
-export async function saveParticipantPage(p: NonNullable<Awaited<ReturnType<typeof loadByToken>>>, answers: unknown): Promise<{ ok: true } | { error: "invalid"; fields: string[] }> {
-  const asked = await askedFor(p);
-  const checked = checkAnswers(asked, answers, { prefill: {}, reviewed: true });
+/** "Doplňte údaje": every shown field, all onto the participant (there is no profile). */
+export async function saveParticipantPage(p: LinkParticipant, answers: unknown): Promise<{ ok: true } | { error: "invalid"; fields: string[] }> {
+  const { shown } = await askedFor(p);
+  const checked = checkAnswers(shown, answers, { prefill: {}, reviewed: true });
   if (!checked.ok) return { error: "invalid", fields: checked.errors };
   await prisma.participant.update({ where: { id: p.id }, data: { customFieldValues: { ...((p.customFieldValues as Record<string, string> | null) ?? {}), ...checked.values } } });
   return { ok: true };

@@ -28,7 +28,10 @@ export function gateHeaders(token: string): Record<string, string> {
 export const portalFetch = (token: string) => (url: string, init?: RequestInit) =>
   fetch(url, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...gateHeaders(token) } });
 
-/** fetch for a /api/portal/<token>/… URL, with the stored gate value of that token. */
+/** The token of a /api/portal/<token>/… or /api/public/u/<token>/… (a participant's page) URL. */
+export const apiToken = (url: string) => /\/api\/(?:portal|public\/u)\/([^/?#]+)/.exec(url)?.[1] ?? "";
+
+/** fetch for such a URL, with the stored gate value of its token. */
 export function portalApiFetch(url: string, init?: RequestInit) {
-  return portalFetch(url.split("/")[3] ?? "")(url, init);
+  return portalFetch(apiToken(url))(url, init);
 }

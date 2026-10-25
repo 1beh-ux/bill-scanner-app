@@ -14,10 +14,8 @@ export async function POST(req: NextRequest) {
   }
 
   const events = await prisma.event.findMany({
-    where: {
-      driveDocSyncEnabled: true,
-      modules: { some: { moduleKey: "mail", enabled: true } },
-    },
+    // Documents are tracked in Účastníci too (portal uploads, manual ones), not only through Pošta.
+    where: { driveDocSyncEnabled: true, status: "active" },
     select: { id: true },
   });
 

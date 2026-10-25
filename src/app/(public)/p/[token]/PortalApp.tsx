@@ -6,7 +6,7 @@ import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import { useEmbed } from "@/components/embed/PublicFrame";
-import { portalApiFetch, postScrollTop, storeGate } from "@/components/embed/embed-client";
+import { apiToken, portalApiFetch, postScrollTop, storeGate } from "@/components/embed/embed-client";
 import { toBoolean } from "@/lib/participant-fields";
 import { previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
@@ -28,10 +28,10 @@ type Access = "edit" | "approval" | "read" | "hidden";
 // requiredBy: the name of an upcoming registration's event that requires this field.
 type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; section: string; summary: boolean; requiredBy: string | null };
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
-type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
+export type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type DocFile = { id: string | null; date: string; person?: boolean } | null;
 type CardSection = { kind: "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields"; title?: string | null; items?: { label: string; value: string }[] };
-type Registration = {
+export type Registration = {
   participantId: string;
   event: EventRef & { location: string | null; info: string | null };
   status: "pending" | "accepted";
@@ -317,7 +317,7 @@ export default function PortalApp({
   );
 }
 
-function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void }) {
+export function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void }) {
   const embed = useEmbed();
   const [birthDate, setBirthDate] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -331,7 +331,7 @@ function Gate({ api, t, onPassed }: { api: string; t: T; onPassed: () => void })
     if (res?.ok) {
       // In a frame the cookie may not stick: keep the signed gate value for this tab (x-portal-gate).
       const gate = ((await res.json().catch(() => ({}))) as { gate?: string }).gate;
-      if (embed && gate) storeGate(api.split("/")[3] ?? "", gate);
+      if (embed && gate) storeGate(apiToken(api), gate);
       return onPassed();
     }
     if (embed) postScrollTop();
@@ -896,7 +896,7 @@ function LaterDetails({ api, r, details, t, onChanged }: { api: string; r: Regis
 }
 
 // One registration, its blocks in the event's card layout (src/lib/participant-layout.ts "portal").
-function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; r: Registration; who: string | null; t: T; evName: (e: EventRef) => string; onChanged: () => void }) {
+export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: string; r: Registration; who: string | null; t: T; evName: (e: EventRef) => string; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
