@@ -47,6 +47,18 @@ async function main() {
   assert.deepEqual(readProfileCategory(null), { show: false, section: "basic", order: 9999 });
   assert.deepEqual(readProfileCategory({ show: true, section: "sadresa", order: 3 }), { show: true, section: "sadresa", order: 3 });
   assert.equal(readProfileCategory({ show: true, section: "../x" }).section, "basic");
+  // Composite "Text s proměnnými": member / non-member blocks and values.
+  const { renderCompositeTemplate } = await import("../src/lib/participant-fields");
+  const tplVal = (o: Record<string, string>) => (k: string) => o[k];
+  const tpl = "{{#clenstvi_rok}}{{Name}} je členem Záře, nižší cena {{price}}{{/clenstvi_rok}}{{^clenstvi_rok}}Nečlen, cena {{price}}{{/clenstvi_rok}}";
+  assert.equal(renderCompositeTemplate(tpl, tplVal({ clenstvi_rok: "Ano", Name: "Ema", price: "3000 Kč" })), "Ema je členem Záře, nižší cena 3000 Kč");
+  assert.equal(renderCompositeTemplate(tpl, tplVal({ clenstvi_rok: "Ne", Name: "Ema", price: "3300 Kč" })), "Nečlen, cena 3300 Kč");
+  // Hromadná úprava odpovědí: grouped case-insensitively, only the picked ones change.
+  const { bulkAnswer, distinctAnswers } = await import("../src/lib/bulk-answers");
+  assert.deepEqual(distinctAnswers(["ne", " Ne", "pyl", undefined, ""]), [{ value: "ne", count: 2 }, { value: "pyl", count: 1 }]);
+  assert.equal(bulkAnswer(" NE ", new Set(["ne"]), null), "");
+  assert.equal(bulkAnswer("pyl", new Set(["ne"]), null), "pyl");
+  assert.equal(bulkAnswer("Ne", new Set(["ne"]), "bez alergií"), "bez alergií");
   // Stored e-mail files: bad rows dropped, empty keys gone.
   const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
   assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });

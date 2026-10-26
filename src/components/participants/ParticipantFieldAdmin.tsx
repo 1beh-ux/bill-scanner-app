@@ -119,6 +119,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // Composite ("Složené pole") being added/edited: part keys in order + separator.
   const [compositeParts, setCompositeParts] = useState<string[]>([]);
   const [compositeSep, setCompositeSep] = useState(" ");
+  // "Text s proměnnými" (2026-10-27): used instead of the parts when filled in.
+  const [compositeTemplate, setCompositeTemplate] = useState("");
   // Ano/Ne field being edited: every value found in the data -> Ano / Ne / unknown.
   const [boolValues, setBoolValues] = useState<{ raw: string; choice: "true" | "false" | "" }[]>([]);
   const [boolSaving, setBoolSaving] = useState(false);
@@ -199,7 +201,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
   function optionsPayload(): unknown {
     if (fieldType === "select") return optionsText.split(",").map((o) => o.trim()).filter(Boolean);
-    if (fieldType === "composite") return { parts: compositeParts, separator: compositeSep };
+    if (fieldType === "composite") return { parts: compositeParts, separator: compositeSep, ...(compositeTemplate.trim() && { template: compositeTemplate }) };
     return undefined;
   }
 
@@ -211,6 +213,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     setNewSurfaces(["email", "documents"]);
     setCompositeParts([]);
     setCompositeSep(" ");
+    setCompositeTemplate("");
   }
 
   // Org scope: event-only custom fields -> org templates (the portal only knows templates).
@@ -276,6 +279,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     const cfg = readComposite(field.options);
     setCompositeParts(field.fieldType === "composite" ? cfg.parts : []);
     setCompositeSep(field.fieldType === "composite" ? cfg.separator : " ");
+    setCompositeTemplate(field.fieldType === "composite" ? (cfg.template ?? "") : "");
   }
 
   // Switches surfaces on one EXISTING field immediately -- the pill click.
@@ -560,7 +564,26 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
             className="w-24 rounded-lg border border-mist bg-paper-2 px-2 py-0.5 text-[12px] text-ink"
           />
         </div>
-        {compositeParts.length > 0 && (
+        <label className="flex flex-col gap-1">
+          <span className="font-medium text-ink">{t("participantFieldAdmin.compositeTemplate")}</span>
+          <span>{t("participantFieldAdmin.compositeTemplateHint")}</span>
+          <textarea
+            value={compositeTemplate}
+            onChange={(e) => setCompositeTemplate(e.target.value)}
+            rows={3}
+            maxLength={2000}
+            placeholder="{{#clenstvi_rok}}Člen Záře, nižší cena {{price}}{{/clenstvi_rok}}{{^clenstvi_rok}}Nečlen, cena {{price}}{{/clenstvi_rok}}"
+            className="rounded-lg border border-mist bg-paper-2 px-2 py-1 font-mono text-[12px] text-ink"
+          />
+          <span className="flex flex-wrap gap-1">
+            {candidates.map((f) => (
+              <button key={f.key} type="button" onClick={() => setCompositeTemplate((x) => `${x}{{${f.key}}}`)} className="rounded-full bg-paper-2 px-2 py-0.5 text-[11.5px] text-ink hover:bg-mist" title={`{{${f.key}}}`}>
+                {f.label}
+              </button>
+            ))}
+          </span>
+        </label>
+        {compositeParts.length > 0 && !compositeTemplate.trim() && (
           <p className="font-mono text-[11.5px]">
             {compositeParts.map((k) => `{{${k}}}`).join(compositeSep === "\n" ? " ⏎ " : compositeSep === " " ? " ␣ " : compositeSep)}
           </p>

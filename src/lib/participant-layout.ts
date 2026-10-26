@@ -13,7 +13,8 @@ export type HealthSectionKind = "notes" | "medsReported" | "medPlans" | "inciden
 export type PortalSectionKind = "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields";
 export type SectionKind = DetailSectionKind | HealthSectionKind | PortalSectionKind;
 export type Column = "left" | "right";
-export type Section = { id: string; kind: SectionKind; title?: string; column: Column; hidden?: boolean; fields?: string[] };
+// top: a portal card's field block shown at the top of the card (first sight), not folded (2026-10-27).
+export type Section = { id: string; kind: SectionKind; title?: string; column: Column; hidden?: boolean; fields?: string[]; top?: boolean };
 export type PageLayout = { sections: Section[]; hiddenFields?: string[] };
 export type ParticipantLayout = { detail?: PageLayout; health?: PageLayout; portal?: PageLayout };
 export type LayoutPage = "detail" | "health" | "portal";
@@ -131,7 +132,7 @@ function resolveSingleColumn(saved: PageLayout | null | undefined, kinds: string
     if (s.kind === "fields") {
       if (sections.some((x) => x.id === s.id)) continue;
       const fields = (s.fields ?? []).filter((k) => !fieldKeys || fieldKeys.has(k));
-      sections.push({ id: s.id, kind: "fields", column: "left", ...(s.title ? { title: s.title } : {}), ...(s.hidden ? { hidden: true } : {}), fields });
+      sections.push({ id: s.id, kind: "fields", column: "left", ...(s.title ? { title: s.title } : {}), ...(s.hidden ? { hidden: true } : {}), ...(s.top ? { top: true } : {}), fields });
       continue;
     }
     if (sections.some((x) => x.kind === s.kind)) continue;
@@ -157,6 +158,7 @@ export function sanitizePageLayout(input: unknown, page: LayoutPage, fieldKeys: 
     if (page !== "detail") out.column = "left";
     if (s.hidden === true) out.hidden = true;
     if (typeof s.title === "string" && s.title.trim() && s.kind === "fields") out.title = s.title.trim().slice(0, 100);
+    if (page === "portal" && s.kind === "fields" && s.top === true) out.top = true;
     if (s.kind === "fields" || s.kind === "health" || s.kind === "basics" || s.kind === "guardians") out.fields = keys(s.fields);
     sections.push(out);
   }

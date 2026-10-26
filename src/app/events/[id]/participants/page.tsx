@@ -9,6 +9,7 @@ import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeHref, type ComposeRequest } from "@/lib/compose-handoff";
 import { MEMBERSHIP_OFFER_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import BulkAnswers from "@/components/participants/BulkAnswers";
 import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -403,6 +404,7 @@ export default function EventParticipantsPage({
         </button>
         <DriveExportButton eventId={id} />
         <StatusUpdateButton eventId={id} />
+        <BulkAnswers eventId={id} onDone={load} />
         <UploadReviewLink eventId={id} />
         <button onClick={openAdd} className={btnPrimary}>
           {t("participantsPage.addButton")}

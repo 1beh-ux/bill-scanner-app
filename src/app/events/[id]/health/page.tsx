@@ -7,6 +7,7 @@ import { calculateAge } from "@/lib/age";
 import { participantListName } from "@/lib/participant-name";
 import { useRouter } from "next/navigation";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
+import BulkAnswers from "@/components/participants/BulkAnswers";
 import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue, type ColumnParticipant } from "@/lib/participant-columns";
 import type { ParticipantFieldDef } from "@/lib/participant-fields";
@@ -165,6 +166,7 @@ export default function EventHealthPage({
           />
         )}
         <StatusUpdateButton eventId={id} />
+        <BulkAnswers eventId={id} onDone={load} />
         <a href={`/events/${id}/participants`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
           {t("participantsPage.manageButton")}
         </a>

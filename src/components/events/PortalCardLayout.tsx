@@ -67,6 +67,10 @@ export default function PortalCardLayout({ eventId, t }: { eventId: string; t: (
         >
           {s.kind === "fields" && (
             <>
+              <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
+                <input type="checkbox" checked={!!s.top} onChange={(e) => update(s.id, { top: e.target.checked || undefined })} />
+                {t("portalCard.top")}
+              </label>
               {(s.fields ?? []).map((k) => (
                 <FieldRow
                   key={k}

@@ -425,7 +425,8 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
     }
   }
   for (const f of fields) {
-    if (f.fieldType === "composite") values[f.key] = composeValue(readComposite(f.options), (k) => values[k]);
+    // {{participant_name}} works in a composite's text too (as in the e-mails).
+    if (f.fieldType === "composite") values[f.key] = composeValue(readComposite(f.options), (k) => values[k] ?? (k === "participant_name" ? participant.name : undefined));
   }
   return values;
 }

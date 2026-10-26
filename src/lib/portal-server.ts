@@ -522,7 +522,7 @@ export async function registrationCard(
     resend: accepted && card.canResend ? { left: Math.max(0, RESEND_PER_DAY - resendUsed) } : null,
     sections: card.layout.sections
       .filter((s) => !s.hidden)
-      .map((s) => (s.kind === "fields" ? { kind: s.kind, title: s.title ?? null, items: (s.fields ?? []).map((k) => ({ label: label(k), value: values[k] ?? "" })) } : { kind: s.kind })),
+      .map((s) => (s.kind === "fields" ? { kind: s.kind, title: s.title ?? null, top: !!s.top, items: (s.fields ?? []).map((k) => ({ label: label(k), value: values[k] ?? "" })) } : { kind: s.kind })),
   };
 }
 

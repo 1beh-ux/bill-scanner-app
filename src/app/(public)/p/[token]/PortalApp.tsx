@@ -30,7 +30,8 @@ type Field = { key: string; label: string; access: Access; fieldType: string; op
 type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
 export type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type DocFile = { id: string | null; date: string; person?: boolean } | null;
-type CardSection = { kind: "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields"; title?: string | null; items?: { label: string; value: string }[] };
+// top: a field block shown at the top of the card (values only, e.g. "Člen Záře, nižší cena 3 000 Kč").
+type CardSection = { kind: "event" | "status" | "category" | "documents" | "resend" | "payment" | "fields"; title?: string | null; top?: boolean; items?: { label: string; value: string }[] };
 export type Registration = {
   participantId: string;
   event: EventRef & { location: string | null; info: string | null };
@@ -1083,7 +1084,8 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
   // Header (event, status) is fixed on top; everything else (payment, documents,
   // data, …) folds under "Podrobnosti" -- open while something is missing.
   const has = (k: CardSection["kind"]) => r.sections.some((x) => x.kind === k);
-  const details = r.sections.filter((x) => x.kind !== "event" && x.kind !== "status" && x.kind !== "resend" && x.kind !== "category");
+  const details = r.sections.filter((x) => x.kind !== "event" && x.kind !== "status" && x.kind !== "resend" && x.kind !== "category" && !x.top);
+  const topLines = r.sections.filter((x) => x.top).flatMap((x) => (x.items ?? []).map((it) => it.value).filter((v) => v.trim()));
   const received = r.documents.filter((d) => d.received).length;
   const docsMissing = r.documents.some((d) => !d.received && d.review !== "pending");
   const docsInReview = r.documents.some((d) => d.review === "pending");
@@ -1116,6 +1118,11 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
           {r.event.info && <EventInfo text={r.event.info} t={t} />}
         </>
       )}
+      {topLines.map((line, i) => (
+        <p key={i} className="whitespace-pre-line text-[13.5px] font-medium text-ink">
+          {line}
+        </p>
+      ))}
       {/* At the top when the card layout (Nastavení akce -> Portál rodičů -> karta přihlášky) shows the category block. */}
       {has("category") && r.category && (
         <p className="text-[13px] text-ink">

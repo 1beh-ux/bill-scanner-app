@@ -41,6 +41,24 @@ const rows: Row[] = [
   r("detailsDocs.done", "vyplněno v údajích", "filled in the details"),
   r("detailsDocs.hint", "Přijato vyplněním podrobných údajů (nastavení dokumentu)", "Received by filling in the detailed information (document setting)"),
   r("portal.docFromDetails", "Vyplněno v údajích", "Filled in the details"),
+  // 2026-10-27 c: bulk answers, composite text with variables, field blocks at the top of the portal card.
+  r("bulkAnswers.open", "Hromadná úprava odpovědí", "Bulk edit answers"),
+  r("bulkAnswers.title", "Hromadná úprava odpovědí", "Bulk edit answers"),
+  r("bulkAnswers.hint", "Vyberte otázku, zaškrtněte odpovědi (např. všechna „ne“ u alergií) a smažte je, nebo nahraďte jiným textem. Velikost písmen a mezery na krajích se nerozlišují.", "Pick a question, tick the answers (e.g. every “no” in allergies) and clear them or replace them with another text. Letter case and spaces around don't matter."),
+  r("bulkAnswers.field", "Otázka", "Question"),
+  r("bulkAnswers.none", "Na tuto otázku zatím nikdo neodpověděl.", "Nobody has answered this question yet."),
+  r("bulkAnswers.clear", "Smazat odpovědi", "Clear the answers"),
+  r("bulkAnswers.replace", "Nahradit textem", "Replace with a text"),
+  r("bulkAnswers.replacement", "nová odpověď", "new answer"),
+  r("bulkAnswers.profiles", "Stejně upravit i v profilu ve Členech (projeví se i v dalších propojených akcích)", "Change the same answer in the Members profile too (reaches their other connected events)"),
+  r("bulkAnswers.apply", "Upravit {n} odpovědí", "Edit {n} answers"),
+  r("bulkAnswers.confirmClear", "Smazat {n} odpovědí? Nejde to vrátit.", "Clear {n} answers? This can't be undone."),
+  r("bulkAnswers.confirmReplace", "Nahradit {n} odpovědí textem „{value}“? Nejde to vrátit.", "Replace {n} answers with “{value}”? This can't be undone."),
+  r("bulkAnswers.done", "Upraveno: {participants} přihlášek, {profiles} profilů ve Členech.", "Changed: {participants} registrations, {profiles} Members profiles."),
+  r("bulkAnswers.failed", "Úprava se nepovedla.", "The change failed."),
+  r("participantFieldAdmin.compositeTemplate", "Text s proměnnými (nepovinné – místo částí výše)", "Text with variables (optional – instead of the parts above)"),
+  r("participantFieldAdmin.compositeTemplateHint", "{{klíč}} = hodnota pole (klikněte na pole níže). {{#klíč}}…{{/klíč}} se ukáže, jen když pole něco obsahuje (ne „Ne“), {{^klíč}}…{{/klíč}} jen když ne. Např. členství: {{#clenstvi_rok}}Člen Záře, nižší cena {{price}}{{/clenstvi_rok}}{{^clenstvi_rok}}Nečlen, cena {{price}}{{/clenstvi_rok}}. Funguje v seznamech, dokumentech, e-mailech, exportu i na kartě v portálu.", "{{key}} = the field's value (click a field below). {{#key}}…{{/key}} shows only when the field says something (not “Ne”), {{^key}}…{{/key}} only when it doesn't. E.g. membership: {{#clenstvi_rok}}Member, lower price {{price}}{{/clenstvi_rok}}{{^clenstvi_rok}}Non-member, price {{price}}{{/clenstvi_rok}}. Works in lists, documents, e-mails, the export and the portal card."),
+  r("portalCard.top", "Zobrazit nahoře na kartě (bez sbalení)", "Show at the top of the card (not folded)"),
 ];
 
 async function main() {
