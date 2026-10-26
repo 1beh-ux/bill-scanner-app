@@ -125,6 +125,12 @@ export function confirmedMembershipKey(p: { childId?: string | null }, e: { vsMe
   return p.childId && e.memberChildIds?.has(p.childId) ? (e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY) : null;
 }
 
+/** The membership field as lists show it: in a connected event Ano / Ne for everyone (the stored value stays); else null. */
+export function membershipDisplay(p: ParticipantForMerge, e: EventForMerge): { key: string; value: string } | null {
+  if (e.memberChildIds === undefined) return null;
+  return { key: e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY, value: isMember(p, e) ? "Ano" : "Ne" };
+}
+
 // Stored "true" (a field's Ano/Ne values are normalised on save/import) or a
 // default Ano value is a member; vsMemberValues is the older per-event list.
 // In a registration-connected event, an accepted membership for the year also
@@ -395,6 +401,9 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
     const fixedDef = FIXED_PARTICIPANT_FIELDS.find((d) => d.key === f.key);
     if (f.kind === "custom" && f.key === confirmedKey) {
       values[f.key] = "Ano";
+    } else if (f.kind === "custom" && event.memberChildIds !== undefined && f.key === (event.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY)) {
+      // A connected event knows who's a member: the membership field reads Ano / Ne, never empty.
+      values[f.key] = isMember(participant, event) ? "Ano" : "Ne";
     } else if (f.kind === "builtin") {
       const fn = fixedDef?.builtinProp ? BUILTIN_RESOLVERS[fixedDef.builtinProp] : undefined;
       if (fn) values[f.key] = fn(participant);

@@ -20,7 +20,8 @@ export function columnValue(field: ParticipantFieldDef, p: ColumnParticipant): s
     if (field.key === "price") return p.computed.price != null ? `${p.computed.price} Kč` : "—";
     if (field.key === "var_symb") return p.computed.var_symb || "—";
     if (field.key === "Email") return p.computed.contact_email || "—";
-    return "—";
+    // Every other calculated field (Členství (rok akce), Cenová kategorie, Podrobné údaje) comes computed by the server.
+    return p.customFieldValues?.[field.key] || "—";
   }
   return formatFieldValue(p.customFieldValues?.[field.key], field.fieldType, field.options);
 }

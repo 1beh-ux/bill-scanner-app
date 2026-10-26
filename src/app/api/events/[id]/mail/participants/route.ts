@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { allowedParticipantFieldKeys, requireAnyModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
-import { resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
+import { resolveContactEmail, fieldTextValues, confirmedMembershipKey, membershipDisplay } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 import { profileDocuments } from "@/lib/person-documents";
 
@@ -76,13 +76,14 @@ export async function GET(
     const { childId, ...row } = p;
     // Membership confirmed by the membership event shows as "Ano" (display only).
     const confirmedKey = confirmedMembershipKey({ childId }, event);
+    const membership = membershipDisplay({ ...p, customFieldValues: custom }, event);
     return {
       ...row,
       contactEmail: resolveContactEmail(p),
       customFieldValues: {
         ...Object.fromEntries(Object.entries(custom).filter(([key]) => allowedKeys.has(key))),
         ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
-        ...(confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
+        ...(membership && allowedKeys.has(membership.key) ? { [membership.key]: membership.value } : confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
       },
     };
   });

@@ -9,7 +9,7 @@ import { countsAsReceived, registrationState, requiredEmpty, type ReviewStatus }
 import { profileValues } from "@/lib/portal-rules";
 import { templateRules } from "@/lib/portal-server";
 import { appliesTo, askedFields, askedMissing } from "@/lib/registration-fields";
-import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
+import { effectivePriceCzk, buildVariableSymbol, resolveContactEmail, fieldTextValues, confirmedMembershipKey, membershipDisplay } from "@/lib/document-variables";
 import { withMembers, linkChildrenIfConnected } from "@/lib/children";
 import { fullNameFrom, compareParticipantsBySurname } from "@/lib/participant-name";
 import { orgIdOfEvent } from "@/lib/org-owner";
@@ -62,6 +62,8 @@ export async function GET(
     const values = composites.length > 0 ? fieldTextValues(forMerge, event, activeFields) : {};
     // Membership confirmed by the membership event shows as "Ano" (display only).
     const confirmedKey = confirmedMembershipKey(p, event);
+    // Connected events: Ano / Ne from the membership year (+ the manual field), not just Ano.
+    const membership = membershipDisplay(forMerge, event);
     return {
       ...rest,
       customFieldValues: {
@@ -69,7 +71,7 @@ export async function GET(
           Object.entries((p.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) => allowedKeys.has(key))
         ),
         ...Object.fromEntries(composites.map((f) => [f.key, values[f.key] ?? ""])),
-        ...(confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
+        ...(membership && allowedKeys.has(membership.key) ? { [membership.key]: membership.value } : confirmedKey && allowedKeys.has(confirmedKey) && { [confirmedKey]: "Ano" }),
       },
       guardian: guardians.find((g) => g.receivesCommunications) ?? guardians[0] ?? null,
       computed: {
