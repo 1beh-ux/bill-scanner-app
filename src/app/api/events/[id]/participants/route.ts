@@ -48,8 +48,9 @@ export async function GET(
     prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
   ]);
-  // Composite ("složené") fields aren't stored -- computed here so they work as columns.
-  const composites = activeFields.filter((f) => f.fieldType === "composite" && allowedKeys.has(f.key));
+  // Composite ("složené") and calculated fields (Členství (rok akce), cena, VS...) aren't stored -- computed
+  // here so they work as columns (the QR image never is a column).
+  const composites = activeFields.filter((f) => (f.fieldType === "composite" || (f.kind === "computed" && f.fieldType !== "image")) && allowedKeys.has(f.key));
   // Computed columns (price/variable symbol) reuse the same formulas as
   // document merge -- resolved here, not lazily on the client, so the
   // roster's optional "computed" columns (see fixed-participant-fields.ts)

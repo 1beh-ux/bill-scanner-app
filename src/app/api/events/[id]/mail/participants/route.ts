@@ -40,7 +40,8 @@ export async function GET(
   const mailListFields = activeFields.filter((f) => f.surfaces.includes("mail_list"));
   const allowedKeys = new Set(mailListFields.map((f) => f.key));
   // Composite fields are computed, not stored -- added so they work as columns.
-  const composites = mailListFields.filter((f) => f.fieldType === "composite");
+  // Composite and calculated fields aren't stored -- computed for the columns (not the QR image).
+  const composites = mailListFields.filter((f) => f.fieldType === "composite" || (f.kind === "computed" && f.fieldType !== "image"));
 
   const participants = await prisma.participant.findMany({
     where: { eventId, active: true },
