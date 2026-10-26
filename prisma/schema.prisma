@@ -1651,6 +1651,9 @@ model Organization {
   emailFiles                Json?   @map("email_files")
   // The participant export's default columns (field keys, in order); an event may have its own.
   exportColumns             Json?   @map("export_columns")
+  // "Cenová kategorie" on the portal profile (Šablony -> Pořadí polí pro rodiče): { show, section, order }
+  // (src/lib/portal-rules.ts readProfileCategory); null = not shown.
+  profileCategory           Json?   @map("profile_category")
   portalRecoveryNewLink   Boolean  @default(false) @map("portal_recovery_new_link")
   // "Ještě nejsem členem" next to it: an event's public registration, or any web address.
   portalJoinEventId       String?  @map("portal_join_event_id")

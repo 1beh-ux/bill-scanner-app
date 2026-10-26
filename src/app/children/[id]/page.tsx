@@ -35,6 +35,7 @@ type Detail = {
     registrationStatus: "pending" | "accepted";
     active: boolean;
     portalNote: string | null;
+    category: string | null;
     event: { id: string; name: string; startDate: string; status: "active" | "closed"; kind: "event" | "membership"; membershipYear: number | null; registrationConnected: boolean };
   }[];
   pendingChanges: PendingChange[];
@@ -304,6 +305,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                         {p.event.registrationConnected && p.event.status === "active" && <span className="rounded bg-paper-2 px-1.5">{t("childProfile.syncedEvent")}</span>}
                       </span>
                     </div>
+                    {p.category && <p className="mt-1 text-[12.5px] text-ink">{t("portal.priceCategory")}: {p.category}</p>}
                     {p.portalNote && <p className="mt-1 text-[12.5px] text-ink-secondary">{t("childProfile.portalNote")}: {p.portalNote}</p>}
                   </li>
                 ))}

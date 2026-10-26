@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { categoryFor, readPriceRules } from "@/lib/price-rules";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { decideChange, profileFieldLabels, readGuardians, setGuardians, updateProfile } from "@/lib/child-profile";
@@ -34,7 +35,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           registrationStatus: true,
           active: true,
           portalNote: true,
-          event: { select: { id: true, name: true, startDate: true, status: true, kind: true, membershipYear: true, registrationConnected: true } },
+          priceCategory: true,
+          event: { select: { id: true, name: true, startDate: true, status: true, kind: true, membershipYear: true, registrationConnected: true, priceRules: true } },
         },
         orderBy: { event: { startDate: "desc" } },
       },
@@ -47,9 +49,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     prisma.participantFieldTemplate.findMany({ where: { organizationId }, orderBy: { label: "asc" } }),
     profileFieldLabels(organizationId),
   ]);
-  const { portalToken, changes, ...rest } = child;
+  const { portalToken, changes, participants, ...rest } = child;
   return NextResponse.json({
     ...rest,
+    // Each registration with its price category's name (by its event's rules); the rules stay here.
+    participants: participants.map(({ priceCategory, event: { priceRules, ...event }, ...p }) => {
+      const rules = readPriceRules(priceRules);
+      return { ...p, event, category: rules ? (categoryFor(rules, priceCategory, child.isAdult)?.label ?? null) : null };
+    }),
     values: profileValues(child),
     fields: templates.map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, child.isAdult), active: t.active, portalAccess: t.portalAccess, audience: t.audience, level: t.level })),
     pendingChanges: changes.map((c) => ({ ...c, childName: child.name, fieldLabel: labels[c.fieldKey] ?? c.fieldKey })),

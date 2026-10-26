@@ -263,3 +263,17 @@ export function readProfileSections(raw: unknown, newKey: () => string = () => `
 /** The section a field shows in: its own section while that still exists, else basic / detailed by level. */
 export const sectionOf = (f: { profileSection: string | null; level: "basic" | "detailed" }, sections: ProfileSection[]): string =>
   f.profileSection && sections.some((s) => s.key === f.profileSection) ? f.profileSection : f.level;
+
+// "Cenová kategorie" on the portal profile (2026-10-27): not a field but the categories of the person's
+// current registrations, placed like one in Šablony -> Pořadí polí pro rodiče. section: "basic" / "detailed"
+// / an organization part's key; order: its place among the fields (their portalSortOrder).
+export const PROFILE_CATEGORY_KEY = "__price_category";
+export type ProfileCategory = { show: boolean; section: string; order: number };
+export function readProfileCategory(raw: unknown): ProfileCategory {
+  const o = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  return {
+    show: o.show === true,
+    section: typeof o.section === "string" && /^(basic|detailed|s[a-z0-9]{2,24})$/.test(o.section) ? o.section : "basic",
+    order: typeof o.order === "number" && Number.isFinite(o.order) ? o.order : 9999,
+  };
+}

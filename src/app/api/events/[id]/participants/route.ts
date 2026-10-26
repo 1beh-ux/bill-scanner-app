@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { detailsDocuments } from "@/lib/details-documents";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess, allowedParticipantFieldKeys } from "@/lib/module-access";
@@ -107,7 +108,8 @@ export async function GET(
     });
     // Types the linked person's permanent document covers count as received (slice 6 #4).
     const typeSet = new Set(documentTypes.map((d) => d.id));
-    for (const [participantId, covered] of await profileDocuments(participants)) {
+    // ...and the ones filled in by the details (details-documents.ts).
+    for (const [participantId, covered] of [...(await profileDocuments(participants)), ...(await detailsDocuments(participants.map((p) => p.id)))]) {
       rows.push(...covered.filter((c) => typeSet.has(c.eventListItemId)).map((c) => ({ participantId, eventListItemId: c.eventListItemId, receivedVia: c.receivedVia, reviewStatus: c.reviewStatus })));
     }
     for (const r of rows) {

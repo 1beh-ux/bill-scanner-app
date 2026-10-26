@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { detailsDocuments } from "@/lib/details-documents";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { allowedParticipantFieldKeys, requireAnyModuleAccess } from "@/lib/module-access";
@@ -91,6 +92,8 @@ export async function GET(
   const documentTypes = await getActiveDocumentTypes(eventId);
   // Received through the person's permanent document (slice 6 #4): shown, not toggled.
   const fromProfile = await profileDocuments(participants.map((p) => ({ id: p.id, eventId, childId: p.childId })));
+  // Filled in by the details ("Splněno vyplněním podrobných údajů"): shown, not toggled either.
+  const fromDetails = await detailsDocuments(participants.map((p) => p.id));
   // Payments confirmed from the bank: "Doručeno · banka" + date and amount in the tooltip.
   const bank = new Map(
     (await prisma.bankMovement.findMany({
@@ -108,6 +111,7 @@ export async function GET(
           name: documentDisplayName(d),
           received: receivedItemIds.has(d.id),
           fromProfile: !!fromProfile.get(p.id)?.some((c) => c.eventListItemId === d.id),
+          fromDetails: !!fromDetails.get(p.id)?.some((c) => c.eventListItemId === d.id),
           bank: receivedItemIds.has(d.id) ? (bank.get(`${p.id}:${d.id}`) ?? null) : null,
         })),
       };

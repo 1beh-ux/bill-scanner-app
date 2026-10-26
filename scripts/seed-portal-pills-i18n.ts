@@ -33,6 +33,14 @@ const rows: Row[] = [
   r("emailKinds.membershipOffer.what", "Účastníkovi, který není ve Členech: nabídka členství s odkazem na předvyplněnou přihlášku ke členství ({{membership_offer_link}}).", "To a participant not in Members: the membership offer with the link to a pre-filled membership registration ({{membership_offer_link}})."),
   r("emailKinds.membershipOffer.where", "Posílá se ze Seznamu účastníků: vyberte účastníky → Nabídnout členství. Odkaz vede na akci nastavenou u „Ještě nejsem členem“ (Organizace → Vzhled veřejných stránek).", "Sent from the participant list: pick participants → Offer membership. The link leads to the event set for “Not a member yet” (Organization → Public pages)."),
   r("emailKinds.membershipOffer.open", "Otevřít Seznam účastníků", "Open the participant list"),
+  // 2026-10-27 b: category on the profile, documents done by the details.
+  r("fieldOrder.categoryRow", "Cenová kategorie (z přihlášek)", "Price category (from registrations)"),
+  r("fieldOrder.categoryShow", "zobrazit v profilu", "show on the profile"),
+  r("listTemplateAdmin.fromDetailsLabel", "Splněno vyplněním podrobných údajů", "Done by filling in the detailed information"),
+  r("listTemplateAdmin.fromDetailsHint", "Dokument se počítá jako přijatý, jakmile má účastník vyplněná všechna pole, která akce vyžaduje (např. zdravotní dotazník, jehož otázky jsou teď pole). Jde do Dokumenty x/y, {{document_checklist}}, přehledu dokumentů, portálu i exportu; nahrávat se nedá.", "Counts as received once the participant has every field the event requires filled in (e.g. the health questionnaire whose questions are fields now). Goes into Documents x/y, {{document_checklist}}, the documents overview, the portal and the export; no upload."),
+  r("detailsDocs.done", "vyplněno v údajích", "filled in the details"),
+  r("detailsDocs.hint", "Přijato vyplněním podrobných údajů (nastavení dokumentu)", "Received by filling in the detailed information (document setting)"),
+  r("portal.docFromDetails", "Vyplněno v údajích", "Filled in the details"),
 ];
 
 async function main() {

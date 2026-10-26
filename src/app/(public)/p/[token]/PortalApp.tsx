@@ -43,7 +43,7 @@ export type Registration = {
   // bankCheck: the event confirms payments from its Fio account; paidViaBank = when (docs/bank-payments-design.md).
   payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null; bankCheck?: boolean; paidViaBank?: string | null } | null;
   // fromProfile: received through the person's permanent document (slice 6 #4).
-  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
+  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromDetails?: boolean; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
   // Two-step events, after acceptance: the rest of the event's fields ("Doplňte údaje").
@@ -985,7 +985,11 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
                 <span className="text-ink">{d.name}</span>
                 <span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
                   {fileLink(d.sent, t("portal.docSent"))}
-                  {fileLink(d.received, d.fromProfile ? (d.fromProfile.event ? t("portal.docFromProfileEvent", { event: d.fromProfile.event }) : t("portal.docFromProfile")) : t("portal.docReceived"))}
+                  {d.fromDetails && !d.received?.id ? (
+                    <span className="text-pine">{t("portal.docFromDetails")}</span>
+                  ) : (
+                    fileLink(d.received, d.fromProfile ? (d.fromProfile.event ? t("portal.docFromProfileEvent", { event: d.fromProfile.event }) : t("portal.docFromProfile")) : t("portal.docReceived"))
+                  )}
                   {d.review === "pending" && <span className="text-amber-700">{t("portal.docInReview")}</span>}
                   {d.review === "rejected" && <span className="text-red-700">{t("portal.docRejected", { note: d.reviewNote ?? "" })}</span>}
                   {!d.received && !d.review && <span className="text-amber-700">{t("portal.docMissing")}</span>}
@@ -1112,7 +1116,8 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
           {r.event.info && <EventInfo text={r.event.info} t={t} />}
         </>
       )}
-      {r.category && (
+      {/* At the top when the card layout (Nastavení akce -> Portál rodičů -> karta přihlášky) shows the category block. */}
+      {has("category") && r.category && (
         <p className="text-[13px] text-ink">
           {t("portal.priceCategory")}: <span className="font-medium">{r.category}</span>
         </p>

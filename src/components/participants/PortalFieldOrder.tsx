@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { sectionOf, type ProfileSection } from "@/lib/portal-rules";
+import { PROFILE_CATEGORY_KEY, sectionOf, type ProfileCategory, type ProfileSection } from "@/lib/portal-rules";
 
 // Šablony -> Účastníci -> "Pořadí polí pro rodiče" (2026-10-23): every field parents see, by profile
 // part, in the order the portal profile, the public form and the registration step show them. Move a
 // field up / down or into another part (e.g. all the address fields together in "Adresa").
 type T = (key: string, vars?: Record<string, string>) => string;
-type Tpl = { key: string; label: string; active: boolean; portalAccess: string; level: "basic" | "detailed"; profileSection: string | null; portalSortOrder: number | null };
+// show: only the "Cenová kategorie" row (not a field: the categories of the person's registrations).
+type Tpl = { key: string; label: string; active: boolean; portalAccess: string; level: "basic" | "detailed"; profileSection: string | null; portalSortOrder: number | null; show?: boolean };
 const btn = "rounded border border-mist px-2 py-0.5 text-[12px] text-ink hover:bg-paper-2 disabled:opacity-30";
 
 export default function PortalFieldOrder({ sections, t }: { sections: ProfileSection[]; t: T }) {
@@ -19,17 +20,30 @@ export default function PortalFieldOrder({ sections, t }: { sections: ProfileSec
 
   useEffect(() => {
     if (!open) return;
-    fetch("/api/participant-field-templates")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((all: Tpl[]) =>
+    Promise.all([
+      fetch("/api/participant-field-templates").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/participant-field-templates/order").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([all, saved]: [Tpl[], { category: ProfileCategory } | null]) => {
+        const c = saved?.category ?? { show: false, section: "basic", order: 9999 };
+        const category: Tpl = {
+          key: PROFILE_CATEGORY_KEY,
+          label: t("fieldOrder.categoryRow"),
+          active: true,
+          portalAccess: "read",
+          level: c.section === "detailed" ? "detailed" : "basic",
+          profileSection: c.section.startsWith("s") ? c.section : null,
+          portalSortOrder: c.order,
+          show: c.show,
+        };
         setRows(
-          all
-            .filter((x) => x.active && x.portalAccess !== "hidden")
-            .sort((a, b) => (a.portalSortOrder ?? 1e9) - (b.portalSortOrder ?? 1e9) || a.label.localeCompare(b.label, "cs"))
-        )
-      )
+          [...all.filter((x) => x.active && x.portalAccess !== "hidden"), category].sort(
+            (a, b) => (a.portalSortOrder ?? 1e9) - (b.portalSortOrder ?? 1e9) || a.label.localeCompare(b.label, "cs")
+          )
+        );
+      })
       .catch(() => setRows([]));
-  }, [open]);
+  }, [open, t]);
 
   const parts = [
     { key: "basic", label: t("portal.basicTitle") },
@@ -51,7 +65,8 @@ export default function PortalFieldOrder({ sections, t }: { sections: ProfileSec
     setDirty(true);
   }
   function setPart(key: string, part: string) {
-    setRows(rows!.map((r) => (r.key === key ? { ...r, profileSection: part === "basic" || part === "detailed" ? null : part } : r)));
+    // The category row isn't a field with a level: it may go to Základní or Podrobné údaje too.
+    setRows(rows!.map((r) => (r.key === key ? { ...r, profileSection: part === "basic" || part === "detailed" ? null : part, ...(r.key === PROFILE_CATEGORY_KEY && (part === "basic" || part === "detailed") && { level: part }) } : r)));
     setDirty(true);
   }
   async function save() {
@@ -59,7 +74,7 @@ export default function PortalFieldOrder({ sections, t }: { sections: ProfileSec
     setMessage(null);
     // Saved in the shown order: part by part, so the order inside each part is what's on screen.
     const ordered = parts.flatMap((p) => rows!.filter((r) => partOf(r) === p.key));
-    const res = await fetch("/api/participant-field-templates/order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: ordered.map((r) => ({ key: r.key, profileSection: r.profileSection })) }) }).catch(() => null);
+    const res = await fetch("/api/participant-field-templates/order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: ordered.map((r) => (r.key === PROFILE_CATEGORY_KEY ? { key: r.key, profileSection: partOf(r), show: !!r.show } : { key: r.key, profileSection: r.profileSection })) }) }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "appearance.saved" : "appearance.failed"));
     if (res?.ok) setDirty(false);
@@ -87,11 +102,24 @@ export default function PortalFieldOrder({ sections, t }: { sections: ProfileSec
                     <li key={r.key} className="flex flex-wrap items-center gap-2 rounded border border-mist bg-paper px-2 py-1 text-[13.5px] text-ink">
                       <span className="w-5 text-right text-ink-secondary">{i + 1}.</span>
                       <span className="min-w-0 flex-1">{r.label}</span>
+                      {r.key === PROFILE_CATEGORY_KEY && (
+                        <label className="flex items-center gap-1 text-[12px] text-ink-secondary">
+                          <input
+                            type="checkbox"
+                            checked={!!r.show}
+                            onChange={(e) => {
+                              setRows(rows.map((x) => (x.key === r.key ? { ...x, show: e.target.checked } : x)));
+                              setDirty(true);
+                            }}
+                          />
+                          {t("fieldOrder.categoryShow")}
+                        </label>
+                      )}
                       <button type="button" onClick={() => move(r.key, -1)} disabled={i === 0} className={btn} aria-label="↑">↑</button>
                       <button type="button" onClick={() => move(r.key, 1)} disabled={i === mine.length - 1} className={btn} aria-label="↓">↓</button>
                       <select value={p.key} onChange={(e) => setPart(r.key, e.target.value)} className="rounded border border-mist bg-paper-2 px-1.5 py-0.5 text-[12px]" aria-label={t("profileSections.column")}>
                         {parts.map((x) => (
-                          <option key={x.key} value={x.key} disabled={(x.key === "basic" && r.level !== "basic") || (x.key === "detailed" && r.level !== "detailed")}>
+                          <option key={x.key} value={x.key} disabled={r.key !== PROFILE_CATEGORY_KEY && ((x.key === "basic" && r.level !== "basic") || (x.key === "detailed" && r.level !== "detailed"))}>
                             {x.label}
                           </option>
                         ))}

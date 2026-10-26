@@ -1,4 +1,5 @@
 // Parent portal, server side (docs/registration-portal-spec.md G, slice 3 B):
+import { detailsDocuments } from "@/lib/details-documents";
 // resolving the token + birth-date cookie, what the portal shows, and the
 // portal registration. A token is either a child's (that child only) or a
 // family's (every member). The portal only mirrors: it shows only what the
@@ -18,7 +19,7 @@ import {
   isEligible,
   profileValues,
   readEligibility,
-  type PortalAccessLevel, readProfileSections, sectionOf } from "@/lib/portal-rules";
+  type PortalAccessLevel, readProfileSections, sectionOf, PROFILE_CATEGORY_KEY, readProfileCategory, type ProfileCategory } from "@/lib/portal-rules";
 import { eligibilityFacts, profileFieldLabels, proposeChange, updateProfile } from "@/lib/child-profile";
 import { buildVariableSymbol, effectivePriceCzk, fieldTextValues, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
 import { readParticipantLayout, resolvePortalLayout } from "@/lib/participant-layout";
@@ -183,6 +184,16 @@ export async function availableEvents(organizationId: string, memberIds: string[
     .filter((a) => a.memberIds.length > 0);
 }
 
+/** The profile's fields with "Cenová kategorie" put at its place (before the first field ordered after it), when shown. */
+function withCategory<F extends { key: string; value: string }>(rows: { order: number | null; f: F }[], place: ProfileCategory, value: string, label: string): F[] {
+  const fields = rows.map((r) => r.f);
+  if (!place.show) return fields;
+  const at = rows.findIndex((r) => (r.order ?? Number.MAX_SAFE_INTEGER) > place.order);
+  const level: FieldLevel = place.section === "detailed" ? "detailed" : "basic";
+  const category = { ...fields[0], key: PROFILE_CATEGORY_KEY, label, access: "read" as PortalAccessLevel, fieldType: "text", options: null, level, section: place.section, summary: false, value, pending: null, requiredBy: null } as unknown as F;
+  return at < 0 ? [...fields, category] : [...fields.slice(0, at), category, ...fields.slice(at)];
+}
+
 /** Everything the portal shows for a scope (after the gate). */
 export async function portalData(scope: PortalScope) {
   const memberIds = scope.members.map((m) => m.id);
@@ -197,10 +208,12 @@ export async function portalData(scope: PortalScope) {
       orderBy: { event: { startDate: "desc" } },
     }),
     templateRules(scope.organizationId),
-    prisma.organization.findUniqueOrThrow({ where: { id: scope.organizationId }, select: { portalProfileSections: true } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: scope.organizationId }, select: { portalProfileSections: true, profileCategory: true } }),
   ]);
   // The profile page's own sections after Základní / Podrobné údaje (2026-10-22).
   const sections = readProfileSections(org.portalProfileSections);
+  // "Cenová kategorie" on the profile, where Šablony -> Pořadí polí pro rodiče puts it (2026-10-27).
+  const categoryPlace = readProfileCategory(org.profileCategory);
   const today = startOfToday();
   const isCurrent = (e: { status: string; endDate: Date }) => e.status === "active" && e.endDate >= today;
   // Upcoming/current registrations only of events using the module; the rest is history.
@@ -272,7 +285,20 @@ export async function portalData(scope: PortalScope) {
       profile: {
         fields: [
           ...Object.keys(PROFILE_BUILTINS).map((k) => field(k, BUILTIN_PORTAL_ACCESS, k === "datum_narozeni" ? "date" : "text", null, "basic", "basic", true)),
-          ...mine.map((t) => field(t.key, t.portalAccess, t.fieldType, optionsFor(t, child.isAdult), t.level, sectionOf(t, sections), t.portalSummary)),
+          ...withCategory(
+            mine.map((t) => ({ order: t.portalSortOrder, f: field(t.key, t.portalAccess, t.fieldType, optionsFor(t, child.isAdult), t.level, sectionOf(t, sections), t.portalSummary) })),
+            categoryPlace,
+            // The categories of the current registrations (read only), e.g. "Registrace 2027: Dítě registrované na oddíl".
+            current
+              .map((p) => {
+                const rules = readPriceRules(p.event.priceRules);
+                const label = rules ? categoryFor(rules, p.priceCategory, child.isAdult)?.label : null;
+                return label ? `${p.event.name}: ${label}` : null;
+              })
+              .filter(Boolean)
+              .join(" · "),
+            labels[PROFILE_CATEGORY_KEY] ?? "Cenová kategorie"
+          ),
         ],
         guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
         // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
@@ -422,8 +448,9 @@ export async function registrationCard(
   const accepted = p.registrationStatus === "accepted";
   // "Dokument platby" (slice 4 #5): shown in the payment block, not as a document / upload.
   const paymentDocTypeId = card.docTypes.some((d) => d.id === e.paymentDocTypeId) ? e.paymentDocTypeId : null;
-  // The registration's own documents plus the ones its person's profile covers.
-  const docs = [...p.documents, ...fromProfile];
+  // The registration's own documents plus the ones its person's profile covers and the filled-in details cover.
+  const fromDetails = (await detailsDocuments([p.id])).get(p.id) ?? [];
+  const docs = [...p.documents, ...fromProfile, ...fromDetails];
   const paid = paymentDocTypeId ? docState(docs, paymentDocTypeId).state === "received" : null;
   const paidDoc = paymentDocTypeId ? p.documents.find((d) => d.eventListItemId === paymentDocTypeId && countsAsReceived(d)) : undefined;
 
@@ -475,17 +502,20 @@ export async function registrationCard(
       const mine = p.documents.filter((d) => d.eventListItemId === dt.id);
       const state = docState(mine, dt.id);
       const profile = fromProfile.find((f) => f.eventListItemId === dt.id)?.doc;
+      const byDetails = fromDetails.some((f) => f.eventListItemId === dt.id);
       return {
         typeId: dt.id,
         name: documentDisplayName({ ...dt, data }),
         sent: file(mine.find((d) => d.receivedVia === "generated")),
         // A profile document downloads from the person store (portal person-documents route).
-        received: profile ? { id: profile.id, date: profile.createdAt, person: true } : file(mine.find(countsAsReceived)),
+        received: profile ? { id: profile.id, date: profile.createdAt, person: true } : (file(mine.find(countsAsReceived)) ?? (byDetails ? { id: null, date: p.createdAt } : null)),
+        // "Splněno vyplněním podrobných údajů": done by the details form, nothing to upload.
+        fromDetails: byDetails,
         fromProfile: profile ? { event: profile.sourceEvent?.name ?? null } : null,
         review: profile ? null : mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
         reviewNote: state.note,
         // Documents are asked for once the registration is accepted.
-        canUpload: accepted && !!data?.allowPortalUpload && !profile,
+        canUpload: accepted && !!data?.allowPortalUpload && !profile && !data?.fromDetails,
       };
     }),
     // Re-send the acceptance e-mail (needs the event's sending account).

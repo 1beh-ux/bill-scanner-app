@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { detailsDocuments } from "@/lib/details-documents";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
@@ -41,6 +42,7 @@ export async function GET(
       prisma.participantDocument.findMany({ where: { participantId, reviewStatus: { in: ["pending", "rejected"] } }, orderBy: { receivedAt: "desc" } }),
       profileDocuments([participant]).then((m) => m.get(participantId) ?? []),
     ]);
+    const fromDetails = (await detailsDocuments([participantId])).get(participantId) ?? [];
     return NextResponse.json(
       types.map((type) => {
         const latest = docs.find((d) => d.eventListItemId === type.id);
@@ -55,7 +57,9 @@ export async function GET(
             .map((d) => ({ id: d.id, filename: d.originalFilename, receivedAt: d.receivedAt, status: d.reviewStatus, note: d.reviewNote })),
           docTypeId: type.id,
           name: documentDisplayName(type),
-          received: !!latest || !!profile,
+          received: !!latest || !!profile || fromDetails.some((x) => x.eventListItemId === type.id),
+          // "Splněno vyplněním podrobných údajů": received by the filled-in details.
+          fromDetails: fromDetails.some((x) => x.eventListItemId === type.id),
           receivedAt: latest?.receivedAt ?? profile?.createdAt ?? null,
           receivedVia: latest?.receivedVia ?? null,
           fileId: file?.id ?? null,

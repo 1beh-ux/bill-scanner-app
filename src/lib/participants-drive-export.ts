@@ -14,6 +14,7 @@ import { exportFields, readExportColumns } from "@/lib/export-columns";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { docState } from "@/lib/registration-status";
 import { profileDocuments } from "@/lib/person-documents";
+import { detailsDocuments } from "@/lib/details-documents";
 import { participantsRootFolderId, syncParticipantDocumentsToDrive } from "@/lib/mail-drive-sync";
 
 const DOC_STATE_TEXT = { received: "přijato", pending: "ke kontrole", rejected: "zamítnuto", none: "chybí" } as const;
@@ -32,7 +33,7 @@ export async function exportParticipantsToDrive(
   ]);
   // Fixed attachments (the same file for everyone) aren't tracked.
   const tracked = docTypes.filter((d) => !(d.data as DocumentTypeData | null)?.staticAttachment);
-  const fromProfile = await profileDocuments(participants);
+  const [fromProfile, fromDetails] = await Promise.all([profileDocuments(participants), detailsDocuments(participants.map((p) => p.id))]);
   // The chosen columns in their order (the event's, else the organization's), else every field the user may see.
   const shown = exportFields(
     fields.filter((f) => allowed.has(f.key) && f.fieldType !== "image"),
@@ -51,7 +52,7 @@ export async function exportParticipantsToDrive(
     ["Přihláška", ...shown.map((f) => f.label), ...tracked.map((d) => documentDisplayName({ ...d, data: d.data as DocumentTypeData | null })), ...(root ? ["Složka"] : [])],
     ...participants.map((p) => {
       const values = fieldTextValues({ ...p, customFieldValues: p.customFieldValues as Record<string, string> | null }, event, fields);
-      const docs = [...p.documents, ...(fromProfile.get(p.id) ?? [])];
+      const docs = [...p.documents, ...(fromProfile.get(p.id) ?? []), ...(fromDetails.get(p.id) ?? [])];
       return [p.registrationStatus === "accepted" ? "přijatá" : "čeká", ...shown.map((f) => sheetText(values[f.key] ?? "")), ...tracked.map((d) => DOC_STATE_TEXT[docState(docs, d.id).state]), ...(root ? [folderCell(p.name)] : [])];
     }),
   ];

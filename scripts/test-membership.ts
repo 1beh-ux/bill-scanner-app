@@ -42,6 +42,11 @@ async function main() {
   assert.equal(detailsStatus({ ...base, customFieldValues: { x: "1" } }, ev), "chybí 1");
   assert.equal(detailsStatus({ ...base, customFieldValues: { x: "1", y: "Ne" } }, ev), "vyplněno");
   assert.equal(detailsStatus({ ...base, isAdult: true, customFieldValues: {} }, ev), "");
+  // "Cenová kategorie" on the profile: off by default, a bad section falls back to Základní údaje.
+  const { readProfileCategory } = await import("../src/lib/portal-rules");
+  assert.deepEqual(readProfileCategory(null), { show: false, section: "basic", order: 9999 });
+  assert.deepEqual(readProfileCategory({ show: true, section: "sadresa", order: 3 }), { show: true, section: "sadresa", order: 3 });
+  assert.equal(readProfileCategory({ show: true, section: "../x" }).section, "basic");
   // Stored e-mail files: bad rows dropped, empty keys gone.
   const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
   assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });

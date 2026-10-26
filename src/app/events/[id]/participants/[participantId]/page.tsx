@@ -42,6 +42,7 @@ type DocStatus = {
   fileId: string | null;
   // Received through the person's permanent document (slice 6 #4); `event` = where it came from.
   fromProfile: { event: string | null; url: string } | null;
+  fromDetails?: boolean;
   // Portal uploads waiting for review / rejected (slice 4 #6-7).
   review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
 };
@@ -443,6 +444,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
                 {d.fromProfile.event ? t("personDocs.fromProfileEvent", { event: d.fromProfile.event }) : t("personDocs.fromProfile")}
               </a>
             )}
+            {d.fromDetails && !d.receivedVia && <span className="text-pine" title={t("detailsDocs.hint")}>{t("detailsDocs.done")}</span>}
             {d.received && d.receivedAt && !(d.fromProfile && !d.receivedVia) && (
               <span>
                 {new Date(d.receivedAt).toLocaleDateString("cs-CZ")}

@@ -15,7 +15,8 @@ type EventBasic = { id: string; name: string; documentsListColumns: string[] | n
 
 // fromProfile: covered by the person's permanent document (slice 6 #4) -- not a toggle.
 // bank: confirmed from the bank (docs/bank-payments-design.md) -- booking date + amount.
-type DocStatus = { eventListItemId: string; name: string; received: boolean; fromProfile?: boolean; bank?: { date: string; amount: number } | null };
+// fromDetails: a "Splněno vyplněním podrobných údajů" document, received by the filled-in details -- not a toggle.
+type DocStatus = { eventListItemId: string; name: string; received: boolean; fromProfile?: boolean; fromDetails?: boolean; bank?: { date: string; amount: number } | null };
 
 type Participant = {
   id: string;
@@ -118,6 +119,10 @@ export default function MailParticipantsPage({
     d.fromProfile ? (
       <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine" title={t("personDocs.fromProfileHint")}>
         {t("personDocs.fromProfile")}
+      </span>
+    ) : d.fromDetails ? (
+      <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine" title={t("detailsDocs.hint")}>
+        {t("detailsDocs.done")}
       </span>
     ) : (
       <button

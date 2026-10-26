@@ -4,3 +4,5 @@ ALTER TYPE "ComputedFieldType" ADD VALUE IF NOT EXISTS 'price_category';
 ALTER TYPE "ComputedFieldType" ADD VALUE IF NOT EXISTS 'details_status';
 ALTER TABLE "events" ADD COLUMN "export_columns" JSONB;
 ALTER TABLE "organizations" ADD COLUMN "export_columns" JSONB;
+-- Where the portal profile shows the price category (Šablony -> Pořadí polí pro rodiče).
+ALTER TABLE "organizations" ADD COLUMN "profile_category" JSONB;

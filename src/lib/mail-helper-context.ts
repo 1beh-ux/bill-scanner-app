@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { detailsDocuments } from "@/lib/details-documents";
 import type { DocumentListItem, DocumentTypeData } from "@/lib/mail-reply-template";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
 import { profileDocuments } from "@/lib/person-documents";
@@ -35,8 +36,11 @@ export async function getReceivedItemIds(participantId: string): Promise<Set<str
     }),
     prisma.participant.findUnique({ where: { id: participantId }, select: { id: true, eventId: true, childId: true } }),
   ]);
-  const fromProfile = participant ? ((await profileDocuments([participant])).get(participantId) ?? []) : [];
-  return new Set([...rows, ...fromProfile].map((r) => r.eventListItemId));
+  const [fromProfile, fromDetails] = participant
+    ? await Promise.all([profileDocuments([participant]).then((m) => m.get(participantId) ?? []), detailsDocuments([participantId]).then((m) => m.get(participantId) ?? [])])
+    : [[], []];
+  // ...and one "Splněno vyplněním podrobných údajů" counts once the details are filled (details-documents.ts).
+  return new Set([...rows, ...fromProfile, ...fromDetails].map((r) => r.eventListItemId));
 }
 
 export async function requireEventSenderEmail(eventId: string): Promise<string> {

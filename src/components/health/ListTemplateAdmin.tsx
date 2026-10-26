@@ -29,6 +29,8 @@ type DocumentData = {
   autoAttachOnAccept?: boolean;
   staticAttachment?: boolean;
   allowPortalUpload?: boolean;
+  // Received once every detailed field the event asks of the person is filled (2026-10-27).
+  fromDetails?: boolean;
   // Slice 6: org template "platí trvale" (set via /api/list-templates/<id>/permanent);
   // event copy "vyžadovat nový" (this event ignores the person's stored document).
   permanent?: boolean;
@@ -90,6 +92,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
   const [staticAttachment, setStaticAttachment] = useState(false);
   const [allowPortalUpload, setAllowPortalUpload] = useState(false);
+  const [fromDetails, setFromDetails] = useState(false);
   const [requireNew, setRequireNew] = useState(false);
   // Event scope: keys of the org templates that are "platí trvale" (slice 6).
   const [permanentKeys, setPermanentKeys] = useState<Set<string>>(new Set());
@@ -170,6 +173,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setAutoAttachOnAccept(true);
     setStaticAttachment(false);
     setAllowPortalUpload(false);
+    setFromDetails(false);
     setRequireNew(false);
     setPlanData(categoryGroup ? { group: categoryGroup } : {});
     setEditingId(null);
@@ -198,6 +202,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
     setStaticAttachment((item.data as DocumentData | null)?.staticAttachment ?? false);
     setAllowPortalUpload((item.data as DocumentData | null)?.allowPortalUpload ?? false);
+    setFromDetails((item.data as DocumentData | null)?.fromDetails ?? false);
     setRequireNew((item.data as DocumentData | null)?.requireNew ?? false);
     setPlanData((item.data as Record<string, unknown> | null) ?? {});
     setFormOpen(true);
@@ -232,7 +237,8 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           templateGoogleDocId: scope === "event" ? templateGoogleDocId.trim() || undefined : undefined,
           autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
           staticAttachment: scope === "event" && staticAttachment ? true : undefined,
-          allowPortalUpload: scope === "event" && allowPortalUpload && !staticAttachment ? true : undefined,
+          allowPortalUpload: scope === "event" && allowPortalUpload && !staticAttachment && !fromDetails ? true : undefined,
+          fromDetails: !staticAttachment && fromDetails ? true : undefined,
           // Kept as is: the org flag has its own switch, the event copy's is only a copy.
           permanent: (items.find((i) => i.id === editingId)?.data as DocumentData | null)?.permanent || undefined,
           requireNew: scope === "event" && requireNew && editingPermanent ? true : undefined,
@@ -502,6 +508,15 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                     </label>
                   )}
                   {!staticAttachment && (
+                    <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
+                      <input type="checkbox" className="mt-0.5" checked={fromDetails} onChange={(e) => setFromDetails(e.target.checked)} />
+                      <span>
+                        {t("listTemplateAdmin.fromDetailsLabel")}
+                        <span className="block text-[11.5px]">{t("listTemplateAdmin.fromDetailsHint")}</span>
+                      </span>
+                    </label>
+                  )}
+                  {!staticAttachment && !fromDetails && (
                     <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
                       <input type="checkbox" className="mt-0.5" checked={allowPortalUpload} onChange={(e) => setAllowPortalUpload(e.target.checked)} />
                       <span>

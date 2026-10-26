@@ -19,6 +19,9 @@ export type DocumentTypeData = {
   // Parents may upload this document in the portal instead of e-mailing it
   // (slice 3 F); default off.
   allowPortalUpload?: boolean;
+  // Received once every detailed field the event asks of the person is filled (2026-10-27,
+  // src/lib/details-documents.ts) -- e.g. the health questionnaire whose questions are fields now.
+  fromDetails?: boolean;
 };
 
 export type DocumentListItem = {
