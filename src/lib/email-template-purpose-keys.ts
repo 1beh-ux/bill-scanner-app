@@ -17,6 +17,9 @@ export const REGISTRATION_ACCEPTANCE_PURPOSE_KEY = "registration_acceptance";
 // The acceptance for a participant NOT in Členové of a portal event (2026-10-26): sent instead of the one
 // above (same send, same log key) -- tells them about their own page /u/<token> ({{details_link}}).
 export const REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY = "registration_acceptance_page";
+// The acceptance in an event with the parent portal, for its members (2026-10-26): the portal link
+// ({{details_link_line}}). Same send, same log key as the plain one (src/lib/email-kinds.ts eventTemplateKey).
+export const REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY = "registration_acceptance_portal";
 // Not a stored/editable template -- an admin types fresh subject/body every
 // time for the "open email to selected participants" feature. Used only as
 // a ParentEmailLog.purposeKey tag so these sends are distinguishable from

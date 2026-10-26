@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate, senderIdentity, substituteVariables, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { templateFiles } from "@/lib/email-files";
+import { eventTemplateKey } from "@/lib/email-kinds";
 import { attachmentIdsFor } from "@/lib/email-attachments";
 import { documentAttachmentsFor } from "@/lib/participant-bulk-email";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
@@ -72,11 +73,11 @@ export async function sendBulkStatusUpdates(
   eventId: string,
   participantIds: string[],
   sentByUserId: string,
-  // The status e-mail or its variant with the link (MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY).
-  purposeKey: string = MAIL_HELPER_BULK_STATUS_PURPOSE_KEY
 ): Promise<BulkStatusSendResult[]> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) throw new Error("event_not_found");
+  // The event's case: with the link to the portal / the participant's page when it uses the portal.
+  const purposeKey = eventTemplateKey(event, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
 
   const senderEmail = event.senderEmail;
   const documentTypes = await getActiveDocumentTypes(eventId);

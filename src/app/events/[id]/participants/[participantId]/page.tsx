@@ -617,7 +617,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         <Link href={composeHref(eventId, { mode: "freeform", participantIds: [participantId] })} className={btnSecondary}>
           {t("participantsPage.bulkEmailButton")}
         </Link>
-        {moduleAccess.mail && <StatusUpdateButton eventId={eventId} participantId={participantId} className={btnSecondary} />}
+        <StatusUpdateButton eventId={eventId} participantId={participantId} className={btnSecondary} />
         {moduleAccess.health && (
           <Link href={`/events/${eventId}/health/participants/${participantId}`} className="text-[13px] text-ember hover:underline">
             {t("participantsPage.editHealthDetailsLink")}

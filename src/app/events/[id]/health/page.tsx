@@ -45,7 +45,6 @@ export default function EventHealthPage({
   const router = useRouter();
   // Optional field columns ("Sloupce", Event.healthListColumns): any field except built-in/image.
   const [fields, setFields] = useState<ParticipantFieldDef[]>([]);
-  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
   // Every configured health note (with its places): the "Seznam Zdraví" column + highlight badges.
   const [notes, setNotes] = useState<Record<string, HealthNote[]>>({});
   const listNotes = (pid: string) => (notes[pid] ?? []).filter((n) => n.places.includes("list"));
@@ -78,10 +77,6 @@ export default function EventHealthPage({
 
   useEffect(() => {
     load();
-    fetch(`/api/events/${id}/modules/mine`)
-      .then((r) => (r.ok ? r.json() : {}))
-      .then(setModuleAccess)
-      .catch(() => {});
   }, [id]);
 
   const filteredParticipants = useMemo(() => {
@@ -169,7 +164,7 @@ export default function EventHealthPage({
             }}
           />
         )}
-        {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
+        <StatusUpdateButton eventId={id} />
         <a href={`/events/${id}/participants`} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover">
           {t("participantsPage.manageButton")}
         </a>

@@ -7,6 +7,7 @@ import {
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
@@ -187,6 +188,24 @@ Kdyby cokoli nebylo jasné, odpovězte prosím na tento e-mail.
 Děkujeme,
 {{sender_name}}`,
   },
+  [REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY]: {
+    subject: "Přijetí přihlášky: {{participant_name}} — {{camp_name}}",
+    body: `Dobrý den,
+
+s radostí potvrzujeme přijetí {{participant_name}} na akci {{camp_name}} ({{date_range}}).
+
+{{details_link_line}}
+V portálu u přihlášky uvidíte, co ještě chybí (údaje, dokumenty), a platbu – částku, účet, variabilní symbol, QR kód a jestli už dorazila.
+
+V příloze najdete: {{attachments_list}}.
+
+{{registration_deadline_line}}
+
+Kdyby cokoli nebylo jasné, ozvěte se na {{sender_email}}.
+
+S pozdravem
+{{sender_name}}`,
+  },
   [REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY]: {
     subject: "Přijetí přihlášky: {{participant_name}} — {{camp_name}}",
     body: `Dobrý den,
@@ -259,8 +278,14 @@ export function senderIdentity(
 // health or mail access reaches (same as the bulk-email send route).
 export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
   if (isTicketPurpose(purposeKey)) return ["tickets"];
-  if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY || purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY || purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) return ["mail"];
-  if (purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
+  if (purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) return ["mail"];
+  // The document status e-mails belong to Účastníci (2026-10-26), like the acceptance.
+  if (
+    purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY ||
+    purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY ||
+    purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY ||
+    purposeKey === REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY ||
+    purposeKey === REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
   return ["health"];
 }
 

@@ -36,6 +36,8 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [body, setBody] = useState("");
   const [templateSource, setTemplateSource] = useState<"event" | "org" | null>(null);
   const [loading, setLoading] = useState(mode === "acceptance");
+  // The template the acceptance actually uses here (the event's portal case), for its attachments.
+  const [sentKey, setSentKey] = useState<string | null>(null);
   const [sendEmail, setSendEmail] = useState(!(mode === "acceptance" && regenerate));
   const emailOn = mode === "freeform" || sendEmail;
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
@@ -93,13 +95,15 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
 
   useEffect(() => {
     if (mode !== "acceptance") return;
-    fetch(`/api/events/${eventId}/email-template?purposeKey=${encodeURIComponent(purposeKey)}`, { cache: "no-store" })
+    // forEvent: the acceptance of this event's case (with the portal or without).
+    fetch(`/api/events/${eventId}/email-template?purposeKey=${encodeURIComponent(purposeKey)}&forEvent=1`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
         setSubject(data.subject);
         setBody(data.body);
         setTemplateSource(data.hasOverride ? "event" : "org");
+        setSentKey(data.purposeKey ?? purposeKey);
       })
       .finally(() => setLoading(false));
   }, [eventId, mode, purposeKey]);
@@ -112,11 +116,11 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
       .then((d: { documents: { id: string; name: string; fixed: boolean; autoAttachOnAccept: boolean }[]; attachments: Record<string, string[]> } | null) => {
         if (!d) return;
         setDocTypes(d.documents.map((i) => ({ id: i.id, name: i.name, fixed: i.fixed })));
-        const preset = d.attachments[templateKey ?? purposeKey] ?? [];
+        const preset = d.attachments[templateKey ?? sentKey ?? purposeKey] ?? [];
         setSelectedDocs(new Set([...preset, ...(mode === "acceptance" ? d.documents.filter((i) => i.autoAttachOnAccept).map((i) => i.id) : [])]));
       })
       .catch(() => {});
-  }, [eventId, mode, purposeKey, templateKey]);
+  }, [eventId, mode, purposeKey, templateKey, sentKey]);
 
   useEffect(() => {
     if (!templateKey) return;

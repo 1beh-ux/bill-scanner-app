@@ -6,6 +6,7 @@ import { takeRateSlot } from "@/lib/portal-rate";
 import { resolveEmailTemplate } from "@/lib/email-template";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendBulkParticipantEmail } from "@/lib/participant-bulk-email";
+import { eventTemplateKey } from "@/lib/email-kinds";
 
 // "Poslat znovu e-mailem" (docs/registration-slice3-spec.md F): the parent's
 // own click re-sends the acceptance e-mail + documents of an ACCEPTED
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
   if (!sender) return NextResponse.json({ error: "no_sender" }, { status: 409 });
   if (!(await takeRateSlot(`resend:${participant.id}`, RESEND_PER_DAY, 24 * 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
-  const template = await resolveEmailTemplate(participant.eventId, REGISTRATION_ACCEPTANCE_PURPOSE_KEY);
+  const template = await resolveEmailTemplate(participant.eventId, eventTemplateKey(participant.event, REGISTRATION_ACCEPTANCE_PURPOSE_KEY));
   const { results } = await sendBulkParticipantEmail({
     eventId: participant.eventId,
     participantIds: [participant.id],

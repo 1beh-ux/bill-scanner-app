@@ -3,6 +3,7 @@ import { resolveEmailTemplate, senderIdentity, substituteVariables } from "@/lib
 import { REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { templateFiles } from "@/lib/email-files";
+import { eventTemplateKey } from "@/lib/email-kinds";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink } from "@/lib/document-variables";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
@@ -312,7 +313,7 @@ export async function sendBulkParticipantEmail(opts: {
   const failedDocs = new Set<string>();
   const staticPdfs = new Map<string, Promise<Buffer>>();
   // The e-mail's uploaded files (organization + event, src/lib/email-files.ts), downloaded once.
-  const ownFiles = sendEmail ? await templateFiles(event.organizationId, event.id, opts.purposeKey) : [];
+  const ownFiles = sendEmail ? await templateFiles(event.organizationId, event.id, eventTemplateKey(event, opts.purposeKey)) : [];
   // A participant not in Členové of a portal event gets "Přijetí – osobní stránka" instead (its own page,
   // {{details_link}}), loaded on first need; the admin's edited text is for the others.
   let pageTemplate: { subject: string; body: string; files: typeof ownFiles } | null = null;

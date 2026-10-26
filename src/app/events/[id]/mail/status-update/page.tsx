@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { templateEditHref } from "@/lib/email-kinds";
 
 type DocTypeCol = { id: string; name: string };
 type Row = {
@@ -38,30 +39,25 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
   const [filled, setFilled] = useState<{ subject: string; body: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<{ text: string; warn: boolean } | null>(null);
-  // Which template: the status e-mail, or its variant with the link to the portal / the participant's page.
-  const [variant, setVariant] = useState<"plain" | "link" | null>(null);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the address
-    setVariant(new URLSearchParams(window.location.search).get("template") === "link" ? "link" : "plain");
-  }, []);
-  const purposeKey = variant === "link" ? MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY : MAIL_HELPER_BULK_STATUS_PURPOSE_KEY;
+  // The event's template (with the link when it uses the parent portal), chosen by the server.
+  const [purposeKey, setPurposeKey] = useState(MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
 
   useEffect(() => {
-    if (!variant) return;
-    fetch(`/api/events/${eventId}/mail/bulk-status-preview${variant === "link" ? "?template=link" : ""}`, { cache: "no-store" })
+    fetch(`/api/events/${eventId}/mail/bulk-status-preview`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
         setDocumentTypes(data.documentTypes);
         setRows(data.rows);
         setTemplate(data.template);
+        setPurposeKey(data.purposeKey ?? MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
         const only = new URLSearchParams(window.location.search).get("only");
         setSelected(Object.fromEntries((data.rows as Row[]).map((r) => [r.participantId, only ? r.participantId === only : r.defaultSend])));
         const first = (data.rows as Row[]).find((r) => (only ? r.participantId === only : r.defaultSend)) ?? data.rows[0];
         setPreviewFor(first?.participantId ?? "");
       })
       .finally(() => setLoading(false));
-  }, [eventId, variant]);
+  }, [eventId]);
 
   useEffect(() => {
     if (!template || !previewFor) return;
@@ -87,7 +83,7 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/events/${eventId}/mail/bulk-status-send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantIds: selectedIds, purposeKey }),
+        body: JSON.stringify({ participantIds: selectedIds }),
       });
       if (!res.ok) return setStatus({ text: t("bulkStatusModal.sendFailed"), warn: true });
       const d = await res.json();
@@ -107,24 +103,15 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
       <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">{t("statusUpdate.title")}</h1>
       <p className="mb-4 text-[13px] text-ink-secondary">
         {t("statusUpdate.intro")}{" "}
-        <Link href={`/events/${eventId}?tab=posta`} className="text-ember hover:underline">
+        <Link href={templateEditHref(eventId, { purposeKey })} className="text-ember hover:underline">
           {t("compose.editTemplate")}
         </Link>
       </p>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label={t("statusUpdate.variant")}>
-        {(["plain", "link"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            onClick={() => setVariant(v)}
-            className={"rounded-full px-3 py-1 text-[13px] " + (variant === v ? "bg-ember text-white" : "bg-paper-2 text-ink hover:bg-mist")}
-          >
-            {t(v === "link" ? "emailKinds.documentStatusLink.name" : "emailKinds.documentStatus.name")}
-          </button>
-        ))}
-        {variant === "link" && <span className="text-[12px] text-ink-secondary">{t("statusUpdate.linkHint")}</span>}
-      </div>
+      <p className="mb-4 text-[13px] text-ink">
+        {t("statusUpdate.templateUsed", { name: t(purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY ? "emailKinds.documentStatusLink.name" : "emailKinds.documentStatus.name") })}
+        {purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY && <span className="ml-1 text-[12px] text-ink-secondary">{t("statusUpdate.linkHint")}</span>}
+      </p>
 
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>

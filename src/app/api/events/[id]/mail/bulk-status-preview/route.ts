@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { resolveEmailTemplate, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
-import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { eventTemplateKey } from "@/lib/email-kinds";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -23,7 +23,7 @@ export async function GET(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id: eventId } = await params;
-  const denied = await requireModuleAccess(user, eventId, "mail");
+  const denied = await requireAnyModuleAccess(user, eventId, ["participants", "health", "mail"]);
   if (denied) return denied;
 
   const documentTypes = await getActiveDocumentTypes(eventId);
@@ -51,12 +51,14 @@ export async function GET(
 
   // The raw template; the page fills it in per participant via
   // /api/events/[id]/email-template/preview (same code as the send).
-  // ?template=link: the variant with the link where to fill in / upload / pay.
-  const template = await resolveEmailTemplate(eventId, req.nextUrl.searchParams.get("template") === "link" ? MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY : MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
+  // The event's case: with the link to the portal / the participant's page when it uses the portal.
+  const purposeKey = eventTemplateKey(await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { registrationConnected: true, kind: true } }), MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
+  const template = await resolveEmailTemplate(eventId, purposeKey);
 
   return NextResponse.json({
     documentTypes: documentTypes.map((d) => ({ id: d.id, name: d.data?.displayName || d.name })),
     rows,
     template: { subject: template.subject, body: template.body },
+    purposeKey,
   });
 }

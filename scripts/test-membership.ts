@@ -19,6 +19,16 @@ async function main() {
   // The membership year an event checks: its setting, else its start year.
   assert.equal(membershipYearOf({ membershipCheckYear: null, startDate: new Date("2027-03-24") }), 2027);
   assert.equal(membershipYearOf({ membershipCheckYear: 2026, startDate: new Date("2027-03-24") }), 2026);
+  // The template an event sends: its portal case for the acceptance / status e-mail, else the asked one.
+  const { eventTemplateKey, kindForEvent } = await import("../src/lib/email-kinds");
+  const portal = { registrationConnected: true, kind: "event" }, plain = { registrationConnected: false, kind: "event" }, year = { registrationConnected: false, kind: "membership" };
+  assert.equal(eventTemplateKey(portal, "registration_acceptance"), "registration_acceptance_portal");
+  assert.equal(eventTemplateKey(year, "mail_helper_bulk_status_update"), "mail_helper_bulk_status_link");
+  assert.equal(eventTemplateKey(plain, "registration_acceptance"), "registration_acceptance");
+  assert.equal(eventTemplateKey(portal, "custom_x"), "custom_x");
+  assert.equal(kindForEvent({ when: "portal" }, plain), false);
+  assert.equal(kindForEvent({ when: "noPortal" }, plain), true);
+  assert.equal(kindForEvent({}, portal), true);
   // Stored e-mail files: bad rows dropped, empty keys gone.
   const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
   assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });

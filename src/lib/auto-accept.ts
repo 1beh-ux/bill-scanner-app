@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
 import { resolveEmailTemplate } from "@/lib/email-template";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendBulkParticipantEmail } from "@/lib/participant-bulk-email";
+import { eventTemplateKey } from "@/lib/email-kinds";
 
 export type AutoAcceptMode = "manual" | "accept" | "accept_send";
 export type RegistrationSource = "portal" | "public" | "import" | "manual";
@@ -40,14 +41,15 @@ export type AutoAcceptOutcome = "pending" | "accepted" | "accepted_sent";
  */
 export async function autoAcceptRegistrations(eventId: string, participantIds: string[], source: RegistrationSource): Promise<AutoAcceptOutcome> {
   if (participantIds.length === 0) return "pending";
-  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { autoAccept: true, senderEmail: true } });
+  const event = await prisma.event.findUnique({ where: { id: eventId }, select: { autoAccept: true, senderEmail: true, registrationConnected: true, kind: true } });
   if (!event || event.autoAccept === "manual") return "pending";
   const sender = event.autoAccept === "accept_send" ? await eventSender(event) : null;
   const plan = autoAcceptPlan(event.autoAccept, source, !!sender);
   if (!plan.accept) return "pending";
   try {
     if (plan.send && sender) {
-      const template = await resolveEmailTemplate(eventId, REGISTRATION_ACCEPTANCE_PURPOSE_KEY);
+      // The event's case (portal / not); participants not in Členové get their own (participant-bulk-email.ts).
+      const template = await resolveEmailTemplate(eventId, eventTemplateKey(event, REGISTRATION_ACCEPTANCE_PURPOSE_KEY));
       await sendBulkParticipantEmail({
         eventId,
         participantIds,

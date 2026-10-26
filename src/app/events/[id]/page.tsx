@@ -16,7 +16,7 @@ import EventCostCard from "@/components/usage/EventCostCard";
 import PortalSettings from "@/components/events/PortalSettings";
 import PaymentSettings from "@/components/events/PaymentSettings";
 import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
-import { EMAIL_KINDS, kindAllowed, templateEditHref } from "@/lib/email-kinds";
+import { EMAIL_KINDS, kindAllowed, kindForEvent, templateEditHref } from "@/lib/email-kinds";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
 import MembershipYearCard from "@/components/events/MembershipYearCard";
 import PortalCardLayout from "@/components/events/PortalCardLayout";
@@ -730,7 +730,7 @@ export default function EventDetailPage({
           {tab === "posta" && roster && (
             <div className="flex flex-col gap-6">
               {/* Every e-mail type (src/lib/email-kinds.ts), same order as Poslat e-mail. */}
-              {EMAIL_KINDS.filter((k) => !k.noTemplate).map((k) =>
+              {EMAIL_KINDS.filter((k) => !k.noTemplate && (!event || kindForEvent(k, event))).map((k) =>
                 k.orgOnly ? (
                   <div key={k.purposeKey} id={`tpl-${k.purposeKey}`}>
                     <h3 className="mb-1 text-[15px] font-semibold text-ink">{t(`emailKinds.${k.id}.name`)}</h3>

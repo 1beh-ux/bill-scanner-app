@@ -73,7 +73,6 @@ export default function EventParticipantsPage({
   const [searchQuery, setSearchQuery] = useState("");
   // Status filter (slice 4 #8), same states as the parent portal.
   const [stateFilter, setStateFilter] = useState<RegistrationState | "">("");
-  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean>>({});
 
   const [addOpen, setAddOpen] = useState(false);
   const [firstName, setFirstName] = useState("");
@@ -133,10 +132,6 @@ export default function EventParticipantsPage({
 
   useEffect(() => {
     load();
-    fetch(`/api/events/${id}/modules/mine`)
-      .then((r) => (r.ok ? r.json() : {}))
-      .then(setModuleAccess)
-      .catch(() => {});
   }, [id]);
 
   const filteredParticipants = useMemo(() => {
@@ -410,7 +405,7 @@ export default function EventParticipantsPage({
           {t("participantsPage.writeEmailButton")}
         </button>
         <DriveExportButton eventId={id} />
-        {moduleAccess.mail && <StatusUpdateButton eventId={id} />}
+        <StatusUpdateButton eventId={id} />
         <UploadReviewLink eventId={id} />
         <button onClick={openAdd} className={btnPrimary}>
           {t("participantsPage.addButton")}

@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
 import { orgIdOfEvent } from "@/lib/org-owner";
 import { isCustomPurpose } from "@/lib/email-template-purpose-keys";
+import { eventTemplateKey } from "@/lib/email-kinds";
 import { getOrCreateOrgEmailTemplate, PARENT_SUMMARY_PURPOSE_KEY, modulesForEmailPurpose } from "@/lib/email-template";
 
 export async function GET(
@@ -19,15 +20,17 @@ export async function GET(
   const denied = await requireAnyModuleAccess(user, eventId, modulesForEmailPurpose(purposeKey));
   if (denied) return denied;
 
+  // ?forEvent=1 (the send dialog): the template this event actually sends for it (its portal case).
+  const key = req.nextUrl.searchParams.get("forEvent") === "1" ? eventTemplateKey(await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { registrationConnected: true, kind: true } }), purposeKey) : purposeKey;
   const override = await prisma.eventEmailTemplate.findUnique({
-    where: { eventId_purposeKey: { eventId, purposeKey } },
+    where: { eventId_purposeKey: { eventId, purposeKey: key } },
   });
   if (override) {
-    return NextResponse.json({ subject: override.subject, body: override.body, hasOverride: true });
+    return NextResponse.json({ subject: override.subject, body: override.body, hasOverride: true, purposeKey: key });
   }
 
-  const org = await getOrCreateOrgEmailTemplate(await orgIdOfEvent(eventId), purposeKey);
-  return NextResponse.json({ subject: org.subject, body: org.body, hasOverride: false });
+  const org = await getOrCreateOrgEmailTemplate(await orgIdOfEvent(eventId), key);
+  return NextResponse.json({ subject: org.subject, body: org.body, hasOverride: false, purposeKey: key });
 }
 
 export async function PATCH(

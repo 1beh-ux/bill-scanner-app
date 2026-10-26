@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { composeHref } from "@/lib/compose-handoff";
 import { portalComposeHref } from "@/components/children/portal-link";
-import { EMAIL_KINDS, kindAllowed, templateEditHref, type EmailKind } from "@/lib/email-kinds";
+import { EMAIL_KINDS, kindAllowed, kindForEvent, templateEditHref, type EmailKind } from "@/lib/email-kinds";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 
 // Účastníci -> Poslat e-mail: every e-mail in one submenu. The ones sent from here (blank,
@@ -25,6 +25,8 @@ export default function SendEmailPage({ params }: { params: Promise<{ id: string
   const router = useRouter();
   const [access, setAccess] = useState<Record<string, boolean>>({});
   const [customs, setCustoms] = useState<Custom[]>([]);
+  // The event's case (with the parent portal or not): only the e-mails it uses are listed.
+  const [eventCase, setEventCase] = useState<{ registrationConnected: boolean; kind: string } | null>(null);
   const [participants, setParticipants] = useState<Participant[] | null>(null);
   const [selectedKey, setSelectedKey] = useState(EMAIL_KINDS[0].purposeKey);
   const [state, setState] = useState<RegistrationState | "all" | "accepted" | "pending">("all");
@@ -34,6 +36,7 @@ export default function SendEmailPage({ params }: { params: Promise<{ id: string
 
   const load = useCallback(() => {
     fetch(`/api/events/${id}/modules/mine`).then((r) => (r.ok ? r.json() : {})).then(setAccess).catch(() => {});
+    fetch(`/api/events/${id}`).then((r) => (r.ok ? r.json() : null)).then((e) => e && setEventCase({ registrationConnected: !!e.registrationConnected, kind: e.kind })).catch(() => {});
     fetch(`/api/events/${id}/email-templates`).then((r) => (r.ok ? r.json() : [])).then(setCustoms).catch(() => {});
     fetch(`/api/events/${id}/participants`).then((r) => (r.ok ? r.json() : [])).then((rows: Participant[]) => setParticipants(rows.filter((p) => p.active))).catch(() => setParticipants([]));
   }, [id]);
@@ -43,7 +46,7 @@ export default function SendEmailPage({ params }: { params: Promise<{ id: string
 
   // Portal e-mails go through the people list (Lidé), which only admins open.
   const items: Item[] = [
-    ...EMAIL_KINDS.filter((k) => kindAllowed(k, access) && (k.launch !== "portal" || role === "admin")),
+    ...EMAIL_KINDS.filter((k) => kindAllowed(k, access) && (k.launch !== "portal" || role === "admin") && (!eventCase || kindForEvent(k, eventCase))),
     ...customs.map((c) => ({ purposeKey: c.purposeKey, id: "custom" as const, name: c.name, launch: "compose" as const, module: "roster" as const })),
   ];
   const fromHere = items.filter((i) => i.launch !== "elsewhere");
