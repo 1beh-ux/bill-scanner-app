@@ -10,7 +10,9 @@ import {
   PORTAL_LINK_PURPOSE_KEY,
   PARENT_SUMMARY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
 } from "@/lib/email-template-purpose-keys";
 
@@ -35,7 +37,10 @@ export const EMAIL_KINDS: EmailKind[] = [
   { purposeKey: PORTAL_LINK_PURPOSE_KEY, id: "portalLink", launch: "portal", module: "roster", orgOnly: true },
   { purposeKey: PARENT_SUMMARY_PURPOSE_KEY, id: "healthSummary", launch: "elsewhere", launchHref: (id) => `/events/${id}/health/send-summaries`, module: "health" },
   { purposeKey: REGISTRATION_ACCEPTANCE_PURPOSE_KEY, id: "acceptance", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants`, module: "roster" },
+  // Sent instead of the acceptance to participants not in Členové (src/lib/participant-bulk-email.ts).
+  { purposeKey: REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, id: "acceptancePage", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants`, module: "roster" },
   { purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, id: "documentStatus", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants/documents`, module: "mail" },
+  { purposeKey: MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY, id: "documentStatusLink", launch: "elsewhere", launchHref: (id) => `/events/${id}/mail/status-update?template=link`, module: "mail" },
   { purposeKey: MAIL_HELPER_REPLY_PURPOSE_KEY, id: "mailReply", launch: "elsewhere", launchHref: (id) => `/events/${id}/mail`, module: "mail", bodyOnly: true },
 ];
 

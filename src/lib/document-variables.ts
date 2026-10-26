@@ -23,6 +23,8 @@ export type ParticipantForMerge = {
   customFieldValues: Record<string, string> | null;
   registrationNumber: number | null;
   childId?: string | null;
+  // Not linked to a person: child / adult as registered (Participant.isAdult).
+  isAdult?: boolean | null;
   // Price rules (slice 3 C): the chosen category and when the registration was made.
   priceCategory?: string | null;
   createdAt?: Date;
@@ -133,7 +135,7 @@ export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): num
   if (!rules) return isMember(p, e) ? e.memberPriceCzk : e.nonMemberPriceCzk;
   return rulePrice(rules, {
     category: p.priceCategory,
-    isAdult: !!p.childId && !!e.priceContext?.adultChildIds.has(p.childId),
+    isAdult: p.childId ? !!e.priceContext?.adultChildIds.has(p.childId) : !!p.isAdult,
     isMember: isMember(p, e),
     createdAt: p.createdAt ?? new Date(),
     eventStart: e.startDate,
@@ -233,7 +235,13 @@ async function detailsLinkVars(participant: { id?: string; childId?: string | nu
   const portal = await portalLinkVars(participant, event, create);
   const { participantLinkUrl } = await import("@/lib/participant-link");
   const link = portal.portal_link || (participant.id ? await participantLinkUrl(participant.id, create) : "");
-  return { ...portal, details_link: link, details_link_line: link ? `Podrobné údaje, dokumenty a platbu najdete zde: ${link} (při otevření se zeptá na datum narození).` : "" };
+  // The sentence says which of the two it is: a member's family portal, or the page for this registration only.
+  const line = !link
+    ? ""
+    : portal.portal_link
+      ? `Údaje, dokumenty a platbu najdete v rodinném portálu: ${link} (při prvním otevření se zeptá na datum narození).`
+      : `Údaje, dokumenty a platbu k této přihlášce najdete na její osobní stránce: ${link} (při otevření se zeptá na datum narození přihlášeného).`;
+  return { ...portal, details_link: link, details_link_line: line };
 }
 
 export function formatDateRange(startDate: Date, endDate: Date): string {

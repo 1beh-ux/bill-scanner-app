@@ -71,7 +71,9 @@ export async function previewBulkStatusEmail(
 export async function sendBulkStatusUpdates(
   eventId: string,
   participantIds: string[],
-  sentByUserId: string
+  sentByUserId: string,
+  // The status e-mail or its variant with the link (MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY).
+  purposeKey: string = MAIL_HELPER_BULK_STATUS_PURPOSE_KEY
 ): Promise<BulkStatusSendResult[]> {
   const event = await prisma.event.findUnique({ where: { id: eventId } });
   if (!event) throw new Error("event_not_found");
@@ -83,14 +85,14 @@ export async function sendBulkStatusUpdates(
 
   const { subject: templateSubject, body: templateBody } = await resolveEmailTemplate(
     eventId,
-    MAIL_HELPER_BULK_STATUS_PURPOSE_KEY
+    purposeKey
   );
 
   const results: BulkStatusSendResult[] = [];
   // Documents set for this e-mail in Nastavení akce -> Pošta (fixed ones exported once).
-  const attachIds = attachmentIdsFor(event, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
+  const attachIds = attachmentIdsFor(event, purposeKey);
   const staticPdfs = new Map<string, Promise<Buffer>>();
-  const files = senderEmail ? await templateFiles(event.organizationId, eventId, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) : [];
+  const files = senderEmail ? await templateFiles(event.organizationId, eventId, purposeKey) : [];
 
   for (const participantId of participantIds) {
     const participant = await prisma.participant.findUnique({
@@ -111,7 +113,7 @@ export async function sendBulkStatusUpdates(
           data: {
             participantId,
             guardianId: guardian.id,
-            purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+            purposeKey,
             status: "failed",
             errorMessage: "sender_not_configured",
             sentByUserId,
@@ -128,7 +130,7 @@ export async function sendBulkStatusUpdates(
           data: {
             participantId,
             guardianId: guardian.id,
-            purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+            purposeKey,
             status: "sent",
             sentByUserId,
             subject,
@@ -141,7 +143,7 @@ export async function sendBulkStatusUpdates(
           data: {
             participantId,
             guardianId: guardian.id,
-            purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+            purposeKey,
             status: "failed",
             errorMessage,
             sentByUserId,

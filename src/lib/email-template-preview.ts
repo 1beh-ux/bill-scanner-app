@@ -3,6 +3,8 @@ import {
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
+  MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
   PORTAL_INVITATION_PURPOSE_KEY,
@@ -76,6 +78,8 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   // Free e-mail to participants (compose page, "Napsat e-mail") and the own templates.
   [PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY]: PARTICIPANT_VARS,
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: PARTICIPANT_VARS,
+  [REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY]: PARTICIPANT_VARS,
+  [MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY]: PARTICIPANT_VARS,
   // Child-level, no event: the child's own profile fields are the other {{key}}s.
   [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
   // Yearly invitation (slice 4 #12): same variables as the link e-mail.
@@ -105,7 +109,7 @@ const PORTAL_DUMMY = {
   portal_link: "https://example.com/p/…",
   portal_link_line: "Vaše přihlášky, dokumenty a platby najdete v rodinném portálu: https://example.com/p/… (při prvním otevření se zeptá na datum narození).",
   details_link: "https://example.com/p/…",
-  details_link_line: "Podrobné údaje, dokumenty a platbu najdete zde: https://example.com/p/… (při otevření se zeptá na datum narození).",
+  details_link_line: "Údaje, dokumenty a platbu najdete v rodinném portálu: https://example.com/p/… (při prvním otevření se zeptá na datum narození).",
 };
 
 const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
@@ -156,6 +160,22 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     child_name: "Anna Nováková",
     portal_link: "https://example.com/p/…",
     sender_email: "tabor@example.com",
+    sender_name: "Pavel",
+    signature: "S pozdravem\nPavel, hlavní vedoucí",
+  },
+  [MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY]: {
+    ...PORTAL_DUMMY,
+    participant_name: "Anna Nováková",
+    camp_name: "Letní tábor 2026",
+    document_checklist: "- ✅ Přihláška,\n- ❌ Potvrzení od lékaře,",
+    sender_name: "Pošta táboru",
+    signature: "S pozdravem\nPošta táboru",
+  },
+  [REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY]: {
+    ...PORTAL_DUMMY,
+    participant_name: "Anna Nováková",
+    camp_name: "Letní tábor 2026",
+    details_link: "https://example.com/u/…",
     sender_name: "Pavel",
     signature: "S pozdravem\nPavel, hlavní vedoucí",
   },

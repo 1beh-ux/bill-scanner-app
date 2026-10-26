@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { senderIdentity, substituteVariables } from "@/lib/email-template";
+import { resolveEmailTemplate, senderIdentity, substituteVariables } from "@/lib/email-template";
+import { REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { templateFiles } from "@/lib/email-files";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink } from "@/lib/document-variables";
@@ -311,12 +312,26 @@ export async function sendBulkParticipantEmail(opts: {
   const failedDocs = new Set<string>();
   const staticPdfs = new Map<string, Promise<Buffer>>();
   // The e-mail's uploaded files (organization + event, src/lib/email-files.ts), downloaded once.
-  const files = sendEmail ? await templateFiles(event.organizationId, event.id, opts.purposeKey) : [];
+  const ownFiles = sendEmail ? await templateFiles(event.organizationId, event.id, opts.purposeKey) : [];
+  // A participant not in Členové of a portal event gets "Přijetí – osobní stránka" instead (its own page,
+  // {{details_link}}), loaded on first need; the admin's edited text is for the others.
+  let pageTemplate: { subject: string; body: string; files: typeof ownFiles } | null = null;
+  const pageFor = async (p: { childId: string | null }) => {
+    if (opts.purposeKey !== REGISTRATION_ACCEPTANCE_PURPOSE_KEY || p.childId || !event.registrationConnected || !sendEmail) return null;
+    if (!pageTemplate) {
+      const t = await resolveEmailTemplate(event.id, REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY);
+      pageTemplate = { subject: t.subject, body: t.body, files: await templateFiles(event.organizationId, event.id, REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY) };
+    }
+    return pageTemplate;
+  };
 
   for (const participantId of opts.participantIds) {
     const participant = await loadParticipant(participantId);
     // Only this event's participants (ids come from the request).
     if (!participant || participant.eventId !== opts.eventId) continue;
+    const page = await pageFor(participant);
+    const text = page ?? opts;
+    const files = page?.files ?? ownFiles;
 
     // Built before `vars` -- {{attachments_list}} depends on what actually got
     // attached (Part 11-I), not a static guess made before generation runs.
@@ -330,9 +345,9 @@ export async function sendBulkParticipantEmail(opts: {
 
     // Re-read: the acceptance send may just have assigned the registration number.
     const fresh = (await loadParticipant(participantId)) ?? participant;
-    const vars = await participantEmailVars(fresh, event, sender, [...generated.attachedDocumentNames, ...files.map((f) => f.filename)], usesPortalLink(opts.subject, opts.body));
-    const subject = substituteVariables(opts.subject, vars);
-    const body = substituteVariables(opts.body, vars);
+    const vars = await participantEmailVars(fresh, event, sender, [...generated.attachedDocumentNames, ...files.map((f) => f.filename)], usesPortalLink(text.subject, text.body));
+    const subject = substituteVariables(text.subject, vars);
+    const body = substituteVariables(text.body, vars);
 
     for (const guardian of sendEmail ? participant.guardians : []) {
       if (!senderEmail) {

@@ -4,6 +4,8 @@ import { requireAnyModuleAccess } from "@/lib/module-access";
 import { modulesForEmailPurpose, senderIdentity } from "@/lib/email-template";
 import {
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
+  MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
+  REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
   PARENT_SUMMARY_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (purposeKey === MAIL_HELPER_REPLY_PURPOSE_KEY) {
     const body = await buildReplyText({ eventId, participantId, userId: user.id, template });
     preview = body === null ? null : { subject: "Re: …", body };
-  } else if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY) {
+  } else if (purposeKey === MAIL_HELPER_BULK_STATUS_PURPOSE_KEY || purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY) {
     preview = await previewBulkStatusEmail(eventId, participantId, user.id, template);
   } else if (purposeKey === PARENT_SUMMARY_PURPOSE_KEY) {
     preview = await resolveEmailPreview(participantId, senderIdentity(user, "Zdravotník"), template).catch(() => null);
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       participantId,
       ...template,
       sentByUserId: user.id,
-      markAccepted: purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
+      markAccepted: purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY || purposeKey === REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
     });
   }
   if (!preview) return NextResponse.json({ error: "not_found" }, { status: 404 });

@@ -83,6 +83,7 @@ export async function createPublicRegistration(event: PublicEvent, data: CleanSu
           firstName: p.firstName,
           lastName: p.lastName,
           dateOfBirth: new Date(p.birthDate),
+          isAdult: p.isAdult,
           customFieldValues: Object.fromEntries(Object.entries(p.values).filter(([k, v]) => keys.has(k) && v)),
           portalNote: data.note.trim().slice(0, 2000) || null,
           priceCategory: p.category,

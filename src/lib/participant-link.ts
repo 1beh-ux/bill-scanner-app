@@ -53,6 +53,9 @@ export async function participantScope(token: string, gated: boolean): Promise<{
   return { p };
 }
 
+/** Child or adult: as registered (the public form stores it), else by age at the event's start. */
+const isAdultOf = (p: LinkParticipant) => p.isAdult ?? adultAt(p.dateOfBirth, p.event.startDate);
+
 /** The birth date typed at the gate: true = right. No birth date on the registration = always right. */
 export const birthDatePasses = (p: LinkParticipant, birthDate: unknown) => !p.dateOfBirth || birthDateMatches(typeof birthDate === "string" ? birthDate : null, p.dateOfBirth);
 
@@ -63,7 +66,7 @@ export const birthDatePasses = (p: LinkParticipant, birthDate: unknown) => !p.da
  */
 async function askedFor(p: LinkParticipant) {
   const [eventFields, rules] = await Promise.all([requiredEventFields([p.eventId]), templateRules(p.event.organizationId)]);
-  const asked = askedFields(eventFields, rules, adultAt(p.dateOfBirth, p.event.startDate));
+  const asked = askedFields(eventFields, rules, isAdultOf(p));
   const shown = p.event.detailsAfterAcceptance ? (p.registrationStatus === "accepted" ? askedLater(asked, true) : []) : asked;
   return { asked, shown };
 }
@@ -73,7 +76,7 @@ export async function participantPageData(p: LinkParticipant) {
   const { asked, shown } = await askedFor(p);
   const own = (p.customFieldValues as Record<string, string> | null) ?? {};
   const missing = shown.filter((f) => !own[f.key]?.trim()).length;
-  const card = await registrationCard(p, adultAt(p.dateOfBirth, p.event.startDate), new Map(), { requiredEmpty: askedMissing(asked, null, own), pendingChange: false }, []);
+  const card = await registrationCard(p, isAdultOf(p), new Map(), { requiredEmpty: askedMissing(asked, null, own), pendingChange: false }, []);
   return {
     name: p.name,
     registration: { ...card, details: shown.length ? { fields: shown.map((f) => ({ ...f, value: own[f.key] ?? "" })), missing } : null },

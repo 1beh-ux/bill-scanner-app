@@ -744,6 +744,8 @@ model Participant {
   // The participant's own page /u/<token> (2026-10-23): details, documents and payment for one
   // registration when it isn't linked to a person in Členové (src/lib/participant-link.ts).
   detailsToken           String?            @unique @map("details_token")
+  // Child or adult as registered (public form), for a participant without a person in Členové; null = by age.
+  isAdult                Boolean?           @map("is_adult")
   // The persistent child profile this event's row belongs to (null = not
   // linked; everything works as before). See src/lib/children.ts.
   childId                String?            @map("child_id")

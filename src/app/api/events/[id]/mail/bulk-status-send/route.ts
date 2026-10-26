@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { sendBulkStatusUpdates } from "@/lib/mail-bulk-status-send";
+import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 export async function POST(
   req: NextRequest,
@@ -21,7 +22,8 @@ export async function POST(
     return NextResponse.json({ error: "participant_ids_required" }, { status: 400 });
   }
 
-  const results = await sendBulkStatusUpdates(eventId, participantIds, user.id);
+  const purposeKey = body.purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY ? MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY : MAIL_HELPER_BULK_STATUS_PURPOSE_KEY;
+  const results = await sendBulkStatusUpdates(eventId, participantIds, user.id, purposeKey);
   const sentCount = results.filter((r) => r.status === "sent").length;
   const failedCount = results.filter((r) => r.status === "failed").length;
 

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
+import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 type DocTypeCol = { id: string; name: string };
 type Row = {
@@ -38,9 +38,17 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
   const [filled, setFilled] = useState<{ subject: string; body: string } | null>(null);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<{ text: string; warn: boolean } | null>(null);
+  // Which template: the status e-mail, or its variant with the link to the portal / the participant's page.
+  const [variant, setVariant] = useState<"plain" | "link" | null>(null);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- read once from the address
+    setVariant(new URLSearchParams(window.location.search).get("template") === "link" ? "link" : "plain");
+  }, []);
+  const purposeKey = variant === "link" ? MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY : MAIL_HELPER_BULK_STATUS_PURPOSE_KEY;
 
   useEffect(() => {
-    fetch(`/api/events/${eventId}/mail/bulk-status-preview`, { cache: "no-store" })
+    if (!variant) return;
+    fetch(`/api/events/${eventId}/mail/bulk-status-preview${variant === "link" ? "?template=link" : ""}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
@@ -53,19 +61,19 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
         setPreviewFor(first?.participantId ?? "");
       })
       .finally(() => setLoading(false));
-  }, [eventId]);
+  }, [eventId, variant]);
 
   useEffect(() => {
     if (!template || !previewFor) return;
     fetch(`/api/events/${eventId}/email-template/preview`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, participantId: previewFor, ...template }),
+      body: JSON.stringify({ purposeKey, participantId: previewFor, ...template }),
     })
       .then((r) => (r.ok ? r.json() : null))
       .then(setFilled)
       .catch(() => setFilled(null));
-  }, [eventId, template, previewFor]);
+  }, [eventId, template, previewFor, purposeKey]);
 
   const selectedIds = Object.keys(selected).filter((k) => selected[k]);
   const setAll = (value: boolean) => setSelected(Object.fromEntries(rows.map((r) => [r.participantId, value])));
@@ -79,7 +87,7 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
       const res = await fetch(`/api/events/${eventId}/mail/bulk-status-send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ participantIds: selectedIds }),
+        body: JSON.stringify({ participantIds: selectedIds, purposeKey }),
       });
       if (!res.ok) return setStatus({ text: t("bulkStatusModal.sendFailed"), warn: true });
       const d = await res.json();
@@ -103,6 +111,20 @@ export default function StatusUpdatePage({ params }: { params: Promise<{ id: str
           {t("compose.editTemplate")}
         </Link>
       </p>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label={t("statusUpdate.variant")}>
+        {(["plain", "link"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setVariant(v)}
+            className={"rounded-full px-3 py-1 text-[13px] " + (variant === v ? "bg-ember text-white" : "bg-paper-2 text-ink hover:bg-mist")}
+          >
+            {t(v === "link" ? "emailKinds.documentStatusLink.name" : "emailKinds.documentStatus.name")}
+          </button>
+        ))}
+        {variant === "link" && <span className="text-[12px] text-ink-secondary">{t("statusUpdate.linkHint")}</span>}
+      </div>
 
       {loading ? (
         <p className="text-[14px] text-ink-secondary">{t("common.loading")}</p>

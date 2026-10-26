@@ -277,6 +277,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                       </Link>
                     </p>
                   )}
+                  {mode === "acceptance" && <p className="text-[12px] text-ink-secondary">{t("compose.acceptancePageNote")}</p>}
                   <div className="flex flex-wrap gap-1.5">
                     {variables.map((v) => (
                       <button

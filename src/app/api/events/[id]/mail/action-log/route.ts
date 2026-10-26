@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { MAIL_HELPER_REPLY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
+import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 type LogRow = {
   id: string;
@@ -41,7 +42,7 @@ export async function GET(
     }),
     prisma.parentEmailLog.findMany({
       where: {
-        purposeKey: { in: [MAIL_HELPER_REPLY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY] },
+        purposeKey: { in: [MAIL_HELPER_REPLY_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY] },
         participant: { eventId },
       },
       include: { sentBy: true, participant: true },

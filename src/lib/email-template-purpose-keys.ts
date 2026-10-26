@@ -7,10 +7,16 @@
 // must import from this file, never from email-template.ts directly.
 export const PARENT_SUMMARY_PURPOSE_KEY = "parent_health_summary";
 export const MAIL_HELPER_BULK_STATUS_PURPOSE_KEY = "mail_helper_bulk_status_update";
+// Its variant with the link where to fill in / upload / pay (2026-10-26): the family portal for members,
+// the participant's own page for others ({{details_link_line}}). Picked on the status update page.
+export const MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY = "mail_helper_bulk_status_link";
 export const MAIL_HELPER_REPLY_PURPOSE_KEY = "mail_helper_reply";
 // Sent once per participant, when an admin decides to accept a registration
 // (see docs/registration-workflow.md). Editable template like the others.
 export const REGISTRATION_ACCEPTANCE_PURPOSE_KEY = "registration_acceptance";
+// The acceptance for a participant NOT in Členové of a portal event (2026-10-26): sent instead of the one
+// above (same send, same log key) -- tells them about their own page /u/<token> ({{details_link}}).
+export const REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY = "registration_acceptance_page";
 // Not a stored/editable template -- an admin types fresh subject/body every
 // time for the "open email to selected participants" feature. Used only as
 // a ParentEmailLog.purposeKey tag so these sends are distinguishable from

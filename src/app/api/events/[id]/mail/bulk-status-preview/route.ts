@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { resolveEmailTemplate, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY } from "@/lib/email-template";
+import { MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
@@ -50,7 +51,8 @@ export async function GET(
 
   // The raw template; the page fills it in per participant via
   // /api/events/[id]/email-template/preview (same code as the send).
-  const template = await resolveEmailTemplate(eventId, MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
+  // ?template=link: the variant with the link where to fill in / upload / pay.
+  const template = await resolveEmailTemplate(eventId, req.nextUrl.searchParams.get("template") === "link" ? MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY : MAIL_HELPER_BULK_STATUS_PURPOSE_KEY);
 
   return NextResponse.json({
     documentTypes: documentTypes.map((d) => ({ id: d.id, name: d.data?.displayName || d.name })),

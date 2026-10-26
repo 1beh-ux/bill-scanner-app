@@ -30,6 +30,18 @@ const rows: Row[] = [
   // 2026-10-25 b: the participant export also mirrors the received files.
   r("participantsPage.driveExportHint", "Uloží seznam účastníků se všemi údaji, které vidíte, a se stavem dokumentů jako tabulku „Účastníci – název akce“ do složky pro export na Google Disku (kde je i přehled účtenek); další export ji přepíše. Přijaté soubory (e-mailem, ručně, schválené z portálu) nahraje do složky účastníků – každý účastník má svou složku, soubor má v názvu „_prijato“.", "Saves the participant list with every detail you see and the documents' state as the sheet “Účastníci – event name” in the export folder on Google Drive (next to the bills overview); the next export overwrites it. Received files (by e-mail, by hand, approved from the portal) go to the participants folder – a folder per participant, “_prijato” in the file name."),
   r("participantsPage.driveExportFiles", "Soubory na Disk: nově {synced}, nepovedlo se {skipped}.", "Files to Drive: {synced} new, {skipped} failed."),
+  // 2026-10-26: acceptance for participants not in Členové, status e-mail with the link.
+  r("emailKinds.acceptancePage.name", "Přijetí přihlášky – bez portálu", "Registration acceptance – without the portal"),
+  r("emailKinds.acceptancePage.what", "Posílá se místo běžného přijetí účastníkům, kteří nejsou ve Členech (akce s portálem): odkaz na osobní stránku přihlášky ({{details_link}}) a co na ní najdou – údaje k doplnění, dokumenty, platbu.", "Sent instead of the usual acceptance to participants not in Members (events with the portal): the link to the registration's own page ({{details_link}}) and what's there – details to fill in, documents, payment."),
+  r("emailKinds.acceptancePage.where", "Posílá se samo při přijetí (Přijmout a odeslat, automatické přijetí, Poslat znovu) – podle toho, jestli je účastník propojený se Členy.", "Goes on its own on acceptance (Accept and send, automatic acceptance, Send again) – by whether the participant is linked to Members."),
+  r("emailKinds.acceptancePage.open", "Otevřít Seznam účastníků", "Open the participant list"),
+  r("emailKinds.documentStatusLink.name", "Stav dokumentů s odkazem", "Document status with the link"),
+  r("emailKinds.documentStatusLink.what", "Přehled dokumentů jako „Stav dokumentů“ a k tomu odkaz, kde je doplnit a zaplatit: členům rodinný portál, ostatním osobní stránku přihlášky ({{details_link_line}}).", "The document list like “Document status”, plus the link where to complete and pay: the family portal for members, the registration's own page for others ({{details_link_line}})."),
+  r("emailKinds.documentStatusLink.where", "Posílá se ze stránky Stav dokumentů – nahoře vyberte „Stav dokumentů s odkazem“.", "Sent from the Document status page – pick “Document status with the link” at the top."),
+  r("emailKinds.documentStatusLink.open", "Otevřít Stav dokumentů", "Open Document status"),
+  r("compose.acceptancePageNote", "Účastníci, kteří nejsou ve Členech, dostanou místo tohoto textu šablonu „Přijetí přihlášky – bez portálu“ (s odkazem na svou stránku).", "Participants not in Members get the “Registration acceptance – without the portal” template instead of this text (with the link to their page)."),
+  r("statusUpdate.variant", "Šablona", "Template"),
+  r("statusUpdate.linkHint", "Členové dostanou odkaz do rodinného portálu, ostatní na osobní stránku přihlášky.", "Members get the family portal link, others the registration's own page."),
 ];
 
 async function main() {
