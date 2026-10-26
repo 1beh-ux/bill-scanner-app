@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { driveErrorText } from "@/lib/drive-error-messages";
+import ExportColumns from "@/components/participants/ExportColumns";
 
 // Seznam účastníků -> Google Sheet in the export folder (next to the bills manifest); on Účastníci and Dokumenty.
 export default function DriveExportButton({ eventId }: { eventId: string }) {
@@ -30,6 +31,7 @@ export default function DriveExportButton({ eventId }: { eventId: string }) {
       <button onClick={run} disabled={busy} title={t("participantsPage.driveExportHint")} className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50">
         {busy ? t("participantsPage.driveExporting") : t("participantsPage.driveExport")}
       </button>
+      <ExportColumns eventId={eventId} />
       {notice && (
         <span role="status" className={"basis-full rounded-lg border px-3 py-2 text-[13px] " + (notice.warn ? "border-amber-300 bg-amber-50 text-amber-800" : "border-pine/40 bg-pine/10 text-pine")}>
           {notice.text}

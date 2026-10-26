@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   }
 
   const eventSelect = { select: { id: true, name: true, startDate: true, kind: true, membershipYear: true } };
-  const [children, unlinked, pending, labels] = await Promise.all([
+  const [children, unlinked, pending, labels, columns] = await Promise.all([
     prisma.child.findMany({
       where: { organizationId },
       orderBy: [{ lastName: "asc" }, { name: "asc" }],
@@ -40,6 +40,7 @@ export async function GET(req: NextRequest) {
         isAdult: true,
         familyId: true,
         leftAt: true,
+        fieldValues: true,
         family: { select: { name: true, portalToken: true } },
         portalToken: true,
         participants: { select: { id: true, registrationStatus: true, event: eventSelect } },
@@ -57,6 +58,8 @@ export async function GET(req: NextRequest) {
       include: { child: { select: { name: true } } },
     }),
     profileFieldLabels(organizationId),
+    // Šablony -> Účastníci -> "Ve seznamu Členů" (2026-10-27), in the parents' order.
+    prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true, memberListColumn: true }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }], select: { key: true, label: true } }),
   ]);
 
   const byName = new Map<string, string[]>();
@@ -66,8 +69,10 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({
     // Link = the family's for a family member (slice 4 #12 filter), else the person's own.
-    children: children.map(({ portalToken, family, ...c }) => ({
+    columns,
+    children: children.map(({ portalToken, family, fieldValues, ...c }) => ({
       ...c,
+      columns: Object.fromEntries(columns.map((col) => [col.key, String((fieldValues as Record<string, unknown> | null)?.[col.key] ?? "")])),
       family: family && { name: family.name },
       hasPortalLink: !!portalToken,
       hasLink: family ? !!family.portalToken : !!portalToken,

@@ -15,17 +15,24 @@ import { birthDateMatches } from "@/lib/portal-rules";
 import { registrationCard, requiredEventFields, templateRules } from "@/lib/portal-server";
 import { gateCookieName, gateCookieValid, portalSecret } from "@/lib/portal-gate";
 
-/** The page's address for a participant (made on a real send: `create`), "" when there's none. */
-export async function participantLinkUrl(participantId: string, create: boolean): Promise<string> {
+/** The participant's token (made on a real send: `create`); null = none yet. */
+export async function participantToken(participantId: string, create: boolean): Promise<{ token: string | null; organizationId: string } | null> {
   const p = await prisma.participant.findUnique({ where: { id: participantId }, select: { detailsToken: true, event: { select: { organizationId: true } } } });
-  if (!p) return "";
+  if (!p) return null;
   let token = p.detailsToken;
   if (!token && create) {
     token = crypto.randomBytes(18).toString("base64url");
     await prisma.participant.update({ where: { id: participantId }, data: { detailsToken: token } });
   }
-  if (!token) return create ? "" : "https://…/u/…";
-  return (await publicUrl("portal", null, `/u/${token}`, p.event.organizationId)) ?? "";
+  return { token, organizationId: p.event.organizationId };
+}
+
+/** The page's address for a participant (made on a real send: `create`), "" when there's none. */
+export async function participantLinkUrl(participantId: string, create: boolean): Promise<string> {
+  const t = await participantToken(participantId, create);
+  if (!t) return "";
+  if (!t.token) return create ? "" : "https://…/u/…";
+  return (await publicUrl("portal", null, `/u/${t.token}`, t.organizationId)) ?? "";
 }
 
 const loadByToken = (token: string) =>
@@ -57,7 +64,7 @@ export async function participantScope(token: string, gated: boolean): Promise<{
 const isAdultOf = (p: LinkParticipant) => p.isAdult ?? adultAt(p.dateOfBirth, p.event.startDate);
 
 /** The birth date typed at the gate: true = right. No birth date on the registration = always right. */
-export const birthDatePasses = (p: LinkParticipant, birthDate: unknown) => !p.dateOfBirth || birthDateMatches(typeof birthDate === "string" ? birthDate : null, p.dateOfBirth);
+export const birthDatePasses = (p: { dateOfBirth: Date | null }, birthDate: unknown) => !p.dateOfBirth || birthDateMatches(typeof birthDate === "string" ? birthDate : null, p.dateOfBirth);
 
 /**
  * What the page asks (the portal's rules, src/lib/registration-fields.ts): two-step events after acceptance

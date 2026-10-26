@@ -52,7 +52,7 @@ export default function MailParticipantsPage({
     const [evRes, partRes, fieldsRes] = await Promise.all([
       fetch(`/api/events/${id}`),
       fetch(`/api/events/${id}/mail/participants?withDocuments=1`),
-      fetch(`/api/events/${id}/participant-fields?surface=mail_list`),
+      fetch(`/api/events/${id}/participant-fields`),
     ]);
     if (evRes.ok) setEvent(await evRes.json());
     if (partRes.ok) setParticipants(await partRes.json());
@@ -77,12 +77,13 @@ export default function MailParticipantsPage({
   }, [participants, searchQuery]);
 
   // Saved order, limited to fields still on offer; nothing saved = all of them.
+  // The participant list's fields (custom and calculated, "Seznam" or "Přehled dokumentů"), not the QR image.
+  const offeredColumns = useMemo(() => fields.filter((f) => (f.kind === "custom" || f.kind === "computed") && f.key !== "Email" && f.fieldType !== "image" && (f.surfaces.includes("list") || f.surfaces.includes("mail_list"))), [fields]);
   const extraColumns = useMemo(() => {
-    const offered = fields.filter((f) => f.kind === "custom");
+    const offered = offeredColumns;
     const saved = (event?.documentsListColumns ?? []).filter((k) => offered.some((f) => f.key === k));
     return saved.length > 0 ? saved.map((k) => offered.find((f) => f.key === k)!) : offered;
-  }, [fields, event]);
-  const offeredColumns = fields.filter((f) => f.kind === "custom");
+  }, [offeredColumns, event]);
 
   const documentColumns = participants[0]?.documents.map((d) => ({ id: d.eventListItemId, name: d.name })) ?? [];
 

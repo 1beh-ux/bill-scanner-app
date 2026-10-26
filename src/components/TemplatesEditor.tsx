@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
+import ExportColumns from "@/components/participants/ExportColumns";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
 import { EMAIL_KINDS } from "@/lib/email-kinds";
@@ -77,7 +78,16 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
       {tab === "emails" && <EmailTemplatesTab />}
       {tab === "mail" && <Synced table="list" filter="document"><ListTemplateAdmin kind="document" scope="org" label={t("templatesPage.tabMail")} /></Synced>}
       {tab === "bills" && <Synced table="category"><BillsTemplatesTab /></Synced>}
-      {tab === "participants" && <Synced table="field"><ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} /></Synced>}
+      {tab === "participants" && (
+        <>
+          <Synced table="field"><ParticipantFieldAdmin scope="org" label={t("templatesPage.tabParticipants")} /></Synced>
+          {/* The participant export's default columns (each event may change them next to its export button). */}
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <span className="text-[14px] text-ink-secondary">{t("exportColumns.orgHint")}</span>
+            <ExportColumns />
+          </div>
+        </>
+      )}
       {tab === "planning" && (
         <div className="flex flex-col gap-6">
           <p className="text-[14px] text-ink-secondary">{t("planLists.templatesSubtitle")}</p>

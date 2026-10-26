@@ -97,6 +97,9 @@ const eventCard = "rounded-lg border border-mist bg-paper-2 p-4 shadow-sm";
 const h2 = "text-[13px] font-semibold uppercase tracking-wide text-ink-secondary";
 const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—");
 const chip = (on: boolean) => "rounded-full border px-3 py-1 text-[14px] " + (on ? "border-ember bg-ember/15 text-ink" : "border-mist text-ink-secondary hover:text-ink");
+// Card pills: done / waiting for us / missing.
+const pill = (k: "ok" | "wait" | "missing") =>
+  "shrink-0 rounded-full px-2.5 py-0.5 text-[12.5px] font-medium " + (k === "ok" ? "bg-pine/15 text-pine" : k === "wait" ? "bg-amber-500/15 text-amber-700" : "bg-red-500/15 text-red-700");
 const range = (e: { startDate: string; endDate: string }) => (date(e.startDate) === date(e.endDate) ? date(e.startDate) : `${date(e.startDate)} – ${date(e.endDate)}`);
 
 // Portal chips: "Čeká na potvrzení" = not accepted yet OR waiting, so a pending registration
@@ -361,7 +364,10 @@ function MemberCard({ member, t, onOpen }: { member: Member; t: T; onOpen: () =>
   return (
     <section className={card + " flex flex-wrap items-center justify-between gap-3"}>
       <div className="min-w-0">
-        <h3 className="text-[16px] font-semibold text-ink">{member.name}</h3>
+        <h3 className="text-[16px] font-semibold text-ink">
+          {member.name}
+          <span className="ml-2 rounded-full bg-paper-2 px-2 py-0.5 align-middle text-[11.5px] font-normal text-ink-secondary">{t(member.isAdult ? "portal.ageAdult" : "portal.ageChild")}</span>
+        </h3>
         <p className="text-[13px] text-ink-secondary">
           {[birth && /^\d{4}-\d{2}-\d{2}$/.test(birth) ? t("portal.bornOn", { date: date(birth) }) : null, ...extra.map((f) => `${f.label}: ${showValue(f, f.value, t)}`)].filter(Boolean).join(" · ")}
         </p>
@@ -874,7 +880,10 @@ function LaterDetails({ api, r, details, t, onChanged }: { api: string; r: Regis
     const res = await portalApiFetch(`${api}/details`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId, answers: values }) }).catch(() => null);
     setBusy(false);
     setMessage(t(res?.ok ? "portal.saved" : res?.status === 400 ? "portal.laterInvalid" : "portal.saveFailed"));
-    if (res?.ok) onChanged();
+    if (res?.ok) {
+      setOpen(false);
+      onChanged();
+    }
   }
   if (!open)
     return (
@@ -965,11 +974,8 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
           </span>
         );
       case "category":
-        return r.category ? (
-          <p key={i} className="text-[14px] text-ink">
-            {t("portal.priceCategory")}: {r.category}
-          </p>
-        ) : null;
+        // Shown at the top of the card (2026-10-27).
+        return null;
       case "documents":
         return r.documents.length > 0 ? (
           <div key={i} className="flex flex-col gap-2 text-[14px]">
@@ -1073,8 +1079,10 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
   // Header (event, status) is fixed on top; everything else (payment, documents,
   // data, …) folds under "Podrobnosti" -- open while something is missing.
   const has = (k: CardSection["kind"]) => r.sections.some((x) => x.kind === k);
-  const details = r.sections.filter((x) => x.kind !== "event" && x.kind !== "status" && x.kind !== "resend");
+  const details = r.sections.filter((x) => x.kind !== "event" && x.kind !== "status" && x.kind !== "resend" && x.kind !== "category");
   const received = r.documents.filter((d) => d.received).length;
+  const docsMissing = r.documents.some((d) => !d.received && d.review !== "pending");
+  const docsInReview = r.documents.some((d) => d.review === "pending");
 
   return (
     <section className={eventCard + " flex flex-col gap-2"}>
@@ -1083,11 +1091,17 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
           <h3 className="text-[16px] font-semibold leading-snug text-ink">{evName(r.event)}</h3>
           {who && <p className="text-[13px] text-ink-secondary">{who}</p>}
         </div>
-        {has("status") && (
-          <span className={"shrink-0 rounded-full px-2.5 py-0.5 text-[12.5px] font-medium " + (r.status === "accepted" ? "bg-pine/15 text-pine" : "bg-ember/15 text-ember")}>
-            {t(r.status === "accepted" ? "portal.pillAccepted" : "portal.pillPending")}
-          </span>
+      </div>
+      {/* The state at first sight (2026-10-27): registration, documents, payment, details -- red = missing,
+          orange = waiting for us, green = done. Documents only once accepted (they're asked for then). */}
+      <div className="flex flex-wrap gap-1.5">
+        {has("status") && <span className={pill(r.status === "accepted" ? "ok" : "wait")}>{t(r.status === "accepted" ? "portal.pillAccepted" : "portal.pillPending")}</span>}
+        {r.status === "accepted" && r.documents.length > 0 && (
+          <span className={pill(docsMissing ? "missing" : docsInReview ? "wait" : "ok")}>{t("portal.pillDocs", { done: String(received), total: String(r.documents.length) })}</span>
         )}
+        {r.payment?.paid === false && <span className={pill("missing")}>{t("portal.awaitingPayment")}</span>}
+        {r.payment?.paid === true && <span className={pill("ok")}>{t("portal.paid")}</span>}
+        {r.details && <span className={pill(r.details.missing ? "missing" : "ok")}>{r.details.missing ? t("portal.pillDetailsMissing", { n: String(r.details.missing) }) : t("portal.pillDetailsDone")}</span>}
       </div>
       {has("event") && (
         <>
@@ -1098,18 +1112,16 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
           {r.event.info && <EventInfo text={r.event.info} t={t} />}
         </>
       )}
+      {r.category && (
+        <p className="text-[13px] text-ink">
+          {t("portal.priceCategory")}: <span className="font-medium">{r.category}</span>
+        </p>
+      )}
       {details.length > 0 && (
         <div className="mt-1 border-t border-mist pt-2">
-          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 text-left text-[13px]">
-            <span className="font-medium text-ink">{t("portal.details")}</span>
-            <span className="flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-ink-secondary">
-              {r.payment?.paid === true && <span className="text-pine">{t("portal.paid")}</span>}
-              {r.payment?.paid === false && <span className="text-ember">{t("portal.awaitingPayment")}</span>}
-              {r.documents.length > 0 && (
-                <span className={received < r.documents.length ? "text-amber-700" : ""}>{t("portal.docsSummary", { done: String(received), total: String(r.documents.length) })}</span>
-              )}
-              <ChevronDown size={16} aria-hidden="true" className={"transition-transform " + (open ? "rotate-180" : "")} />
-            </span>
+          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1.5 text-left text-[13px] font-medium text-ink">
+            {t("portal.details")}
+            <ChevronDown size={16} aria-hidden="true" className={"transition-transform " + (open ? "rotate-180" : "")} />
           </button>
           {open && (
             <div className="mt-3 flex flex-col gap-4">

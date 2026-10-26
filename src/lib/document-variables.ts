@@ -3,11 +3,12 @@ import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
-import { withMembers } from "@/lib/children";
+import { adultAt, withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
-import { readPriceRules, rulePrice } from "@/lib/price-rules";
+import { categoryFor, readPriceRules, rulePrice } from "@/lib/price-rules";
+import type { AskedField } from "@/lib/registration-fields";
 import { newPortalToken, portalLinkLine } from "@/lib/portal-gate";
-import { portalLinkFor } from "@/lib/public-host";
+import { portalLinkFor, publicUrl } from "@/lib/public-host";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { buildDocumentChecklistText } from "@/lib/mail-bulk-status-template";
 
@@ -30,6 +31,9 @@ export type ParticipantForMerge = {
   createdAt?: Date;
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
 };
+
+/** The asked fields per age group + adult people of the event (src/lib/children.ts detailsAsk). */
+export type DetailsAsk = { adults: AskedField[]; children: AskedField[]; adultChildIds: Set<string> };
 
 /** What price rules need beyond the participant row (src/lib/children.ts withMembers). */
 export type PriceContext = {
@@ -69,6 +73,8 @@ export type EventForMerge = {
   // Event.priceRules (src/lib/price-rules.ts); null/missing = member / non-member pricing.
   priceRules?: unknown;
   priceContext?: PriceContext;
+  // What the event asks, for the "Podrobné údaje" status (withMembers).
+  detailsAsk?: DetailsAsk;
   // {{portal_link}} only for events using the module (slice 4 #11).
   registrationConnected?: boolean;
   kind?: string;
@@ -128,6 +134,21 @@ export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
   const raw = p.customFieldValues?.[key] ?? "";
   return toBoolean(raw) === "true" || memberValues(e).includes(normalizeMemberValue(raw));
+}
+
+/** Adult or child as the event sees the person: the person's own flag, else as registered, else by age. */
+function adultOf(p: ParticipantForMerge, e: EventForMerge): boolean {
+  if (p.childId) return !!(e.priceContext?.adultChildIds.has(p.childId) || e.detailsAsk?.adultChildIds.has(p.childId));
+  return p.isAdult ?? adultAt(p.dateOfBirth, e.startDate);
+}
+
+/** "Podrobné údaje": the asked fields of this person all filled -> "vyplněno", else "chybí N"; "" = the event asks none. */
+export function detailsStatus(p: ParticipantForMerge, e: EventForMerge): string {
+  const ask = e.detailsAsk;
+  if (!ask) return "";
+  const asked = adultOf(p, e) ? ask.adults : ask.children;
+  const missing = asked.filter((f) => !p.customFieldValues?.[f.key]?.trim()).length;
+  return asked.length === 0 ? "" : missing ? `chybí ${missing}` : "vyplněno";
 }
 
 export function effectivePriceCzk(p: ParticipantForMerge, e: EventForMerge): number | null {
@@ -224,7 +245,26 @@ export async function portalLinkVars(
 }
 
 /** Whether a template text uses the portal link (a send then creates a missing token). */
-export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link") || t.includes("{{details_link"));
+export const usesPortalLink = (...texts: string[]) => texts.some((t) => t.includes("{{portal_link") || t.includes("{{details_link") || t.includes("{{membership_offer_link"));
+
+/**
+ * {{membership_offer_link}} (2026-10-27): for a participant not in Členové, the organization's membership
+ * registration ("Ještě nejsem členem" event) pre-filled from this registration: /r/<slug>?nabidka=<token>
+ * (the participant's own token; the form asks the birth date before pre-filling). "" otherwise.
+ */
+async function membershipOfferVars(participant: { id?: string; childId?: string | null }, event: { id: string }, create: boolean) {
+  const none = { membership_offer_link: "" };
+  if (!participant.id || participant.childId) return none;
+  const org = await prisma.organization.findFirst({ where: { events: { some: { id: event.id } } }, select: { id: true, portalJoinEventId: true } });
+  const join = org?.portalJoinEventId
+    ? await prisma.event.findFirst({ where: { id: org.portalJoinEventId, organizationId: org.id, publicRegistration: true, publicSlug: { not: null } }, select: { id: true, publicSlug: true } })
+    : null;
+  if (!org || !join) return none;
+  const { participantToken } = await import("@/lib/participant-link");
+  const t = await participantToken(participant.id, create);
+  if (!t?.token) return { membership_offer_link: create ? "" : `https://…/r/${join.publicSlug}?nabidka=…` };
+  return { membership_offer_link: (await publicUrl("registration", join.id, `/r/${join.publicSlug}?nabidka=${t.token}`, org.id)) ?? "" };
+}
 
 /**
  * The portal link + {{details_link}} (2026-10-23): where to fill in the rest of the details, upload the
@@ -289,6 +329,7 @@ export async function resolveVariables(
       ? `Vyplněné a podepsané dokumenty nám prosím pošlete zpět nejpozději do ${formatDate(event.registrationDeadline)}.`
       : "",
     ...(await detailsLinkVars(participant, event, createPortalLink)),
+    ...(await membershipOfferVars(participant, event, createPortalLink)),
     // {{organization_name}} (organizations step 5): the event's organization, never a hard-coded name.
     organization_name: (await prisma.organization.findFirst({ where: { events: { some: { id: event.id } } }, select: { name: true } }))?.name ?? "",
   };
@@ -375,6 +416,11 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
         values[f.key] = resolveContactEmail(participant);
       } else if (f.computedType === "membership_status") {
         values[f.key] = isMember(participant, event) ? "Ano" : "Ne";
+      } else if (f.computedType === "price_category") {
+        const rules = readPriceRules(event.priceRules);
+        values[f.key] = rules ? (categoryFor(rules, participant.priceCategory, adultOf(participant, event))?.label ?? "") : "";
+      } else if (f.computedType === "details_status") {
+        values[f.key] = detailsStatus(participant, event);
       }
     }
   }

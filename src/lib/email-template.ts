@@ -8,6 +8,7 @@ import {
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY,
+  MEMBERSHIP_OFFER_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
@@ -188,6 +189,23 @@ Kdyby cokoli nebylo jasné, odpovězte prosím na tento e-mail.
 Děkujeme,
 {{sender_name}}`,
   },
+  [MEMBERSHIP_OFFER_PURPOSE_KEY]: {
+    subject: "Členství v {{organization_name}} – {{participant_name}}",
+    body: `Dobrý den,
+
+děkujeme za přihlášku {{participant_name}} na akci {{camp_name}}.
+
+Rádi bychom vám nabídli členství v {{organization_name}}. Členové mají slevy na akce a vlastní rodinný portál, kde vidí všechny své přihlášky, dokumenty a platby na jednom místě.
+
+Přihlášku ke členství jsme vám předvyplnili podle přihlášky na {{camp_name}} – stačí ji zkontrolovat a odeslat:
+{{membership_offer_link}}
+(Před předvyplněním se zeptá na datum narození.)
+
+Po odeslání vám pošleme odkaz do rodinného portálu, kde uvidíte i přihlášku na {{camp_name}}.
+
+S pozdravem
+{{sender_name}}`,
+  },
   [REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY]: {
     subject: "Přijetí přihlášky: {{participant_name}} — {{camp_name}}",
     body: `Dobrý den,
@@ -285,7 +303,8 @@ export function modulesForEmailPurpose(purposeKey: string): ModuleKey[] {
     purposeKey === MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY ||
     purposeKey === REGISTRATION_ACCEPTANCE_PURPOSE_KEY ||
     purposeKey === REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY ||
-    purposeKey === REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
+    purposeKey === REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY ||
+    purposeKey === MEMBERSHIP_OFFER_PURPOSE_KEY || purposeKey === PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY || isCustomPurpose(purposeKey)) return ["participants", "health", "mail"];
   return ["health"];
 }
 

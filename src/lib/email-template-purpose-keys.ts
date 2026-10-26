@@ -20,6 +20,9 @@ export const REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY = "registration_acceptance
 // The acceptance in an event with the parent portal, for its members (2026-10-26): the portal link
 // ({{details_link_line}}). Same send, same log key as the plain one (src/lib/email-kinds.ts eventTemplateKey).
 export const REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY = "registration_acceptance_portal";
+// "Nabídnout členství" (2026-10-27): to a participant not in Členové -- the membership registration
+// pre-filled from this registration ({{membership_offer_link}}); sent from Poslat e-mail like an own template.
+export const MEMBERSHIP_OFFER_PURPOSE_KEY = "membership_offer";
 // Not a stored/editable template -- an admin types fresh subject/body every
 // time for the "open email to selected participants" feature. Used only as
 // a ParentEmailLog.purposeKey tag so these sends are distinguishable from

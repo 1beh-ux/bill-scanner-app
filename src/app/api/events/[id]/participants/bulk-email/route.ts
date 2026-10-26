@@ -21,6 +21,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = String(form.get("body") || "").trim();
   const purposeKey = String(form.get("purposeKey") || PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY);
   const markAccepted = form.get("markAccepted") === "true";
+  // An own template's key (custom_…): its uploaded files go along (src/lib/email-files.ts).
+  const filesKeyRaw = String(form.get("filesKey") || "");
+  const filesKey = /^[a-z0-9_]{1,64}$/.test(filesKeyRaw) ? filesKeyRaw : undefined;
   const autoAttachDocumentTypeIds: string[] | undefined = form.get("autoAttachDocumentTypeIds")
     ? JSON.parse(String(form.get("autoAttachDocumentTypeIds")))
     : undefined;
@@ -49,6 +52,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     subject,
     body,
     purposeKey,
+    filesKey,
     sentByUserId: user.id,
     markAccepted,
     attachment,

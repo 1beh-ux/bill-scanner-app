@@ -23,9 +23,11 @@ type ChildRow = {
   // The family's link for a family member, else the person's own.
   hasLink: boolean;
   participants: { id: string; registrationStatus: "pending" | "accepted"; event: EventRef }[];
+  // The values of the "Ve seznamu Členů" fields (Data.columns).
+  columns: Record<string, string>;
 };
 type UnlinkedRow = { id: string; name: string; dateOfBirth: string | null; event: EventRef };
-type Data = { children: ChildRow[]; unlinked: UnlinkedRow[]; duplicates: string[][]; pendingChanges: PendingChange[] };
+type Data = { columns: { key: string; label: string }[]; children: ChildRow[]; unlinked: UnlinkedRow[]; duplicates: string[][]; pendingChanges: PendingChange[] };
 
 const inputClassSm =
   "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -355,6 +357,9 @@ export default function ChildrenPage() {
                       </th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("children.colBirth")}</th>
+                      {data.columns.map((col) => (
+                        <th key={col.key} className="p-2 text-[12px] font-medium text-ink-secondary">{col.label}</th>
+                      ))}
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("children.colEvents")}</th>
                       <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("childProfile.colPortal")}</th>
                     </tr>
@@ -373,6 +378,9 @@ export default function ChildrenPage() {
                             {c.leftAt && <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700">{t("people.inactive")}</span>}
                           </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>
+                          {data.columns.map((col) => (
+                            <td key={col.key} className="p-2 text-[13px] text-ink [overflow-wrap:anywhere]">{c.columns[col.key] === "true" ? "Ano" : c.columns[col.key] === "false" ? "Ne" : c.columns[col.key] || "—"}</td>
+                          ))}
                           <td className="p-2">{c.participants.map(eventChip)}</td>
                           <td className="whitespace-nowrap p-2 text-[13px]">
                             {/* In a family the link tools are the family's (Rodiny above). */}

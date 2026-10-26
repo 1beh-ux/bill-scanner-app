@@ -38,7 +38,10 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function PublicRegistrationPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams?: SP }) {
   const { slug } = await params;
-  const { embed, theme } = embedParams((await searchParams) ?? {});
+  const sp = (await searchParams) ?? {};
+  const { embed, theme } = embedParams(sp);
+  // "Nabídnout členství": ?nabidka=<the offered registration's token> (the form pre-fills after the birth date).
+  const offer = typeof sp.nabidka === "string" && sp.nabidka.length <= 64 ? sp.nabidka : undefined;
   const event = await loadEvent(slug);
   if (!event) notFound();
   // Public host: only its purpose/event. Admin host: old links move to the public host when there is one.
@@ -101,6 +104,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       fields={ctx.fields}
       rules={ctx.rules}
       oddil={ctx.oddil}
+      offer={offer}
       org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}
       strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}
     />

@@ -38,6 +38,8 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
   const [loading, setLoading] = useState(mode === "acceptance");
   // The template the acceptance actually uses here (the event's portal case), for its attachments.
   const [sentKey, setSentKey] = useState<string | null>(null);
+  // Files uploaded to that template (organization + event) -- they go with every send (src/lib/email-files.ts).
+  const [templateFileNames, setTemplateFileNames] = useState<string[]>([]);
   const [sendEmail, setSendEmail] = useState(!(mode === "acceptance" && regenerate));
   const emailOn = mode === "freeform" || sendEmail;
   const [docTypes, setDocTypes] = useState<DocType[]>([]);
@@ -158,6 +160,15 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
     return () => clearTimeout(handle);
   }, [eventId, previewFor, subject, body, docKey, mode, emailOn]);
 
+  const filesKey = templateKey ?? sentKey ?? (mode === "acceptance" ? null : purposeKey);
+  useEffect(() => {
+    if (!filesKey) return;
+    fetch(`/api/email-files?purposeKey=${encodeURIComponent(filesKey)}&eventId=${eventId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { files: { name: string }[]; orgFiles: { name: string }[] } | null) => setTemplateFileNames(d ? [...d.orgFiles, ...d.files].map((f) => f.name) : []))
+      .catch(() => {});
+  }, [eventId, filesKey]);
+
   function toggleDoc(docId: string) {
     setSelectedDocs((prev) => {
       const next = new Set(prev);
@@ -176,6 +187,7 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
     form.set("subject", subject);
     form.set("body", body);
     form.set("purposeKey", purposeKey);
+    if (templateKey) form.set("filesKey", templateKey);
     form.set("markAccepted", String(mode === "acceptance"));
     form.set("sendEmail", String(emailOn));
     form.set("autoAttachDocumentTypeIds", JSON.stringify([...selectedDocs]));
@@ -327,6 +339,16 @@ export default function ComposePage({ params }: { params: Promise<{ id: string }
                       <span className="text-[11.5px] text-ink-secondary">({t(d.fixed ? "templateAttachments.fixed" : "templateAttachments.generated")})</span>
                     </label>
                   ))}
+                </section>
+              )}
+              {emailOn && templateFileNames.length > 0 && (
+                <section className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+                  <p>{t("compose.templateFiles")}</p>
+                  <ul className="list-disc pl-5 text-[14px] text-ink">
+                    {templateFileNames.map((n) => (
+                      <li key={n}>{n}</li>
+                    ))}
+                  </ul>
                 </section>
               )}
               {emailOn && (

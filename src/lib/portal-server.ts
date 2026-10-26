@@ -29,7 +29,7 @@ import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-tem
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
-import { memberFormFields, validateSubmission } from "@/lib/public-registration";
+import { memberFormFields, readAudience, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, optionsFor, askedNow, askedLater, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 import { remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
@@ -158,7 +158,7 @@ const startOfToday = () => new Date(new Date().toISOString().slice(0, 10));
  * still register (eligible, not registered yet). Events nobody can take are left out.
  */
 export async function availableEvents(organizationId: string, memberIds: string[]) {
-  const [events, facts, registered] = await Promise.all([
+  const [events, facts, registered, adults] = await Promise.all([
     prisma.event.findMany({
       where: {
         // The family's own organization's events only.
@@ -172,10 +172,14 @@ export async function availableEvents(organizationId: string, memberIds: string[
     }),
     eligibilityFacts(organizationId, memberIds),
     prisma.participant.findMany({ where: { childId: { in: memberIds } }, select: { eventId: true, childId: true } }),
+    prisma.child.findMany({ where: { id: { in: memberIds }, isAdult: true }, select: { id: true } }),
   ]);
   const taken = new Set(registered.map((r) => `${r.eventId}:${r.childId}`));
+  const adultIds = new Set(adults.map((a) => a.id));
+  // "Koho lze přihlásit: jen děti" (the public form's setting) holds in the portal too.
+  const audienceOk = (e: (typeof events)[number], childId: string) => readAudience(e.publicAudience) !== "children" || !adultIds.has(childId);
   return events
-    .map((e) => ({ event: e, memberIds: facts.filter((f) => !taken.has(`${e.id}:${f.childId}`) && isEligible(readEligibility(e.eligibility), f)).map((f) => f.childId) }))
+    .map((e) => ({ event: e, memberIds: facts.filter((f) => !taken.has(`${e.id}:${f.childId}`) && audienceOk(e, f.childId) && isEligible(readEligibility(e.eligibility), f)).map((f) => f.childId) }))
     .filter((a) => a.memberIds.length > 0);
 }
 
@@ -480,7 +484,8 @@ export async function registrationCard(
         fromProfile: profile ? { event: profile.sourceEvent?.name ?? null } : null,
         review: profile ? null : mine.some((d) => d.reviewStatus === "pending") ? ("pending" as const) : state.state === "rejected" ? ("rejected" as const) : null,
         reviewNote: state.note,
-        canUpload: !!data?.allowPortalUpload && !profile,
+        // Documents are asked for once the registration is accepted.
+        canUpload: accepted && !!data?.allowPortalUpload && !profile,
       };
     }),
     // Re-send the acceptance e-mail (needs the event's sending account).

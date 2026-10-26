@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
 import { readPriceRules } from "@/lib/price-rules";
-import type { PriceContext } from "@/lib/document-variables";
+import type { DetailsAsk, PriceContext } from "@/lib/document-variables";
+import { askedFields, type TemplateRule } from "@/lib/registration-fields";
 
 /** Match key: name without diacritics/case/extra spaces + birth date. Null = can't match safely. */
 export function childKey(name: string, dateOfBirth: Date | null): string | null {
@@ -251,8 +252,22 @@ export async function priceContext(eventId: string): Promise<PriceContext> {
   };
 }
 
-/** The event with its confirmed members (isMember() in document-variables.ts) and, with price rules, the price context attached. */
-export async function withMembers<E extends { id: string; priceRules?: unknown }>(event: E): Promise<E & { memberChildIds?: Set<string>; priceContext?: PriceContext }> {
-  const [members, context] = await Promise.all([memberChildIds(event.id), readPriceRules(event.priceRules) ? priceContext(event.id) : undefined]);
-  return { ...event, memberChildIds: members, priceContext: context };
+/**
+ * What the event asks at / after registration (its fields marked "Vyžadovat při přihlášce", the portal's rule),
+ * per age group, + who of its people are adults -- for the "Podrobné údaje" status (document-variables.ts).
+ */
+export async function detailsAsk(eventId: string): Promise<DetailsAsk> {
+  const [eventFields, templates, adults] = await Promise.all([
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true, kind: "custom", requiredOnRegistration: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
+    prisma.participantFieldTemplate.findMany({ where: { active: true, organization: { events: { some: { id: eventId } } } }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }] }),
+    prisma.participant.findMany({ where: { eventId, child: { isAdult: true } }, select: { childId: true } }),
+  ]);
+  const rules = new Map(templates.map((t) => [t.key, t as TemplateRule]));
+  return { adults: askedFields(eventFields, rules, true), children: askedFields(eventFields, rules, false), adultChildIds: new Set(adults.map((a) => a.childId!)) };
+}
+
+/** The event with its confirmed members (isMember() in document-variables.ts), the price context (with price rules) and what it asks attached. */
+export async function withMembers<E extends { id: string; priceRules?: unknown }>(event: E): Promise<E & { memberChildIds?: Set<string>; priceContext?: PriceContext; detailsAsk?: DetailsAsk }> {
+  const [members, context, ask] = await Promise.all([memberChildIds(event.id), readPriceRules(event.priceRules) ? priceContext(event.id) : undefined, detailsAsk(event.id)]);
+  return { ...event, memberChildIds: members, priceContext: context, detailsAsk: ask };
 }

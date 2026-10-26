@@ -297,6 +297,8 @@ export async function sendBulkParticipantEmail(opts: {
   autoAttachDocumentTypeIds?: string[];
   // false = only (re)create the documents -- no email, no send log.
   sendEmail?: boolean;
+  // Whose uploaded files go along when not the purpose key's (an own template sent as the open e-mail).
+  filesKey?: string;
 }): Promise<BulkSendOutcome> {
   const event = await prisma.event.findUnique({ where: { id: opts.eventId } });
   if (!event) throw new Error("event_not_found");
@@ -313,7 +315,7 @@ export async function sendBulkParticipantEmail(opts: {
   const failedDocs = new Set<string>();
   const staticPdfs = new Map<string, Promise<Buffer>>();
   // The e-mail's uploaded files (organization + event, src/lib/email-files.ts), downloaded once.
-  const ownFiles = sendEmail ? await templateFiles(event.organizationId, event.id, eventTemplateKey(event, opts.purposeKey)) : [];
+  const ownFiles = sendEmail ? await templateFiles(event.organizationId, event.id, opts.filesKey ?? eventTemplateKey(event, opts.purposeKey)) : [];
   // A participant not in Členové of a portal event gets "Přijetí – osobní stránka" instead (its own page,
   // {{details_link}}), loaded on first need; the admin's edited text is for the others.
   let pageTemplate: { subject: string; body: string; files: typeof ownFiles } | null = null;

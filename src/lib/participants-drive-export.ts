@@ -9,7 +9,8 @@ import { allowedParticipantFieldKeys } from "@/lib/module-access";
 import { withMembers } from "@/lib/children";
 import { fieldTextValues } from "@/lib/document-variables";
 import { compareParticipantsBySurname } from "@/lib/participant-name";
-import { sheetText, upsertSheetByName } from "@/lib/drive";
+import { listAuthorSubfolders, sheetText, upsertSheetByName } from "@/lib/drive";
+import { exportFields, readExportColumns } from "@/lib/export-columns";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { docState } from "@/lib/registration-status";
 import { profileDocuments } from "@/lib/person-documents";
@@ -21,7 +22,7 @@ export async function exportParticipantsToDrive(
   eventId: string,
   user: User
 ): Promise<{ count: number; spreadsheetId: string; files: { synced: number; skipped: number } | null } | { error: "no_export_folder" }> {
-  const event = await withMembers(await prisma.event.findUniqueOrThrow({ where: { id: eventId } }));
+  const event = await withMembers(await prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { organization: { select: { exportColumns: true } } } }));
   if (!event.driveExportFolderId) return { error: "no_export_folder" };
   const [allowed, fields, participants, docTypes] = await Promise.all([
     allowedParticipantFieldKeys(user, eventId),
@@ -32,18 +33,28 @@ export async function exportParticipantsToDrive(
   // Fixed attachments (the same file for everyone) aren't tracked.
   const tracked = docTypes.filter((d) => !(d.data as DocumentTypeData | null)?.staticAttachment);
   const fromProfile = await profileDocuments(participants);
-  const shown = fields.filter((f) => allowed.has(f.key));
+  // The chosen columns in their order (the event's, else the organization's), else every field the user may see.
+  const shown = exportFields(
+    fields.filter((f) => allowed.has(f.key) && f.fieldType !== "image"),
+    readExportColumns(event.exportColumns) ?? readExportColumns(event.organization.exportColumns)
+  );
   participants.sort(compareParticipantsBySurname);
+  // The files go first, so the "Složka" column links the participants' folders (one listing of the root).
+  const root = participantsRootFolderId(event);
+  const files = root ? await syncParticipantDocumentsToDrive(eventId) : null;
+  const folders = root ? new Map((await listAuthorSubfolders(eventId, root, "participants")).map((f) => [f.name, f.id])) : new Map<string, string>();
+  const folderCell = (name: string) => {
+    const id = folders.get(name);
+    return id ? `=HYPERLINK("https://drive.google.com/drive/folders/${id}","složka")` : "";
+  };
   const rows: string[][] = [
-    ["Přihláška", ...shown.map((f) => f.label), ...tracked.map((d) => documentDisplayName({ ...d, data: d.data as DocumentTypeData | null }))],
+    ["Přihláška", ...shown.map((f) => f.label), ...tracked.map((d) => documentDisplayName({ ...d, data: d.data as DocumentTypeData | null })), ...(root ? ["Složka"] : [])],
     ...participants.map((p) => {
       const values = fieldTextValues({ ...p, customFieldValues: p.customFieldValues as Record<string, string> | null }, event, fields);
       const docs = [...p.documents, ...(fromProfile.get(p.id) ?? [])];
-      return [p.registrationStatus === "accepted" ? "přijatá" : "čeká", ...shown.map((f) => sheetText(values[f.key] ?? "")), ...tracked.map((d) => DOC_STATE_TEXT[docState(docs, d.id).state])];
+      return [p.registrationStatus === "accepted" ? "přijatá" : "čeká", ...shown.map((f) => sheetText(values[f.key] ?? "")), ...tracked.map((d) => DOC_STATE_TEXT[docState(docs, d.id).state]), ...(root ? [folderCell(p.name)] : [])];
     }),
   ];
   const spreadsheetId = await upsertSheetByName(eventId, event.driveExportFolderId, `Účastníci – ${event.name}`, rows);
-  // The files that aren't on Drive yet (the same run as "Synchronizovat dokumenty").
-  const files = participantsRootFolderId(event) ? await syncParticipantDocumentsToDrive(eventId) : null;
   return { count: participants.length, spreadsheetId, files };
 }

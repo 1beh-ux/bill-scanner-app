@@ -39,12 +39,15 @@ export type PublicEvent = NonNullable<Awaited<ReturnType<typeof publicEvent>>>;
  */
 export async function publicFormContext(event: PublicEvent) {
   const rules = readPriceRules(event.priceRules);
-  const [templates, eventFields, tplRules, org] = await Promise.all([
+  const [templates, eventFields, tplRules, org, own] = await Promise.all([
     visibleTemplates(event.organizationId),
     requiredEventFields([event.id]),
     templateRules(event.organizationId),
     prisma.organization.findUniqueOrThrow({ where: { id: event.organizationId }, select: { portalProfileSections: true } }),
+    prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true, kind: "custom" }, select: { key: true } }),
   ]);
+  // Only the organization's fields this event has (2026-10-27): one removed from the event isn't asked.
+  const eventKeys = new Set(own.map((f) => f.key));
   // Headings: the profile parts (only the organization's own ones -- basic / detailed stay unnamed).
   const sections = readProfileSections(org.portalProfileSections);
   const groupOf = (t: { profileSection: string | null; level: "basic" | "detailed" }) => sections.find((s) => s.key === sectionOf(t, sections))?.label;
@@ -53,11 +56,26 @@ export async function publicFormContext(event: PublicEvent) {
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
   const fields: FormField[] = [
     ...templates
-      .filter((t) => t.level === "basic" || askedKeys.has(t.key))
+      .filter((t) => eventKeys.has(t.key) && (t.level === "basic" || askedKeys.has(t.key)))
       .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, group: groupOf(t), required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
     ...asked.filter((f) => f.source === "event").map((f) => ({ key: f.key, label: f.label, fieldType: f.fieldType, options: f.options, required: true, eventOnly: true })),
   ];
   return { fields, rules, oddil: await oddilField(event.id, rules) };
+}
+
+/**
+ * "Nabídnout členství": the offered registration (its token from ?nabidka=) gets linked to the person just
+ * created from the form -- the one with its birth date, else the first. Only a registration of the same
+ * organization not linked yet; nothing happens otherwise. From then on it shows in that family's portal.
+ */
+export async function linkOfferedRegistration(token: unknown, organizationId: string, createdIds: string[]): Promise<void> {
+  if (typeof token !== "string" || !token || token.length > 64 || createdIds.length === 0) return;
+  const offered = await prisma.participant.findUnique({ where: { detailsToken: token }, select: { id: true, childId: true, dateOfBirth: true, event: { select: { organizationId: true } } } });
+  if (!offered || offered.childId || offered.event.organizationId !== organizationId) return;
+  const created = await prisma.participant.findMany({ where: { id: { in: createdIds }, childId: { not: null } }, select: { childId: true, dateOfBirth: true } });
+  const day = (d: Date | null) => d?.toISOString().slice(0, 10);
+  const person = created.find((c) => day(c.dateOfBirth) === day(offered.dateOfBirth)) ?? created[0];
+  if (person) await prisma.participant.update({ where: { id: offered.id }, data: { childId: person.childId } });
 }
 
 /**

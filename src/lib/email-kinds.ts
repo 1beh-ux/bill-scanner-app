@@ -12,6 +12,7 @@ import {
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY,
+  MEMBERSHIP_OFFER_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   MAIL_HELPER_REPLY_PURPOSE_KEY,
@@ -44,6 +45,8 @@ export const EMAIL_KINDS: EmailKind[] = [
   { purposeKey: REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY, id: "acceptancePortal", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants`, module: "roster", when: "portal" },
   // Sent instead of the acceptance to participants not in Členové (src/lib/participant-bulk-email.ts).
   { purposeKey: REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, id: "acceptancePage", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants`, module: "roster", when: "portal" },
+  // "Nabídnout členství" in Účastníci: picked participants not in Členové (src/lib/document-variables.ts membershipOfferVars).
+  { purposeKey: MEMBERSHIP_OFFER_PURPOSE_KEY, id: "membershipOffer", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants`, module: "roster", when: "portal" },
   { purposeKey: MAIL_HELPER_BULK_STATUS_PURPOSE_KEY, id: "documentStatus", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants/documents`, module: "roster", when: "noPortal" },
   { purposeKey: MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY, id: "documentStatusLink", launch: "elsewhere", launchHref: (id) => `/events/${id}/participants/documents`, module: "roster", when: "portal" },
   { purposeKey: MAIL_HELPER_REPLY_PURPOSE_KEY, id: "mailReply", launch: "elsewhere", launchHref: (id) => `/events/${id}/mail`, module: "mail", bodyOnly: true },

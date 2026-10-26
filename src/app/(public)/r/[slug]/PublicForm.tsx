@@ -24,7 +24,6 @@ type Person = {
   email: string;
   phone: string;
   guardianOfChildren: boolean;
-  sameAsFirst: boolean;
   values: Record<string, string>;
   category?: string;
   oddil?: string;
@@ -51,7 +50,7 @@ const btnPrimary = "rounded-lg bg-ember px-4 py-2.5 text-[15px] font-medium text
 const btn = "rounded-lg border border-mist px-3 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
 const card = "rounded-lg border border-mist bg-paper p-4";
 const date = (d: string | null) => (d ? new Date(d).toLocaleDateString("cs-CZ", { timeZone: "UTC" }) : "—");
-const newPerson = (isAdult: boolean, sameAsFirst: boolean): Person => ({
+const newPerson = (isAdult: boolean): Person => ({
   isAdult,
   firstName: "",
   lastName: "",
@@ -59,7 +58,6 @@ const newPerson = (isAdult: boolean, sameAsFirst: boolean): Person => ({
   email: "",
   phone: "",
   guardianOfChildren: isAdult,
-  sameAsFirst,
   values: {},
 });
 
@@ -69,6 +67,7 @@ export default function PublicForm({
   fields,
   rules,
   oddil,
+  offer,
   org,
   strings,
 }: {
@@ -78,6 +77,8 @@ export default function PublicForm({
   fields: FormField[];
   rules: PriceRules | null;
   oddil: { key: string; label: string; options: string[] } | null;
+  // "Nabídnout členství": the offered registration's token -- pre-fill from it after the birth date.
+  offer?: string;
   strings: Record<string, string>;
 }) {
   const t = useCallback(
@@ -90,7 +91,7 @@ export default function PublicForm({
   );
   // Starts with a child (the main case); adults only as the event allows (Event.publicAudience).
   const audience = event.audience ?? "any";
-  const [persons, setPersons] = useState<Person[]>([newPerson(false, false)]);
+  const [persons, setPersons] = useState<Person[]>([newPerson(false)]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [note, setNote] = useState("");
   const [website, setWebsite] = useState("");
@@ -104,17 +105,40 @@ export default function PublicForm({
   // The family's portal link -- only when the event auto-sends (slice 4 #10).
   const [portalLink, setPortalLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [offerBirth, setOfferBirth] = useState("");
+  const [offerState, setOfferState] = useState<"ask" | "busy" | "done" | "wrong" | "throttled" | "gone">("ask");
+
+  async function prefill() {
+    setOfferState("busy");
+    const res = await fetch(`/api/public/r/${slug}/offer`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: offer, birthDate: offerBirth }) }).catch(() => null);
+    if (!res?.ok) return setOfferState(res?.status === 403 ? "wrong" : res?.status === 429 ? "throttled" : "gone");
+    const d = (await res.json()) as { person: { firstName: string; lastName: string; birthDate: string; isAdult: boolean; values: Record<string, string> }; guardians: Guardian[] };
+    setPersons([{ ...newPerson(d.person.isAdult), firstName: d.person.firstName, lastName: d.person.lastName, birthDate: d.person.birthDate, values: d.person.values }]);
+    if (!d.person.isAdult) setGuardians(d.guardians);
+    setOfferState("done");
+  }
 
   const title = event.kind === "membership" ? t("portal.membership", { year: String(event.membershipYear ?? "") }) : event.name;
   const setPerson = (i: number, patch: Partial<Person>) => setPersons((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const categoriesOf = (p: Person) => (rules ? allowedCategories(rules, p.isAdult).map((c) => ({ key: c.key, label: c.label, asksOddil: !!c.asksOddil })) : []);
   // Only the fields for this person (slice 5 #1: children / adults / both).
   const fieldsOf = (p: Person) => fields.filter((f) => appliesTo(f.audience, p.isAdult));
-  // "Same details as the first person": the first person's values of the fields
-  // both have are sent for this one; the rest (e.g. children-only) stay asked.
-  const shared = (p: Person, f: FormField) => p.sameAsFirst && !!persons[0] && appliesTo(f.audience, persons[0].isAdult);
-  const valuesOf = (p: Person) =>
-    p.sameAsFirst && persons[0] ? { ...p.values, ...Object.fromEntries(fieldsOf(p).filter((f) => shared(p, f) && persons[0].values[f.key]).map((f) => [f.key, persons[0].values[f.key]])) } : p.values;
+  // "Vyplnit stejné údaje jako osoba 1" (2026-10-27): copies the first person's answers into this person's
+  // empty fields, all still editable -- not a select answer this person can't have (Muž for a child) nor a
+  // field with its own adult options (Pohlaví): those are personal.
+  const copyFromFirst = (i: number) => {
+    const first = persons[0];
+    const p = persons[i];
+    const copied: Record<string, string> = {};
+    for (const f of fieldsOf(p)) {
+      const v = first.values[f.key];
+      if (!v || p.values[f.key] || (Array.isArray(f.adultOptions) && f.adultOptions.length)) continue;
+      const opts = optionsFor(f, p.isAdult);
+      if (f.fieldType === "select" && Array.isArray(opts) && opts.length && !opts.includes(v)) continue;
+      copied[f.key] = v;
+    }
+    setPerson(i, { values: { ...p.values, ...copied } });
+  };
   const prices = previewPrices(
     { rules, memberPriceCzk: event.memberPriceCzk, nonMemberPriceCzk: event.nonMemberPriceCzk, eventStart: new Date(event.startDate), alreadyRegistered: 0, inFamily: true },
     persons.map((p) => ({ category: p.category ?? categoriesOf(p)[0]?.key, isAdult: p.isAdult, isMember: false }))
@@ -130,7 +154,8 @@ export default function PublicForm({
       website,
       note,
       guardians,
-      persons: persons.map((p) => ({ ...p, values: valuesOf(p), category: p.category ?? categoriesOf(p)[0]?.key })),
+      offer,
+      persons: persons.map((p) => ({ ...p, category: p.category ?? categoriesOf(p)[0]?.key })),
     };
     const res = await fetch(`/api/public/r/${slug}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
@@ -215,6 +240,21 @@ export default function PublicForm({
         <h2 className="text-[18px] font-semibold text-ink">{t("public.formTitle")}</h2>
         <p className="text-[13px] text-ink-secondary">{t("public.formHint")}</p>
         {event.detailsLater && <p className="text-[13px] text-ink-secondary">{t("public.detailsLaterNote")}</p>}
+        {offer && offerState !== "done" && offerState !== "gone" && (
+          <div className={card + " flex flex-col gap-2"}>
+            <p className="text-[14px] font-medium text-ink">{t("public.offerTitle")}</p>
+            <p className="text-[13px] text-ink-secondary">{t("public.offerHint")}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="date" value={offerBirth} onChange={(e) => setOfferBirth(e.target.value)} aria-label={t("portal.gateLabel")} className={inputClass + " max-w-[12rem]"} />
+              <button type="button" onClick={prefill} disabled={!offerBirth || offerState === "busy"} className={btn}>
+                {t("public.offerFill")}
+              </button>
+            </div>
+            {offerState === "wrong" && <p className="text-[13px] text-red-600">{t("portal.gateWrong")}</p>}
+            {offerState === "throttled" && <p className="text-[13px] text-red-600">{t("portal.gateThrottled")}</p>}
+          </div>
+        )}
+        {offerState === "done" && <p className="text-[13px] text-pine">{t("public.offerDone")}</p>}
         {/* Honeypot: invisible to people, bots fill it in. */}
         <input type="text" name="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
 
@@ -261,14 +301,13 @@ export default function PublicForm({
               )}
             </div>
             {fieldsOf(p).length > 0 && i > 0 && (
-              <label className="flex items-center gap-2 text-[14px] text-ink">
-                <input type="checkbox" checked={p.sameAsFirst} onChange={(e) => setPerson(i, { sameAsFirst: e.target.checked })} />
-                {t("public.sameAsFirst")}
-              </label>
+              <button type="button" onClick={() => copyFromFirst(i)} className="self-start text-[14px] text-ember underline hover:no-underline">
+                {t("public.copyFromFirst")}
+              </button>
             )}
-            {fieldsOf(p).some((f) => !(i > 0 && shared(p, f))) && (
+            {fieldsOf(p).length > 0 && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {fieldsOf(p).filter((f) => !(i > 0 && shared(p, f))).map((f, j, list) => (
+                {fieldsOf(p).map((f, j, list) => (
                   <Fragment key={f.key}>
                   {/* A heading where the organization's own profile part starts (e.g. "Adresa"). */}
                   {f.group && f.group !== list[j - 1]?.group && <h4 className="mt-2 text-[14px] font-semibold text-ink sm:col-span-2">{f.group}</h4>}
@@ -298,11 +337,11 @@ export default function PublicForm({
 
         {persons.length < MAX_PERSONS && (
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setPersons((x) => [...x, newPerson(false, x.length > 0)])} className={btn}>
+            <button type="button" onClick={() => setPersons((x) => [...x, newPerson(false)])} className={btn}>
               + {t("public.addChild")}
             </button>
             {audience !== "children" && (
-              <button type="button" onClick={() => setPersons((x) => [...x, newPerson(true, false)])} className={btn}>
+              <button type="button" onClick={() => setPersons((x) => [...x, newPerson(true)])} className={btn}>
                 + {t(audience === "children_adults" ? "public.addAdultWithChild" : "public.addAdult")}
               </button>
             )}

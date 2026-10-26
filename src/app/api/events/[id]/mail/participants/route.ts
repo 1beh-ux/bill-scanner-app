@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireAnyModuleAccess } from "@/lib/module-access";
+import { allowedParticipantFieldKeys, requireAnyModuleAccess } from "@/lib/module-access";
 import { getActiveDocumentTypes, getReceivedItemIds } from "@/lib/mail-helper-context";
 import { documentDisplayName } from "@/lib/mail-reply-template";
 import { resolveContactEmail, fieldTextValues, confirmedMembershipKey } from "@/lib/document-variables";
@@ -37,7 +37,10 @@ export async function GET(
     prisma.eventParticipantField.findMany({ where: { eventId, active: true } }),
     prisma.event.findUniqueOrThrow({ where: { id: eventId } }).then(withMembers),
   ]);
-  const mailListFields = activeFields.filter((f) => f.surfaces.includes("mail_list"));
+  // The documents overview offers the participant list's fields too (2026-10-27): "Seznam" or "Přehled dokumentů",
+  // as far as this user may see them (the roster's rule).
+  const visible = await allowedParticipantFieldKeys(user, eventId);
+  const mailListFields = activeFields.filter((f) => (f.surfaces.includes("mail_list") || f.surfaces.includes("list")) && visible.has(f.key));
   const allowedKeys = new Set(mailListFields.map((f) => f.key));
   // Composite fields are computed, not stored -- added so they work as columns.
   // Composite and calculated fields aren't stored -- computed for the columns (not the QR image).
@@ -59,6 +62,9 @@ export async function GET(
       registrationNumber: true,
       groupName: true,
       childId: true,
+      isAdult: true,
+      priceCategory: true,
+      createdAt: true,
     },
     orderBy: { name: "asc" },
   });

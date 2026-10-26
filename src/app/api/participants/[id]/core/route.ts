@@ -6,7 +6,7 @@ import { deleteParticipantCascade } from "@/lib/participant-delete";
 import { fullNameFrom } from "@/lib/participant-name";
 import { confirmedMembershipKey, effectivePriceCzk } from "@/lib/document-variables";
 import { allowedCategories, readPriceRules } from "@/lib/price-rules";
-import { withMembers } from "@/lib/children";
+import { linkChildrenIfConnected, membershipYearOf, withMembers } from "@/lib/children";
 
 // Core-identity view of a participant (name/group/dob/registration status)
 // for the central "Seznam účastníků" section, reachable by health OR mail
@@ -50,6 +50,7 @@ export async function GET(
       acceptedPriceCzk: true,
       createdAt: true,
       registrationNumber: true,
+      isAdult: true,
       child: { select: { isAdult: true } },
     },
   });
@@ -70,11 +71,11 @@ export async function GET(
   if (participant.childId || rules) {
     const event = await withMembers(rawEvent);
     const key = confirmedMembershipKey(participant, event);
-    if (key) confirmedMembership = { key, year: event.startDate.getUTCFullYear() };
+    if (key) confirmedMembership = { key, year: membershipYearOf(event) };
     if (rules) {
       pricing = {
         category: participant.priceCategory,
-        categories: allowedCategories(rules, !!participant.child?.isAdult).map((c) => ({ key: c.key, label: c.label })),
+        categories: allowedCategories(rules, participant.child ? participant.child.isAdult : !!participant.isAdult).map((c) => ({ key: c.key, label: c.label })),
         price: effectivePriceCzk({ ...participant, customFieldValues: participant.customFieldValues as Record<string, string> | null }, event),
         priceSent: participant.acceptedPriceCzk,
       };
@@ -164,6 +165,7 @@ export async function PATCH(
     },
     select: {
       id: true,
+      eventId: true,
       name: true,
       firstName: true,
       lastName: true,
@@ -173,6 +175,9 @@ export async function PATCH(
       customFieldValues: true,
     },
   });
+
+  // A corrected name / birth date of a registration not linked to Členové links it now (by the event's rule).
+  if (name !== undefined || dateOfBirth !== undefined) await linkChildrenIfConnected(updated.eventId);
 
   const scoped = {
     ...updated,

@@ -25,7 +25,7 @@ export async function PATCH(
   const current = await prisma.participantFieldTemplate.findFirst({ where: { key: decodedKey, organizationId: scope.organizationId }, select: { id: true } });
   if (!current) return notFound();
   const body = await req.json();
-  const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration, audience, level, profileSection, portalSummary, adultOptions } = body;
+  const { key: newKey, label, fieldType, options, defaultSurfaces, active, portalAccess, requiredInRegistration, audience, level, profileSection, portalSummary, memberListColumn, adultOptions } = body;
   if (requiredInRegistration !== undefined && typeof requiredInRegistration !== "boolean") {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
@@ -39,7 +39,7 @@ export async function PATCH(
   }
 
   // Portal profile page (2026-10-22): the section key (null = by level) and the family overview switch.
-  if ((profileSection !== undefined && profileSection !== null && !(typeof profileSection === "string" && /^s[a-z0-9]{2,24}$/.test(profileSection))) || (portalSummary !== undefined && typeof portalSummary !== "boolean")) {
+  if ((profileSection !== undefined && profileSection !== null && !(typeof profileSection === "string" && /^s[a-z0-9]{2,24}$/.test(profileSection))) || (portalSummary !== undefined && typeof portalSummary !== "boolean") || (memberListColumn !== undefined && typeof memberListColumn !== "boolean")) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
@@ -77,6 +77,7 @@ export async function PATCH(
       ...(level !== undefined && { level }),
       ...(profileSection !== undefined && { profileSection }),
       ...(portalSummary !== undefined && { portalSummary }),
+      ...(memberListColumn !== undefined && { memberListColumn }),
       ...(adultOptions !== undefined && { adultOptions: adultOptions.length ? adultOptions : Prisma.DbNull }),
     },
   });

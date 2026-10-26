@@ -5,6 +5,7 @@ import {
   REGISTRATION_ACCEPTANCE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY,
   REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY,
+  MEMBERSHIP_OFFER_PURPOSE_KEY,
   MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY,
   PARTICIPANT_OPEN_EMAIL_PURPOSE_KEY,
   PORTAL_LINK_PURPOSE_KEY,
@@ -81,6 +82,7 @@ const VARIABLES_BY_PURPOSE: Record<string, readonly string[]> = {
   [REGISTRATION_ACCEPTANCE_PURPOSE_KEY]: PARTICIPANT_VARS,
   [REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY]: PARTICIPANT_VARS,
   [REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY]: PARTICIPANT_VARS,
+  [MEMBERSHIP_OFFER_PURPOSE_KEY]: [...PARTICIPANT_VARS, "membership_offer_link"],
   [MAIL_HELPER_BULK_STATUS_LINK_PURPOSE_KEY]: PARTICIPANT_VARS,
   // Child-level, no event: the child's own profile fields are the other {{key}}s.
   [PORTAL_LINK_PURPOSE_KEY]: ["child_name", "portal_link", "sender_email", "sender_name", "signature", ...ORG_VARS],
@@ -172,6 +174,14 @@ const DUMMY_VALUES_BY_PURPOSE: Record<string, Record<string, string>> = {
     document_checklist: "- ✅ Přihláška,\n- ❌ Potvrzení od lékaře,",
     sender_name: "Pošta táboru",
     signature: "S pozdravem\nPošta táboru",
+  },
+  [MEMBERSHIP_OFFER_PURPOSE_KEY]: {
+    ...PORTAL_DUMMY,
+    participant_name: "Anna Nováková",
+    camp_name: "Letní tábor 2026",
+    organization_name: "Turistický oddíl Sluníčko",
+    membership_offer_link: "https://example.com/r/clenstvi-2027?nabidka=…",
+    sender_name: "Pavel",
   },
   [REGISTRATION_ACCEPTANCE_PORTAL_PURPOSE_KEY]: {
     ...PORTAL_DUMMY,

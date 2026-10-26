@@ -7,6 +7,7 @@ import { calculateAge } from "@/lib/age";
 import { formatFieldValue, type ParticipantFieldDef } from "@/lib/participant-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { composeHref, type ComposeRequest } from "@/lib/compose-handoff";
+import { MEMBERSHIP_OFFER_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import StatusUpdateButton from "@/components/mail/StatusUpdateButton";
 import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue } from "@/lib/participant-columns";
@@ -273,16 +274,12 @@ export default function EventParticipantsPage({
     load();
   }
 
-  // "Nabídnout portál": the picked ones become people in Členové (when not yet), then the portal invitation e-mail.
-  async function offerPortal() {
-    setBulkRunning(true);
-    setBulkMessage(null);
-    const res = await fetch(`/api/events/${id}/offer-portal`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantIds: Array.from(selected) }) }).catch(() => null);
-    setBulkRunning(false);
-    const data = res?.ok ? await res.json() : null;
-    if (!data) return setBulkMessage(t("children.errorFailed"));
-    if (data.childIds.length === 0) return setBulkMessage(t("participantsPage.offerPortalNone"));
-    router.push(portalComposeHref(data.childIds, "invitation"));
+  // "Nabídnout členství": the picked ones not in Členové get the membership offer (pre-filled membership
+  // registration; the person appears in Členové only once they send it) -- reviewed and sent on Poslat e-mail.
+  function offerMembership() {
+    const unlinked = participants.filter((p) => selected.has(p.id) && !p.childId).map((p) => p.id);
+    if (unlinked.length === 0) return setBulkMessage(t("participantsPage.offerMembershipNone"));
+    router.push(`${composeHref(id, { mode: "freeform", participantIds: unlinked })}&template=${MEMBERSHIP_OFFER_PURPOSE_KEY}`);
   }
 
   if (loading) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
@@ -447,12 +444,12 @@ export default function EventParticipantsPage({
           )}
           {role === "admin" && !event.peopleUnlinked && event.kind === "event" && (
             <button
-              onClick={offerPortal}
+              onClick={offerMembership}
               disabled={bulkRunning}
-              title={t("participantsPage.offerPortalHint")}
+              title={t("participantsPage.offerMembershipHint")}
               className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50"
             >
-              {t("participantsPage.offerPortal")}
+              {t("participantsPage.offerMembership")}
             </button>
           )}
           <button

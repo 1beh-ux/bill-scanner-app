@@ -15,7 +15,7 @@ type FieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "
 type Surface = "list" | "health_list" | "health_detail" | "mail_list" | "documents" | "email" | "import";
 type ModuleKey = "bills" | "health" | "mail" | "planning";
 type FieldKind = "custom" | "builtin" | "guardian" | "computed";
-type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image" | "contact_email" | "membership_status";
+type ComputedType = "effective_price" | "variable_symbol" | "payment_qr_image" | "contact_email" | "membership_status" | "price_category" | "details_status";
 
 const FIELD_TYPES: FieldType[] = ["text", "number", "date", "boolean", "select", "composite"];
 const SEPARATORS = [" ", ", ", " – ", "\n"];
@@ -40,9 +40,10 @@ type Field = {
   level?: FieldLevel; // org scope only (slice 5 #1)
   profileSection?: string | null; // org scope only: the portal profile section (null = by level)
   portalSummary?: boolean; // org scope only: on the portal's family overview
+  memberListColumn?: boolean; // org scope only: a column of the Členové list
   requiredOnRegistration?: boolean; // event scope only (slice 5 #2)
 };
-type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level" | "profileSection" | "portalSummary">;
+type TemplateMeta = Pick<Field, "portalAccess" | "requiredInRegistration" | "audience" | "level" | "profileSection" | "portalSummary" | "memberListColumn">;
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -687,9 +688,18 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   // Portal profile page (2026-10-22): the section the field sits in + "on the family overview".
   function profileCell(field: Field) {
     const tpl = isEvent ? templates.get(field.key) : field;
-    if (field.kind !== "custom" || !tpl || appLevel || (tpl.portalAccess ?? "hidden") === "hidden") return null;
+    if (field.kind !== "custom" || !tpl || appLevel) return null;
+    // "Ve seznamu Členů" (2026-10-27): any field of the organization, portal-visible or not.
+    const memberList = !isEvent && (
+      <label className="flex items-center gap-1.5 text-[11.5px] text-ink-secondary">
+        <input type="checkbox" disabled={role !== "admin"} checked={!!tpl.memberListColumn} onChange={(e) => setPortalAccess(field, { memberListColumn: e.target.checked })} />
+        {t("profileSections.memberList")}
+      </label>
+    );
+    if ((tpl.portalAccess ?? "hidden") === "hidden") return memberList || null;
     return (
       <>
+        {memberList}
         <select
           value={tpl.profileSection && sections.some((s) => s.key === tpl.profileSection) ? tpl.profileSection : ""}
           disabled={role !== "admin"}

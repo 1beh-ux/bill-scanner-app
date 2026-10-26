@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicRegistration, publicEvent, publicFormContext } from "@/lib/public-registration-server";
+import { createPublicRegistration, linkOfferedRegistration, publicEvent, publicFormContext } from "@/lib/public-registration-server";
 import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission, readAudience } from "@/lib/public-registration";
 import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
 import { autoAcceptRegistrations } from "@/lib/auto-accept";
@@ -26,6 +26,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   if (!(await takeRateSlot(`submit:${hashedIp(req)}`, SUBMIT_LIMIT_PER_HOUR, 3600 * 1000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
 
   const { ids, portalToken } = await createPublicRegistration(event, result.data, ctx.fields);
+  // Sent from "Nabídnout členství": that registration joins the new person (and so their portal).
+  await linkOfferedRegistration(body?.offer, event.organizationId, ids);
   // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
   await autoAcceptRegistrations(event.id, ids, "public");
   // accept_send events show the family's portal link on the confirmation screen (slice 4 #10).

@@ -416,6 +416,8 @@ model Event {
   // Uploaded files each e-mail of this event carries, on top of the organization's: { purposeKey: EmailFile[] }
   // (src/lib/email-files.ts).
   emailFiles                    Json?          @map("email_files")
+  // Participant export to Drive: its columns in order (field keys); null = the organization's, else all.
+  exportColumns                 Json?          @map("export_columns")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?
@@ -1027,6 +1029,10 @@ enum ComputedFieldType {
   contact_email
   // Ano / Ne: a member for the event's membership year (isMember() in document-variables.ts).
   membership_status
+  // The price category's name (Participant.priceCategory by the event's price rules).
+  price_category
+  // The detailed fields the event asks: "vyplněno" / "chybí N" (document-variables.ts).
+  details_status
 }
 
 // Org-wide field definition, synced into EventParticipantField the same
@@ -1065,6 +1071,8 @@ model ParticipantFieldTemplate {
   // family overview next to the name and birth date.
   profileSection         String?                   @map("profile_section")
   portalSummary          Boolean                   @default(false) @map("portal_summary")
+  // A column of the Členové list (2026-10-27).
+  memberListColumn       Boolean                   @default(false) @map("member_list_column")
   // Order for parents (2026-10-23): the portal profile, the public form and the registration step
   // list fields by this (null = after the ordered ones, by label). Šablony -> Účastníci -> Pořadí polí.
   portalSortOrder        Int?                      @map("portal_sort_order")
@@ -1641,6 +1649,8 @@ model Organization {
   portalRecoverySenderEmail String? @map("portal_recovery_sender_email")
   // Uploaded files every e-mail of a kind carries (Šablony -> E-maily): { purposeKey: EmailFile[] } (src/lib/email-files.ts).
   emailFiles                Json?   @map("email_files")
+  // The participant export's default columns (field keys, in order); an event may have its own.
+  exportColumns             Json?   @map("export_columns")
   portalRecoveryNewLink   Boolean  @default(false) @map("portal_recovery_new_link")
   // "Ještě nejsem členem" next to it: an event's public registration, or any web address.
   portalJoinEventId       String?  @map("portal_join_event_id")

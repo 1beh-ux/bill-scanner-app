@@ -153,6 +153,24 @@ export const FIXED_PARTICIPANT_FIELDS: FixedFieldDef[] = [
     defaultSurfaces: ["list", "mail_list", "documents", "email"],
   },
   {
+    // The price category picked at registration (by the event's price rules).
+    key: "cenova_kategorie",
+    kind: "computed",
+    fieldType: "text",
+    label: "Cenová kategorie",
+    computedType: "price_category",
+    defaultSurfaces: ["list", "mail_list", "documents", "email"],
+  },
+  {
+    // The detailed fields the event asks of this person: "vyplněno" / "chybí N".
+    key: "podrobne_udaje",
+    kind: "computed",
+    fieldType: "text",
+    label: "Podrobné údaje",
+    computedType: "details_status",
+    defaultSurfaces: ["list", "mail_list"],
+  },
+  {
     key: "picture",
     kind: "computed",
     fieldType: "image",

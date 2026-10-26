@@ -29,6 +29,19 @@ async function main() {
   assert.equal(kindForEvent({ when: "portal" }, plain), false);
   assert.equal(kindForEvent({ when: "noPortal" }, plain), true);
   assert.equal(kindForEvent({}, portal), true);
+  // Export columns: saved order, unknown keys dropped; nothing saved = every field.
+  const { exportFields, readExportColumns } = await import("../src/lib/export-columns");
+  const fs = [{ key: "a" }, { key: "b" }, { key: "c" }];
+  assert.deepEqual(exportFields(fs, readExportColumns(["c", "x", "a", "c"])).map((f) => f.key), ["c", "a"]);
+  assert.deepEqual(exportFields(fs, readExportColumns([])).map((f) => f.key), ["a", "b", "c"]);
+  // "Podrobné údaje": the asked fields of the person's age group, filled or how many are missing.
+  const { detailsStatus } = await import("../src/lib/document-variables");
+  const ask = { adults: [], children: [{ key: "x" }, { key: "y" }], adultChildIds: new Set<string>() } as never;
+  const base = { name: "A", groupName: null, dateOfBirth: new Date("2015-01-01"), registrationStatus: "accepted", registrationNumber: null, guardians: [], isAdult: false };
+  const ev = { startDate: new Date("2027-03-24"), detailsAsk: ask } as never;
+  assert.equal(detailsStatus({ ...base, customFieldValues: { x: "1" } }, ev), "chybí 1");
+  assert.equal(detailsStatus({ ...base, customFieldValues: { x: "1", y: "Ne" } }, ev), "vyplněno");
+  assert.equal(detailsStatus({ ...base, isAdult: true, customFieldValues: {} }, ev), "");
   // Stored e-mail files: bad rows dropped, empty keys gone.
   const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
   assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });
