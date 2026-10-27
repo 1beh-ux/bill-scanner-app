@@ -43,6 +43,7 @@ const rows: Row[] = [
   r("parentQuestions.filter.open", "Otevřené", "Open"),
   r("parentQuestions.filter.answered", "Zodpovězené", "Answered"),
   r("parentQuestions.filter.all", "Všechny", "All"),
+  r("healthPage.colQuestions", "Dotazy", "Questions"),
 ];
 
 async function main() {

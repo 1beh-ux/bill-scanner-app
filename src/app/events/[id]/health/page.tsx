@@ -94,12 +94,24 @@ export default function EventHealthPage({
   const medSet = useMemo(() => new Set(signals.medPlanParticipantIds), [signals]);
   // "Dotazy na rodiče": how many are still open (the link's badge).
   const [openQuestions, setOpenQuestions] = useState(0);
+  // ...and per child (the "Dotazy" column's pill).
+  const [openBy, setOpenBy] = useState<Record<string, number>>({});
   const loadQuestionCount = useCallback(() => {
     fetch(`/api/events/${id}/parent-questions`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: { answer: string | null }[]) => setOpenQuestions(list.filter((q) => !q.answer).length))
+      .then((list: { participantId: string; answer: string | null }[]) => {
+        const open = list.filter((q) => !q.answer);
+        setOpenQuestions(open.length);
+        setOpenBy(open.reduce<Record<string, number>>((m, q) => ({ ...m, [q.participantId]: (m[q.participantId] ?? 0) + 1 }), {}));
+      })
       .catch(() => {});
   }, [id]);
+  const questionsPill = (pid: string) =>
+    openBy[pid] ? (
+      <a href={`/events/${id}/health/participants/${pid}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-800" title={t("parentQuestions.openCount", { n: String(openBy[pid]) })}>
+        ? {openBy[pid]}
+      </a>
+    ) : null;
   useEffect(() => {
     loadQuestionCount();
   }, [loadQuestionCount]);
@@ -233,6 +245,7 @@ export default function EventHealthPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colIncidents")}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colMeds")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colQuestions")}</th>
                 {anyListNotes && <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantDetail.notesTitle")}</th>}
                 {activeColumns.map((f) => (
                   <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
@@ -272,6 +285,7 @@ export default function EventHealthPage({
                     <td className="p-2 text-[13px]">
                       {medSet.has(p.id) ? medsCell(p.id) : "—"}
                     </td>
+                    <td className="p-2 text-[13px]">{questionsPill(p.id) ?? "—"}</td>
                     {anyListNotes && (
                       <td className="max-w-[280px] p-2 text-[12px] text-ink-secondary">
                         {listNotes(p.id).map((n) => (
@@ -321,6 +335,7 @@ export default function EventHealthPage({
                       </span>
                     )}
                     {medSet.has(p.id) && medsCell(p.id)}
+                    {questionsPill(p.id)}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">

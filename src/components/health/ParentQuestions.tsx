@@ -20,6 +20,17 @@ export function QuestionRow({ eventId, q, showName, onChanged }: { eventId: stri
   const [text, setText] = useState("");
   const [editing, setEditing] = useState(!q.answer);
   const [busy, setBusy] = useState(false);
+  // "Upravit": the question itself and its prepared answers.
+  const [editQ, setEditQ] = useState<{ question: string; options: string } | null>(null);
+  async function saveQuestion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editQ?.question.trim()) return;
+    setBusy(true);
+    await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: editQ.question, options: editQ.options }) }).catch(() => null);
+    setBusy(false);
+    setEditQ(null);
+    onChanged();
+  }
   const url = `/api/events/${eventId}/parent-questions/${q.id}`;
 
   async function answer(value: string | null) {
@@ -45,12 +56,34 @@ export function QuestionRow({ eventId, q, showName, onChanged }: { eventId: stri
               {q.participantName}
             </a>
           )}
-          <p className="whitespace-pre-line text-[14px] text-ink">{q.question}</p>
+          {!editQ && <p className="whitespace-pre-line text-[14px] text-ink">{q.question}</p>}
         </div>
-        <button type="button" onClick={remove} className="text-[12px] text-red-600 hover:underline">
-          {t("common.delete")}
-        </button>
+        <span className="flex items-center gap-3">
+          <button type="button" onClick={() => setEditQ(editQ ? null : { question: q.question, options: q.options.join("\n") })} className="text-[12px] text-ember hover:underline">
+            {t("common.edit")}
+          </button>
+          <button type="button" onClick={remove} className="text-[12px] text-red-600 hover:underline">
+            {t("common.delete")}
+          </button>
+        </span>
       </div>
+      {editQ && (
+        <form onSubmit={saveQuestion} className="flex flex-col gap-2">
+          <textarea value={editQ.question} onChange={(e) => setEditQ({ ...editQ, question: e.target.value })} rows={2} maxLength={1000} className={inputClass} aria-label={t("parentQuestions.question")} />
+          <label className="flex flex-col gap-1 text-[12.5px] text-ink-secondary">
+            {t("parentQuestions.options")}
+            <textarea value={editQ.options} onChange={(e) => setEditQ({ ...editQ, options: e.target.value })} rows={3} className={inputClass} />
+          </label>
+          <div className="flex gap-3">
+            <button type="submit" disabled={busy || !editQ.question.trim()} className={btnPrimary}>
+              {t("common.save")}
+            </button>
+            <button type="button" onClick={() => setEditQ(null)} className="text-[13px] text-ink-secondary hover:underline">
+              {t("common.cancel")}
+            </button>
+          </div>
+        </form>
+      )}
       {q.answer && !editing ? (
         <p className="flex flex-wrap items-center gap-2 text-[14px]">
           <span className="rounded-full bg-pine/15 px-2.5 py-0.5 text-pine">{q.answer}</span>

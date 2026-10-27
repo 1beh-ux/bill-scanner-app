@@ -68,8 +68,9 @@ const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 const btnPrimary =
   "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
-const btnSecondary =
-  "rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
+// The header's actions: one height, one padding, one text size.
+const headerBtn = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-mist bg-paper px-3 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
+const headerBtnPrimary = "inline-flex h-9 items-center gap-1.5 rounded-lg border border-ember bg-ember px-3 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 
 function incidentMeta(inc: IncidentClientData): string {
   const parts: string[] = [];
@@ -614,54 +615,46 @@ export default function ParticipantDetailPage({
         </div>
       </div>
 
-      <div className="mb-4 mt-2 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-[22px] font-semibold text-ink">{participant.name}</h1>
-          <p className="text-[14px] text-ink-secondary">
-            {[
-              participant.groupName,
-              participant.dateOfBirth
-                ? `${new Date(participant.dateOfBirth).toLocaleDateString("cs-CZ")} (${calculateAge(participant.dateOfBirth)} let)`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {hasDriveFolder && (
-              <button onClick={openDriveFolder} className={btnSecondary}>
-                {t("participantDetail.openDriveFolder")}
-              </button>
-            )}
-            {!draft && layoutData && (
-              <button onClick={startEditing} className={btnSecondary}>
-                {t("layoutEditor.edit")}
-              </button>
-            )}
-            {layoutSaved && <span className="text-[13px] text-pine">{t("layoutEditor.saved")}</span>}
-          </div>
-          {driveFolderError && <p className="mt-1 text-[12px] text-red-600">{driveFolderError}</p>}
-        </div>
-        {/* Part 7: primary actions as buttons; "Upravit" now opens the central roster's
-            section editor (Part 2), which already covers both core fields and Zdravotní
-            poznámky -- no separate inline notes editor here anymore. Smazat moved into
-            the overflow menu, confirmed with the shared dialog either way. */}
-        <div className="flex items-center gap-2">
-          <button onClick={() => setSendModalOpen(true)} className={btnPrimary}>
+      <div className="mb-4 mt-2">
+        <h1 className="text-[22px] font-semibold text-ink">{participant.name}</h1>
+        <p className="text-[14px] text-ink-secondary">
+          {[
+            participant.groupName,
+            participant.dateOfBirth
+              ? `${new Date(participant.dateOfBirth).toLocaleDateString("cs-CZ")} (${calculateAge(participant.dateOfBirth)} let)`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+        {/* Every action in one row, all the same size (2026-10-27); "+ záznam" first -- the most common one.
+            "Upravit" opens the central roster's section editor (core fields + Zdravotní poznámky);
+            Smazat stays in the overflow menu, confirmed with the shared dialog. */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button onClick={() => router.push(`/events/${eventId}/health/participants/${participantId}/incident`)} className={headerBtnPrimary}>
+            + {t("medGridPage.addNote")}
+          </button>
+          <button onClick={() => setSendModalOpen(true)} className={headerBtn}>
             {t("sendSummary.sendButtonShort")}
           </button>
-          <a href={`/api/participants/${participantId}/summary-pdf`} className={btnSecondary}>
+          <a href={`/api/participants/${participantId}/summary-pdf`} className={headerBtn}>
             {t("participantDetail.downloadPdfButton")}
           </a>
-          <a href={`/events/${eventId}/participants/${participantId}`} className={btnSecondary}>
+          <a href={`/events/${eventId}/participants/${participantId}`} className={headerBtn}>
             {t("common.edit")}
           </a>
+          {hasDriveFolder && (
+            <button onClick={openDriveFolder} className={headerBtn}>
+              {t("participantDetail.openDriveFolder")}
+            </button>
+          )}
+          {!draft && layoutData && (
+            <button onClick={startEditing} className={headerBtn}>
+              {t("layoutEditor.edit")}
+            </button>
+          )}
           <div className="relative">
-            <button
-              onClick={() => setOverflowOpen((v) => !v)}
-              aria-label={t("common.moreActions")}
-              className="rounded-lg border border-mist bg-paper px-2.5 py-2 text-[14px] text-ink-secondary hover:bg-paper-2"
-            >
+            <button onClick={() => setOverflowOpen((v) => !v)} aria-label={t("common.moreActions")} className={headerBtn}>
               ⋯
             </button>
             {overflowOpen && (
@@ -679,7 +672,9 @@ export default function ParticipantDetailPage({
               </div>
             )}
           </div>
+          {layoutSaved && <span className="text-[13px] text-pine">{t("layoutEditor.saved")}</span>}
         </div>
+        {driveFolderError && <p className="mt-1 text-[12px] text-red-600">{driveFolderError}</p>}
       </div>
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}

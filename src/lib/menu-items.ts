@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
@@ -56,6 +56,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "participants-import", section: "participants", labelKey: "nav.participantsImport", icon: Upload, href: ev("/participants/import"), module: "roster" },
   { id: "health", section: "health", labelKey: "nav.health", icon: HeartPulse, href: ev("/health"), module: "health" },
   { id: "meds", section: "health", labelKey: "medChecklistPage.title", icon: Pill, href: ev("/health/meds"), module: "health" },
+  { id: "parent-questions", section: "health", labelKey: "parentQuestions.title", icon: MessageCircleQuestion, href: ev("/health/questions"), module: "health" },
   { id: "mail", section: "mail", labelKey: "nav.mail", icon: Mail, href: ev("/mail"), module: "mail" },
   { id: "planning", section: "planning", labelKey: "nav.planning", icon: CalendarClock, href: ev("/planning"), module: "planning" },
   { id: "activities", section: "planning", labelKey: "planActivities.title", icon: Library, href: ev("/planning/activities"), module: "planning" },
