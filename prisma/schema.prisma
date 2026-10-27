@@ -418,6 +418,8 @@ model Event {
   emailFiles                    Json?          @map("email_files")
   // Participant export to Drive: its columns in order (field keys); null = the organization's, else all.
   exportColumns                 Json?          @map("export_columns")
+  // Léky a výdej (src/lib/meds-page-settings.ts): font size, the date buttons shown + the first one, print defaults.
+  medsPageSettings              Json?          @map("meds_page_settings")
   autoAccept                    AutoAccept     @default(manual) @map("auto_accept")
   // Shown on the portal's registration card (slice 3 F): place + a short info.
   location                      String?
@@ -768,6 +770,7 @@ model Participant {
   child          Child?                @relation(fields: [childId], references: [id])
   guardians      ParticipantGuardian[]
   incidents      Incident[]
+  parentQuestions ParentQuestion[]
   medPlans       ParticipantMedPlan[]
   medChecklist   MedChecklist[]
   emailLogs      ParentEmailLog[]
@@ -1127,6 +1130,25 @@ model EventParticipantField {
 
   @@unique([eventId, key])
   @@map("event_participant_fields")
+}
+
+// "Dotazy na rodiče" (2026-10-27): a question for a participant's parents, noted before the event and
+// answered when they bring the child -- free text or one of its predefined answers.
+model ParentQuestion {
+  id              String    @id @default(uuid())
+  participantId   String    @map("participant_id")
+  question        String
+  // Predefined answers to click (string[]); Ano / Ne are always offered too.
+  options         Json?
+  answer          String?
+  answeredAt      DateTime? @map("answered_at")
+  createdByUserId String?   @map("created_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@index([participantId])
+  @@map("parent_questions")
 }
 
 model Incident {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ownMedAndSlot } from "@/lib/med-plan-items";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -31,7 +32,11 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { dose, notes, active } = body;
+  const { dose, notes, active, eventMedId, eventSlotId } = body;
+  // Editing the med or the time (2026-10-27): both stay this event's own items.
+  if ((eventMedId !== undefined || eventSlotId !== undefined) && !(await ownMedAndSlot(participant.eventId, eventMedId ?? existing.eventMedId, eventSlotId ?? existing.eventSlotId))) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
 
   const updated = await prisma.participantMedPlan.update({
     where: { id: planId },
@@ -39,6 +44,8 @@ export async function PATCH(
       ...(dose !== undefined && { dose: dose || null }),
       ...(notes !== undefined && { notes: notes || null }),
       ...(active !== undefined && { active }),
+      ...(eventMedId !== undefined && { eventMedId }),
+      ...(eventSlotId !== undefined && { eventSlotId }),
     },
     include: { eventMed: true, eventSlot: true },
   });

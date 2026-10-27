@@ -36,7 +36,8 @@ export async function GET(
     }),
     prisma.participantMedPlan.findMany({
       where: { participant: { eventId }, active: true },
-      select: { participantId: true },
+      select: { participantId: true, dose: true, notes: true, eventMed: { select: { name: true } }, eventSlot: { select: { name: true, sortOrder: true } } },
+      orderBy: [{ eventSlot: { sortOrder: "asc" } }, { eventMed: { name: "asc" } }],
     }),
   ]);
 
@@ -49,5 +50,9 @@ export async function GET(
   }
   const hasMedPlan = new Set(activeMedPlans.map((p) => p.participantId));
 
-  return NextResponse.json({ incidentCount, lastIncidentAt, medPlanParticipantIds: [...hasMedPlan] });
+  // The plans themselves (2026-10-27): the list shows each time's initials and the detail on a click.
+  const medPlans: Record<string, { med: string; slot: string; dose: string | null; notes: string | null }[]> = {};
+  for (const p of activeMedPlans) (medPlans[p.participantId] ??= []).push({ med: p.eventMed.name, slot: p.eventSlot.name, dose: p.dose, notes: p.notes });
+
+  return NextResponse.json({ incidentCount, lastIncidentAt, medPlanParticipantIds: [...hasMedPlan], medPlans });
 }

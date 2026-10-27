@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ownMedAndSlot } from "@/lib/med-plan-items";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -48,6 +49,7 @@ export async function POST(
   if (!eventMedId || !eventSlotId) {
     return NextResponse.json({ error: "med_and_slot_required" }, { status: 400 });
   }
+  if (!(await ownMedAndSlot(participant.eventId, eventMedId, eventSlotId))) return NextResponse.json({ error: "bad_request" }, { status: 400 });
 
   const created = await prisma.participantMedPlan.create({
     data: {

@@ -1,6 +1,7 @@
 "use client";
+import { AskParentButton } from "@/components/health/ParentQuestions";
 
-import { useEffect, useMemo, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import type { HealthNote } from "@/lib/health-notes";
 import { calculateAge } from "@/lib/age";
@@ -27,7 +28,11 @@ type HealthSignals = {
   incidentCount: Record<string, number>;
   lastIncidentAt: Record<string, string>;
   medPlanParticipantIds: string[];
+  medPlans?: Record<string, { med: string; slot: string; dose: string | null; notes: string | null }[]>;
 };
+
+// A time's short mark for the list: the words' first letters, e.g. ráno -> R, po obědě -> PO, před spaním -> PS.
+const slotMark = (name: string) => name.split(/\s+/).filter(Boolean).map((w) => w[0]!.toUpperCase()).join("");
 
 export default function EventHealthPage({
   params,
@@ -87,6 +92,43 @@ export default function EventHealthPage({
   }, [participants, searchQuery]);
 
   const medSet = useMemo(() => new Set(signals.medPlanParticipantIds), [signals]);
+  // "Dotazy na rodiče": how many are still open (the link's badge).
+  const [openQuestions, setOpenQuestions] = useState(0);
+  const loadQuestionCount = useCallback(() => {
+    fetch(`/api/events/${id}/parent-questions`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: { answer: string | null }[]) => setOpenQuestions(list.filter((q) => !q.answer).length))
+      .catch(() => {});
+  }, [id]);
+  useEffect(() => {
+    loadQuestionCount();
+  }, [loadQuestionCount]);
+  // Rows whose med cell is opened (a click shows the plans, another hides them).
+  const [openMeds, setOpenMeds] = useState<Set<string>>(new Set());
+  const toggleMeds = (pid: string) => setOpenMeds((x) => { const n = new Set(x); if (n.has(pid)) n.delete(pid); else n.add(pid); return n; });
+  const medsCell = (pid: string) => {
+    const plans = signals.medPlans?.[pid] ?? [];
+    const marks = [...new Set(plans.map((p) => slotMark(p.slot)))];
+    return (
+      <button type="button" onClick={(e) => { e.stopPropagation(); toggleMeds(pid); }} className="flex flex-col items-start gap-1 text-left" aria-expanded={openMeds.has(pid)} title={t("healthPage.medsTooltip")}>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">
+          <span className="h-[7px] w-[7px] rounded-full bg-amber-600" />
+          {marks.length ? marks.join(" · ") : t("healthPage.colMeds")}
+        </span>
+        {openMeds.has(pid) && (
+          <span className="flex flex-col gap-0.5 text-[12px] text-ink">
+            {plans.map((p, i) => (
+              <span key={i}>
+                <strong>{p.slot}</strong>: {p.med}
+                {p.dose && ` (${p.dose})`}
+                {p.notes && <span className="text-ink-secondary"> · {p.notes}</span>}
+              </span>
+            ))}
+          </span>
+        )}
+      </button>
+    );
+  };
   const columnOptions = useMemo(() => fields.filter((f) => f.kind !== "builtin" && f.fieldType !== "image"), [fields]);
   const activeColumns = useMemo(
     () => (event?.healthListColumns ?? []).map((k) => columnOptions.find((f) => f.key === k)).filter((f): f is ParticipantFieldDef => !!f),
@@ -139,6 +181,10 @@ export default function EventHealthPage({
             </button>
           )}
         </div>
+        <a href={`/events/${id}/health/questions`} className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2">
+          {t("parentQuestions.title")}
+          {openQuestions > 0 && <span className="ml-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 text-[12px] font-medium text-amber-700">{openQuestions}</span>}
+        </a>
         <a
           href={`/events/${id}/health/send-summaries`}
           className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
@@ -204,6 +250,9 @@ export default function EventHealthPage({
                     <td className="p-2 text-[14px] font-medium text-ink">
                       {participantListName(p)}
                       {warning(p.id)}
+                      <span className="ml-1.5 inline-block align-middle">
+                        <AskParentButton eventId={id} participantId={p.id} participantName={p.name} onAdded={loadQuestionCount} />
+                      </span>
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
@@ -221,13 +270,7 @@ export default function EventHealthPage({
                       )}
                     </td>
                     <td className="p-2 text-[13px]">
-                      {medSet.has(p.id) ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800" title={t("healthPage.medsTooltip")}>
-                          <span className="h-[7px] w-[7px] rounded-full bg-amber-600" />
-                        </span>
-                      ) : (
-                        "—"
-                      )}
+                      {medSet.has(p.id) ? medsCell(p.id) : "—"}
                     </td>
                     {anyListNotes && (
                       <td className="max-w-[280px] p-2 text-[12px] text-ink-secondary">
@@ -266,6 +309,9 @@ export default function EventHealthPage({
                   <span className="min-w-0 text-[14px] font-medium text-ink">
                     {participantListName(p)}
                     {warning(p.id)}
+                    <span className="ml-1.5 inline-block align-middle">
+                      <AskParentButton eventId={id} participantId={p.id} participantName={p.name} onAdded={loadQuestionCount} />
+                    </span>
                   </span>
                   <div className="flex shrink-0 items-center gap-1.5 text-[12px]">
                     {count > 0 && (
@@ -274,12 +320,7 @@ export default function EventHealthPage({
                         {count}
                       </span>
                     )}
-                    {medSet.has(p.id) && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800" title={t("healthPage.medsTooltip")}>
-                        <span className="h-[7px] w-[7px] rounded-full bg-amber-600" />
-                        {t("healthPage.colMeds")}
-                      </span>
-                    )}
+                    {medSet.has(p.id) && medsCell(p.id)}
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-secondary">

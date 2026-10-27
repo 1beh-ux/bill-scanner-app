@@ -7,12 +7,15 @@ interface PdfExportControlsProps {
   // Builds the export URL given the currently selected mode/format --
   // lets each page supply its own date/date-range/type params.
   buildHref: (mode: "blank" | "hybrid", format: "A4" | "A3") => string;
+  // Starting choices (Léky a výdej settings); changeable per print.
+  defaultMode?: "blank" | "hybrid";
+  defaultFormat?: "A4" | "A3";
 }
 
-export default function PdfExportControls({ buildHref }: PdfExportControlsProps) {
+export default function PdfExportControls({ buildHref, defaultMode = "blank", defaultFormat = "A4" }: PdfExportControlsProps) {
   const { t } = useTranslations();
-  const [mode, setMode] = useState<"blank" | "hybrid">("blank");
-  const [format, setFormat] = useState<"A4" | "A3">("A4");
+  const [mode, setMode] = useState<"blank" | "hybrid">(defaultMode);
+  const [format, setFormat] = useState<"A4" | "A3">(defaultFormat);
 
   return (
     <div className="flex flex-wrap items-end gap-2">

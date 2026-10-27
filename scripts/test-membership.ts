@@ -59,6 +59,13 @@ async function main() {
   assert.equal(bulkAnswer(" NE ", new Set(["ne"]), null), "");
   assert.equal(bulkAnswer("pyl", new Set(["ne"]), null), "pyl");
   assert.equal(bulkAnswer("Ne", new Set(["ne"]), "bez alergií"), "bez alergií");
+  // Dotazy na rodiče: prepared answers cleaned, Ano / Ne added once.
+  const { answerButtons, readOptions } = await import("../src/lib/parent-questions");
+  assert.deepEqual(readOptions("k snídani\n po snídani \n\nk snídani"), ["k snídani", "po snídani"]);
+  assert.deepEqual(answerButtons(["ano", "k snídani"]), ["ano", "k snídani", "Ne"]);
+  // Léky a výdej settings: hidden default falls back to the first shown button.
+  const { readMedsPageSettings } = await import("../src/lib/meds-page-settings");
+  assert.deepEqual(readMedsPageSettings({ presets: ["week", "event"], defaultPreset: "today", fontSize: "xxl" }), { fontSize: "m", presets: ["week", "event"], defaultPreset: "week", exportMode: "blank", exportFormat: "A4" });
   // Stored e-mail files: bad rows dropped, empty keys gone.
   const f = { id: "a", name: "x.pdf", type: "application/pdf", size: 3, path: "email-files/o/a-x.pdf" };
   assert.deepEqual(readEmailFiles({ portal_link: [f, { id: 1 }], x: [], y: "no" }), { portal_link: [f] });

@@ -1,5 +1,7 @@
 "use client";
+import ParentQuestions from "@/components/health/ParentQuestions";
 
+import MedPlansEditor from "@/components/health/MedPlansEditor";
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -61,15 +63,6 @@ type ParticipantDocumentRow = {
   driveUrl: string | null;
 };
 
-type NamedListItem = { id: string; name: string };
-type MedPlan = {
-  id: string;
-  dose: string | null;
-  notes: string | null;
-  active: boolean;
-  eventMed: NamedListItem;
-  eventSlot: NamedListItem;
-};
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -136,83 +129,8 @@ export default function ParticipantDetailPage({
   const [adjacent, setAdjacent] = useState<{ prev: string | null; next: string | null }>({ prev: null, next: null });
   const healthNotes = useHealthNotes(eventId, participantId, "detail", notesVersion);
 
-  const [medPlans, setMedPlans] = useState<MedPlan[]>([]);
-  const [eventMeds, setEventMeds] = useState<NamedListItem[]>([]);
-  const [eventSlots, setEventSlots] = useState<NamedListItem[]>([]);
-  const [addingMedPlan, setAddingMedPlan] = useState(false);
-  // Part 3: a combobox, not a plain dropdown -- typing a name not yet in the event
-  // catalogue creates it on the fly (POST .../list-items) so an empty catalogue is
-  // never a dead end; matching an existing name (case-insensitive) reuses that item.
-  const [planMedName, setPlanMedName] = useState("");
-  const [planSlotId, setPlanSlotId] = useState("");
-  const [planDose, setPlanDose] = useState("");
-  const [planNotes, setPlanNotes] = useState("");
-  const [savingMedPlan, setSavingMedPlan] = useState(false);
-
-  async function loadMedPlans() {
-    const [plansRes, medsRes, slotsRes] = await Promise.all([
-      fetch(`/api/participants/${participantId}/med-plans`),
-      fetch(`/api/events/${eventId}/list-items?kind=med`),
-      fetch(`/api/events/${eventId}/list-items?kind=slot`),
-    ]);
-    if (plansRes.ok) setMedPlans(await plansRes.json());
-    if (medsRes.ok) setEventMeds(await medsRes.json());
-    if (slotsRes.ok) setEventSlots(await slotsRes.json());
-  }
-
-  async function handleAddMedPlan(e: React.FormEvent) {
-    e.preventDefault();
-    const name = planMedName.trim();
-    if (!name || !planSlotId) return;
-    setSavingMedPlan(true);
-
-    let eventMedId = eventMeds.find((m) => m.name.trim().toLowerCase() === name.toLowerCase())?.id;
-    if (!eventMedId) {
-      const created = await fetch(`/api/events/${eventId}/list-items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "med", name }),
-      });
-      if (created.ok) {
-        const item = (await created.json()) as NamedListItem;
-        eventMedId = item.id;
-      }
-    }
-    if (eventMedId) {
-      await fetch(`/api/participants/${participantId}/med-plans`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventMedId,
-          eventSlotId: planSlotId,
-          dose: planDose.trim() || undefined,
-          notes: planNotes.trim() || undefined,
-        }),
-      });
-    }
-    setSavingMedPlan(false);
-    setPlanMedName("");
-    setPlanSlotId("");
-    setPlanDose("");
-    setPlanNotes("");
-    setAddingMedPlan(false);
-    loadMedPlans();
-  }
-
-  async function toggleMedPlanActive(plan: MedPlan) {
-    await fetch(`/api/participants/${participantId}/med-plans/${plan.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !plan.active }),
-    });
-    loadMedPlans();
-  }
-
-  async function removeMedPlan(planId: string) {
-    if (!(await confirm({ message: t("medPlansSection.confirmRemove"), danger: true }))) return;
-    await fetch(`/api/participants/${participantId}/med-plans/${planId}`, { method: "DELETE" });
-    loadMedPlans();
-  }
+  // "Převést na plán" opens the plan editor's add form with the reported text.
+  const [planPrefill, setPlanPrefill] = useState<{ text: string; nonce: number } | null>(null);
 
   async function loadLayout() {
     const res = await fetch(`/api/events/${eventId}/participant-layout`);
@@ -263,7 +181,6 @@ export default function ParticipantDetailPage({
   useEffect(() => {
     load();
     loadIncidents();
-    loadMedPlans();
     loadLayout();
     fetch(`/api/participants/${participantId}/field-values`)
       .then((r) => (r.ok ? r.json() : { values: {} }))
@@ -573,10 +490,7 @@ export default function ParticipantDetailPage({
               <strong>{t("medPlansSection.reportedLabel")}:</strong> {participant.customFieldValues.medsNotes}
             </p>
             <button
-              onClick={() => {
-                setPlanNotes(participant.customFieldValues!.medsNotes!);
-                setAddingMedPlan(true);
-              }}
+              onClick={() => setPlanPrefill({ text: participant.customFieldValues!.medsNotes!, nonce: Date.now() })}
               className="text-[13px] text-ember hover:underline"
             >
               {t("medPlansSection.convertToPlanButton")}
@@ -585,89 +499,7 @@ export default function ParticipantDetailPage({
         )}
       </>
     ),
-    medPlans: (
-      <>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[16px] font-semibold text-ink">{t("medPlansSection.title")}</h2>
-          <button onClick={() => setAddingMedPlan((v) => !v)} className="text-[13px] text-ember hover:underline">
-            {t("medPlansSection.addButton")}
-          </button>
-        </div>
-
-        {addingMedPlan && (
-          <form
-            onSubmit={handleAddMedPlan}
-            className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-mist p-2"
-          >
-            <input
-              type="text"
-              list="med-plan-catalog"
-              placeholder={t("medPlansSection.selectMed")}
-              value={planMedName}
-              onChange={(e) => setPlanMedName(e.target.value)}
-              className={inputClass + " flex-1"}
-            />
-            <datalist id="med-plan-catalog">
-              {eventMeds.map((m) => (
-                <option key={m.id} value={m.name} />
-              ))}
-            </datalist>
-            <select value={planSlotId} onChange={(e) => setPlanSlotId(e.target.value)} className={inputClass + " flex-1"}>
-              <option value="">{t("medPlansSection.selectSlot")}</option>
-              {eventSlots.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="text"
-              placeholder={t("medPlansSection.doseLabel")}
-              value={planDose}
-              onChange={(e) => setPlanDose(e.target.value)}
-              className={inputClass + " flex-1"}
-            />
-            <input
-              type="text"
-              placeholder={t("participantDetail.otherNotesLabel")}
-              value={planNotes}
-              onChange={(e) => setPlanNotes(e.target.value)}
-              className={inputClass + " flex-1"}
-            />
-            <button type="submit" disabled={savingMedPlan} className={btnPrimary}>
-              {t("common.save")}
-            </button>
-          </form>
-        )}
-
-        {medPlans.length === 0 ? (
-          <p className="text-[14px] text-ink-secondary">{t("medPlansSection.empty")}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {medPlans.map((plan) => (
-              <div
-                key={plan.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist/60 p-2"
-              >
-                <div className={"text-[14px] " + (plan.active ? "text-ink" : "text-ink-secondary line-through")}>
-                  {plan.eventMed.name} · {plan.eventSlot.name}
-                  {plan.dose && <span className="text-ink-secondary"> · {plan.dose}</span>}
-                  {plan.notes && <span className="text-ink-secondary"> · {plan.notes}</span>}
-                </div>
-                <div className="flex items-center gap-3">
-                  <button onClick={() => toggleMedPlanActive(plan)} className="text-[12px] text-ink-secondary hover:text-ink">
-                    {plan.active ? t("listTemplateAdmin.deactivate") : t("listTemplateAdmin.activate")}
-                  </button>
-                  <button onClick={() => removeMedPlan(plan.id)} className="text-[13px] text-red-600 hover:underline">
-                    {t("common.delete")}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </>
-    ),
+    medPlans: <MedPlansEditor eventId={eventId} participantId={participantId} prefillNotes={planPrefill} />,
     incidents: (
       <>
         <div className="mb-3 flex items-center justify-between">
@@ -851,6 +683,11 @@ export default function ParticipantDetailPage({
       </div>
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
+
+      {/* "Dotazy na rodiče": seen right away when going through the children. */}
+      <div className="mb-5">
+        <ParentQuestions eventId={eventId} participantId={participantId} />
+      </div>
 
       {view.sections.map((s) => {
         const kind = s.kind as HealthSectionKind;

@@ -19,6 +19,7 @@ import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
 import { EMAIL_KINDS, kindAllowed, kindForEvent, templateEditHref } from "@/lib/email-kinds";
 import PublicRegistrationSettings from "@/components/events/PublicRegistrationSettings";
 import MembershipYearCard from "@/components/events/MembershipYearCard";
+import MedsPageSettingsCard from "@/components/health/MedsPageSettings";
 import PortalCardLayout from "@/components/events/PortalCardLayout";
 import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -709,6 +710,7 @@ export default function EventDetailPage({
           {tab === "zdravi" && moduleAccess.health && (
             <div className="flex flex-col gap-6">
               <HealthNotesSettings eventId={id} />
+              <MedsPageSettingsCard eventId={id} />
               <ListTemplateAdmin kind="med" scope="event" eventId={id} label={t("healthTemplatesPage.tabMeds")} />
               <ListTemplateAdmin kind="slot" scope="event" eventId={id} label={t("eventHealthTab.slotsLabel")} />
               <ListTemplateAdmin kind="situation" scope="event" eventId={id} label={t("healthTemplatesPage.tabSituations")} />

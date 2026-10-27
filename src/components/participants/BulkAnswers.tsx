@@ -46,7 +46,16 @@ export default function BulkAnswers({ eventId, onDone }: { eventId: string; onDo
 
   const count = (answers ?? []).filter((a) => picked.has(a.value)).reduce((s, a) => s + a.count, 0);
 
-  async function apply() {
+  // Stays open after a change (the list reloads only on Zavřít -- reloading it would close this):
+  // "…a další otázka" goes on to the next question.
+  const [changedAny, setChangedAny] = useState(false);
+  function close() {
+    setOpen(false);
+    if (changedAny) onDone?.();
+    setChangedAny(false);
+  }
+
+  async function apply(next = false) {
     if (!picked.size) return;
     const what = mode === "clear" ? t("bulkAnswers.confirmClear", { n: String(count) }) : t("bulkAnswers.confirmReplace", { n: String(count), value: replacement.trim() });
     if (!(await confirm({ message: what, danger: true }))) return;
@@ -58,11 +67,12 @@ export default function BulkAnswers({ eventId, onDone }: { eventId: string; onDo
     }).catch(() => null);
     setBusy(false);
     const d = res?.ok ? await res.json() : null;
-    setMessage(d ? t("bulkAnswers.done", { participants: String(d.participants), profiles: String(d.profiles) }) : t("bulkAnswers.failed"));
     if (d) {
-      await loadAnswers(fieldKey);
-      onDone?.();
+      setChangedAny(true);
+      const i = fields.findIndex((f) => f.key === fieldKey);
+      await loadAnswers(next && i >= 0 && i < fields.length - 1 ? fields[i + 1].key : fieldKey);
     }
+    setMessage(d ? t("bulkAnswers.done", { participants: String(d.participants), profiles: String(d.profiles) }) : t("bulkAnswers.failed"));
   }
 
   if (!open)
@@ -75,7 +85,7 @@ export default function BulkAnswers({ eventId, onDone }: { eventId: string; onDo
     <section className="basis-full rounded-lg border border-mist bg-paper p-4">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-[15px] font-semibold text-ink">{t("bulkAnswers.title")}</h3>
-        <button type="button" onClick={() => setOpen(false)} className="text-[13px] text-ink-secondary hover:underline">
+        <button type="button" onClick={close} className="text-[13px] text-ink-secondary hover:underline">
           {t("common.close")}
         </button>
       </div>
@@ -91,7 +101,17 @@ export default function BulkAnswers({ eventId, onDone }: { eventId: string; onDo
           ))}
         </select>
       </label>
-      {answers && answers.length === 0 && <p className="mt-3 text-[13px] text-ink-secondary">{t("bulkAnswers.none")}</p>}
+      {fieldKey && fields.findIndex((f) => f.key === fieldKey) < fields.length - 1 && (
+        <button type="button" onClick={() => loadAnswers(fields[fields.findIndex((f) => f.key === fieldKey) + 1].key)} className="mt-2 text-[13px] text-ember hover:underline">
+          {t("bulkAnswers.skip")} →
+        </button>
+      )}
+      {answers && answers.length === 0 && (
+        <p className="mt-3 text-[13px] text-ink-secondary">
+          {message && <span className="mr-2 text-ink">{message}</span>}
+          {t("bulkAnswers.none")}
+        </p>
+      )}
       {answers && answers.length > 0 && (
         <div className="mt-3 flex flex-col gap-3">
           <div className="flex max-h-72 flex-col gap-1 overflow-y-auto rounded-lg border border-mist p-2">
@@ -124,9 +144,14 @@ export default function BulkAnswers({ eventId, onDone }: { eventId: string; onDo
             {t("bulkAnswers.profiles")}
           </label>
           <div className="flex flex-wrap items-center gap-3">
-            <button type="button" onClick={apply} disabled={busy || picked.size === 0 || (mode === "replace" && !replacement.trim())} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
+            <button type="button" onClick={() => apply()} disabled={busy || picked.size === 0 || (mode === "replace" && !replacement.trim())} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
               {t("bulkAnswers.apply", { n: String(count) })}
             </button>
+            {fields.findIndex((f) => f.key === fieldKey) < fields.length - 1 && (
+              <button type="button" onClick={() => apply(true)} disabled={busy || picked.size === 0 || (mode === "replace" && !replacement.trim())} className={btn}>
+                {t("bulkAnswers.applyNext", { n: String(count) })}
+              </button>
+            )}
             {message && <span className="text-[13px] text-ink">{message}</span>}
           </div>
         </div>

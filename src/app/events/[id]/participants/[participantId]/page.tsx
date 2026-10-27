@@ -1,4 +1,5 @@
 "use client";
+import ParentQuestions from "@/components/health/ParentQuestions";
 
 import { use, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -641,6 +642,11 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
             </button>
           </span>
         )}
+      </div>
+
+      {/* "Dotazy na rodiče": seen right away when going through the children. */}
+      <div className="mb-5">
+        <ParentQuestions eventId={eventId} participantId={participantId} />
       </div>
 
       {core.pricing && (

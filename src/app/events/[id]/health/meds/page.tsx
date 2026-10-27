@@ -5,8 +5,11 @@ import { useTranslations } from "@/lib/i18n";
 import PdfExportControls from "@/components/health/PdfExportControls";
 import HealthNotesBox from "@/components/health/HealthNotesBox";
 import type { HealthNote } from "@/lib/health-notes";
+import { Pencil } from "lucide-react";
+import MedPlansEditor from "@/components/health/MedPlansEditor";
+import { MEDS_ZOOM, readMedsPageSettings } from "@/lib/meds-page-settings";
 
-type EventBasic = { id: string; name: string; startDate: string; endDate: string };
+type EventBasic = { id: string; name: string; startDate: string; endDate: string; medsPageSettings?: unknown };
 type Slot = { id: string; name: string };
 type CellStatus = { given: boolean; givenAt: string | null };
 type GridRow = {
@@ -83,6 +86,10 @@ export default function MedChecklistPage({
   const [expandedParticipantId, setExpandedParticipantId] = useState<string | null>(null);
   // Health notes per opened participant (place "meds" of Nastavení akce -> Zdraví).
   const [notesCache, setNotesCache] = useState<Record<string, HealthNote[]>>({});
+  // The pill plan opened for editing (✎ next to a name).
+  const [editingPlansOf, setEditingPlansOf] = useState<string | null>(null);
+  // Nastavení akce -> Zdraví -> Léky a výdej.
+  const settings = useMemo(() => readMedsPageSettings(event?.medsPageSettings), [event]);
 
   useEffect(() => {
     fetch(`/api/events/${eventId}`)
@@ -118,7 +125,12 @@ export default function MedChecklistPage({
   }
 
   useEffect(() => {
-    if (event) applyPreset("today", event);
+    if (!event) return;
+    if (settings.defaultPreset === "custom") {
+      setPreset("custom");
+      setStartDate(event.startDate.slice(0, 10));
+      setEndDate(event.endDate.slice(0, 10));
+    } else applyPreset(settings.defaultPreset, event);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event]);
 
@@ -245,6 +257,29 @@ export default function MedChecklistPage({
     return classes.join(" ");
   }
 
+  // ✎ = edit the pill plan here; "+ záznam" = a note in the health log (Zdravotní deník) when something happens.
+  const rowTools = (participantId: string) => (
+    <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
+      <button type="button" onClick={() => setEditingPlansOf(editingPlansOf === participantId ? null : participantId)} className="text-ink-secondary hover:text-ink" title={t("medPlansSection.edit")} aria-label={t("medPlansSection.edit")}>
+        <Pencil size={12} aria-hidden="true" />
+      </button>
+      <a href={`/events/${eventId}/health/participants/${participantId}/incident?from=meds`} className="text-[10px] text-ember hover:underline" title={t("medGridPage.addNoteHint")}>
+        + {t("medGridPage.addNote")}
+      </a>
+    </span>
+  );
+  const plansPanel = (participantId: string) => (
+    <div className="rounded-lg border border-mist bg-paper p-3">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="text-[14px] font-semibold text-ink">{data?.rows.find((r) => r.participantId === participantId)?.participantName}</span>
+        <button type="button" onClick={() => setEditingPlansOf(null)} className="text-[12px] text-ink-secondary hover:underline">
+          {t("common.close")}
+        </button>
+      </div>
+      <MedPlansEditor eventId={eventId} participantId={participantId} title={false} onChanged={() => loadGrid(startDate, endDate)} />
+    </div>
+  );
+
   function NotesPanel({ participantId }: { participantId: string }) {
     return <HealthNotesBox notes={notesCache[participantId] ?? null} className="rounded-lg bg-paper-2 p-2 text-[12px] text-ink" />;
   }
@@ -263,7 +298,7 @@ export default function MedChecklistPage({
       </h1>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {(["today", "week", "event", "custom"] as Preset[]).map((p) => (
+        {(settings.presets as Preset[]).map((p) => (
           <button
             key={p}
             onClick={() => (p === "custom" ? setPreset("custom") : applyPreset(p, event))}
@@ -317,6 +352,8 @@ export default function MedChecklistPage({
 
       <div className="mb-4">
         <PdfExportControls
+          defaultMode={settings.exportMode}
+          defaultFormat={settings.exportFormat}
           buildHref={(mode, format) =>
             `/api/events/${eventId}/med-checklist/export?startDate=${startDate}&endDate=${endDate}&mode=${mode}&format=${format}&slotIds=${visibleSlots.map((s) => s.id).join(",")}`
           }
@@ -334,7 +371,7 @@ export default function MedChecklistPage({
       ) : !data || visibleRows.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">{t("medChecklistPage.empty")}</p>
       ) : (
-        <>
+        <div style={{ zoom: MEDS_ZOOM[settings.fontSize] }}>
           {/* Desktop / wide: full day×period grid */}
           <div className="hidden overflow-x-auto rounded-lg border border-mist md:block">
             <table className="border-collapse text-[11px]">
@@ -371,6 +408,7 @@ export default function MedChecklistPage({
                       <button onClick={() => toggleNotes(row.participantId)} className="text-left hover:underline">
                         {row.participantName}
                       </button>
+                      {rowTools(row.participantId)}
                       <span className="ml-1 text-[10px] text-ink-secondary">
                         {row.medName}
                         {row.dose && ` (${row.dose})`}
@@ -401,6 +439,7 @@ export default function MedChecklistPage({
               <NotesPanel participantId={expandedParticipantId} />
             </div>
           )}
+          {editingPlansOf && <div className="mt-2 hidden md:block">{plansPanel(editingPlansOf)}</div>}
 
           {/* Mobile: per-participant cards, days/periods listed vertically instead of as columns */}
           <div className="flex flex-col gap-2 md:hidden">
@@ -416,6 +455,8 @@ export default function MedChecklistPage({
                   <button onClick={() => toggleNotes(participantId)} className="text-[14px] font-medium text-ink hover:underline">
                     {p.name}
                   </button>
+                  {rowTools(participantId)}
+                  {editingPlansOf === participantId && <div className="mt-2">{plansPanel(participantId)}</div>}
                   {expandedParticipantId === participantId && (
                     <div className="mt-1">
                       <NotesPanel participantId={participantId} />
@@ -457,7 +498,7 @@ export default function MedChecklistPage({
               ));
             })()}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
