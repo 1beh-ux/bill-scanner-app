@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ALLERGEN_CODES, DIET_FLAG_CODES, cleanCodes } from "@/lib/kitchen/allergens";
 import { categoryFor, readPriceRules } from "@/lib/price-rules";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -81,6 +82,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (!(await prisma.child.findUnique({ where: { id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (body.isAdult !== undefined) await prisma.child.update({ where: { id }, data: { isAdult: body.isAdult } });
+  // Kuchyně (2026-10-28): an adult's allergens, diet flags and note (known codes only).
+  if (body.allergens !== undefined || body.dietFlags !== undefined || body.dietNote !== undefined) {
+    await prisma.child.update({
+      where: { id },
+      data: {
+        ...(body.allergens !== undefined && { allergens: cleanCodes(body.allergens, ALLERGEN_CODES) }),
+        ...(body.dietFlags !== undefined && { dietFlags: cleanCodes(body.dietFlags, DIET_FLAG_CODES) }),
+        ...(body.dietNote !== undefined && { dietNote: typeof body.dietNote === "string" ? body.dietNote.trim().slice(0, 1000) || null : null }),
+      },
+    });
+  }
   if (body.inactive !== undefined) await prisma.child.update({ where: { id }, data: leftData(body.inactive, "admin", body.leftNote) });
   const changed = body.values ? await updateProfile(id, body.values as Record<string, string>) : [];
   return NextResponse.json({ ok: true, changed });

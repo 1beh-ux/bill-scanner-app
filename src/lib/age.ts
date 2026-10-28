@@ -11,3 +11,12 @@ export function calculateAge(dateOfBirth: string | null | undefined): number | n
   }
   return age;
 }
+
+/** Age in whole years on `on` (both UTC dates): the birthday itself counts. Null without a birth date. */
+export function ageOn(dateOfBirth: Date | string | null | undefined, on: Date): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (isNaN(dob.getTime())) return null;
+  const before = on.getUTCMonth() < dob.getUTCMonth() || (on.getUTCMonth() === dob.getUTCMonth() && on.getUTCDate() < dob.getUTCDate());
+  return on.getUTCFullYear() - dob.getUTCFullYear() - (before ? 1 : 0);
+}

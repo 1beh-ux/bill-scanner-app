@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createAdult } from "@/lib/adults-server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfEvent } from "@/lib/org-owner";
@@ -94,6 +95,12 @@ export async function POST(req: NextRequest) {
   // The acting organization's people, events and participants only; another organization's ids are "not found".
   const organizationId = await getActingOrgId(user);
   const inOrg = async (ids: string[]) => (await prisma.child.count({ where: { id: { in: ids }, organizationId } })) === new Set(ids).size;
+
+  // "Přidat dospělého" (2026-10-28): a leader / helper without any registration, family or portal link.
+  if (body.action === "createAdult") {
+    const created = await createAdult(organizationId, body.adult);
+    return created ? NextResponse.json(created, { status: 201 }) : NextResponse.json({ error: "name_required" }, { status: 400 });
+  }
 
   if (body.action === "seed") {
     return NextResponse.json(await linkChildren({ event: { organizationId } }));

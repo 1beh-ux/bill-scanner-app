@@ -84,7 +84,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "bank" | "tickets";
+type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "kitchen" | "bank" | "tickets";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -1212,7 +1212,9 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
                 ? "accessTab.moduleParticipants"
                 : key === "tickets"
                   ? "accessTab.moduleTickets"
-                  : "accessTab.modulePlanning"
+                  : key === "kitchen"
+                    ? "accessTab.moduleKitchen"
+                    : "accessTab.modulePlanning"
     );
 
   return (
@@ -1294,7 +1296,9 @@ function AccessTab({ eventId, kind, t }: { eventId: string; kind: string; t: (ke
                 ? "accessTab.moduleParticipants"
                 : key === "tickets"
                   ? "accessTab.moduleTickets"
-                  : "accessTab.modulePlanning"
+                  : key === "kitchen"
+                    ? "accessTab.moduleKitchen"
+                    : "accessTab.modulePlanning"
     );
 
   return (

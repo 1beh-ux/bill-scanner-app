@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion, UserRoundCheck } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
@@ -9,7 +9,8 @@ export type MenuSection = "bills" | "tickets" | "bank" | "participants" | "healt
 // event's automatic bank check on (docs/bank-payments-design.md).
 // bankRecon = the Banka module (bank reconciliation, explicit grant).
 // tickets = Vstupenky of a public event (docs/public-event-tickets-spec.md).
-export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets";
+// adults = Dospělí na akci: the Kuchyně grant, or an organization admin.
+export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets" | "adults";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -53,6 +54,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "documents", section: "participants", labelKey: "participantsPage.mailListTitle", icon: FolderCheck, href: ev("/participants/documents"), module: "roster" },
   { id: "send-email", section: "participants", labelKey: "sendEmail.title", icon: Send, href: ev("/participants/send"), module: "roster" },
   { id: "bank-payments", section: "participants", labelKey: "bankPayments.title", icon: Landmark, href: ev("/participants/bank"), module: "bank" },
+  { id: "event-adults", section: "participants", labelKey: "adults.navTitle", icon: UserRoundCheck, href: ev("/adults"), module: "adults" },
   { id: "participants-import", section: "participants", labelKey: "nav.participantsImport", icon: Upload, href: ev("/participants/import"), module: "roster" },
   { id: "health", section: "health", labelKey: "nav.health", icon: HeartPulse, href: ev("/health"), module: "health" },
   { id: "meds", section: "health", labelKey: "medChecklistPage.title", icon: Pill, href: ev("/health/meds"), module: "health" },

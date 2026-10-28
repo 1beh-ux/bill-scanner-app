@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CreateAdultForm } from "@/components/adults/AdultForm";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import PendingChanges, { type PendingChange } from "@/components/children/PendingChanges";
@@ -42,6 +43,8 @@ const NO_EVENTS = "__none__";
 export default function ChildrenPage() {
   const { t, role, roleLoaded } = useTranslations();
   const router = useRouter();
+  // "Přidat dospělého" (a leader / helper, no registration or portal).
+  const [addingAdult, setAddingAdult] = useState(false);
   const confirm = useConfirm();
   const [data, setData] = useState<Data | null>(null);
   const [query, setQuery] = useState("");
@@ -205,12 +208,29 @@ export default function ChildrenPage() {
         </Link>
       </p>
 
+      {addingAdult && (
+        <div className="mb-6">
+          <CreateAdultForm
+            onCancel={() => setAddingAdult(false)}
+            submit={async (adult) => {
+              const res = await fetch("/api/children", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "createAdult", adult }) }).catch(() => null);
+              if (!res?.ok) return false;
+              const { id } = await res.json();
+              router.push(`/children/${id}`);
+              return true;
+            }}
+          />
+        </div>
+      )}
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <button onClick={seed} disabled={busy} className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
           {t("children.seedButton")}
         </button>
         <button onClick={fillProfiles} disabled={busy} title={t("childProfile.fillHint")} className={btn}>
           {t("childProfile.fillButton")}
+        </button>
+        <button onClick={() => setAddingAdult(!addingAdult)} className={btn}>
+          + {t("adults.createButton")}
         </button>
         <input type="search" placeholder={t("children.search")} value={query} onChange={(e) => setQuery(e.target.value)} className={inputClassSm} />
         <select value={who} onChange={(e) => setWho(e.target.value as typeof who)} aria-label={t("people.filter")} className={inputClassSm}>

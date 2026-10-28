@@ -98,6 +98,8 @@ enum ModuleKey {
   participants
   // Vstupenky (public events, docs/public-event-tickets-spec.md): orders + the check-in scan page.
   tickets
+  // Kuchyně (docs/kitchen-planning-design.md): the camp's adults on the event (Dospělí na akci) and the kitchen.
+  kitchen
 }
 
 enum IncidentCategory {
@@ -477,6 +479,7 @@ model Event {
   bankTransactions       BankTransaction[]
   bankImportBatches      BankImportBatch[]
   ticketOrders           TicketOrder[]
+  eventPersons           EventPerson[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -796,6 +799,11 @@ model Child {
   // Record<ParticipantFieldTemplate.key, string> -- same keys/values as
   // Participant.customFieldValues.
   fieldValues           Json?          @map("field_values")
+  // Kuchyně (2026-10-28, adults): allergen codes (src/lib/kitchen/allergens.ts ALLERGENS), diet flags (DIET_FLAGS)
+  // and a free note. The address stays in fieldValues (the organization's adresa_* fields).
+  allergens             String[]       @default([])
+  dietFlags             String[]       @default([]) @map("diet_flags")
+  dietNote              String?        @map("diet_note")
   // Parent portal link (/p/<token>): random, generated on demand; replacing it
   // kills the old link and every device's birth-date cookie (src/lib/portal-gate.ts).
   portalToken           String?        @unique @map("portal_token")
@@ -824,6 +832,7 @@ model Child {
   changes      ChildChange[]
   emailLogs    ChildEmailLog[]
   documents    PersonDocument[]
+  eventPersons EventPerson[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -1130,6 +1139,28 @@ model EventParticipantField {
 
   @@unique([eventId, key])
   @@map("event_participant_fields")
+}
+
+// Dospělí na akci (2026-10-28): an adult of Lidé (Child.isAdult) at the event -- a leader, helper, cook.
+// Not a participant: no registration, no portal, no e-mail. Dates null = the event's.
+model EventPerson {
+  id        String    @id @default(uuid())
+  eventId   String    @map("event_id")
+  childId   String    @map("child_id")
+  // Display only: vedoucí, pomocník, kuchař…
+  label     String?
+  fromDate  DateTime? @map("from_date") @db.Date
+  toDate    DateTime? @map("to_date") @db.Date
+  // Eats at the camp (the kitchen counts them).
+  eats      Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, childId])
+  @@index([eventId])
+  @@map("event_persons")
 }
 
 // "Dotazy na rodiče" (2026-10-27): a question for a participant's parents, noted before the event and

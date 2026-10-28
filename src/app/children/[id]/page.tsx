@@ -1,4 +1,5 @@
 "use client";
+import AdultFoodCard from "@/components/adults/AdultFoodCard";
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
@@ -22,6 +23,10 @@ type Detail = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  // Kuchyně (adults): allergen codes, diet flags, a note.
+  allergens: string[];
+  dietFlags: string[];
+  dietNote: string | null;
   // "Neaktivní" (slice 8 #2): since when, by whom, the note.
   leftAt: string | null;
   leftVia: "portal" | "admin" | null;
@@ -287,6 +292,8 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
             </section>
 
             <PersonDocuments childId={id} />
+
+            {data.isAdult && <AdultFoodCard key={data.id} childId={id} initial={{ allergens: data.allergens ?? [], dietFlags: data.dietFlags ?? [], dietNote: data.dietNote }} />}
 
             <section>
               <h2 className={sectionTitle}>{t("children.colEvents")}</h2>

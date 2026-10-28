@@ -114,6 +114,26 @@ async function main() {
       const r = await (await import("@/app/api/families/route")).POST(req("/api/families", { method: "POST", body: { action: "isolation-probe", familyId: z.family.id } }));
       check("Záře family -> 404", r.status === 404, `HTTP ${r.status}`);
     }
+    // --- Dospělí na akci (2026-10-28): Záře's event and Záře's people are "not found"; a new adult is no participant.
+    {
+      const adultsRoute = await import("@/app/api/events/[id]/adults/route");
+      if (z.event) {
+        const r = await adultsRoute.GET(req(`/api/events/${z.event.id}/adults`), params({ id: z.event.id }));
+        check("Záře event adults -> 404", r.status === 404, `HTTP ${r.status}`);
+      }
+      if (z.child) {
+        const r = await adultsRoute.POST(req(`/api/events/${eventId}/adults`, { method: "POST", body: { childIds: [z.child.id] } }), params({ id: eventId }));
+        check("assigning Záře's person to the test event -> 404", r.status === 404, `HTTP ${r.status}`);
+      }
+      const before = await prisma.participant.count({ where: { eventId } });
+      const created = await json(await adultsRoute.POST(req(`/api/events/${eventId}/adults`, { method: "POST", body: { create: { firstName: "Isolation", lastName: "Adult" } } }), params({ id: eventId })));
+      const listed = await json(await adultsRoute.GET(req(`/api/events/${eventId}/adults`), params({ id: eventId })));
+      check(
+        "new adult on the test event: listed, no participant created",
+        created.status === 201 && listed.body?.adults?.length === 1 && (await prisma.participant.count({ where: { eventId } })) === before,
+        JSON.stringify({ status: created.status, listed: listed.body?.adults?.length })
+      );
+    }
     if (z.author) {
       const r = await (await import("@/app/api/authors/[id]/route")).GET(req(`/api/authors/${z.author.id}`), params({ id: z.author.id }));
       check("Záře payer -> 404", r.status === 404, `HTTP ${r.status}`);
