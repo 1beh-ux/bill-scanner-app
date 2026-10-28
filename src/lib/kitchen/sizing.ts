@@ -28,3 +28,27 @@ export function formatQty(q: number, unit: "g" | "ml" | "ks"): { value: string; 
   if (q >= 1000) return { value: one(q / 1000), unit: unit === "g" ? "kg" : "l" };
   return { value: Math.round(q).toLocaleString("cs-CZ"), unit };
 }
+
+export type QtyLine = { ingredientId: string; qtyPerAdultPortion: number };
+export type SwapLine = { fromIngredientId: string; toIngredientId: string; qtyPerAdultPortion?: number | null };
+
+/**
+ * Total per ingredient for one plan entry: the recipe × portions × multiplier; an applied variant cooks its
+ * `portions` special portions with its swaps (the "from" ingredient less, the "to" ingredient more).
+ * ponytail: a special portion counts as 1.0 adult portion, whatever the eater's age band.
+ */
+export function entryTotals(lines: QtyLine[], portions: number, multiplier: number | null | undefined, variants: { swaps: SwapLine[]; portions: number }[] = []) {
+  const m = multiplier ?? 1;
+  const out = new Map<string, number>();
+  const add = (id: string, q: number) => id && out.set(id, (out.get(id) ?? 0) + q);
+  for (const l of lines) add(l.ingredientId, scaledQty(l.qtyPerAdultPortion, portions, m));
+  for (const v of variants) {
+    for (const s of v.swaps) {
+      const base = lines.find((l) => l.ingredientId === s.fromIngredientId)?.qtyPerAdultPortion ?? 0;
+      if (base) add(s.fromIngredientId, -scaledQty(base, v.portions, m));
+      add(s.toIngredientId, scaledQty(s.qtyPerAdultPortion ?? base, v.portions, m));
+    }
+  }
+  for (const [id, q] of out) if (q <= 1e-9) out.delete(id);
+  return out;
+}

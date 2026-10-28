@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
+import KitchenLists from "@/components/kitchen/KitchenLists";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import ExportColumns from "@/components/participants/ExportColumns";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
@@ -23,7 +24,7 @@ const btnPrimary =
 // aplikace: the same sections, on the organization's or the app's templates (organizations step 4).
 export default function TemplatesEditor({ titleKey, introKey }: { titleKey: string; introKey?: string }) {
   const { t } = useTranslations();
-  const [tab, setTab] = useState<"health" | "emails" | "mail" | "bills" | "participants" | "planning">("health");
+  const [tab, setTab] = useState<"health" | "emails" | "mail" | "bills" | "participants" | "planning" | "kitchen">("health");
   const sections: { key: typeof tab; labelKey: string }[] = [
     { key: "health", labelKey: "templatesPage.tabHealth" },
     { key: "emails", labelKey: "templatesPage.tabEmails" },
@@ -31,6 +32,7 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
     { key: "bills", labelKey: "templatesPage.tabBills" },
     { key: "participants", labelKey: "templatesPage.tabParticipants" },
     { key: "planning", labelKey: "nav.planning" },
+    { key: "kitchen", labelKey: "kitchen.navSection" },
   ];
   // ?tab=…: e.g. the Lidé page's "Co vidí a upravují rodiče" (participants), Poslat e-mail (emails).
   useEffect(() => {
@@ -102,6 +104,13 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
           <Synced table="list" filter="plan_day_template"><ListTemplateAdmin kind="plan_day_template" scope="org" label={t("planLists.dayTemplatesLabel")} /></Synced>
           <Synced table="list" filter="plan_location"><ListTemplateAdmin kind="plan_location" scope="org" label={t("planLists.locationsLabel")} /></Synced>
           <Synced table="list" filter="plan_leader"><ListTemplateAdmin kind="plan_leader" scope="org" label={t("planLists.leadersLabel")} /></Synced>
+        </div>
+      )}
+      {tab === "kitchen" && (
+        <div className="flex flex-col gap-6">
+          <p className="text-[14px] text-ink-secondary">{t("kitchen.lists.templatesHint")}</p>
+          <KitchenLists kind="kitchen_slot" scope="org" />
+          <KitchenLists kind="kitchen_band" scope="org" />
         </div>
       )}
         </div>

@@ -34,8 +34,10 @@ assert.deepEqual(r.specialPortions, [{ variantId: "gf", variantName: "bezlepkov�
 assert.deepEqual(r.noVariant, ["Bára"], "no variant removes the cheese for the vegan");
 assert.equal(r.level, "red");
 assert.equal(r.unverifiedPeople, 1);
-// With the variant applied, Anna has no conflict at all.
-assert.ok(!entryConflicts(lines, ingredients, variants, ["gf"], people).conflicts.some((c) => c.name === "Anna"));
+// With the variant applied, Anna gets a special portion and nobody is left uncovered.
+const withGf = entryConflicts(lines, ingredients, variants, ["gf"], people);
+assert.deepEqual(withGf.specialPortions, [{ variantId: "gf", variantName: "bezlepková", applied: true, names: ["Anna"] }]);
+assert.ok(!withGf.uncovered.includes("Anna"));
 // An ingredient whose allergens nobody confirmed: amber, never clear.
 const unsure = new Map([...ingredients, ["sauce", ing("sauce", [], [], false)]]);
 const amber = entryConflicts([{ ingredientId: "tomato", qty: 1 }, { ingredientId: "sauce", qty: 1 }], unsure, [], [], [people[3]]);

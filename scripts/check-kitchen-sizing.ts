@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 const near = (a: number, b: number, m?: string) => assert.ok(Math.abs(a - b) < 1e-9, `${m ?? ""} ${a} != ${b}`);
 import { bandFactor, headcount } from "../src/lib/kitchen/headcount";
-import { formatQty, learnedMultiplier, scaledQty } from "../src/lib/kitchen/sizing";
+import { entryTotals, formatQty, learnedMultiplier, scaledQty } from "../src/lib/kitchen/sizing";
 
 const bands = [
   { ageFrom: 0, ageTo: 5, factor: 0.5 },
@@ -53,4 +53,9 @@ assert.deepEqual(formatQty(998.4, "g"), { value: "998", unit: "g" });
 assert.deepEqual(formatQty(2500, "ml"), { value: "2,5", unit: "l" });
 assert.deepEqual(formatQty(12.01, "ks"), { value: "12,1", unit: "ks" });
 assert.deepEqual(formatQty(12, "ks"), { value: "12", unit: "ks" });
+// Entry totals: 10 portions of 100 g pasta; a gluten-free variant for 2 swaps pasta for GF pasta.
+const t = entryTotals([{ ingredientId: "pasta", qtyPerAdultPortion: 100 }, { ingredientId: "sauce", qtyPerAdultPortion: 50 }], 10, 1.1, [{ portions: 2, swaps: [{ fromIngredientId: "pasta", toIngredientId: "gf", qtyPerAdultPortion: null }] }]);
+near(t.get("pasta")!, 880);
+near(t.get("gf")!, 220);
+near(t.get("sauce")!, 550);
 console.log("kitchen sizing ok");

@@ -7,6 +7,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import PlanningEventSettings from "@/components/planning/PlanningEventSettings";
+import KitchenSettings from "@/components/kitchen/KitchenSettings";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import HealthNotesSettings from "@/components/health/HealthNotesSettings";
@@ -107,7 +108,7 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "vstupenky" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani";
+type Tab = "akce" | "vstupenky" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani" | "kuchyne";
 const SECTION_KEYS: Tab[] = ["akce", "vstupenky", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
@@ -210,6 +211,7 @@ export default function EventDetailPage({
     if (tab === "posta" && !roster) setTab("akce");
     if (tab === "dokumenty" && !roster) setTab("akce");
     if (tab === "planovani" && !moduleAccess.planning) setTab("akce");
+    if (tab === "kuchyne" && !moduleAccess.kitchen) setTab("akce");
     if (tab === "ucastnici" && !roster) setTab("akce");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- roster derives from moduleAccess
   }, [tab, moduleAccess]);
@@ -393,6 +395,7 @@ export default function EventDetailPage({
     ...(roster ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
     ...(roster ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
+    ...(moduleAccess.kitchen ? [{ key: "kuchyne" as Tab, labelKey: "kitchen.navSection", help: "kuchyne" }] : []),
   ];
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
 
@@ -769,6 +772,8 @@ export default function EventDetailPage({
           {tab === "dokumenty" && roster && (
             <ListTemplateAdmin kind="document" scope="event" eventId={id} label={t("eventSettings.tabDocuments")} />
           )}
+
+          {tab === "kuchyne" && moduleAccess.kitchen && <KitchenSettings eventId={id} />}
 
           {tab === "planovani" && moduleAccess.planning && (
             <div className="flex flex-col gap-6">

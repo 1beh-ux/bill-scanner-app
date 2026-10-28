@@ -6,10 +6,10 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const ORG_TABLES = /prisma\.(user|event|author|child|family|driveAccount|mailSenderAccount|publicHost|merchantAlias|categoryTemplate|listTemplate|emailTemplate|participantFieldTemplate|personDocument|childGuardian|bankAccount|bankMovement)\./;
+const ORG_TABLES = /prisma\.(user|event|author|child|family|driveAccount|mailSenderAccount|publicHost|merchantAlias|categoryTemplate|listTemplate|emailTemplate|participantFieldTemplate|personDocument|childGuardian|bankAccount|bankMovement|ingredient|meal)\./;
 const EVENT_ID = /\/events\/\[id\]\/|\beventId\b/;
 const GUARDS =
-  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser|templateScope|requireOrgBankAccount|requireEventBank|requireBank|requireBillAccess|questionsGuard|adultsGuard)\b/;
+  /\b(requireModuleAccess|requireAnyModuleAccess|requireListItemAccess|hasModuleAccess|requireEventInOrg|eventInOrg|requireOrgAdminEvent|getActingOrgId|orgWhere|requireSuperAdmin|authorInOrg|childInOrg|authorizePlanning|portalScope|resolvePublicHost|moveBillToEvent|orgIdOfUser|templateScope|requireOrgBankAccount|requireEventBank|requireBank|requireBillAccess|questionsGuard|adultsGuard|kitchenGuard|libraryGuard)\b/;
 
 // Genuinely global (or guarded by something other than a login) -- with the reason.
 const ALLOW: Record<string, string> = {

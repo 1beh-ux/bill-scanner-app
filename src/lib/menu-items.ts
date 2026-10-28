@@ -1,16 +1,16 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion, UserRoundCheck } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion, UserRoundCheck, UtensilsCrossed, BookOpen, WheatOff, ShoppingCart, ChefHat } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
 // it and personal settings offers its items as menu favourites (by id).
-export type MenuSection = "bills" | "tickets" | "bank" | "participants" | "health" | "mail" | "planning" | "event" | "organization" | "app";
+export type MenuSection = "bills" | "tickets" | "bank" | "participants" | "health" | "mail" | "planning" | "kitchen" | "event" | "organization" | "app";
 // roster = the central participant list, reachable with participants, health or mail; bank = roster + the
 // event's automatic bank check on (docs/bank-payments-design.md).
 // bankRecon = the Banka module (bank reconciliation, explicit grant).
 // tickets = Vstupenky of a public event (docs/public-event-tickets-spec.md).
-// adults = Dospělí na akci: the Kuchyně grant, or an organization admin.
-export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets" | "adults";
+// adults = Dospělí na akci: the Kuchyně grant, or an organization admin. kitchen = Kuchyně (enabled + grant).
+export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets" | "adults" | "kitchen";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -32,6 +32,7 @@ export const MENU_SECTIONS: { id: MenuSection; labelKey: string | null }[] = [
   { id: "health", labelKey: "nav.sectionHealth" },
   { id: "mail", labelKey: "nav.sectionMail" },
   { id: "planning", labelKey: "nav.sectionPlanning" },
+  { id: "kitchen", labelKey: "kitchen.navSection" },
   { id: "event", labelKey: null },
   { id: "organization", labelKey: "nav.organization" },
   { id: "app", labelKey: "nav.sectionApp" },
@@ -62,6 +63,11 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "mail", section: "mail", labelKey: "nav.mail", icon: Mail, href: ev("/mail"), module: "mail" },
   { id: "planning", section: "planning", labelKey: "nav.planning", icon: CalendarClock, href: ev("/planning"), module: "planning" },
   { id: "activities", section: "planning", labelKey: "planActivities.title", icon: Library, href: ev("/planning/activities"), module: "planning" },
+  { id: "kitchen-plan", section: "kitchen", labelKey: "kitchen.navPlan", icon: UtensilsCrossed, href: ev("/kitchen"), module: "kitchen" },
+  { id: "kitchen-library", section: "kitchen", labelKey: "kitchen.navLibrary", icon: BookOpen, href: ev("/kitchen/library"), module: "kitchen" },
+  { id: "kitchen-diets", section: "kitchen", labelKey: "kitchen.navDiets", icon: WheatOff, href: ev("/kitchen/diets"), module: "kitchen" },
+  { id: "kitchen-shopping", section: "kitchen", labelKey: "kitchen.navShopping", icon: ShoppingCart, href: ev("/kitchen/shopping"), module: "kitchen" },
+  { id: "kitchen-today", section: "kitchen", labelKey: "kitchen.navToday", icon: ChefHat, href: ev("/kitchen/today"), module: "kitchen" },
   { id: "event-settings", section: "event", labelKey: "nav.eventSetup", icon: Settings, href: (id) => (id ? `/events/${id}` : "/events") },
   ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
   ...NAV_SECTIONS.app.items.map((i) => ({ id: i.path, section: "app" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),

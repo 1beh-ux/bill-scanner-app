@@ -309,6 +309,44 @@ async function main() {
     (globalThis as { __orgTestHost?: string }).__orgTestHost = undefined;
     check("landing page: the host's organization's name; inactive organization's host -> 404", landingText.includes(TEST_ORG) && !/Záře/.test(landingText) && landing404, JSON.stringify({ named: landingText.includes(TEST_ORG), landing404 }));
 
+    // ===== Kuchyně (Prompt 6): the library is org-owned, the plan per event =====
+    asUser(admin);
+    {
+      const kRoute = await import("@/app/api/events/[id]/kitchen/route");
+      if (z.event) {
+        const r = await kRoute.GET(req(`/api/events/${z.event.id}/kitchen`), params({ id: z.event.id }));
+        check("Záře event Jídelníček -> 404", r.status === 404, `HTTP ${r.status}`);
+      }
+      // The second test organization stands in for Záře (nothing is written to Záře).
+      const otherIng = await prisma.ingredient.create({ data: { organizationId: org2Id!, name: "Iso mouka", nameKey: `iso mouka ${stamp}`, unit: "g" } });
+      const otherMeal = await prisma.meal.create({ data: { organizationId: org2Id!, name: "Iso jídlo", nameKey: `iso jidlo ${stamp}` } });
+      const meals = await import("@/app/api/kitchen/meals/route");
+      const list = await json(await meals.GET(req("/api/kitchen/meals")));
+      check("Knihovna: none of another organization's meals", list.status === 200 && !ids(list.body).includes(otherMeal.id), JSON.stringify({ status: list.status, n: list.body?.length }));
+      const mealRoute = await import("@/app/api/kitchen/meals/[mealId]/route");
+      const ingRoute = await import("@/app/api/kitchen/ingredients/[ingredientId]/route");
+      const entries = await import("@/app/api/events/[id]/kitchen/entries/route");
+      const plan = await json(await kRoute.GET(req(`/api/events/${eventId}/kitchen`), params({ id: eventId! })));
+      const slotId = plan.body?.slots?.[0]?.id;
+      const codes = [
+        (await mealRoute.GET(req(`/api/kitchen/meals/${otherMeal.id}`), params({ mealId: otherMeal.id }))).status,
+        (await mealRoute.PATCH(req(`/api/kitchen/meals/${otherMeal.id}`, { method: "PATCH", body: { archived: true } }), params({ mealId: otherMeal.id }))).status,
+        (await ingRoute.PATCH(req(`/api/kitchen/ingredients/${otherIng.id}`, { method: "PATCH", body: { allergensConfirmed: true } }), params({ ingredientId: otherIng.id }))).status,
+        (await meals.POST(req("/api/kitchen/meals", { method: "POST", body: { name: "Iso cizí", lines: [{ ingredientId: otherIng.id, qtyPerAdultPortion: 100 }] } }))).status,
+        (await entries.POST(req(`/api/events/${eventId}/kitchen/entries`, { method: "POST", body: { date: "2027-07-02", slotItemId: slotId, mealId: otherMeal.id } }), params({ id: eventId! }))).status,
+      ];
+      const untouched = (await prisma.meal.findUniqueOrThrow({ where: { id: otherMeal.id } })).archivedAt === null && !(await prisma.ingredient.findUniqueOrThrow({ where: { id: otherIng.id } })).allergensConfirmed;
+      check("another organization's meal / ingredient: read, edit, use, plan -> 404, unchanged", codes.every((c) => c === 404) && untouched, JSON.stringify(codes));
+      const own = await json(await meals.POST(req("/api/kitchen/meals", { method: "POST", body: { name: `Iso guláš ${stamp}`, lines: [{ newIngredient: { name: `Iso maso ${stamp}`, unit: "g", allergens: ["celery"] }, qtyPerAdultPortion: 150 }] } })));
+      const e = await json(await entries.POST(req(`/api/events/${eventId}/kitchen/entries`, { method: "POST", body: { date: "2027-07-02", slotItemId: slotId, mealId: own.body?.id } }), params({ id: eventId! })));
+      const newIng = await prisma.ingredient.findFirst({ where: { organizationId: org.id, nameKey: `iso maso ${stamp}` } });
+      check(
+        "own meal saved + planned; default slots seeded; a new ingredient is 'neověřeno'",
+        own.status === 201 && e.status === 201 && plan.body?.slots?.length === 6 && !!newIng && !newIng.allergensConfirmed,
+        JSON.stringify({ meal: own.status, entry: e.status, slots: plan.body?.slots?.length, confirmed: newIng?.allergensConfirmed })
+      );
+    }
+
     // ===== bank check (docs/bank-payments-design.md) =====
     asUser(admin);
     await prisma.organization.update({ where: { id: org.id }, data: { active: true } });
@@ -534,6 +572,7 @@ async function main() {
       await step("participantGuardian", () => prisma.participantGuardian.deleteMany({ where: pv }));
       await step("participant", () => prisma.participant.deleteMany({ where: ev }));
       await step("eventParticipantField", () => prisma.eventParticipantField.deleteMany({ where: ev }));
+      await step("planEntry", () => prisma.planEntry.deleteMany({ where: ev }));
       await step("eventListItem", () => prisma.eventListItem.deleteMany({ where: ev }));
       await step("eventCategory", () => prisma.eventCategory.deleteMany({ where: ev }));
       await step("eventModule", () => prisma.eventModule.deleteMany({ where: ev }));
@@ -546,6 +585,8 @@ async function main() {
     }
     for (const oid of [org.id, org2Id].filter((x): x is string => !!x)) {
       const ov = { organizationId: oid };
+      await step("meal", () => prisma.meal.deleteMany({ where: ov }));
+      await step("ingredient", () => prisma.ingredient.deleteMany({ where: ov }));
       await step("childGuardian", () => prisma.childGuardian.deleteMany({ where: { child: ov } }));
       await step("child", () => prisma.child.deleteMany({ where: ov }));
       await step("family", () => prisma.family.deleteMany({ where: ov }));

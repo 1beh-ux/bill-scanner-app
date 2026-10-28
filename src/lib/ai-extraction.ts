@@ -96,7 +96,7 @@ async function downloadWithRetry(gcsObjectPath: string): Promise<Buffer> {
 
 let cachedAuth: GoogleAuth | null = null;
 
-async function getIdToken(): Promise<string> {
+export async function getIdToken(): Promise<string> {
   if (!AI_SERVICE_URL) throw new Error("AI_SERVICE_URL is not set");
   console.log("[ai-extraction] step 1: fetching ID token for audience", AI_SERVICE_URL);
   if (!cachedAuth) {

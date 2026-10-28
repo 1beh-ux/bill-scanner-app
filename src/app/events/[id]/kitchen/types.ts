@@ -1,0 +1,50 @@
+// The plan GET's shapes (src/app/api/events/[id]/kitchen/route.ts) for the Kuchyně screens.
+export type Slot = { id: string; name: string; time: string | null };
+export type SheetLine = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null };
+export type Sheet = { mealName: string; steps: string | null; portions: number; multiplier: number | null; participants: number; adults: number; extra: number; variants: { id: string; name: string; portions: number; names: string[] }[]; lines: SheetLine[]; allergens: string[] };
+export type Check = {
+  allergens: string[];
+  unconfirmedIngredients: string[];
+  conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null }[];
+  specialPortions: { variantId: string; variantName: string; applied: boolean; names: string[] }[];
+  noVariant: string[];
+  uncovered: string[];
+  unverifiedPeople: number;
+  level: "red" | "amber" | "ok";
+};
+export type Entry = {
+  id: string;
+  date: string;
+  slotItemId: string;
+  mealId: string | null;
+  name: string;
+  archived: boolean;
+  status: "draft" | "confirmed" | "cooked";
+  variantIds: string[];
+  headcountMode: "auto" | "manual";
+  manualPortions: number | null;
+  servingTime: string | null;
+  note: string | null;
+  multiplier: number | null;
+  headcount: { participants: number; adults: number; extra: number; eaters: number; portions: number; missingDob: number };
+  portions: number;
+  check: Check | null;
+  proposal: { multiplier: number; samples: number; events: number } | null;
+  variants: { id: string; name: string }[];
+  feedback: { verdict: "short" | "ok" | "leftover"; leftoverPercent: number | null; shortPercent: number | null; stars: number | null; note: string | null } | null;
+  sheet: Sheet;
+  fromSnapshot: boolean;
+};
+export type Adjust = { id: string; dateFrom: string; dateTo: string; slotItemId: string | null; count: number; factor: number; label: string };
+export type Note = { id: string; mealId: string; body: string; eventId: string | null; pinned: boolean; createdAt: string };
+export type PlanData = {
+  event: { id: string; name: string; startDate: string; endDate: string };
+  settings: { feedbackUnlockMinutes: number; foodCategoryIds: string[]; countOnlyAccepted: boolean };
+  slots: Slot[];
+  days: string[];
+  entries: Entry[];
+  adjusts: Adjust[];
+  unverifiedDiets: number;
+  notes: Note[];
+  cost: { foodSet: boolean; spent: number; budget: number; personDays: number; perPersonDay: number | null };
+};

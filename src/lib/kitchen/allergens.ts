@@ -128,14 +128,17 @@ export function personConflicts(profile: { allergens: Set<string>; content: Set<
 }
 
 /**
- * An entry against the people present: who has a conflict with the base dish (the applied variants), which
- * meal variant clears it (special portions, grouped by variant, with names), who no variant clears (red),
- * how many have unconfirmed restrictions and which ingredients' allergens nobody confirmed (amber).
+ * An entry against the people present. The base dish is cooked for everyone; an applied variant
+ * (entry.variantIds) is cooked as special portions for the people it clears. Per person with a conflict:
+ * the variant that clears it (an applied one first), grouped into special portions with names.
+ * red: someone is left without a safe plate (no variant clears them, or that variant isn't applied yet);
+ * amber: restrictions or ingredient allergens nobody confirmed; else ok.
  */
 export function entryConflicts(lines: MealLine[], ingredients: Map<string, IngredientInfo>, variants: VariantInfo[], appliedVariantIds: string[], people: PersonDiet[]) {
-  const applied = variants.filter((v) => appliedVariantIds.includes(v.id));
-  const baseLines = applyVariants(lines, applied);
-  const base = mealProfile(baseLines, ingredients, applied.flatMap((v) => v.clearsAllergens));
+  const base = mealProfile(lines, ingredients);
+  // The applied variants' swapped-in ingredients count for "neověřeno" too.
+  for (const v of variants.filter((x) => appliedVariantIds.includes(x.id)))
+    for (const n of mealProfile(applyVariants(lines, [v]), ingredients).unconfirmed) if (!base.unconfirmed.includes(n)) base.unconfirmed.push(n);
   const conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null }[] = [];
   const special = new Map<string, { variantId: string; variantName: string; applied: boolean; names: string[] }>();
   const noVariant: string[] = [];
@@ -143,10 +146,10 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
     if (p.status !== "confirmed") continue;
     const c = personConflicts(base, p);
     if (!c.allergens.length && !c.diets.length) continue;
-    // The first meal variant that, on top of the applied ones, leaves this person nothing they can't eat.
-    const clearing = variants.find((v) => {
-      const prof = mealProfile(applyVariants(baseLines, [v]), ingredients, [...applied.flatMap((x) => x.clearsAllergens), ...v.clearsAllergens]);
-      const left = personConflicts(prof, p);
+    // The meal variant that leaves this person nothing they can't eat (applied ones first).
+    const ordered = [...variants.filter((v) => appliedVariantIds.includes(v.id)), ...variants.filter((v) => !appliedVariantIds.includes(v.id))];
+    const clearing = ordered.find((v) => {
+      const left = personConflicts(mealProfile(applyVariants(lines, [v]), ingredients, v.clearsAllergens), p);
       return !left.allergens.length && !left.diets.length;
     });
     conflicts.push({ key: p.key, name: p.name, ...c, variantId: clearing?.id ?? null });
@@ -158,14 +161,15 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
     }
   }
   const unverifiedPeople = people.filter((p) => p.status === "unverified").length;
+  const uncovered = conflicts.filter((c) => !c.variantId || !appliedVariantIds.includes(c.variantId)).map((c) => c.name);
   return {
     allergens: ALLERGEN_CODES.filter((a) => base.allergens.has(a)),
     unconfirmedIngredients: base.unconfirmed,
     conflicts,
     specialPortions: [...special.values()],
     noVariant,
+    uncovered,
     unverifiedPeople,
-    // red: someone no variant can feed; amber: something nobody confirmed; else ok.
-    level: noVariant.length ? ("red" as const) : unverifiedPeople || base.unconfirmed.length ? ("amber" as const) : ("ok" as const),
+    level: uncovered.length ? ("red" as const) : unverifiedPeople || base.unconfirmed.length ? ("amber" as const) : ("ok" as const),
   };
 }

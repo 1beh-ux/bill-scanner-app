@@ -21,7 +21,7 @@ export function cleanRoute(route: unknown): string | null {
   return "/" + segs.filter((s, i) => s || i === 0).join("/");
 }
 
-const EVENT_MODULES: Record<string, string> = { bills: "bills", budget: "bills", payers: "bills", payments: "bills", import: "bills", health: "health", mail: "mail", "document-templates": "mail", participants: "participants", planning: "planning" };
+const EVENT_MODULES: Record<string, string> = { bills: "bills", budget: "bills", payers: "bills", payments: "bills", import: "bills", health: "health", mail: "mail", "document-templates": "mail", participants: "participants", planning: "planning", kitchen: "kitchen", adults: "kitchen" };
 
 /** Module of a route: the event module for /events/[id]/…, the event settings, else the first segment. */
 export function routeModule(route: string): string {
