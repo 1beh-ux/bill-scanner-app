@@ -425,13 +425,13 @@ async function main() {
     // Appearance stays in its organization (acting_org of a non-super-admin is ignored).
     const zareLook = await prisma.organization.findUniqueOrThrow({ where: { id: zare.id }, select: { publicFontFamily: true, publicBaseFontSize: true } });
     setCookies({ acting_org: zare.id });
-    const look = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { publicFontFamily: "lato", publicBaseFontSize: 16, publicHeadingScale: "large" } }));
+    const look = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { layer: "base", values: { publicFontFamily: "lato", publicBaseFontSize: 16, publicHeadingScale: "large" } } }));
     setCookies({});
     const { publicOrg: pOrg } = await import("@/lib/public-host");
     const testLook = await prisma.organization.findUniqueOrThrow({ where: { id: org.id }, select: { publicFontFamily: true } });
     const zareAfter = await prisma.organization.findUniqueOrThrow({ where: { id: zare.id }, select: { publicFontFamily: true, publicBaseFontSize: true } });
     check("appearance: organization A's settings don't touch organization B", look.status === 200 && testLook.publicFontFamily === "lato" && JSON.stringify(zareAfter) === JSON.stringify(zareLook) && typeof pOrg === "function", JSON.stringify({ status: look.status, test: testLook, zareBefore: zareLook, zareAfter }));
-    const badLook = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { publicFontFamily: "comic-sans" } }));
+    const badLook = await (await import("@/app/api/organizations/appearance/route")).PATCH(req("/api/organizations/appearance", { method: "PATCH", body: { layer: "base", values: { publicFontFamily: "comic-sans" } } }));
     check("appearance: a value outside the options -> 400", badLook.status === 400, `HTTP ${badLook.status}`);
 
     // Portal links go to the organization's embedding page (#t=), never into the query string.
