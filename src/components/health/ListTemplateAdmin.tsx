@@ -42,6 +42,7 @@ type Item = {
   key?: string | null;
   name: string;
   active: boolean;
+  sortOrder?: number | null;
   data: SituationData | DocumentData | Record<string, unknown> | null;
 };
 
@@ -102,6 +103,24 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  // Time periods (kind slot) in your own order (2026-10-28): ↑ ↓ swap with the neighbour and
+  // save every item's place -- the meds table, the plans and the print follow it.
+  async function moveItem(index: number, d: -1 | 1) {
+    const j = index + d;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[index], next[j]] = [next[j], next[index]];
+    setItems(next);
+    await Promise.all(
+      next.map((it, i) =>
+        it.sortOrder === i
+          ? null
+          : fetch(itemUrl(it.id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sortOrder: i }) })
+      )
+    );
+    load();
+  }
 
   async function load() {
     setLoading(true);
@@ -325,12 +344,22 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
         <p className="mb-4 text-[13px] text-ink-secondary">{t("listTemplateAdmin.empty")}</p>
       ) : (
         <ul className="mb-4 list-none p-0">
-          {items.map((item) => (
+          {items.map((item, index) => (
             <li
               key={item.id}
               className="flex items-center justify-between gap-2 border-b border-mist/60 py-2"
             >
               <span className={"flex items-center gap-2 text-[14px] " + (item.active ? "text-ink" : "text-ink-secondary line-through")}>
+                {kind === "slot" && (
+                  <span className="flex flex-col leading-none">
+                    <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} className="px-1 text-[11px] text-ink-secondary hover:text-ink disabled:opacity-30" aria-label="↑">
+                      ▲
+                    </button>
+                    <button type="button" onClick={() => moveItem(index, 1)} disabled={index === items.length - 1} className="px-1 text-[11px] text-ink-secondary hover:text-ink disabled:opacity-30" aria-label="↓">
+                      ▼
+                    </button>
+                  </span>
+                )}
                 {(kind === "plan_category" || kind === "plan_leader") && typeof (item.data as { color?: string } | null)?.color === "string" && (
                   <span
                     className="inline-block h-3 w-3 rounded-full"

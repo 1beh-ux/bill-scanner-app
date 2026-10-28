@@ -15,9 +15,12 @@ type CellStatus = { given: boolean; givenAt: string | null };
 type GridRow = {
   participantId: string;
   participantName: string;
+  participantFirstName: string | null;
+  participantLastName: string | null;
   participantGroup: string | null;
   eventMedId: string;
   medName: string;
+  notes: string | null;
   dose: string | null;
   slotIds: string[];
   days: Record<string, Record<string, CellStatus>>;
@@ -25,6 +28,18 @@ type GridRow = {
 type GridResponse = { slots: Slot[]; days: string[]; rows: GridRow[] };
 
 type Preset = "today" | "week" | "event" | "custom";
+// Row order (2026-10-28): by surname (as the server sends), first name, group or med; a click on the heading flips it.
+type SortKey = "surname" | "firstName" | "group" | "med";
+const SORT_KEYS: SortKey[] = ["surname", "firstName", "group", "med"];
+const cs = (a: string | null, b: string | null) => (a ?? "").localeCompare(b ?? "", "cs");
+function compareRows(a: GridRow, b: GridRow, key: SortKey): number {
+  const surname = cs(a.participantLastName || a.participantName, b.participantLastName || b.participantName) || cs(a.participantFirstName, b.participantFirstName);
+  const person = key === "firstName" ? cs(a.participantFirstName || a.participantName, b.participantFirstName || b.participantName) || surname : key === "group" ? cs(a.participantGroup, b.participantGroup) || surname : surname;
+  // A participant's meds stay together (the grid's borders group them), except when sorting by med.
+  return key === "med" ? cs(a.medName, b.medName) || surname : person || a.participantId.localeCompare(b.participantId) || cs(a.medName, b.medName);
+}
+// "Paralen (1 tbl, k jídlu)": the dose and the plan's note in brackets.
+const medDetail = (row: { dose: string | null; notes: string | null }) => [row.dose, row.notes].filter(Boolean).join(", ");
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
@@ -88,6 +103,8 @@ export default function MedChecklistPage({
   const [notesCache, setNotesCache] = useState<Record<string, HealthNote[]>>({});
   // The pill plan opened for editing (✎ next to a name).
   const [editingPlansOf, setEditingPlansOf] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("surname");
+  const [sortDesc, setSortDesc] = useState(false);
   // Nastavení akce -> Zdraví -> Léky a výdej.
   const settings = useMemo(() => readMedsPageSettings(event?.medsPageSettings), [event]);
 
@@ -229,12 +246,10 @@ export default function MedChecklistPage({
   const visibleRows = useMemo(() => {
     if (!data) return [];
     const q = searchQuery.trim().toLowerCase();
-    return data.rows.filter(
-      (r) =>
-        r.slotIds.some((id) => visibleSlotIds?.has(id)) &&
-        (!q || r.participantName.toLowerCase().includes(q))
-    );
-  }, [data, visibleSlotIds, searchQuery]);
+    return data.rows
+      .filter((r) => r.slotIds.some((id) => visibleSlotIds?.has(id)) && (!q || r.participantName.toLowerCase().includes(q)))
+      .sort((a, b) => (sortDesc ? -1 : 1) * compareRows(a, b, sortKey));
+  }, [data, visibleSlotIds, searchQuery, sortKey, sortDesc]);
 
   const groupMeta = useMemo(() => computeGroupMeta(visibleRows), [visibleRows]);
 
@@ -337,6 +352,20 @@ export default function MedChecklistPage({
           )}
         </div>
 
+        <label className="flex items-center gap-1.5 text-[12px] text-ink-secondary">
+          {t("medGridPage.sortBy")}
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink">
+            {SORT_KEYS.map((k) => (
+              <option key={k} value={k}>
+                {t(`medGridPage.sort.${k}`)}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => setSortDesc(!sortDesc)} className="rounded border border-mist px-1.5 py-0.5 text-[12px] text-ink hover:bg-paper-2" aria-label={t("medGridPage.sortFlip")}>
+            {sortDesc ? "▼" : "▲"}
+          </button>
+        </label>
+
         {usedSlots.length > 1 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-[12px] text-ink-secondary">{t("medGridPage.periodFilterLabel")}:</span>
@@ -378,7 +407,9 @@ export default function MedChecklistPage({
               <thead>
                 <tr className="border-b border-mist">
                   <th rowSpan={2} className="sticky left-0 z-10 whitespace-nowrap border-r border-mist bg-paper-2 p-1.5 text-left align-bottom font-medium text-ink-secondary">
-                    {t("medGridPage.colParticipant")}
+                    <button type="button" onClick={() => setSortDesc(!sortDesc)} className="hover:text-ink" title={t("medGridPage.sortFlip")}>
+                      {t("medGridPage.colParticipant")} {sortDesc ? "▼" : "▲"}
+                    </button>
                   </th>
                   {data.days.map((day) => (
                     <th key={day} colSpan={visibleSlots.length} className="border-l-2 border-l-ink p-1 text-center font-medium text-ink-secondary">
@@ -409,9 +440,10 @@ export default function MedChecklistPage({
                         {row.participantName}
                       </button>
                       {rowTools(row.participantId)}
-                      <span className="ml-1 text-[10px] text-ink-secondary">
+                      {/* The med with its dose + note; a long note wraps instead of widening the column. */}
+                      <span className="block max-w-[16rem] whitespace-normal text-[10px] text-ink-secondary">
                         {row.medName}
-                        {row.dose && ` (${row.dose})`}
+                        {medDetail(row) && ` (${medDetail(row)})`}
                       </span>
                     </td>
                     {data.days.flatMap((day) =>
@@ -467,7 +499,7 @@ export default function MedChecklistPage({
                       <div key={row.eventMedId}>
                         <div className="text-[13px] font-medium text-ink">
                           {row.medName}
-                          {row.dose && <span className="font-normal text-ink-secondary"> ({row.dose})</span>}
+                          {medDetail(row) && <span className="font-normal text-ink-secondary"> ({medDetail(row)})</span>}
                         </div>
                         <div className="flex flex-col gap-1">
                           {data.days.map((day) => {

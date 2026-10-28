@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { compareParticipantsBySurname } from "@/lib/participant-name";
 
 function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -8,9 +9,13 @@ export type CellStatus = { given: boolean; givenAt: string | null };
 export type GridRow = {
   participantId: string;
   participantName: string;
+  participantFirstName: string | null;
+  participantLastName: string | null;
   participantGroup: string | null;
   eventMedId: string;
   medName: string;
+  // The plans' notes for this med (each once, e.g. "k jídlu") -- shown with the med name.
+  notes: string | null;
   // First non-empty dose found for this (participant, med) pair -- a plan is really
   // per-slot, so if dose differs between slots only the first one encountered shows
   // here (Part 3: "show dose ... when set", not full per-slot dose display).
@@ -49,7 +54,7 @@ export async function fetchMedChecklistGrid(
     // rows per participant and rely on that adjacency.
     orderBy: [{ participant: { name: "asc" } }, { eventMed: { name: "asc" } }],
     include: {
-      participant: { select: { id: true, name: true, groupName: true } },
+      participant: { select: { id: true, name: true, firstName: true, lastName: true, groupName: true } },
       eventMed: { select: { id: true, name: true } },
     },
   });
@@ -57,10 +62,13 @@ export async function fetchMedChecklistGrid(
   type RowAccum = {
     participantId: string;
     participantName: string;
+    participantFirstName: string | null;
+    participantLastName: string | null;
     participantGroup: string | null;
     eventMedId: string;
     medName: string;
     dose: string | null;
+    notes: Set<string>;
     slotIds: Set<string>;
   };
   const rowMap = new Map<string, RowAccum>();
@@ -71,15 +79,20 @@ export async function fetchMedChecklistGrid(
       row = {
         participantId: plan.participant.id,
         participantName: plan.participant.name,
+        participantFirstName: plan.participant.firstName,
+        participantLastName: plan.participant.lastName,
         participantGroup: plan.participant.groupName,
         eventMedId: plan.eventMed.id,
         medName: plan.eventMed.name,
         dose: plan.dose,
+        notes: new Set(),
         slotIds: new Set(),
       };
       rowMap.set(key, row);
     }
     row.slotIds.add(plan.eventSlotId);
+    if (!row.dose && plan.dose) row.dose = plan.dose;
+    if (plan.notes?.trim()) row.notes.add(plan.notes.trim());
   }
 
   const participantIds = [...new Set(plans.map((p) => p.participantId))];
@@ -105,7 +118,14 @@ export async function fetchMedChecklistGrid(
     days.push(toDateKey(d));
   }
 
-  const rows: GridRow[] = Array.from(rowMap.values()).map((row) => {
+  // By surname (then first name), a participant's meds together in name order -- the page may re-sort.
+  const sorted = Array.from(rowMap.values()).sort(
+    (a, b) =>
+      compareParticipantsBySurname({ name: a.participantName, firstName: a.participantFirstName, lastName: a.participantLastName }, { name: b.participantName, firstName: b.participantFirstName, lastName: b.participantLastName }) ||
+      a.participantId.localeCompare(b.participantId) ||
+      a.medName.localeCompare(b.medName, "cs")
+  );
+  const rows: GridRow[] = sorted.map((row) => {
     const slotIds = Array.from(row.slotIds);
     const daysOut: Record<string, Record<string, CellStatus>> = {};
     for (const day of days) {
@@ -121,9 +141,12 @@ export async function fetchMedChecklistGrid(
     return {
       participantId: row.participantId,
       participantName: row.participantName,
+      participantFirstName: row.participantFirstName,
+      participantLastName: row.participantLastName,
       participantGroup: row.participantGroup,
       eventMedId: row.eventMedId,
       medName: row.medName,
+      notes: row.notes.size ? [...row.notes].join("; ") : null,
       dose: row.dose,
       slotIds,
       days: daysOut,

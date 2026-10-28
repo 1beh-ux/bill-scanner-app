@@ -140,7 +140,7 @@ function renderBandTable(opts: {
         .join("");
       return `
         <tr class="${rowClasses}">
-          <td class="${nameCellClass}">${escapeHtml(row.participantName)}<div class="medname">${escapeHtml(row.medName)}${row.dose ? ` (${escapeHtml(row.dose)})` : ""}</div></td>
+          <td class="${nameCellClass}">${escapeHtml(row.participantName)}<div class="medname">${escapeHtml(row.medName)}${[row.dose, row.notes].filter(Boolean).length ? ` (${escapeHtml([row.dose, row.notes].filter(Boolean).join(", "))})` : ""}</div></td>
           ${cells}
         </tr>`;
     })

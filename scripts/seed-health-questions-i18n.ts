@@ -44,6 +44,12 @@ const rows: Row[] = [
   r("parentQuestions.filter.answered", "Zodpovězené", "Answered"),
   r("parentQuestions.filter.all", "Všechny", "All"),
   r("healthPage.colQuestions", "Dotazy", "Questions"),
+  r("medGridPage.sortBy", "Řadit podle", "Sort by"),
+  r("medGridPage.sort.surname", "příjmení", "surname"),
+  r("medGridPage.sort.firstName", "křestního jména", "first name"),
+  r("medGridPage.sort.group", "skupiny", "group"),
+  r("medGridPage.sort.med", "léku", "med"),
+  r("medGridPage.sortFlip", "Obrátit pořadí", "Reverse the order"),
 ];
 
 async function main() {
