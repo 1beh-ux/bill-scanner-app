@@ -132,6 +132,33 @@ enum ListTemplateKind {
   plan_day_template
   // org base library only -- event activities live in PlanActivity
   plan_activity
+  // Kuchyně (docs/kitchen-planning-design.md): meal slots (data { defaultTime? }) and age bands
+  // (data { ageFrom, ageTo, factor }) -- the kitchen module's (requireListItemAccess).
+  kitchen_slot
+  kitchen_band
+}
+
+enum IngredientUnit {
+  g
+  ml
+  ks
+}
+
+enum PlanEntryStatus {
+  draft
+  confirmed
+  cooked
+}
+
+enum HeadcountMode {
+  auto
+  manual
+}
+
+enum FeedbackVerdict {
+  short
+  ok
+  leftover
 }
 
 enum ParentEmailStatus {
@@ -480,6 +507,12 @@ model Event {
   bankImportBatches      BankImportBatch[]
   ticketOrders           TicketOrder[]
   eventPersons           EventPerson[]
+  kitchenSettings        EventKitchenSettings?
+  planEntries            PlanEntry[]
+  headcountAdjusts       HeadcountAdjust[]
+  mealAbsences           MealAbsence[]
+  shoppingChecks         ShoppingCheck[]
+  mealNotes              MealNote[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -774,6 +807,8 @@ model Participant {
   guardians      ParticipantGuardian[]
   incidents      Incident[]
   parentQuestions ParentQuestion[]
+  mealAbsences    MealAbsence[]
+  diet            ParticipantDiet?
   medPlans       ParticipantMedPlan[]
   medChecklist   MedChecklist[]
   emailLogs      ParentEmailLog[]
@@ -1157,6 +1192,7 @@ model EventPerson {
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+  mealAbsences MealAbsence[]
 
   @@unique([eventId, childId])
   @@index([eventId])
@@ -1282,6 +1318,9 @@ model EventListItem {
   planBlocksAsLocation     PlanBlock[]           @relation("PlanBlockLocation")
   planActivitiesAsLeader   PlanActivity[]        @relation("PlanActivityLeader")
   planActivitiesAsLocation PlanActivity[]        @relation("PlanActivityLocation")
+  planEntriesAsSlot        PlanEntry[]           @relation("PlanEntrySlot")
+  headcountAdjustsAsSlot   HeadcountAdjust[]     @relation("HeadcountAdjustSlot")
+  mealAbsencesAsSlot       MealAbsence[]         @relation("MealAbsenceSlot")
 
   @@map("event_list_items")
 }
@@ -1694,6 +1733,8 @@ model PublicHost {
 // (docs/organizations-change-notes.md); existing data belongs to "Pionýrská skupina Záře".
 model Organization {
   id                      String   @id @default(uuid())
+  ingredients             Ingredient[]
+  meals                   Meal[]
   name                    String
   shortName               String   @map("short_name")
   contactEmail            String?  @map("contact_email")
@@ -2186,4 +2227,266 @@ model Ticket {
 
   @@index([eventId])
   @@map("tickets")
+}
+
+
+// ===== Kuchyně (docs/kitchen-planning-design.md, phase 1) =====
+// The library (ingredients, meals) is the organization's; everything else belongs to an event.
+// No prices, no nutrition: the only norm is grams (ml, pieces) per portion of a standard adult.
+
+model Ingredient {
+  id                 String         @id @default(uuid())
+  organizationId     String         @map("organization_id")
+  name               String
+  // name lower-cased, without diacritics and spaces doubled -- unique per organization ("Mouka hladká" = "mouka hladka").
+  nameKey            String         @map("name_key")
+  unit               IngredientUnit
+  allergens          String[]       @default([])
+  // What it contains: meat, pork, fish, dairy, egg (src/lib/kitchen/allergens.ts CONTENT_FLAGS).
+  dietFlags          String[]       @default([]) @map("diet_flags")
+  // AI-guessed or unchecked allergens are "neověřeno" until a human confirms them.
+  allergensConfirmed Boolean        @default(false) @map("allergens_confirmed")
+  packSize           Decimal?       @map("pack_size") @db.Decimal(12, 3)
+  packUnit           String?        @map("pack_unit")
+  shelfLifeDays      Int?           @map("shelf_life_days")
+  storeHint          String?        @map("store_hint")
+  category           String?
+  globalId           String?        @map("global_id")
+  syncedAt           DateTime?      @map("synced_at")
+  active             Boolean        @default(true)
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  mealUses       MealIngredient[]
+  shoppingChecks ShoppingCheck[]
+
+  @@unique([organizationId, nameKey])
+  @@index([organizationId])
+  @@map("ingredients")
+}
+
+model Meal {
+  id               String    @id @default(uuid())
+  organizationId   String    @map("organization_id")
+  name             String
+  nameKey          String    @map("name_key")
+  // A slot hint (snídaně, oběd…), free text.
+  mealType         String?   @map("meal_type")
+  // The recipe is written for this many standard adult portions.
+  yieldPortions    Int       @default(10) @map("yield_portions")
+  prepMinutes      Int?      @map("prep_minutes")
+  cookMinutes      Int?      @map("cook_minutes")
+  equipment        String?
+  prepAheadOk      Boolean   @default(false) @map("prep_ahead_ok")
+  leftoverFriendly Boolean   @default(false) @map("leftover_friendly")
+  coldPackable     Boolean   @default(false) @map("cold_packable")
+  tags             String[]  @default([])
+  steps            String?
+  // "Vytvořit variantu jídla": the meal it was forked from.
+  parentMealId     String?   @map("parent_meal_id")
+  archivedAt       DateTime? @map("archived_at")
+  globalId         String?   @map("global_id")
+  syncedAt         DateTime? @map("synced_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  parentMeal   Meal?            @relation("MealFork", fields: [parentMealId], references: [id], onDelete: SetNull)
+  forks        Meal[]           @relation("MealFork")
+  ingredients  MealIngredient[]
+  variants     MealVariant[]
+  notes        MealNote[]
+  planEntries  PlanEntry[]
+
+  @@index([organizationId])
+  @@index([organizationId, nameKey])
+  @@map("meals")
+}
+
+model MealIngredient {
+  id                 String  @id @default(uuid())
+  mealId             String  @map("meal_id")
+  ingredientId       String  @map("ingredient_id")
+  // In the ingredient's unit, for one standard adult portion.
+  qtyPerAdultPortion Decimal @map("qty_per_adult_portion") @db.Decimal(12, 3)
+  // main / starch / vegetable / sauce / side
+  role               String?
+  optional           Boolean @default(false)
+  note               String?
+  sortOrder          Int     @default(0) @map("sort_order")
+
+  meal       Meal       @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  @@index([mealId])
+  @@map("meal_ingredients")
+}
+
+model MealVariant {
+  id              String   @id @default(uuid())
+  mealId          String   @map("meal_id")
+  // e.g. "bezlepková"
+  name            String
+  clearsAllergens String[] @default([]) @map("clears_allergens")
+  // [{ fromIngredientId, toIngredientId, qtyPerAdultPortion? }]
+  swaps           Json     @default("[]")
+
+  meal Meal @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  @@index([mealId])
+  @@map("meal_variants")
+}
+
+model MealNote {
+  id           String   @id @default(uuid())
+  mealId       String   @map("meal_id")
+  // Set = a note from this event; null = a library note ("Převést do knihovny").
+  eventId      String?  @map("event_id")
+  body         String
+  authorUserId String?  @map("author_user_id")
+  pinned       Boolean  @default(false)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  meal  Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([mealId])
+  @@map("meal_notes")
+}
+
+model EventKitchenSettings {
+  eventId               String   @id @map("event_id")
+  // The participants' allergy field (default: the field whose key / label is "alergie").
+  allergyFieldKey       String?  @map("allergy_field_key")
+  // The event's categories that count as "potraviny" (cena na osobu a den).
+  foodCategoryIds       String[] @default([]) @map("food_category_ids")
+  countOnlyAccepted     Boolean  @default(false) @map("count_only_accepted")
+  feedbackUnlockMinutes Int      @default(30) @map("feedback_unlock_minutes")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("event_kitchen_settings")
+}
+
+model PlanEntry {
+  id               String          @id @default(uuid())
+  eventId          String          @map("event_id")
+  date             DateTime        @db.Date
+  slotItemId       String          @map("slot_item_id")
+  planWindowId     String?         @map("plan_window_id")
+  mealId           String?         @map("meal_id")
+  customName       String?         @map("custom_name")
+  variantIds       String[]        @default([]) @map("variant_ids")
+  headcountMode    HeadcountMode   @default(auto) @map("headcount_mode")
+  // Adult-equivalent portions (manual mode).
+  manualPortions   Decimal?        @map("manual_portions") @db.Decimal(10, 2)
+  // The accepted sizing multiplier (only ever set by "Použít").
+  sizingMultiplier Decimal?        @map("sizing_multiplier") @db.Decimal(6, 3)
+  // HH:mm
+  servingTime      String?         @map("serving_time")
+  status           PlanEntryStatus @default(draft)
+  // Written on confirm: ingredients with quantities, variants, headcount, multiplier.
+  recipeSnapshot   Json?           @map("recipe_snapshot")
+  note             String?
+  sortOrder        Int             @default(0) @map("sort_order")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  event    Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  slotItem EventListItem @relation("PlanEntrySlot", fields: [slotItemId], references: [id])
+  meal     Meal?         @relation(fields: [mealId], references: [id], onDelete: SetNull)
+  feedback MealFeedback?
+
+  @@index([eventId, date])
+  @@map("plan_entries")
+}
+
+// Anonymous extras only (visitors, "výlet bez oběda"); named adults are EventPerson.
+model HeadcountAdjust {
+  id         String         @id @default(uuid())
+  eventId    String         @map("event_id")
+  dateFrom   DateTime       @map("date_from") @db.Date
+  dateTo     DateTime       @map("date_to") @db.Date
+  slotItemId String?        @map("slot_item_id")
+  // Negative allowed.
+  count      Int
+  label      String
+  factor     Decimal        @default(1.0) @db.Decimal(6, 3)
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  slotItem EventListItem? @relation("HeadcountAdjustSlot", fields: [slotItemId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("headcount_adjusts")
+}
+
+// Exactly one of participantId / eventPersonId (also a SQL CHECK).
+model MealAbsence {
+  id            String         @id @default(uuid())
+  eventId       String         @map("event_id")
+  participantId String?        @map("participant_id")
+  eventPersonId String?        @map("event_person_id")
+  date          DateTime       @db.Date
+  // null = the whole day.
+  slotItemId    String?        @map("slot_item_id")
+  reason        String?
+  createdAt     DateTime       @default(now()) @map("created_at")
+
+  event       Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  participant Participant?   @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  eventPerson EventPerson?   @relation(fields: [eventPersonId], references: [id], onDelete: Cascade)
+  slotItem    EventListItem? @relation("MealAbsenceSlot", fields: [slotItemId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, date])
+  @@map("meal_absences")
+}
+
+// A participant's confirmed allergens / diet (Strava účastníků), from the allergy text it was confirmed against.
+model ParticipantDiet {
+  id            String    @id @default(uuid())
+  participantId String    @unique @map("participant_id")
+  allergens     String[]  @default([])
+  dietFlags     String[]  @default([]) @map("diet_flags")
+  rawText       String    @map("raw_text")
+  rawTextHash   String    @map("raw_text_hash")
+  confirmedById String?   @map("confirmed_by_id")
+  confirmedAt   DateTime  @default(now()) @map("confirmed_at")
+  note          String?
+
+  participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@map("participant_diets")
+}
+
+model MealFeedback {
+  id              String          @id @default(uuid())
+  planEntryId     String          @unique @map("plan_entry_id")
+  verdict         FeedbackVerdict
+  leftoverPercent Int?            @map("leftover_percent")
+  shortPercent    Int?            @map("short_percent")
+  stars           Int?
+  note            String?
+  recordedById    String?         @map("recorded_by_id")
+  recordedAt      DateTime        @default(now()) @map("recorded_at")
+
+  planEntry PlanEntry @relation(fields: [planEntryId], references: [id], onDelete: Cascade)
+
+  @@map("meal_feedback")
+}
+
+model ShoppingCheck {
+  id           String     @id @default(uuid())
+  eventId      String     @map("event_id")
+  ingredientId String     @map("ingredient_id")
+  forDate      DateTime   @map("for_date") @db.Date
+  checked      Boolean    @default(false)
+  qtyBought    Decimal?   @map("qty_bought") @db.Decimal(12, 3)
+
+  event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, ingredientId, forDate])
+  @@map("shopping_checks")
 }
