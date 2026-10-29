@@ -27,7 +27,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ mea
   const samples = meal.planEntries.filter((e) => e.feedback).map((e) => ({ ...e.feedback!, eventId: e.eventId }));
   return NextResponse.json({
     ...meal,
-    ingredients: meal.ingredients.map((l) => ({ ...l, qtyPerAdultPortion: Number(l.qtyPerAdultPortion), ingredient: { ...l.ingredient, packSize: l.ingredient.packSize == null ? null : Number(l.ingredient.packSize) } })),
+    ingredients: meal.ingredients.map((l) => ({ ...l, qtyPerAdultPortion: Number(l.qtyPerAdultPortion), ingredient: { ...l.ingredient, packSize: l.ingredient.packSize == null ? null : Number(l.ingredient.packSize), altUnitQty: l.ingredient.altUnitQty == null ? null : Number(l.ingredient.altUnitQty) } })),
     notes: meal.notes.map((n) => ({ id: n.id, body: n.body, eventId: n.eventId, eventName: n.event?.name ?? null, pinned: n.pinned, createdAt: n.createdAt })),
     planEntries: undefined,
     history: meal.planEntries.map((e) => ({ id: e.id, eventId: e.event.id, eventName: e.event.name, date: iso(e.date), slot: e.slotItem.name, status: e.status, feedback: e.feedback })),

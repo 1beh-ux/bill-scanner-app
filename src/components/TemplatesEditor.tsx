@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import KitchenLists from "@/components/kitchen/KitchenLists";
+import KitchenDiets from "@/components/kitchen/KitchenDiets";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import ExportColumns from "@/components/participants/ExportColumns";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
@@ -11,7 +12,7 @@ import CustomEmailTemplates from "@/components/health/CustomEmailTemplates";
 import { EMAIL_KINDS } from "@/lib/email-kinds";
 import { Synced } from "@/components/AppSyncPanel";
 import { useConfirm } from "@/components/ConfirmDialog";
-import { useLevelUrl } from "@/lib/template-level";
+import { useLevelUrl, useTemplateLevel } from "@/lib/template-level";
 
 type CategoryTemplateRow = { id: string; name: string; description: string | null };
 
@@ -24,6 +25,7 @@ const btnPrimary =
 // aplikace: the same sections, on the organization's or the app's templates (organizations step 4).
 export default function TemplatesEditor({ titleKey, introKey }: { titleKey: string; introKey?: string }) {
   const { t } = useTranslations();
+  const level = useTemplateLevel();
   const [tab, setTab] = useState<"health" | "emails" | "mail" | "bills" | "participants" | "planning" | "kitchen">("health");
   const sections: { key: typeof tab; labelKey: string }[] = [
     { key: "health", labelKey: "templatesPage.tabHealth" },
@@ -111,6 +113,8 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
           <p className="text-[14px] text-ink-secondary">{t("kitchen.lists.templatesHint")}</p>
           <KitchenLists kind="kitchen_slot" scope="org" />
           <KitchenLists kind="kitchen_band" scope="org" />
+          {/* Diets are the organization's own (people's data refer to their codes): not an app template. */}
+          {level !== "app" && <KitchenDiets />}
         </div>
       )}
         </div>

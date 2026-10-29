@@ -12,9 +12,15 @@ Zapnutí a přístup: **Nastavení akce → Lidé** (moduly akce a kdo má ke Ku
 - Jídla a suroviny patří **celé organizaci** – každá akce plánuje ze stejné knihovny.
 - Recept se píše na **jednu standardní dospělou porci** (g, ml, ks). Náhled ukáže množství třeba pro 10 porcí.
 - **Alergeny jídla** se skládají ze surovin. Surovina, jejíž alergeny nikdo nepotvrdil, je všude **„neověřeno“** – nikdy se nebere jako „bez alergenu“. Potvrzuje se tlačítkem **Potvrdit alergeny** (ideálně podle obalu).
-- **Varianty** (např. bezlepková): náhrada suroviny jinou. Jídelníček pak navrhne zvláštní porce pro ty, kdo je potřebují.
+- **Varianty** (např. bezlepková): náhrada suroviny jinou – i suroviny, která ještě není uložená (při importu); nová se založí při uložení jako „neověřeno“. Jídelníček pak navrhne zvláštní porce pro ty, kdo je potřebují.
+- **Vždy v kuchyni** (sůl, koření…): u suroviny zaškrtnete a v receptu nemusí mít množství („dle potřeby“). V nákupu je zvlášť, jen ke kontrole zásob.
+- **Počítat také v**: druhá jednotka suroviny – česnek v kusech jako „stroužek“, mouka „hrnek = 140 g“. V receptu pak jde množství zadat v ní a v jídelníčku, nákupu i listu pro kuchaře se ukáže vedle.
 - **Vytvořit variantu jídla** udělá kopii receptu. Jídlo, které už bylo v jídelníčku, nejde smazat – jen **archivovat**.
-- **Importovat recepty**: nahrajte starý recept (xlsx, docx, pdf, fotka). AI ho přečte a přepočítá na 1 porci, odhady (lžíce, hrnek) a nové suroviny označí. **Nic se neuloží**, dokud recept nezkontrolujete a nekliknete na **Uložit do knihovny**. Alergeny od AI jsou jen návrh – nová surovina je „neověřeno“.
+- **Importovat recepty**: nahrajte starý recept (xlsx, docx, pdf, fotka). AI ho přečte a přepočítá na 1 porci, odhady (lžíce, hrnek) a nové suroviny označí. **Nic se neuloží**, dokud recept nezkontrolujete a nekliknete na **Uložit do knihovny**. Alergeny od AI jsou jen návrh – nová surovina je „neověřeno“. AI navrhne i druh jídla, časy, nádobí, štítky, varianty (např. bezlepková s náhradami), u nových surovin obsah (maso, mléčné…) a co je „vždy v kuchyni“; neznámou jednotku (plechovka, balení) počítá v kusech a nabídne ji jako druhou jednotku. Jeden import stojí zhruba 0,4 Kč (AI Gemini).
+
+## Diety
+
+**Šablony → Kuchyně → Diety**: seznam diet organizace (výchozí vegetarián, vegan, bez vepřového, bezlepková, bez laktózy), lze přidat vlastní (např. bez ořechů). U každé diety: slova, podle kterých se pozná v textu rodičů, a co ji porušuje – obsah suroviny nebo alergeny. Surovina může být **vhodná i pro** dietu (bezlaktózové mléko pro „bez laktózy“). Laktóza se čte jako dieta „bez laktózy“, ne jako alergie na mléko.
 
 ## Jídla dne a věkové skupiny
 

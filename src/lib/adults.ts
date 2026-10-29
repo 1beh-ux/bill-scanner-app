@@ -9,26 +9,50 @@ export type AdultAssignment = {
   name: string;
   dateOfBirth: string | null;
   fieldValues: Record<string, unknown> | null;
-  fromDate: string | null;
-  toDate: string | null;
+  // The days at the event; empty = the whole event.
+  days: string[];
 };
-export type AdultReportRow = { name: string; dateOfBirth: string | null; age: number | null; municipality: string; zip: string; from: string; to: string; days: number; outside: boolean };
+export type AdultReportRow = { name: string; dateOfBirth: string | null; age: number | null; municipality: string; zip: string; from: string; to: string; periods: string; days: number; outside: boolean };
 
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`);
-const DAY_MS = 24 * 3600 * 1000;
+const iso = (d: Date) => d.toISOString().slice(0, 10);
 
-/** Inclusive days of [from, to] inside the event (null = the event's dates); 0 when it doesn't touch the event. */
-export function daysAtEvent(from: string | null, to: string | null, eventStart: string, eventEnd: string): number {
-  const s = Math.max(day(from ?? eventStart).getTime(), day(eventStart).getTime());
-  const e = Math.min(day(to ?? eventEnd).getTime(), day(eventEnd).getTime());
-  return e < s ? 0 : Math.round((e - s) / DAY_MS) + 1;
+/** Every day of the event, first to last ("YYYY-MM-DD"). */
+export function eventDayList(eventStart: string, eventEnd: string): string[] {
+  const out: string[] = [];
+  for (let d = day(eventStart); d <= day(eventEnd) && out.length < 400; d = new Date(d.getTime() + 86400000)) out.push(iso(d));
+  return out;
 }
 
-/** One row per adult: age on `ageDate`, address, from–to (the event's when unset), days at the event. */
+/** The days someone is at the event: their own (sorted, unique) or, when none are set, all of the event's. */
+export const presentDays = (days: string[], eventStart: string, eventEnd: string) => (days.length ? [...new Set(days.map((d) => d.slice(0, 10)))].sort() : eventDayList(eventStart, eventEnd));
+
+/** Runs of consecutive days: ["07-01","07-02","07-05"] -> [{from 07-01, to 07-02}, {from 07-05, to 07-05}]. */
+export function dayIntervals(days: string[]): { from: string; to: string }[] {
+  const out: { from: string; to: string }[] = [];
+  for (const d of [...new Set(days)].sort()) {
+    const last = out[out.length - 1];
+    if (last && day(d).getTime() - day(last.to).getTime() === 86400000) last.to = d;
+    else out.push({ from: d, to: d });
+  }
+  return out;
+}
+
+/** "1.–2. 7., 5. 7." (Czech day.month). */
+export function intervalsText(days: string[]): string {
+  const dm = (d: string) => `${Number(d.slice(8, 10))}. ${Number(d.slice(5, 7))}.`;
+  return dayIntervals(days)
+    .map((i) => (i.from === i.to ? dm(i.from) : i.from.slice(0, 7) === i.to.slice(0, 7) ? `${Number(i.from.slice(8, 10))}.–${dm(i.to)}` : `${dm(i.from)} – ${dm(i.to)}`))
+    .join(", ");
+}
+
+/** Days at the event (inside its dates). */
+export const daysAtEvent = (days: string[], eventStart: string, eventEnd: string) => presentDays(days, eventStart, eventEnd).filter((d) => d >= eventStart.slice(0, 10) && d <= eventEnd.slice(0, 10)).length;
+
+/** One row per adult: age on `ageDate`, address, first / last day, the intervals, days at the event. */
 export function adultReportRows(list: AdultAssignment[], eventStart: string, eventEnd: string, ageDate: string): AdultReportRow[] {
   return list.map((a) => {
-    const from = (a.fromDate ?? eventStart).slice(0, 10);
-    const to = (a.toDate ?? eventEnd).slice(0, 10);
+    const present = presentDays(a.days, eventStart, eventEnd);
     const text = (k: string) => (typeof a.fieldValues?.[k] === "string" ? (a.fieldValues[k] as string) : "");
     return {
       name: a.name,
@@ -36,11 +60,12 @@ export function adultReportRows(list: AdultAssignment[], eventStart: string, eve
       age: ageOn(a.dateOfBirth, day(ageDate)),
       municipality: text(ADDRESS_KEYS.municipality),
       zip: text(ADDRESS_KEYS.zip),
-      from,
-      to,
-      days: daysAtEvent(a.fromDate, a.toDate, eventStart, eventEnd),
-      // Partly or wholly outside the event's dates (a warning, never refused: arrival the day before).
-      outside: from < eventStart.slice(0, 10) || to > eventEnd.slice(0, 10),
+      from: present[0] ?? eventStart.slice(0, 10),
+      to: present[present.length - 1] ?? eventEnd.slice(0, 10),
+      periods: intervalsText(present),
+      days: daysAtEvent(a.days, eventStart, eventEnd),
+      // Days outside the event's dates (it moved after they were set): a warning, never refused.
+      outside: present.some((d) => d < eventStart.slice(0, 10) || d > eventEnd.slice(0, 10)),
     };
   });
 }
@@ -57,6 +82,6 @@ export function reportCsv(rows: AdultReportRow[], header: string[]): string {
     const s = v == null ? "" : String(v);
     return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const lines = [header, ...rows.map((r) => [r.name, r.dateOfBirth, r.age, r.municipality, r.zip, r.from, r.to, r.days])].map((l) => l.map(cell).join(";"));
+  const lines = [header, ...rows.map((r) => [r.name, r.dateOfBirth, r.age, r.municipality, r.zip, r.from, r.to, r.periods, r.days])].map((l) => l.map(cell).join(";"));
   return "﻿" + lines.join("\r\n") + "\r\n";
 }

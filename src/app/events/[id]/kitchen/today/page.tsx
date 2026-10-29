@@ -137,7 +137,7 @@ function CookCard({ eventId, e, slot, notes, unlockMinutes, offline, onChanged }
             <tr key={l.ingredientId} className="border-b border-mist/40">
               <td className="py-1">{l.name}</td>
               <td className="py-1 text-right font-semibold">
-                <Qty q={l.qty} unit={l.unit} />
+                <Qty q={l.qty} unit={l.unit} altName={l.altUnitName} altQty={l.altUnitQty} />
               </td>
             </tr>
           ))}

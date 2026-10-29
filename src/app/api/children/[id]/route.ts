@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ALLERGEN_CODES, DIET_FLAG_CODES, cleanCodes } from "@/lib/kitchen/allergens";
+import { ALLERGEN_CODES, cleanCodes } from "@/lib/kitchen/allergens";
+import { dietCodesOf } from "@/lib/kitchen/server";
 import { categoryFor, readPriceRules } from "@/lib/price-rules";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -70,25 +71,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // (slice 3 A); inactive = the admin's "Neaktivní" toggle (slice 8 #2, leftVia = admin).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { error } = await requireAdmin(id);
+  const { error, organizationId } = await requireAdmin(id);
   if (error) return error;
   const body = await req.json();
   if (
     (body.values !== undefined && (!body.values || typeof body.values !== "object")) ||
     (body.isAdult !== undefined && typeof body.isAdult !== "boolean") ||
+    (body.external !== undefined && typeof body.external !== "boolean") ||
     (body.inactive !== undefined && typeof body.inactive !== "boolean")
   ) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   if (!(await prisma.child.findUnique({ where: { id }, select: { id: true } }))) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (body.isAdult !== undefined) await prisma.child.update({ where: { id }, data: { isAdult: body.isAdult } });
+  // An adult from outside the organization (2026-10-29).
+  if (body.external !== undefined) await prisma.child.update({ where: { id }, data: { external: body.external } });
   // Kuchyně (2026-10-28): an adult's allergens, diet flags and note (known codes only).
   if (body.allergens !== undefined || body.dietFlags !== undefined || body.dietNote !== undefined) {
     await prisma.child.update({
       where: { id },
       data: {
         ...(body.allergens !== undefined && { allergens: cleanCodes(body.allergens, ALLERGEN_CODES) }),
-        ...(body.dietFlags !== undefined && { dietFlags: cleanCodes(body.dietFlags, DIET_FLAG_CODES) }),
+        ...(body.dietFlags !== undefined && { dietFlags: cleanCodes(body.dietFlags, await dietCodesOf(organizationId)) }),
         ...(body.dietNote !== undefined && { dietNote: typeof body.dietNote === "string" ? body.dietNote.trim().slice(0, 1000) || null : null }),
       },
     });

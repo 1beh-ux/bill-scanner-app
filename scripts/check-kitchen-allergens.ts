@@ -5,8 +5,13 @@ import { entryConflicts, mapAllergyText, type IngredientInfo } from "../src/lib/
 
 // Czech samples, diacritics-insensitive; nothing is dropped.
 assert.deepEqual(mapAllergyText("ořechy, lepek"), { allergens: ["gluten", "nuts"], dietFlags: [], unmapped: [] });
-assert.deepEqual(mapAllergyText("Laktóza"), { allergens: ["milk"], dietFlags: [], unmapped: [] });
-assert.deepEqual(mapAllergyText("laktoza a orechy").allergens, ["milk", "nuts"]);
+assert.deepEqual(mapAllergyText("Laktóza"), { allergens: [], dietFlags: ["lactose_free"], unmapped: [] }, "an intolerance, not the milk allergy");
+assert.deepEqual(mapAllergyText("laktoza a orechy"), { allergens: ["nuts"], dietFlags: ["lactose_free"], unmapped: [] });
+assert.deepEqual(mapAllergyText("mléko"), { allergens: ["milk"], dietFlags: [], unmapped: [] });
+assert.deepEqual(mapAllergyText("bezlepková dieta").dietFlags, ["gluten_free"]);
+// The organization's own diet: its keywords map, its allergens / contents conflict.
+const custom = [{ code: "bez_hub", name: "bez hub", keywords: ["houb"], contents: ["mushroom"], allergens: [] }];
+assert.deepEqual(mapAllergyText("nesnáší houby", custom), { allergens: [], dietFlags: ["bez_hub"], unmapped: [] });
 assert.deepEqual(mapAllergyText("bez vepřového"), { allergens: [], dietFlags: ["no_pork"], unmapped: [] });
 assert.deepEqual(mapAllergyText("nesnáší houby"), { allergens: [], dietFlags: [], unmapped: ["nesnáší houby"] });
 assert.deepEqual(mapAllergyText("alergie na pyl"), { allergens: [], dietFlags: [], unmapped: ["alergie na pyl"] });
@@ -40,6 +45,13 @@ assert.deepEqual(withGf.specialPortions, [{ variantId: "gf", variantName: "bezle
 assert.ok(!withGf.uncovered.includes("Anna"));
 // An ingredient whose allergens nobody confirmed: amber, never clear.
 const unsure = new Map([...ingredients, ["sauce", ing("sauce", [], [], false)]]);
+// "bez laktózy": milk breaks it, lactose-free milk (marked ok:lactose_free) doesn't; a variant can swap it in.
+const milkIng = new Map([ing("milk", ["milk"], ["dairy"]), { ...ing("lfmilk", ["milk"], ["dairy", "ok:lactose_free"]) }, ing("oats", [])].map((i) => [i.id, i]));
+const lf = [{ key: "l", name: "Lea", allergens: [], dietFlags: ["lactose_free"], status: "confirmed" as const }];
+const lfVar = [{ id: "lf", name: "bez laktózy", clearsAllergens: [], swaps: [{ fromIngredientId: "milk", toIngredientId: "lfmilk" }] }];
+const porridge = entryConflicts([{ ingredientId: "oats", qty: 50 }, { ingredientId: "milk", qty: 200 }], milkIng, lfVar, ["lf"], lf);
+assert.deepEqual(porridge.conflicts.map((c) => [c.name, c.diets, c.variantId]), [["Lea", ["lactose_free"], "lf"]]);
+assert.equal(porridge.level, "ok");
 const amber = entryConflicts([{ ingredientId: "tomato", qty: 1 }, { ingredientId: "sauce", qty: 1 }], unsure, [], [], [people[3]]);
 assert.equal(amber.level, "amber");
 assert.deepEqual(amber.unconfirmedIngredients, ["sauce"]);

@@ -23,6 +23,7 @@ type Detail = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  external?: boolean;
   // Kuchyně (adults): allergen codes, diet flags, a note.
   allergens: string[];
   dietFlags: string[];
@@ -103,6 +104,13 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     if (res.ok) load();
   }
 
+  // An adult from outside the organization (2026-10-29): in Lidé for the events, never a member.
+  async function setExternal(external: boolean) {
+    const res = await fetch(`/api/children/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ external }) });
+    setMessage(res.ok ? t("childProfile.saved") : t("children.errorFailed"));
+    if (res.ok) load();
+  }
+
   // "Neaktivní" (slice 8 #2): the admin marks / unmarks; nothing is deleted.
   async function setInactive(inactive: boolean) {
     const res = await fetch(`/api/children/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inactive }) });
@@ -173,6 +181,12 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
         <input type="checkbox" checked={data.isAdult} disabled={saving} onChange={(e) => setAdult(e.target.checked)} />
         {t("people.isAdult")}
       </label>
+      {data.isAdult && (
+        <label className="-mt-3 mb-5 flex items-center gap-2 text-[13px] text-ink">
+          <input type="checkbox" checked={!!data.external} disabled={saving} onChange={(e) => setExternal(e.target.checked)} />
+          {t("people.external")}
+        </label>
+      )}
       <label className="-mt-3 mb-5 flex items-center gap-2 text-[13px] text-ink">
         <input type="checkbox" checked={!!data.leftAt} disabled={saving} onChange={(e) => setInactive(e.target.checked)} />
         {t("people.inactive")}

@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   if ("error" in g) return g.error;
   const all = new URL(req.url).searchParams.get("all") === "1";
   const rows = await prisma.ingredient.findMany({ where: { organizationId: g.organizationId, ...(all ? {} : { active: true }) }, include: { _count: { select: { mealUses: true } } }, orderBy: { nameKey: "asc" } });
-  return NextResponse.json(rows.map(({ _count, packSize, ...r }) => ({ ...r, packSize: packSize == null ? null : Number(packSize), uses: _count.mealUses })));
+  return NextResponse.json(rows.map(({ _count, packSize, altUnitQty, ...r }) => ({ ...r, packSize: packSize == null ? null : Number(packSize), altUnitQty: altUnitQty == null ? null : Number(altUnitQty), uses: _count.mealUses })));
 }
 
 export async function POST(req: NextRequest) {

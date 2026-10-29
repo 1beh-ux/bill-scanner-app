@@ -16,12 +16,21 @@ export async function send(url: string, method: string, body?: unknown) {
   return res;
 }
 
-/** "1,5 kg" */
-export function Qty({ q, unit }: { q: number; unit: string }) {
+/** "1,5 kg", with the ingredient's second unit ("≈ 11 hrnek", "12 stroužek"); 0 = "dle potřeby". */
+export function Qty({ q, unit, altName, altQty }: { q: number; unit: string; altName?: string | null; altQty?: number | null }) {
+  const { t } = useTranslations();
+  if (q === 0) return <span className="text-ink-secondary">{t("kitchen.meal.asNeeded")}</span>;
   const f = formatQty(q, unit as "g" | "ml" | "ks");
+  const alt = altName && altQty ? Math.round((q / altQty) * 10) / 10 : null;
   return (
     <span className="tabular-nums">
       {f.value} {f.unit}
+      {alt != null && (
+        <span className="ml-1 text-[0.85em] font-normal text-ink-secondary">
+          ({unit === "ks" && altQty === 1 ? "" : "≈ "}
+          {alt.toLocaleString("cs-CZ")} {altName})
+        </span>
+      )}
     </span>
   );
 }

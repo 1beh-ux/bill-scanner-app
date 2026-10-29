@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 import { adultsGuard } from "@/lib/adults-server";
-import { mapAllergyText, type PersonDiet } from "./allergens";
+import { ALLERGEN_CODES, CONTENT_FLAGS, DEFAULT_DIETS, cleanCodes, mapAllergyText, type DietDef, type PersonDiet } from "./allergens";
 import type { Band, HcAdjust, HcAdult, HcParticipant } from "./headcount";
 import { createHash } from "node:crypto";
 
@@ -60,6 +60,28 @@ export async function ensureKitchenLists(eventId: string, organizationId: string
   }
 }
 
+/** The organization's diets (Šablony -> Kuchyně); the defaults are created on first use. */
+export async function orgDiets(organizationId: string): Promise<DietDef[]> {
+  let rows = await prisma.listTemplate.findMany({ where: { organizationId, kind: "kitchen_diet" }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+  if (!rows.length) {
+    await prisma.listTemplate.createMany({ data: DEFAULT_DIETS.map((d, i) => ({ organizationId, kind: "kitchen_diet" as const, key: d.code, name: d.name, sortOrder: i, data: { keywords: d.keywords, contents: d.contents, allergens: d.allergens } })) });
+    rows = await prisma.listTemplate.findMany({ where: { organizationId, kind: "kitchen_diet" }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+  }
+  return rows
+    .filter((r) => r.active && r.key)
+    .map((r) => {
+      const d = (r.data ?? {}) as { keywords?: unknown; contents?: unknown; allergens?: unknown };
+      return {
+        code: r.key!,
+        name: r.name,
+        keywords: Array.isArray(d.keywords) ? d.keywords.filter((k): k is string => typeof k === "string" && !!k.trim()) : [],
+        contents: cleanCodes(d.contents, [...CONTENT_FLAGS]),
+        allergens: cleanCodes(d.allergens, ALLERGEN_CODES),
+      };
+    });
+}
+export const dietCodesOf = async (organizationId: string) => (await orgDiets(organizationId)).map((d) => d.code);
+
 export const iso = (d: Date) => d.toISOString().slice(0, 10);
 export const dayDate = (s: string) => new Date(`${s}T00:00:00Z`);
 export const isIsoDay = (v: unknown): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v));
@@ -84,11 +106,12 @@ export async function kitchenContext(event: { id: string; organizationId: string
     prisma.eventKitchenSettings.findUnique({ where: { eventId: event.id } }),
     prisma.eventListItem.findMany({ where: { eventId: event.id, kind: { in: ["kitchen_slot", "kitchen_band"] } }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
     prisma.participant.findMany({ where: { eventId: event.id }, select: { id: true, name: true, dateOfBirth: true, active: true, registrationStatus: true, customFieldValues: true, child: { select: { dateOfBirth: true } }, diet: true } }),
-    prisma.eventPerson.findMany({ where: { eventId: event.id }, select: { id: true, eats: true, fromDate: true, toDate: true, child: { select: { name: true, dateOfBirth: true, allergens: true, dietFlags: true, dietNote: true } } } }),
+    prisma.eventPerson.findMany({ where: { eventId: event.id }, select: { id: true, eats: true, days: true, child: { select: { name: true, dateOfBirth: true, allergens: true, dietFlags: true, dietNote: true } } } }),
     prisma.headcountAdjust.findMany({ where: { eventId: event.id }, orderBy: { dateFrom: "asc" } }),
     prisma.mealAbsence.findMany({ where: { eventId: event.id } }),
   ]);
   const fieldKey = await allergyFieldKey(event.id, settings?.allergyFieldKey);
+  const dietDefs = await orgDiets(event.organizationId);
   const slots = items.filter((i) => i.kind === "kitchen_slot" && i.active).map((i) => ({ id: i.id, name: i.name, time: ((i.data as { time?: string } | null)?.time ?? null) as string | null }));
   const bands: Band[] = items
     .filter((i) => i.kind === "kitchen_band" && i.active)
@@ -100,7 +123,7 @@ export async function kitchenContext(event: { id: string; organizationId: string
     const dob = p.dateOfBirth ?? p.child?.dateOfBirth ?? null;
     return { id: p.id, name: p.name, dateOfBirth: dob ? iso(dob) : null, active: p.active, accepted: p.registrationStatus === "accepted", absences: abs((a) => a.participantId === p.id) };
   });
-  const hcAdults: HcAdult[] = adults.map((a) => ({ id: a.id, name: a.child.name, dateOfBirth: a.child.dateOfBirth ? iso(a.child.dateOfBirth) : null, eats: a.eats, from: a.fromDate ? iso(a.fromDate) : null, to: a.toDate ? iso(a.toDate) : null, absences: abs((x) => x.eventPersonId === a.id) }));
+  const hcAdults: HcAdult[] = adults.map((a) => ({ id: a.id, name: a.child.name, dateOfBirth: a.child.dateOfBirth ? iso(a.child.dateOfBirth) : null, eats: a.eats, days: a.days, absences: abs((x) => x.eventPersonId === a.id) }));
   const hcAdjusts: HcAdjust[] = adjusts.map((x) => ({ from: iso(x.dateFrom), to: iso(x.dateTo), slotId: x.slotItemId, count: x.count, factor: Number(x.factor), label: x.label }));
   // Diets: a participant's confirmed review, or "neověřeno" when the allergy text says something unconfirmed
   // (or changed after the confirmation); adults' own (Lidé) data counts as confirmed.
@@ -108,7 +131,7 @@ export async function kitchenContext(event: { id: string; organizationId: string
     .filter((p) => p.active)
     .map((p) => {
       const raw = fieldKey ? String(((p.customFieldValues as Record<string, unknown> | null) ?? {})[fieldKey] ?? "").trim() : "";
-      const proposal = mapAllergyText(raw);
+      const proposal = mapAllergyText(raw, dietDefs);
       const changed = !!p.diet && p.diet.rawTextHash !== hashText(raw);
       const status: PersonDiet["status"] = p.diet && !changed ? "confirmed" : raw && (proposal.allergens.length || proposal.dietFlags.length || proposal.unmapped.length) ? "unverified" : p.diet ? "unverified" : "none";
       const src = p.diet && !changed ? p.diet : proposal;
@@ -116,6 +139,7 @@ export async function kitchenContext(event: { id: string; organizationId: string
     });
   const adultDiets: PersonDiet[] = adults.filter((a) => a.eats).map((a) => ({ key: `a:${a.id}`, name: a.child.name, allergens: a.child.allergens, dietFlags: a.child.dietFlags, status: a.child.allergens.length || a.child.dietFlags.length ? "confirmed" : "none" }));
   return {
+    dietDefs,
     settings: settings ?? { eventId: event.id, allergyFieldKey: null, foodCategoryIds: [] as string[], countOnlyAccepted: false, feedbackUnlockMinutes: 30 },
     allergyFieldKey: fieldKey,
     slots,

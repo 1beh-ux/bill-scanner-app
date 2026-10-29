@@ -1,19 +1,20 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, use, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { CreateAdultForm } from "@/components/adults/AdultForm";
+import DaysPicker from "@/components/adults/DaysPicker";
 import { ageOn } from "@/lib/age";
-import { adultReportRows, reportCsv, reportTotals } from "@/lib/adults";
+import { adultReportRows, daysAtEvent, intervalsText, reportCsv, reportTotals } from "@/lib/adults";
 import { pluralForm } from "@/lib/plural";
 
 // Dospělí na akci (2026-10-28): the event's leaders, helpers and cooks from Lidé -- who is here when and
 // eats here -- plus the report for income / subsidies (facts only). Not participants: no registration,
 // no portal, no e-mail. The Kuchyně grant (organization admins too); new people only by admins.
-type Adult = { id: string; childId: string; name: string; dateOfBirth: string | null; fieldValues: Record<string, unknown> | null; label: string | null; fromDate: string | null; toDate: string | null; eats: boolean };
+type Adult = { id: string; childId: string; name: string; dateOfBirth: string | null; fieldValues: Record<string, unknown> | null; label: string | null; days: string[]; external: boolean; eats: boolean };
 type Data = { event: { name: string; startDate: string; endDate: string }; canCreate: boolean; adults: Adult[] };
-type Candidate = { id: string; name: string; dateOfBirth: string | null; assigned: boolean };
+type Candidate = { id: string; name: string; dateOfBirth: string | null; external: boolean; assigned: boolean };
 
 const inputSm = "rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px] text-ink";
 const btn = "rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
@@ -29,6 +30,8 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
   const [tab, setTab] = useState<"list" | "report">("list");
   const [picking, setPicking] = useState(false);
   const [creating, setCreating] = useState(false);
+  // The row whose days are being picked.
+  const [daysOf, setDaysOf] = useState<string | null>(null);
   const url = `/api/events/${id}/adults`;
 
   const load = useCallback(async () => {
@@ -77,18 +80,16 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
             <button type="button" onClick={() => setPicking(!picking)} className={btnPrimary}>
               {t("adults.addFromPeople")}
             </button>
-            {data.canCreate ? (
-              <button type="button" onClick={() => setCreating(!creating)} className={btn}>
-                + {t("adults.addNew")}
-              </button>
-            ) : (
-              <span className="text-[12.5px] text-ink-secondary">{t("adults.addNewAdminOnly")}</span>
-            )}
+            {/* A member only by organization admins; an adult from outside the organization by anyone here. */}
+            <button type="button" onClick={() => setCreating(!creating)} className={btn}>
+              + {t(data.canCreate ? "adults.addNew" : "adults.addExternal")}
+            </button>
           </div>
           {picking && <PickAdults url={url} startDate={startDate} endDate={endDate} onDone={() => { setPicking(false); load(); }} />}
           {creating && (
             <div className="mb-4">
               <CreateAdultForm
+                external={data.canCreate ? "choice" : "fixed"}
                 onCancel={() => setCreating(false)}
                 submit={async (adult) => {
                   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ create: adult }) }).catch(() => null);
@@ -111,21 +112,22 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
                     <th className="p-2 font-medium">{t("adults.colLabel")}</th>
                     <th className="p-2 font-medium">{t("adults.dateOfBirth")}</th>
                     <th className="p-2 font-medium">{t("adults.colAgeStart")}</th>
-                    <th className="p-2 font-medium">{t("adults.colFrom")}</th>
-                    <th className="p-2 font-medium">{t("adults.colTo")}</th>
+                    <th className="p-2 font-medium">{t("adults.colDaysAt")}</th>
                     <th className="p-2 font-medium">{t("adults.colEats")}</th>
                     <th className="p-2" />
                   </tr>
                 </thead>
                 <tbody>
                   {data.adults.map((a) => {
-                    const outside = (a.fromDate ?? startDate) < startDate || (a.toDate ?? endDate) > endDate;
+                    const outside = a.days.some((d) => d < startDate || d > endDate);
                     return (
-                      <tr key={a.id} className="border-b border-mist/60 align-top">
+                      <Fragment key={a.id}>
+                      <tr className="border-b border-mist/60 align-top">
                         <td className="p-2 text-ink">
                           <a href={`/children/${a.childId}`} className="hover:underline">
                             {a.name}
                           </a>
+                          {a.external && <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t("people.externalBadge")}</span>}
                         </td>
                         <td className="p-2">
                           <input defaultValue={a.label ?? ""} onBlur={(e) => e.target.value !== (a.label ?? "") && patch(a.id, { label: e.target.value })} placeholder={t("adults.labelPlaceholder")} className={inputSm + " w-32"} />
@@ -133,10 +135,10 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
                         <td className="p-2 text-ink-secondary">{fmt(a.dateOfBirth)}</td>
                         <td className="p-2 tabular-nums text-ink-secondary">{ageOn(a.dateOfBirth, new Date(`${startDate}T00:00:00Z`)) ?? "—"}</td>
                         <td className="p-2">
-                          <input type="date" value={a.fromDate ?? ""} onChange={(e) => patch(a.id, { fromDate: e.target.value || null })} className={inputSm} aria-label={t("adults.colFrom")} />
-                        </td>
-                        <td className="p-2">
-                          <input type="date" value={a.toDate ?? ""} onChange={(e) => patch(a.id, { toDate: e.target.value || null })} className={inputSm} aria-label={t("adults.colTo")} />
+                          <button type="button" onClick={() => setDaysOf(daysOf === a.id ? null : a.id)} className="text-left text-ink hover:text-ember" aria-expanded={daysOf === a.id}>
+                            {a.days.length ? intervalsText(a.days) : t("adults.wholeEvent")}
+                            <span className="ml-1 text-[11.5px] text-ink-secondary">({daysAtEvent(a.days, startDate, endDate)})</span> ✎
+                          </button>
                           {outside && <p className="mt-0.5 text-[11.5px] text-amber-700">{t("adults.outsideEvent")}</p>}
                         </td>
                         <td className="p-2">
@@ -148,6 +150,14 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
                           </button>
                         </td>
                       </tr>
+                      {daysOf === a.id && (
+                        <tr className="border-b border-mist/60 bg-paper-2/50">
+                          <td colSpan={7} className="p-2">
+                            <DaysPicker eventStart={startDate} eventEnd={endDate} value={a.days} onChange={(days) => { setData((d) => d && { ...d, adults: d.adults.map((x) => (x.id === a.id ? { ...x, days } : x)) }); patch(a.id, { days }); }} />
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -169,8 +179,7 @@ function PickAdults({ url, startDate, endDate, onDone }: { url: string; startDat
   const [list, setList] = useState<Candidate[] | null>(null);
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [from, setFrom] = useState(startDate);
-  const [to, setTo] = useState(endDate);
+  const [days, setDays] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     fetch(`${url}/candidates`)
@@ -181,11 +190,11 @@ function PickAdults({ url, startDate, endDate, onDone }: { url: string; startDat
   const shown = (list ?? []).filter((c) => !q.trim() || c.name.toLowerCase().includes(q.trim().toLowerCase()));
   async function add() {
     setBusy(true);
-    // The event's own dates are stored as "none" (they follow the event if it moves).
+    // The whole event is stored as no days (it follows the event if it moves).
     await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ childIds: [...picked], fromDate: from === startDate ? null : from, toDate: to === endDate ? null : to }),
+      body: JSON.stringify({ childIds: [...picked], days }),
     }).catch(() => null);
     setBusy(false);
     onDone();
@@ -194,15 +203,8 @@ function PickAdults({ url, startDate, endDate, onDone }: { url: string; startDat
     <div className="mb-4 flex flex-col gap-3 rounded-lg border border-mist bg-paper p-4">
       <div className="flex flex-wrap items-center gap-2">
         <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("children.search")} className={inputSm + " w-56"} />
-        <label className="flex items-center gap-1 text-[12.5px] text-ink-secondary">
-          {t("adults.colFrom")}
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={inputSm} />
-        </label>
-        <label className="flex items-center gap-1 text-[12.5px] text-ink-secondary">
-          {t("adults.colTo")}
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={inputSm} />
-        </label>
       </div>
+      <DaysPicker eventStart={startDate} eventEnd={endDate} value={days} onChange={setDays} />
       {!list ? (
         <p className="text-[13px] text-ink-secondary">{t("common.loading")}</p>
       ) : list.length === 0 ? (
@@ -218,6 +220,7 @@ function PickAdults({ url, startDate, endDate, onDone }: { url: string; startDat
                 onChange={(e) => setPicked((x) => { const n = new Set(x); if (e.target.checked) n.add(c.id); else n.delete(c.id); return n; })}
               />
               {c.name}
+              {c.external && <span className="text-[11px] text-ink-secondary">({t("people.externalBadge")})</span>}
               {c.dateOfBirth && <span className="text-[11.5px] text-ink-secondary">{fmt(c.dateOfBirth)}</span>}
               {c.assigned && <span className="text-[11.5px]">· {t("adults.alreadyHere")}</span>}
             </label>
@@ -244,7 +247,7 @@ function Report({ adults, eventName, startDate, endDate }: { adults: Adult[]; ev
   const [ageTo, setAgeTo] = useState("");
   const rows = useMemo(() => adultReportRows(adults, startDate, endDate, ageDate || startDate), [adults, startDate, endDate, ageDate]);
   const totals = reportTotals(rows, ageFrom === "" ? null : Number(ageFrom), ageTo === "" ? null : Number(ageTo));
-  const header = [t("adults.colName"), t("adults.dateOfBirth"), t("adults.colAgeOn"), t("adults.municipality"), t("adults.zip"), t("adults.colFrom"), t("adults.colTo"), t("adults.colDays")];
+  const header = [t("adults.colName"), t("adults.dateOfBirth"), t("adults.colAgeOn"), t("adults.municipality"), t("adults.zip"), t("adults.colFrom"), t("adults.colTo"), t("adults.colPeriods"), t("adults.colDays")];
 
   function download() {
     const blob = new Blob([reportCsv(rows, header)], { type: "text/csv;charset=utf-8" });
@@ -299,6 +302,7 @@ function Report({ adults, eventName, startDate, endDate }: { adults: Adult[]; ev
                 <td className="p-2 tabular-nums">{r.zip || "—"}</td>
                 <td className="p-2 tabular-nums">{fmt(r.from)}</td>
                 <td className="p-2 tabular-nums">{fmt(r.to)}</td>
+                <td className="p-2">{r.periods}</td>
                 <td className="p-2 tabular-nums">{r.days}</td>
               </tr>
             ))}

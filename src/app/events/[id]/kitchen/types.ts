@@ -1,6 +1,6 @@
 // The plan GET's shapes (src/app/api/events/[id]/kitchen/route.ts) for the Kuchyně screens.
 export type Slot = { id: string; name: string; time: string | null };
-export type SheetLine = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null };
+export type SheetLine = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null; pantry?: boolean; altUnitName?: string | null; altUnitQty?: number | null };
 export type Sheet = { mealName: string; steps: string | null; portions: number; multiplier: number | null; participants: number; adults: number; extra: number; variants: { id: string; name: string; portions: number; names: string[] }[]; lines: SheetLine[]; allergens: string[] };
 export type Check = {
   allergens: string[];

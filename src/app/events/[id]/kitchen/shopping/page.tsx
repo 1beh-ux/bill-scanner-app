@@ -7,7 +7,8 @@ import { NoAccess, Qty, btn, fmtDay, send } from "@/components/kitchen/ui";
 
 // Nákup: what the plan needs, per day of use, grouped by where it's bought (store hint) and category;
 // tick it off while shopping. CSV / print. Totals only -- no prices, no pack sizes (phase 1).
-type Line = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null; meals: string[]; checked: boolean; qtyBought: number | null };
+// pantry: "vždy v kuchyni" -- listed apart, only to check the stock.
+type Line = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null; meals: string[]; checked: boolean; qtyBought: number | null; pantry?: boolean; altUnitName?: string | null; altUnitQty?: number | null };
 type Data = { event: { name: string }; days: { date: string; lines: Line[] }[] };
 
 export default function KitchenShoppingPage({ params }: { params: Promise<{ id: string }> }) {
@@ -36,8 +37,8 @@ export default function KitchenShoppingPage({ params }: { params: Promise<{ id: 
     const rows = [[t("kitchen.shopping.day"), t("kitchen.shopping.store"), t("kitchen.shopping.category"), t("kitchen.shopping.item"), t("kitchen.shopping.qty"), t("kitchen.shopping.unit"), t("kitchen.shopping.meals"), t("kitchen.shopping.bought")]];
     for (const d of data.days)
       for (const l of d.lines) {
-        const f = formatQty(l.qty, l.unit as "g" | "ml" | "ks");
-        rows.push([d.date, l.storeHint ?? "", l.category ?? "", l.name, f.value, f.unit, l.meals.join(", "), l.checked ? "ano" : ""]);
+        const f = l.qty === 0 ? { value: t("kitchen.meal.asNeeded"), unit: "" } : formatQty(l.qty, l.unit as "g" | "ml" | "ks");
+        rows.push([d.date, l.pantry ? t("kitchen.shopping.pantry") : l.storeHint ?? "", l.category ?? "", l.name, f.value, f.unit, l.meals.join(", "), l.checked ? "ano" : ""]);
       }
     const text = "﻿" + rows.map((r) => r.map((c) => (/[;"\n]/.test(c) ? `"${c.replace(/"/g, '""')}"` : c)).join(";")).join("\r\n");
     const a = document.createElement("a");
@@ -71,15 +72,18 @@ export default function KitchenShoppingPage({ params }: { params: Promise<{ id: 
       {data.days.map((d) => {
         const lines = d.lines.filter((l) => !hideDone || !l.checked);
         const groups = new Map<string, Line[]>();
-        for (const l of lines) groups.set(l.storeHint ?? "", [...(groups.get(l.storeHint ?? "") ?? []), l]);
+        for (const l of lines) {
+          const g = l.pantry ? "\u0000pantry" : l.storeHint ?? "";
+          groups.set(g, [...(groups.get(g) ?? []), l]);
+        }
         return (
           <section key={d.date} className="mb-6 break-inside-avoid">
             <h2 className="mb-1 text-[16px] font-semibold text-ink">
               {fmtDay(d.date, lang)} <span className="text-[12.5px] font-normal text-ink-secondary">{t("kitchen.shopping.done", { n: String(d.lines.filter((l) => l.checked).length), total: String(d.lines.length) })}</span>
             </h2>
-            {[...groups].map(([store, ls]) => (
+            {[...groups].sort(([a], [b]) => Number(a === "\u0000pantry") - Number(b === "\u0000pantry")).map(([store, ls]) => (
               <div key={store} className="mb-2">
-                <h3 className="text-[12.5px] font-medium uppercase tracking-wide text-ink-secondary">{store || t("kitchen.shopping.anyStore")}</h3>
+                <h3 className="text-[12.5px] font-medium uppercase tracking-wide text-ink-secondary">{store === "\u0000pantry" ? t("kitchen.shopping.pantry") : store || t("kitchen.shopping.anyStore")}</h3>
                 {ls.map((l) => (
                   <label key={l.ingredientId} className={"flex items-start gap-2 py-1 text-[14px] " + (l.checked ? "text-ink-secondary line-through" : "text-ink")}>
                     <input type="checkbox" className="mt-1 h-4 w-4" checked={l.checked} onChange={(e) => tick(d.date, l, e.target.checked)} />
@@ -89,7 +93,7 @@ export default function KitchenShoppingPage({ params }: { params: Promise<{ id: 
                       <span className="block text-[11.5px] text-ink-secondary">{l.meals.join(", ")}</span>
                     </span>
                     <span className="font-medium">
-                      <Qty q={l.qty} unit={l.unit} />
+                      <Qty q={l.qty} unit={l.unit} altName={l.altUnitName} altQty={l.altUnitQty} />
                     </span>
                   </label>
                 ))}

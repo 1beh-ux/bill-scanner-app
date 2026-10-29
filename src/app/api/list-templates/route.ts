@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { PLAN_ORG_LIST_KINDS } from "@/lib/planning";
 import { templateScope } from "@/lib/template-scope";
 
-const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS, "kitchen_slot", "kitchen_band"];
+const ADMIN_KINDS: ListTemplateKind[] = ["med", "situation", "document", ...PLAN_ORG_LIST_KINDS, "kitchen_slot", "kitchen_band", "kitchen_diet"];
 
 export async function GET(req: NextRequest) {
   const user = await getCurrentUser();

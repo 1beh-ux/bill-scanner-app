@@ -136,6 +136,8 @@ enum ListTemplateKind {
   // (data { ageFrom, ageTo, factor }) -- the kitchen module's (requireListItemAccess).
   kitchen_slot
   kitchen_band
+  // Kuchyně diets (organization-wide, Šablony -> Kuchyně): data { keywords[], contents[], allergens[] }.
+  kitchen_diet
 }
 
 enum IngredientUnit {
@@ -850,6 +852,8 @@ model Child {
   // keeps its name, no destructive rename). An adult's own contact is their
   // first guardian row (same e-mail = same person in the family view).
   isAdult               Boolean        @default(false) @map("is_adult")
+  // An adult from outside the organization (a hired cook, a helper): kept in Lidé for the events, never a member.
+  external              Boolean        @default(false)
   // The household this person belongs to (at most one); null = none. Families
   // are only ever made by an admin's confirm (or the public form, flagged for review).
   familyId              String?        @map("family_id")
@@ -1184,8 +1188,8 @@ model EventPerson {
   childId   String    @map("child_id")
   // Display only: vedoucí, pomocník, kuchař…
   label     String?
-  fromDate  DateTime? @map("from_date") @db.Date
-  toDate    DateTime? @map("to_date") @db.Date
+  // The days at the event ("YYYY-MM-DD"), any intervals; empty = the whole event (follows it if it moves).
+  days      String[]  @default([])
   // Eats at the camp (the kitchen counts them).
   eats      Boolean   @default(true)
   createdAt DateTime  @default(now()) @map("created_at")
@@ -2250,6 +2254,12 @@ model Ingredient {
   dietFlags          String[]       @default([]) @map("diet_flags")
   // AI-guessed or unchecked allergens are "neověřeno" until a human confirms them.
   allergensConfirmed Boolean        @default(false) @map("allergens_confirmed")
+  // "Vždy v kuchyni" (salt, spices…): no exact quantity needed, not on the shopping list's amounts.
+  pantry             Boolean        @default(false)
+  // Another way to count it: "stroužek" for garlic (in ks), "hrnek" = 140 g for flour.
+  altUnitName        String?        @map("alt_unit_name")
+  // How many base units (unit) one altUnitName is.
+  altUnitQty         Decimal?       @map("alt_unit_qty") @db.Decimal(12, 3)
   packSize           Decimal?       @map("pack_size") @db.Decimal(12, 3)
   packUnit           String?        @map("pack_unit")
   shelfLifeDays      Int?           @map("shelf_life_days")

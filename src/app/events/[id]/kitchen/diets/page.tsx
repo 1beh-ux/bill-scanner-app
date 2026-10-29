@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { AllergenPicker, DietPicker } from "@/components/adults/AdultForm";
 import { AllergenList, NoAccess, btn, btnPrimary, inputSm, send } from "@/components/kitchen/ui";
+import { useDiets } from "@/components/kitchen/useDiets";
 
 // Strava účastníků: each participant's allergy answer with what the app reads in it (a proposal), confirmed
 // by a person. Unconfirmed = "neověřeno" everywhere -- never "no allergy". A text changed after the
@@ -23,6 +24,7 @@ type Data = { allergyFieldKey: string | null; fields: { key: string; label: stri
 export default function KitchenDietsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { t } = useTranslations();
+  const { name: dietName } = useDiets();
   const [data, setData] = useState<Data | null>(null);
   const [denied, setDenied] = useState(false);
   const [filter, setFilter] = useState<"open" | "all">("open");
@@ -76,7 +78,7 @@ export default function KitchenDietsPage({ params }: { params: Promise<{ id: str
             </a>
             <span className="text-ink-secondary">
               <AllergenList codes={a.allergens} empty={t("kitchen.diets.nothing")} />
-              {a.dietFlags.length > 0 && ` · ${a.dietFlags.map((d) => t(`kitchen.diet.${d}`)).join(", ")}`}
+              {a.dietFlags.length > 0 && ` · ${a.dietFlags.map(dietName).join(", ")}`}
               {a.dietNote && ` · ${a.dietNote}`}
             </span>
           </div>
@@ -89,6 +91,7 @@ export default function KitchenDietsPage({ params }: { params: Promise<{ id: str
 
 function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => void }) {
   const { t } = useTranslations();
+  const { name: dietName } = useDiets();
   const start = p.review && !p.changed ? p.review : p.proposal;
   const [allergens, setAllergens] = useState(start.allergens);
   const [dietFlags, setDietFlags] = useState(start.dietFlags);
@@ -113,7 +116,7 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
           <span className="flex items-center gap-3 text-[13px]">
             <span>
               <AllergenList codes={start.allergens} empty={t("kitchen.diets.nothing")} />
-              {start.dietFlags.length > 0 && ` · ${start.dietFlags.map((d) => t(`kitchen.diet.${d}`)).join(", ")}`}
+              {start.dietFlags.length > 0 && ` · ${start.dietFlags.map(dietName).join(", ")}`}
             </span>
             <button type="button" onClick={() => setEditing(true)} className="text-[12px] text-ember hover:underline">
               {t("common.edit")}

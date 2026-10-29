@@ -23,7 +23,7 @@ const participants = [
   { id: "p2", name: "Filip", dateOfBirth: null, active: true, accepted: false, absences: [{ date: "2026-07-05", slotId: "dinner" }] },
   { id: "p3", name: "Gustav", dateOfBirth: "2012-01-01", active: false, accepted: true, absences: [] },
 ];
-const adults = [{ id: "a1", name: "Hana", dateOfBirth: "1990-01-01", eats: true, from: "2026-07-03", to: "2026-07-05", absences: [] }];
+const adults = [{ id: "a1", name: "Hana", dateOfBirth: "1990-01-01", eats: true, days: ["2026-07-03", "2026-07-04", "2026-07-05", "2026-07-08"], absences: [] }];
 const adjusts = [{ from: "2026-07-05", to: "2026-07-05", slotId: "lunch", count: -1, factor: 1, label: "výlet bez oběda" }];
 
 const d4 = headcount("2026-07-04", "lunch", { ...base, participants, adults, adjusts });
@@ -36,6 +36,7 @@ assert.equal(lunch5.extra, -1);
 const dinner5 = headcount("2026-07-05", "dinner", { ...base, participants, adults, adjusts });
 near(dinner5.portions, 0.7 + 1.1, "Filip away from dinner, the adjustment is for lunch only");
 assert.equal(headcount("2026-07-06", "lunch", { ...base, participants, adults, adjusts }).adults, 0, "Hana left on the 5th");
+assert.equal(headcount("2026-07-08", "lunch", { ...base, participants, adults, adjusts }).adults, 1, "...and came back on the 8th");
 assert.equal(headcount("2026-07-04", "lunch", { ...base, countOnlyAccepted: true, participants, adults, adjusts }).participants, 1, "only accepted");
 
 // The learned multiplier: one 18 % leftover -> 0.94; nothing -> 1; three "short" -> above 1.
@@ -58,4 +59,6 @@ const t = entryTotals([{ ingredientId: "pasta", qtyPerAdultPortion: 100 }, { ing
 near(t.get("pasta")!, 880);
 near(t.get("gf")!, 220);
 near(t.get("sauce")!, 550);
+const salt = entryTotals([{ ingredientId: "salt", qtyPerAdultPortion: 0 }, { ingredientId: "pasta", qtyPerAdultPortion: 100 }], 10, null, [{ portions: 10, swaps: [{ fromIngredientId: "pasta", toIngredientId: "gf", qtyPerAdultPortion: null }] }]);
+assert.ok(salt.has("salt") && salt.get("salt") === 0 && !salt.has("pasta"), "as needed stays, fully swapped goes");
 console.log("kitchen sizing ok");

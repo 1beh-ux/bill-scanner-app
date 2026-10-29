@@ -6,6 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { AllergenList, CheckBadge, NoAccess, Qty, btn, btnPrimary, fmtDay, inputSm, send } from "@/components/kitchen/ui";
 import type { Adjust, Entry, PlanData, Slot } from "./types";
+import { useDiets } from "@/components/kitchen/useDiets";
 
 // Jídelníček (docs/kitchen-planning-design.md): days × meal slots; meals dragged from the library onto a
 // cell, moved between cells; each entry with headcount, portions and the allergen check. "Potvrdit den"
@@ -423,6 +424,7 @@ function CopyPanel({ base, onChanged }: { base: string; onChanged: () => void })
 
 function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged }: { base: string; eventId: string; entry: Entry; slots: Slot[]; notes: PlanData["notes"]; onClose: () => void; onChanged: () => void }) {
   const { t, lang } = useTranslations();
+  const { name: dietName } = useDiets();
   const confirm = useConfirm();
   const [ignored, setIgnored] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -517,7 +519,7 @@ function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged
             {c.conflicts.map((x) => (
               <p key={x.key} className={!x.variantId || !e.variantIds.includes(x.variantId) ? "text-red-700" : "text-ink"}>
                 {x.name}: <AllergenList codes={x.allergens} />
-                {x.diets.length > 0 && ` ${x.diets.map((d) => t(`kitchen.diet.${d}`)).join(", ")}`}
+                {x.diets.length > 0 && ` ${x.diets.map(dietName).join(", ")}`}
                 {" → "}
                 {x.variantId ? e.variants.find((v) => v.id === x.variantId)?.name : t("kitchen.plan.noSafeVariant")}
               </p>
@@ -550,7 +552,7 @@ function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged
                 <tr key={l.ingredientId}>
                   <td className="py-0.5">{l.name}</td>
                   <td className="py-0.5 text-right">
-                    <Qty q={l.qty} unit={l.unit} />
+                    <Qty q={l.qty} unit={l.unit} altName={l.altUnitName} altQty={l.altUnitQty} />
                   </td>
                 </tr>
               ))}

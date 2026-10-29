@@ -13,7 +13,8 @@ const mealInclude = {
 } satisfies Prisma.MealInclude;
 type MealFull = Prisma.MealGetPayload<{ include: typeof mealInclude }>;
 
-export type SnapshotLine = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null };
+// pantry: "vždy v kuchyni" (no exact amount); altUnit: another way to count it (stroužek, hrnek = 140 g).
+export type SnapshotLine = { ingredientId: string; name: string; unit: string; qty: number; storeHint: string | null; category: string | null; pantry?: boolean; altUnitName?: string | null; altUnitQty?: number | null };
 export type Snapshot = {
   mealName: string;
   steps: string | null;
@@ -34,7 +35,8 @@ export async function loadPlan(ctx: KitchenContext, eventId: string, organizatio
   // Swapped-in ingredients (variants) are looked up too.
   const swapIds = new Set<string>();
   for (const e of entries) for (const v of e.meal?.variants ?? []) for (const s of variantInfo(v).swaps) if (s.toIngredientId) swapIds.add(s.toIngredientId);
-  const ingRows = new Map<string, { id: string; name: string; unit: string; allergens: string[]; dietFlags: string[]; allergensConfirmed: boolean; storeHint: string | null; category: string | null }>();
+  type IngRow = { id: string; name: string; unit: string; allergens: string[]; dietFlags: string[]; allergensConfirmed: boolean; storeHint: string | null; category: string | null; pantry: boolean; altUnitName: string | null; altUnitQty: { toString(): string } | null };
+  const ingRows = new Map<string, IngRow>();
   for (const e of entries) for (const l of e.meal?.ingredients ?? []) ingRows.set(l.ingredient.id, l.ingredient);
   const missing = [...swapIds].filter((id) => !ingRows.has(id));
   if (missing.length) for (const i of await prisma.ingredient.findMany({ where: { id: { in: missing }, organizationId } })) ingRows.set(i.id, i);
@@ -57,7 +59,7 @@ export async function loadPlan(ctx: KitchenContext, eventId: string, organizatio
     const lines = (meal?.ingredients ?? []).map((l) => ({ ingredientId: l.ingredientId, qty: Number(l.qtyPerAdultPortion), optional: l.optional }));
     const variants = (meal?.variants ?? []).map(variantInfo);
     const present = hc.people.map((p) => diets.get(`${p.kind === "adult" ? "a" : "p"}:${p.id}`)).filter((d): d is NonNullable<typeof d> => !!d);
-    const check = meal ? entryConflicts(lines, ingInfo, variants, e.variantIds, present) : null;
+    const check = meal ? entryConflicts(lines, ingInfo, variants, e.variantIds, present, ctx.dietDefs) : null;
     const special = (check?.specialPortions ?? []).filter((s) => s.applied);
     const live = (): Snapshot => {
       const totals = entryTotals(
@@ -77,7 +79,7 @@ export async function loadPlan(ctx: KitchenContext, eventId: string, organizatio
         variants: special.map((s) => ({ id: s.variantId, name: s.variantName, portions: s.names.length, names: s.names })),
         lines: [...totals].map(([id, qty]) => {
           const i = ingRows.get(id);
-          return { ingredientId: id, name: i?.name ?? "?", unit: i?.unit ?? "g", qty, storeHint: i?.storeHint ?? null, category: i?.category ?? null };
+          return { ingredientId: id, name: i?.name ?? "?", unit: i?.unit ?? "g", qty, storeHint: i?.storeHint ?? null, category: i?.category ?? null, pantry: i?.pantry ?? false, altUnitName: i?.altUnitName ?? null, altUnitQty: i?.altUnitQty == null ? null : Number(i.altUnitQty) };
         }),
         allergens: check?.allergens ?? [],
       };

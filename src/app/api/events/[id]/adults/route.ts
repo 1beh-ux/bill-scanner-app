@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isOrgAdmin } from "@/lib/org-scope";
-import { adultsGuard, createAdult, isoDay } from "@/lib/adults-server";
+import { adultsGuard, createAdult, dayList } from "@/lib/adults-server";
 
-// Dospělí na akci (src/lib/adults-server.ts). GET = the event's adults; POST { childIds, fromDate?, toDate?, label? }
-// assigns adults of Lidé (skipping those already here), or { create: {...} } (organization admins) creates one
-// in Lidé and assigns it. Never a Participant, registration, portal token or e-mail.
+// Dospělí na akci (src/lib/adults-server.ts). GET = the event's adults; POST { childIds, days?, label? } assigns
+// adults of Lidé (skipping those already here; days [] = the whole event), or { create: {..., external?} } creates
+// one in Lidé and assigns it -- a member only by organization admins, an adult from outside the organization
+// (external) by anyone with the Kuchyně grant. Never a Participant, registration, portal token or e-mail.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const g = await adultsGuard(id);
   if ("error" in g) return g.error;
   const rows = await prisma.eventPerson.findMany({
     where: { eventId: id },
-    include: { child: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, allergens: true, dietFlags: true, dietNote: true } } },
+    include: { child: { select: { id: true, name: true, firstName: true, lastName: true, dateOfBirth: true, fieldValues: true, allergens: true, dietFlags: true, dietNote: true, external: true } } },
   });
   rows.sort((a, b) => (a.child.lastName || a.child.name).localeCompare(b.child.lastName || b.child.name, "cs") || (a.child.firstName ?? "").localeCompare(b.child.firstName ?? "", "cs"));
   return NextResponse.json({
@@ -27,9 +28,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       allergens: r.child.allergens,
       dietFlags: r.child.dietFlags,
       dietNote: r.child.dietNote,
+      external: r.child.external,
       label: r.label,
-      fromDate: r.fromDate?.toISOString().slice(0, 10) ?? null,
-      toDate: r.toDate?.toISOString().slice(0, 10) ?? null,
+      days: r.days,
       eats: r.eats,
     })),
   });
@@ -39,12 +40,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const g = await adultsGuard(id);
   if ("error" in g) return g.error;
-  const body = (await req.json().catch(() => ({}))) as { childIds?: unknown; create?: unknown; fromDate?: unknown; toDate?: unknown; label?: unknown };
+  const body = (await req.json().catch(() => ({}))) as { childIds?: unknown; create?: unknown; days?: unknown; label?: unknown };
+  const days = body.days === undefined || body.days === null ? [] : dayList(body.days);
+  if (!days) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   let childIds = Array.isArray(body.childIds) ? body.childIds.filter((x): x is string => typeof x === "string").slice(0, 200) : [];
   if (body.create !== undefined) {
-    // A new person in Lidé: the registry is the organization admins'.
-    if (!isOrgAdmin(g.user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
-    const created = await createAdult(g.event.organizationId, body.create);
+    // A new member in Lidé is the organization admins'; an adult from outside the organization anyone here may add.
+    const external = !isOrgAdmin(g.user) || (body.create as { external?: unknown } | null)?.external === true;
+    const created = await createAdult(g.event.organizationId, body.create, external);
     if (!created) return NextResponse.json({ error: "name_required" }, { status: 400 });
     childIds = [created.id];
   }
@@ -53,11 +56,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const adults = await prisma.child.findMany({ where: { id: { in: childIds }, organizationId: g.event.organizationId }, select: { id: true, isAdult: true } });
   if (adults.length !== new Set(childIds).size) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (adults.some((a) => !a.isAdult)) return NextResponse.json({ error: "not_adult" }, { status: 400 });
-  const fromDate = isoDay(body.fromDate);
-  const toDate = isoDay(body.toDate);
   const label = typeof body.label === "string" ? body.label.trim().slice(0, 60) || null : null;
   const r = await prisma.eventPerson.createMany({
-    data: adults.map((a) => ({ eventId: id, childId: a.id, label, fromDate: fromDate ? new Date(fromDate) : null, toDate: toDate ? new Date(toDate) : null })),
+    data: adults.map((a) => ({ eventId: id, childId: a.id, label, days })),
     skipDuplicates: true,
   });
   return NextResponse.json({ added: r.count }, { status: 201 });

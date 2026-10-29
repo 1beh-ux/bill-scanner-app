@@ -49,6 +49,8 @@ export function entryTotals(lines: QtyLine[], portions: number, multiplier: numb
       add(s.toIngredientId, scaledQty(s.qtyPerAdultPortion ?? base, v.portions, m));
     }
   }
-  for (const [id, q] of out) if (q <= 1e-9) out.delete(id);
+  // A line written without an amount (salt, "vždy v kuchyni") stays at 0 = "dle potřeby"; one swapped away goes.
+  const asNeeded = new Set(lines.filter((l) => l.qtyPerAdultPortion === 0).map((l) => l.ingredientId));
+  for (const [id, q] of out) if (q <= 1e-9 && !asNeeded.has(id)) out.delete(id);
   return out;
 }

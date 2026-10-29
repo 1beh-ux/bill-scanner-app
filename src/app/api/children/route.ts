@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
         name: true,
         dateOfBirth: true,
         isAdult: true,
+        external: true,
         familyId: true,
         leftAt: true,
         fieldValues: true,
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
 
   // "Přidat dospělého" (2026-10-28): a leader / helper without any registration, family or portal link.
   if (body.action === "createAdult") {
-    const created = await createAdult(organizationId, body.adult);
+    const created = await createAdult(organizationId, body.adult, body.adult?.external === true);
     return created ? NextResponse.json(created, { status: 201 }) : NextResponse.json({ error: "name_required" }, { status: 400 });
   }
 

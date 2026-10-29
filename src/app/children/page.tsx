@@ -16,6 +16,7 @@ type ChildRow = {
   name: string;
   dateOfBirth: string | null;
   isAdult: boolean;
+  external?: boolean;
   familyId: string | null;
   // "Neaktivní" since (slice 8 #2); null = active.
   leftAt: string | null;
@@ -53,7 +54,7 @@ export default function ChildrenPage() {
   const [linkInput, setLinkInput] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // Lidé (slice 3 A): children stay the default view; adults are members too.
-  const [who, setWho] = useState<"children" | "adults" | "all">("children");
+  const [who, setWho] = useState<"children" | "adults" | "external" | "all">("children");
   // Yearly invitation filters (slice 4 #12); "" = any.
   const [memberYear, setMemberYear] = useState("");
   const [eventId, setEventId] = useState("");
@@ -151,7 +152,8 @@ export default function ChildrenPage() {
   const listed = (data?.children ?? []).filter(
     (c) =>
       match(c.name) &&
-      (who === "all" || c.isAdult === (who === "adults")) &&
+      // Adults = the organization's own; "mimo organizaci" = adults from outside it (2026-10-29).
+      (who === "all" || (who === "children" ? !c.isAdult : who === "adults" ? c.isAdult && !c.external : c.isAdult && !!c.external)) &&
       (!memberYear || c.participants.some((p) => p.event.kind === "membership" && p.registrationStatus === "accepted" && String(p.event.membershipYear) === memberYear)) &&
       (!eventId || (eventId === NO_EVENTS ? c.participants.length === 0 : c.participants.some((p) => p.event.id === eventId))) &&
       yesNo(linkFilter, c.hasLink) &&
@@ -236,6 +238,7 @@ export default function ChildrenPage() {
         <select value={who} onChange={(e) => setWho(e.target.value as typeof who)} aria-label={t("people.filter")} className={inputClassSm}>
           <option value="children">{t("people.filterChildren")}</option>
           <option value="adults">{t("people.filterAdults")}</option>
+          <option value="external">{t("people.filterExternal")}</option>
           <option value="all">{t("people.filterAll")}</option>
         </select>
         <select value={memberYear} onChange={(e) => setMemberYear(e.target.value)} aria-label={t("people.filterMemberYear")} className={inputClassSm}>
@@ -394,7 +397,7 @@ export default function ChildrenPage() {
                             <Link href={`/children/${c.id}`} className="text-ink underline hover:text-ember">
                               {c.name}
                             </Link>
-                            {c.isAdult && <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t("people.adult")}</span>}
+                            {c.isAdult && <span className="ml-1.5 rounded bg-paper-2 px-1.5 py-0.5 text-[11px] text-ink-secondary">{t(c.external ? "people.externalBadge" : "people.adult")}</span>}
                             {c.leftAt && <span className="ml-1.5 rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] text-amber-700">{t("people.inactive")}</span>}
                           </td>
                           <td className="p-2 text-[13px] text-ink-secondary">{date(c.dateOfBirth)}</td>

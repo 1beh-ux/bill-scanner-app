@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashText, kitchenContext, kitchenGuard } from "@/lib/kitchen/server";
-import { ALLERGEN_CODES, DIET_FLAG_CODES, cleanCodes } from "@/lib/kitchen/allergens";
+import { ALLERGEN_CODES, cleanCodes } from "@/lib/kitchen/allergens";
 
 // Strava účastníků: GET each participant's allergy text with the proposed mapping and their review status,
 // the adults' data (read-only here, edited in Lidé); POST { participantId, allergens, dietFlags, note? } confirms
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const raw = ctx.allergyFieldKey ? String(((p.customFieldValues as Record<string, unknown> | null) ?? {})[ctx.allergyFieldKey] ?? "").trim() : "";
   const data = {
     allergens: cleanCodes(b.allergens, ALLERGEN_CODES),
-    dietFlags: cleanCodes(b.dietFlags, DIET_FLAG_CODES),
+    dietFlags: cleanCodes(b.dietFlags, ctx.dietDefs.map((d) => d.code)),
     note: typeof b.note === "string" ? b.note.trim().slice(0, 1000) || null : null,
     rawText: raw,
     rawTextHash: hashText(raw),

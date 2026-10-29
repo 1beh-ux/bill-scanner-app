@@ -12,7 +12,8 @@ export const ALLERGENS: { code: AllergenCode; no: number; cs: string; en: string
   { code: "fish", no: 4, cs: "ryby", en: "fish", keywords: ["ryb"] },
   { code: "peanuts", no: 5, cs: "arašídy", en: "peanuts", keywords: ["arasid", "burak"] },
   { code: "soy", no: 6, cs: "sójové boby", en: "soybeans", keywords: ["soja", "soj"] },
-  { code: "milk", no: 7, cs: "mléko", en: "milk", keywords: ["mleko", "mlek", "mlecn", "laktoz", "laktos"] },
+  // Laktóza is an intolerance, not the milk allergy: it maps to the "bez laktózy" diet.
+  { code: "milk", no: 7, cs: "mléko", en: "milk", keywords: ["mleko", "mlek", "mlecn"] },
   { code: "nuts", no: 8, cs: "skořápkové plody", en: "tree nuts", keywords: ["orech", "liskov", "vlassk", "mandl", "kesu", "pistac", "pekan", "makadam"] },
   { code: "celery", no: 9, cs: "celer", en: "celery", keywords: ["celer"] },
   { code: "mustard", no: 10, cs: "hořčice", en: "mustard", keywords: ["horcic"] },
@@ -23,17 +24,28 @@ export const ALLERGENS: { code: AllergenCode; no: number; cs: string; en: string
 ];
 export const ALLERGEN_CODES = ALLERGENS.map((a) => a.code) as string[];
 
-/** What a person may not eat (beyond allergens). */
-export type DietFlag = "vegetarian" | "vegan" | "no_pork";
-export const DIET_FLAGS: { code: DietFlag; cs: string; en: string; keywords: string[] }[] = [
-  { code: "vegetarian", cs: "vegetarián", en: "vegetarian", keywords: ["vegetarian", "bezmas", "bez masa"] },
-  { code: "vegan", cs: "vegan", en: "vegan", keywords: ["vegan"] },
-  { code: "no_pork", cs: "bez vepřového", en: "no pork", keywords: ["veprov", "bez vepr"] },
+/**
+ * Diets: what a person may not eat beyond allergens. The organization's own list (Šablony -> Kuchyně, ListTemplate
+ * kitchen_diet); these are the defaults it starts with. A diet is broken by an ingredient that contains one of
+ * `contents` (an ingredient's content flags) or one of `allergens` -- unless the ingredient is marked fine for
+ * it ("ok:<code>" in its flags, e.g. lactose-free milk for "bez laktózy").
+ */
+export type DietDef = { code: string; name: string; keywords: string[]; contents: string[]; allergens: string[] };
+export const DEFAULT_DIETS: DietDef[] = [
+  { code: "vegetarian", name: "vegetarián", keywords: ["vegetarian", "bezmas", "bez masa"], contents: ["meat", "fish"], allergens: [] },
+  { code: "vegan", name: "vegan", keywords: ["vegan"], contents: ["meat", "fish", "dairy", "egg"], allergens: [] },
+  { code: "no_pork", name: "bez vepřového", keywords: ["veprov", "bez vepr"], contents: ["pork"], allergens: [] },
+  { code: "gluten_free", name: "bezlepková", keywords: ["bezlepk", "bez lepku"], contents: [], allergens: ["gluten"] },
+  { code: "lactose_free", name: "bez laktózy", keywords: ["laktoz", "laktos", "bezlaktoz"], contents: [], allergens: ["milk"] },
 ];
-export const DIET_FLAG_CODES = DIET_FLAGS.map((d) => d.code) as string[];
 
-/** What an ingredient contains (for the diet conflicts, Part B). */
+/** What an ingredient contains (for the diet conflicts). */
 export const CONTENT_FLAGS = ["meat", "pork", "fish", "dairy", "egg"] as const;
+/** An ingredient's flags: its content flags + "ok:<diet code>" markers. */
+export const cleanIngredientFlags = (raw: unknown): string[] =>
+  Array.isArray(raw) ? [...new Set(raw.filter((x): x is string => typeof x === "string" && ((CONTENT_FLAGS as readonly string[]).includes(x) || /^ok:[a-z0-9_]{1,40}$/.test(x))))] : [];
+/** A diet code from a name: "Bez ořechů" -> "bez_orechu". */
+export const dietCode = (name: string) => normalizeText(name).replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 40) || "dieta";
 
 /** Untrusted codes -> the known ones, each once, in the official order. */
 export const cleanCodes = (raw: unknown, known: string[]): string[] =>
@@ -58,7 +70,7 @@ const hasStem = (token: string, stem: string) =>
  * Split on commas, semicolons, " a ", newlines. Nothing is ever dropped: an unmatched token, a negation
  * ("nemá alergii") or a severity word ("anafylaxe") lands in `unmapped` for a human to check.
  */
-export function mapAllergyText(text: string): { allergens: string[]; dietFlags: string[]; unmapped: string[] } {
+export function mapAllergyText(text: string, dietDefs: DietDef[] = DEFAULT_DIETS): { allergens: string[]; dietFlags: string[]; unmapped: string[] } {
   const allergens = new Set<string>();
   const diets = new Set<string>();
   const unmapped: string[] = [];
@@ -67,22 +79,16 @@ export function mapAllergyText(text: string): { allergens: string[]; dietFlags: 
     if (!token || token === "-") continue;
     let matched = false;
     for (const a of ALLERGENS) if (a.keywords.some((k) => hasStem(token, k))) { allergens.add(a.code); matched = true; }
-    for (const d of DIET_FLAGS) if (d.keywords.some((k) => hasStem(token, k))) { diets.add(d.code); matched = true; }
+    for (const d of dietDefs) if (d.keywords.some((k) => k && hasStem(token, normalizeText(k)))) { diets.add(d.code); matched = true; }
     // vegan implies vegetarian's conflicts already (vegan is the stricter flag).
     const unsure = NEGATIONS.some((n) => `${token} `.includes(n)) || SEVERITY.some((s) => token.includes(s));
     if (!matched || unsure) unmapped.push(raw.trim());
   }
-  return { allergens: ALLERGEN_CODES.filter((c) => allergens.has(c)), dietFlags: DIET_FLAG_CODES.filter((c) => diets.has(c)), unmapped };
+  return { allergens: ALLERGEN_CODES.filter((c) => allergens.has(c)), dietFlags: dietDefs.map((d) => d.code).filter((c) => diets.has(c)), unmapped };
 }
 
 // ===== Conflicts of a plan entry (Part B5) =====
 
-// What each diet may not eat (ingredient content flags).
-export const DIET_CONFLICTS: Record<DietFlag, string[]> = {
-  vegetarian: ["meat", "fish"],
-  vegan: ["meat", "fish", "dairy", "egg"],
-  no_pork: ["pork"],
-};
 
 export type IngredientInfo = { id: string; name: string; allergens: string[]; dietFlags: string[]; allergensConfirmed: boolean };
 export type MealLine = { ingredientId: string; qty: number; optional?: boolean };
@@ -104,26 +110,32 @@ export function applyVariants(lines: MealLine[], variants: VariantInfo[]): MealL
   return out;
 }
 
-/** Allergens + content of the lines (optional lines included: they may land on the plate); unconfirmed ingredients = unknown. */
-export function mealProfile(lines: MealLine[], ingredients: Map<string, IngredientInfo>, cleared: string[] = []) {
+/**
+ * Allergens + content of the lines (optional lines included: they may land on the plate), the diets the lines
+ * break (dietBlocked); unconfirmed ingredients = unknown.
+ */
+export function mealProfile(lines: MealLine[], ingredients: Map<string, IngredientInfo>, cleared: string[] = [], dietDefs: DietDef[] = DEFAULT_DIETS) {
   const allergens = new Set<string>();
   const content = new Set<string>();
+  const dietBlocked = new Set<string>();
   const unconfirmed: string[] = [];
   for (const l of lines) {
     const i = ingredients.get(l.ingredientId);
     if (!i) continue;
-    i.allergens.forEach((a) => allergens.add(a));
+    const own = i.allergens.filter((a) => !cleared.includes(a));
+    own.forEach((a) => allergens.add(a));
     i.dietFlags.forEach((d) => content.add(d));
+    for (const d of dietDefs)
+      if (!i.dietFlags.includes(`ok:${d.code}`) && (d.contents.some((c) => i.dietFlags.includes(c)) || d.allergens.some((a) => own.includes(a)))) dietBlocked.add(d.code);
     if (!i.allergensConfirmed && !unconfirmed.includes(i.name)) unconfirmed.push(i.name);
   }
-  cleared.forEach((a) => allergens.delete(a));
-  return { allergens, content, unconfirmed };
+  return { allergens, content, dietBlocked, unconfirmed };
 }
 
 /** What a person can't eat in a profile: allergens they have, diet conflicts. */
-export function personConflicts(profile: { allergens: Set<string>; content: Set<string> }, p: PersonDiet) {
+export function personConflicts(profile: { allergens: Set<string>; dietBlocked: Set<string> }, p: PersonDiet) {
   const allergens = p.allergens.filter((a) => profile.allergens.has(a));
-  const diets = p.dietFlags.filter((d) => (DIET_CONFLICTS[d as DietFlag] ?? []).some((c) => profile.content.has(c)));
+  const diets = p.dietFlags.filter((d) => profile.dietBlocked.has(d));
   return { allergens, diets };
 }
 
@@ -134,8 +146,8 @@ export function personConflicts(profile: { allergens: Set<string>; content: Set<
  * red: someone is left without a safe plate (no variant clears them, or that variant isn't applied yet);
  * amber: restrictions or ingredient allergens nobody confirmed; else ok.
  */
-export function entryConflicts(lines: MealLine[], ingredients: Map<string, IngredientInfo>, variants: VariantInfo[], appliedVariantIds: string[], people: PersonDiet[]) {
-  const base = mealProfile(lines, ingredients);
+export function entryConflicts(lines: MealLine[], ingredients: Map<string, IngredientInfo>, variants: VariantInfo[], appliedVariantIds: string[], people: PersonDiet[], dietDefs: DietDef[] = DEFAULT_DIETS) {
+  const base = mealProfile(lines, ingredients, [], dietDefs);
   // The applied variants' swapped-in ingredients count for "neověřeno" too.
   for (const v of variants.filter((x) => appliedVariantIds.includes(x.id)))
     for (const n of mealProfile(applyVariants(lines, [v]), ingredients).unconfirmed) if (!base.unconfirmed.includes(n)) base.unconfirmed.push(n);
@@ -149,7 +161,7 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
     // The meal variant that leaves this person nothing they can't eat (applied ones first).
     const ordered = [...variants.filter((v) => appliedVariantIds.includes(v.id)), ...variants.filter((v) => !appliedVariantIds.includes(v.id))];
     const clearing = ordered.find((v) => {
-      const left = personConflicts(mealProfile(applyVariants(lines, [v]), ingredients, v.clearsAllergens), p);
+      const left = personConflicts(mealProfile(applyVariants(lines, [v]), ingredients, v.clearsAllergens, dietDefs), p);
       return !left.allergens.length && !left.diets.length;
     });
     conflicts.push({ key: p.key, name: p.name, ...c, variantId: clearing?.id ?? null });

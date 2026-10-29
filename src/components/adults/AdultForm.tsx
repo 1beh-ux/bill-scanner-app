@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
-import { ALLERGENS, DIET_FLAGS } from "@/lib/kitchen/allergens";
+import { ALLERGENS } from "@/lib/kitchen/allergens";
+import { useDiets } from "@/components/kitchen/useDiets";
 
 // Adults (2026-10-28): the 14 allergens + diet flags as tick lists, and "Přidat dospělého" (Lidé, Dospělí na akci).
 const inputClass = "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -29,14 +30,15 @@ export function AllergenPicker({ value, onChange }: { value: string[]; onChange:
   );
 }
 
+/** The organization's diets (Šablony -> Kuchyně). */
 export function DietPicker({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
-  const { lang } = useTranslations();
+  const { diets } = useDiets();
   return (
     <div className="flex flex-wrap gap-3">
-      {DIET_FLAGS.map((d) => (
+      {diets.map((d) => (
         <label key={d.code} className="flex items-center gap-1.5 text-[13px] text-ink">
           <input type="checkbox" checked={value.includes(d.code)} onChange={(e) => onChange(toggle(value, d.code, e.target.checked))} />
-          {lang === "en" ? d.en : d.cs}
+          {d.name}
         </label>
       ))}
     </div>
@@ -47,11 +49,13 @@ export function DietPicker({ value, onChange }: { value: string[]; onChange: (v:
  * "Přidat dospělého": name, birth date, address, allergens, diet -- no registration, family or portal link.
  * submit(adult) posts it where the page needs it (Lidé, or Dospělí na akci with the assignment) and returns ok.
  */
-export function CreateAdultForm({ submit, onCancel }: { submit: (adult: Record<string, unknown>) => Promise<boolean>; onCancel: () => void }) {
+// external: "fixed" = always from outside the organization (a Kuchyně user without admin rights), "choice" = a tick box.
+export function CreateAdultForm({ submit, onCancel, external = "choice" }: { submit: (adult: Record<string, unknown>) => Promise<boolean>; onCancel: () => void; external?: "fixed" | "choice" }) {
   const { t } = useTranslations();
   const [a, setA] = useState({ firstName: "", lastName: "", dateOfBirth: "", street: "", municipality: "", zip: "", dietNote: "" });
   const [allergens, setAllergens] = useState<string[]>([]);
   const [dietFlags, setDietFlags] = useState<string[]>([]);
+  const [isExternal, setIsExternal] = useState(external === "fixed");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const field = (k: keyof typeof a, label: string, type = "text") => (
@@ -64,7 +68,7 @@ export function CreateAdultForm({ submit, onCancel }: { submit: (adult: Record<s
     e.preventDefault();
     setBusy(true);
     setError(false);
-    const ok = await submit({ ...a, allergens, dietFlags });
+    const ok = await submit({ ...a, allergens, dietFlags, external: isExternal });
     setBusy(false);
     if (!ok) setError(true);
   }
@@ -72,6 +76,14 @@ export function CreateAdultForm({ submit, onCancel }: { submit: (adult: Record<s
     <form onSubmit={save} className="flex flex-col gap-3 rounded-lg border border-mist bg-paper p-4">
       <h3 className="text-[15px] font-semibold text-ink">{t("adults.createTitle")}</h3>
       <p className="text-[12.5px] text-ink-secondary">{t("adults.createHint")}</p>
+      {external === "choice" ? (
+        <label className="flex items-center gap-2 text-[13px] text-ink">
+          <input type="checkbox" checked={isExternal} onChange={(e) => setIsExternal(e.target.checked)} />
+          {t("people.external")}
+        </label>
+      ) : (
+        <p className="text-[12.5px] text-ink-secondary">{t("adults.externalOnly")}</p>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         {field("firstName", t("adults.firstName"))}
         {field("lastName", t("adults.lastName"))}

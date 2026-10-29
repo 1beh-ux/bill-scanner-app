@@ -7,11 +7,30 @@ import { AllergenPicker } from "@/components/adults/AdultForm";
 import MealEditor, { emptyDraft, type Ingredient, type MealDraft } from "@/components/kitchen/MealEditor";
 import { AllergenList, NoAccess, btn, btnPrimary, inputSm, send } from "@/components/kitchen/ui";
 import { CONTENT_FLAGS } from "@/lib/kitchen/allergens";
+import { useDiets } from "@/components/kitchen/useDiets";
 
 // Knihovna (the organization's): Jídla, Suroviny and "Importovat recepty" (AI). Org-owned -- every event of
 // the organization plans from it; access: a Kuchyně grant on any of its events (or an org admin).
 type MealRow = { id: string; name: string; mealType: string | null; tags: string[]; ingredients: number; variants: { id: string; name: string }[]; uses: number; allergens: string[]; unconfirmed: string[]; archivedAt: string | null; parentMealId: string | null };
 type IngredientRow = Ingredient & { storeHint: string | null; category: string | null; packSize: number | null; packUnit: string | null; shelfLifeDays: number | null; uses: number };
+// The diets an ingredient may be marked fine for ("ok:<code>": lactose-free milk for "bez laktózy").
+const DietOkPicker = ({ flags, onChange }: { flags: string[]; onChange: (f: string[]) => void }) => {
+  const { t } = useTranslations();
+  const { diets } = useDiets();
+  const relevant = diets.filter((d) => d.allergens.length || d.contents.length);
+  if (!relevant.length) return null;
+  return (
+    <div className="flex flex-wrap gap-3 text-[13px] text-ink">
+      <span className="text-ink-secondary">{t("kitchen.ingredient.okFor")}</span>
+      {relevant.map((d) => (
+        <label key={d.code} className="flex items-center gap-1.5">
+          <input type="checkbox" checked={flags.includes(`ok:${d.code}`)} onChange={(e) => onChange(e.target.checked ? [...flags, `ok:${d.code}`] : flags.filter((x) => x !== `ok:${d.code}`))} />
+          {d.name}
+        </label>
+      ))}
+    </div>
+  );
+};
 
 export default function KitchenLibraryPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -122,7 +141,7 @@ type MealFull = {
   learned: { multiplier: number; samples: number; events: number };
 };
 
-const toDraft = (m: MealFull): MealDraft => ({
+const toDraft = (m: MealFull, ingredients: Ingredient[]): MealDraft => ({
   name: m.name,
   mealType: m.mealType ?? "",
   tags: m.tags.join(", "),
@@ -133,8 +152,13 @@ const toDraft = (m: MealFull): MealDraft => ({
   prepAheadOk: m.prepAheadOk,
   leftoverFriendly: m.leftoverFriendly,
   coldPackable: m.coldPackable,
-  lines: m.ingredients.map((l) => ({ ingredientId: l.ingredientId, name: l.ingredient.name, unit: l.ingredient.unit, qty: String(l.qtyPerAdultPortion), optional: l.optional, note: l.note ?? "", allergens: [] })),
-  variants: m.variants.map((v) => ({ name: v.name, clearsAllergens: v.clearsAllergens, swaps: v.swaps.map((s) => ({ fromIngredientId: s.fromIngredientId, toIngredientId: s.toIngredientId, qtyPerAdultPortion: s.qtyPerAdultPortion ?? null })) })),
+  // 0 = "dle potřeby" (shown empty).
+  lines: m.ingredients.map((l) => ({ ingredientId: l.ingredientId, name: l.ingredient.name, unit: l.ingredient.unit, qty: l.qtyPerAdultPortion ? String(l.qtyPerAdultPortion) : "", optional: l.optional, note: l.note ?? "", allergens: [] })),
+  variants: m.variants.map((v) => ({
+    name: v.name,
+    clearsAllergens: v.clearsAllergens,
+    swaps: v.swaps.map((s) => ({ fromLine: m.ingredients.findIndex((l) => l.ingredientId === s.fromIngredientId), toName: ingredients.find((i) => i.id === s.toIngredientId)?.name ?? "", qty: s.qtyPerAdultPortion == null ? "" : String(s.qtyPerAdultPortion) })),
+  })),
 });
 
 function MealDetail({ mealId, ingredients, onClose, onOpen }: { mealId: string; ingredients: Ingredient[]; onClose: () => void; onOpen: (id: string) => void }) {
@@ -218,7 +242,7 @@ function MealDetail({ mealId, ingredients, onClose, onOpen }: { mealId: string; 
           </button>
         </p>
       )}
-      <MealEditor key={`${mealId}-${version}`} initial={m ? toDraft(m) : emptyDraft()} ingredients={ingredients} onSave={save} onCancel={onClose} banner={m ? <p className="text-[12px] text-ink-secondary">{t("kitchen.library.snapshotHint")}</p> : null} />
+      <MealEditor key={`${mealId}-${version}`} initial={m ? toDraft(m, ingredients) : emptyDraft()} ingredients={ingredients} onSave={save} onCancel={onClose} banner={m ? <p className="text-[12px] text-ink-secondary">{t("kitchen.library.snapshotHint")}</p> : null} />
       {m && (
         <>
           <section className="flex flex-col gap-1">
@@ -342,6 +366,20 @@ function Ingredients({ rows, onChanged }: { rows: IngredientRow[]; onChanged: ()
               </label>
             ))}
           </div>
+          <DietOkPicker flags={edit.dietFlags ?? []} onChange={(f) => setEdit({ ...edit, dietFlags: f })} />
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input type="checkbox" checked={!!edit.pantry} onChange={(e) => setEdit({ ...edit, pantry: e.target.checked })} />
+            {t("kitchen.ingredient.pantry")}
+            <span className="text-[12px] text-ink-secondary">{t("kitchen.ingredient.pantryHint")}</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-secondary">
+            {t("kitchen.ingredient.altUnit")}
+            <input value={edit.altUnitName ?? ""} onChange={(e) => setEdit({ ...edit, altUnitName: e.target.value })} placeholder={t("kitchen.ingredient.altUnitName")} className={inputSm + " w-32"} />
+            =
+            <input value={edit.altUnitQty ?? ""} onChange={(e) => setEdit({ ...edit, altUnitQty: e.target.value === "" ? null : Number(e.target.value.replace(",", ".")) })} inputMode="decimal" className={inputSm + " w-24"} />
+            {edit.unit}
+            <span className="text-[12px]">{t("kitchen.ingredient.altUnitHint")}</span>
+          </div>
           {error && <p className="text-[13px] text-red-600">{t(`kitchen.error.${error}`)}</p>}
           <div className="flex flex-wrap gap-3">
             <button type="button" onClick={() => save(false)} disabled={!edit.name?.trim()} className={btn}>
@@ -361,7 +399,8 @@ function Ingredients({ rows, onChanged }: { rows: IngredientRow[]; onChanged: ()
         {shown.map((r) => (
           <div key={r.id} className={"flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[13px] " + (r.active ? "" : "opacity-60")}>
             <span>
-              <span className="font-medium text-ink">{r.name}</span> <span className="text-ink-secondary">({r.unit})</span>
+              <span className="font-medium text-ink">{r.name}</span> <span className="text-ink-secondary">({r.unit}{r.altUnitName && r.altUnitQty ? `, 1 ${r.altUnitName} = ${r.altUnitQty} ${r.unit}` : ""})</span>
+              {r.pantry && <span className="ml-1.5 rounded-full bg-paper-2 px-2 text-[11.5px] text-ink-secondary">{t("kitchen.ingredient.pantry")}</span>}
               <span className="ml-2 text-ink-secondary">{[r.storeHint, r.category].filter(Boolean).join(" · ")}</span>
             </span>
             <span className="flex items-center gap-3">
@@ -401,7 +440,15 @@ type ImportDraft = {
   mealType: string | null;
   steps: string | null;
   duplicateOf: { id: string; name: string } | null;
-  lines: { name: string; qtyPerAdultPortion: number | null; unit: "g" | "ml" | "ks"; ingredientId: string | null; warnings: string[]; note: string | null; suggestedAllergens: string[] }[];
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  equipment: string | null;
+  tags: string[];
+  prepAheadOk: boolean;
+  leftoverFriendly: boolean;
+  coldPackable: boolean;
+  variants: { name: string; swaps: { fromLine: number; toName: string; toIngredientId: string | null }[] }[];
+  lines: { name: string; qtyPerAdultPortion: number | null; unit: "g" | "ml" | "ks"; ingredientId: string | null; warnings: string[]; note: string | null; pantry: boolean; altUnitName: string | null; suggestedAllergens: string[]; suggestedContains: string[]; suggestedCategory: string | null }[];
 };
 
 function ImportRecipes({ eventId, ingredients, onSaved }: { eventId: string; ingredients: Ingredient[]; onSaved: () => void }) {
@@ -428,12 +475,35 @@ function ImportRecipes({ eventId, ingredients, onSaved }: { eventId: string; ing
     setDrafts(d.drafts);
     setNotes(d.notes);
   }
+  // Everything the AI guessed is prefilled -- and shown as a guess, saved only on "Uložit do knihovny".
   const toDraft = (x: ImportDraft): MealDraft => ({
     ...emptyDraft(),
     name: x.name,
     mealType: x.mealType ?? "",
     steps: x.steps ?? "",
-    lines: x.lines.map((l) => ({ ingredientId: l.ingredientId, name: l.name, unit: l.unit, qty: l.qtyPerAdultPortion == null ? "" : String(l.qtyPerAdultPortion), optional: false, note: l.note ?? "", allergens: l.suggestedAllergens, warnings: l.warnings })),
+    prepMinutes: x.prepMinutes?.toString() ?? "",
+    cookMinutes: x.cookMinutes?.toString() ?? "",
+    equipment: x.equipment ?? "",
+    tags: x.tags.join(", "),
+    prepAheadOk: x.prepAheadOk,
+    leftoverFriendly: x.leftoverFriendly,
+    coldPackable: x.coldPackable,
+    lines: x.lines.map((l) => ({
+      ingredientId: l.ingredientId,
+      name: l.name,
+      unit: l.unit,
+      qty: l.qtyPerAdultPortion ? String(l.qtyPerAdultPortion) : "",
+      optional: false,
+      note: l.note ?? "",
+      allergens: l.suggestedAllergens,
+      contains: l.suggestedContains,
+      category: l.suggestedCategory,
+      pantry: l.pantry,
+      altUnitName: l.altUnitName,
+      altUnitQty: l.altUnitName ? "1" : "",
+      warnings: l.warnings,
+    })),
+    variants: x.variants.map((v) => ({ name: v.name, clearsAllergens: [], swaps: v.swaps.map((s) => ({ fromLine: s.fromLine, toName: s.toName, qty: "" })) })),
   });
 
   return (
@@ -461,6 +531,7 @@ function ImportRecipes({ eventId, ingredients, onSaved }: { eventId: string; ing
               <div className="flex flex-col gap-1 text-[12.5px]">
                 <p className="text-ink-secondary">{t(x.servingsGuessed ? "kitchen.import.servingsGuessed" : "kitchen.import.servings", { n: String(x.servings) })}</p>
                 <p className="text-amber-700">{t("kitchen.import.aiAllergens")}</p>
+                <p className="text-ink-secondary">{t("kitchen.import.aiGuesses")}</p>
                 {x.duplicateOf && <p className="text-amber-700">{t("kitchen.import.duplicate", { name: x.duplicateOf.name })}</p>}
               </div>
             }
