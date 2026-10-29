@@ -52,7 +52,7 @@ type ParticipantDetail = {
   guardians: Guardian[];
 };
 
-type IncidentWithFollowUps = IncidentClientData & { followUps: IncidentClientData[] };
+type IncidentWithFollowUps = IncidentClientData & { resolvedAt: string | null; followUps: IncidentClientData[] };
 
 type ParticipantDocumentRow = {
   id: string;
@@ -114,6 +114,12 @@ export default function ParticipantDetailPage({
   const [incidents, setIncidents] = useState<IncidentWithFollowUps[]>([]);
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [detailIncident, setDetailIncident] = useState<IncidentClientData | null>(null);
+  // "Vyřešeno" (2026-10-29): resolved cases are hidden until "Zobrazit vyřešené".
+  const [showResolved, setShowResolved] = useState(false);
+  async function setResolved(incidentId: string, resolved: boolean) {
+    await fetch(`/api/incidents/${incidentId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ resolved }) }).catch(() => null);
+    loadIncidents();
+  }
 
   const [sendModalOpen, setSendModalOpen] = useState(false);
   // Layout ("Upravit rozvržení"): section order/visibility + the notes list (= health notes with place "detail").
@@ -510,12 +516,18 @@ export default function ParticipantDetailPage({
           </button>
         </div>
 
-        {incidents.length === 0 ? (
-          <p className="text-[14px] text-ink-secondary">{t("incidentsPage.empty")}</p>
+        {incidents.some((i) => i.resolvedAt) && (
+          <label className="mb-2 flex items-center gap-2 text-[13px] text-ink-secondary">
+            <input type="checkbox" checked={showResolved} onChange={(e) => setShowResolved(e.target.checked)} />
+            {t("incidentsPage.showResolved", { n: String(incidents.filter((i) => i.resolvedAt).length) })}
+          </label>
+        )}
+        {incidents.filter((i) => showResolved || !i.resolvedAt).length === 0 ? (
+          <p className="text-[14px] text-ink-secondary">{incidents.length ? t("incidentsPage.noActive") : t("incidentsPage.empty")}</p>
         ) : (
           <div className="flex flex-col gap-2">
-            {incidents.map((inc) => (
-              <div key={inc.id} className="rounded-lg border border-mist/60 p-2">
+            {incidents.filter((i) => showResolved || !i.resolvedAt).map((inc) => (
+              <div key={inc.id} className={"rounded-lg border p-2 " + (inc.resolvedAt ? "border-mist/60 opacity-70" : "border-red-300/70")}>
                 <div
                   onClick={() => setDetailIncident(inc)}
                   className="flex cursor-pointer flex-wrap items-center justify-between gap-2 rounded-lg hover:bg-paper-2"
@@ -538,6 +550,16 @@ export default function ParticipantDetailPage({
                     <div className="text-[12px] text-ink-secondary">{incidentMeta(inc)}</div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {inc.resolvedAt && <span className="rounded-full bg-mist px-2 py-0.5 text-[12px] text-ink-secondary">✓ {t("incidentsPage.resolved")}</span>}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResolved(inc.id, !inc.resolvedAt);
+                      }}
+                      className="text-[13px] text-ink-secondary hover:text-ink hover:underline"
+                    >
+                      {inc.resolvedAt ? t("incidentsPage.reopen") : t("incidentsPage.markResolved")}
+                    </button>
                     {inc.followUps.length > 0 && (
                       <button
                         onClick={(e) => {

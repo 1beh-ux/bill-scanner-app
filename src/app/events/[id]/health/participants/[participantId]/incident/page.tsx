@@ -16,7 +16,7 @@ export default function IncidentPage({ params }: { params: Promise<{ id: string;
   const followUpId = q.get("followUp");
   const editId = q.get("edit");
   const from = q.get("from");
-  const back = from === "list" ? `/events/${eventId}/health` : from === "meds" ? `/events/${eventId}/health/meds` : `/events/${eventId}/health/participants/${participantId}`;
+  const back = from === "list" ? `/events/${eventId}/health` : from === "meds" ? `/events/${eventId}/health/meds` : from === "cases" ? `/events/${eventId}/health/cases` : `/events/${eventId}/health/participants/${participantId}`;
   const targetId = followUpId ?? editId;
   const [incident, setIncident] = useState<IncidentClientData | null>(null);
   const [missing, setMissing] = useState(false);

@@ -12,6 +12,7 @@ import BulkAnswers from "@/components/participants/BulkAnswers";
 import ColumnPicker from "@/components/ColumnPicker";
 import { columnValue, type ColumnParticipant } from "@/lib/participant-columns";
 import type { ParticipantFieldDef } from "@/lib/participant-fields";
+import { useTableFilter, type FilterCol } from "@/components/TableFilter";
 
 type EventBasic = { id: string; name: string; healthListColumns: string[] | null };
 
@@ -26,6 +27,7 @@ type Participant = ColumnParticipant & {
 
 type HealthSignals = {
   incidentCount: Record<string, number>;
+  resolvedCount?: Record<string, number>;
   lastIncidentAt: Record<string, string>;
   medPlanParticipantIds: string[];
   medPlans?: Record<string, { med: string; slot: string; dose: string | null; notes: string | null }[]>;
@@ -85,7 +87,7 @@ export default function EventHealthPage({
     load();
   }, [id]);
 
-  const filteredParticipants = useMemo(() => {
+  const searchedParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return participants;
     return participants.filter((p) => p.name.toLowerCase().includes(query));
@@ -115,6 +117,27 @@ export default function EventHealthPage({
   useEffect(() => {
     loadQuestionCount();
   }, [loadQuestionCount]);
+  // Cases: pink = active, grey = resolved ("Vyřešeno"); a click opens the child's cases.
+  const incidentPills = (pid: string, lastAt?: string) => {
+    const active = signals.incidentCount[pid] ?? 0;
+    const resolved = signals.resolvedCount?.[pid] ?? 0;
+    if (!active && !resolved) return null;
+    return (
+      <a href={`/events/${id}/health/cases?participantId=${pid}${active ? "" : "&status=all"}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1">
+        {active > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2 py-0.5 text-red-700" title={lastAt ? t("healthPage.incidentTooltip", { date: new Date(lastAt).toLocaleString(lang === "cs" ? "cs-CZ" : "en-GB") }) : t("healthPage.incidentsActive")}>
+            <span className="h-[7px] w-[7px] rounded-full bg-red-600" />
+            {active}
+          </span>
+        )}
+        {resolved > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-mist px-2 py-0.5 text-ink-secondary" title={t("healthPage.incidentsResolved")}>
+            ✓ {resolved}
+          </span>
+        )}
+      </a>
+    );
+  };
   // Rows whose med cell is opened (a click shows the plans, another hides them).
   const [openMeds, setOpenMeds] = useState<Set<string>>(new Set());
   const toggleMeds = (pid: string) => setOpenMeds((x) => { const n = new Set(x); if (n.has(pid)) n.delete(pid); else n.add(pid); return n; });
@@ -146,6 +169,22 @@ export default function EventHealthPage({
     () => (event?.healthListColumns ?? []).map((k) => columnOptions.find((f) => f.key === k)).filter((f): f is ParticipantFieldDef => !!f),
     [event, columnOptions]
   );
+
+  // Excel-like sorting / filtering of the columns (2026-10-29).
+  const incidentState = (pid: string) =>
+    (signals.incidentCount[pid] ?? 0) > 0 ? t("healthPage.incidentsActive") : (signals.resolvedCount?.[pid] ?? 0) > 0 ? t("healthPage.incidentsResolvedOnly") : "—";
+  const filterCols: FilterCol<Participant>[] = [
+    { key: "name", text: (p) => participantListName(p) },
+    { key: "group", text: (p) => p.groupName || "—" },
+    { key: "age", text: (p) => String(calculateAge(p.dateOfBirth) ?? "—"), sort: (p) => calculateAge(p.dateOfBirth) },
+    { key: "incidents", text: (p) => incidentState(p.id), sort: (p) => (signals.incidentCount[p.id] ?? 0) * 1000 + (signals.resolvedCount?.[p.id] ?? 0) || null },
+    { key: "meds", text: (p) => (medSet.has(p.id) ? [...new Set((signals.medPlans?.[p.id] ?? []).map((x) => slotMark(x.slot)))].join(" · ") || t("healthPage.colMeds") : "—") },
+    { key: "questions", text: (p) => (openBy[p.id] ? String(openBy[p.id]) : "—"), sort: (p) => openBy[p.id] ?? null },
+    { key: "notes", text: (p) => listNotes(p.id).map((n) => `${n.label}: ${n.value}`).join("; ") || "—" },
+    ...activeColumns.map((f) => ({ key: `f:${f.key}`, text: (p: Participant) => columnValue(f, p) })),
+  ];
+  const table = useTableFilter(searchedParticipants, filterCols, `healthListFilter:${id}`, t);
+  const filteredParticipants = table.rows;
 
   // The whole row opens the Zdraví detail; its previous/next follow this list as shown.
   function openDetail(pid: string) {
@@ -193,6 +232,15 @@ export default function EventHealthPage({
             </button>
           )}
         </div>
+        {table.active > 0 && (
+          <button type="button" onClick={table.clear} className="text-[13px] text-ember hover:underline">
+            {t("healthPage.clearFilters", { n: String(table.active) })}
+          </button>
+        )}
+        <a href={`/events/${id}/health/cases`} className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2">
+          {t("healthCases.title")}
+          {Object.values(signals.incidentCount).reduce((a, b) => a + b, 0) > 0 && <span className="ml-1.5 rounded-full bg-red-100 px-2 py-0.5 text-[12px] font-medium text-red-700">{Object.values(signals.incidentCount).reduce((a, b) => a + b, 0)}</span>}
+        </a>
         <a href={`/events/${id}/health/questions`} className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2">
           {t("parentQuestions.title")}
           {openQuestions > 0 && <span className="ml-1.5 rounded-full bg-amber-500/15 px-2 py-0.5 text-[12px] font-medium text-amber-700">{openQuestions}</span>}
@@ -232,7 +280,7 @@ export default function EventHealthPage({
 
       {filteredParticipants.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
-          {searchQuery ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
+          {searchQuery || table.active ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
         <>
@@ -240,15 +288,15 @@ export default function EventHealthPage({
           <table className="w-full min-w-[560px] border-collapse">
             <thead>
               <tr className="border-b border-mist text-left">
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("common.name")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colIncidents")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colMeds")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("healthPage.colQuestions")}</th>
-                {anyListNotes && <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantDetail.notesTitle")}</th>}
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("name", t("common.name"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("group", t("participantsPage.colGroup"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("age", t("participantsPage.colAge"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("incidents", t("healthPage.colIncidents"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("meds", t("healthPage.colMeds"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("questions", t("healthPage.colQuestions"))}</th>
+                {anyListNotes && <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("notes", t("participantDetail.notesTitle"))}</th>}
                 {activeColumns.map((f) => (
-                  <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                  <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}</th>
                 ))}
                 <th className="p-2"></th>
               </tr>
@@ -256,7 +304,6 @@ export default function EventHealthPage({
             <tbody>
               {filteredParticipants.map((p) => {
                 const age = calculateAge(p.dateOfBirth);
-                const count = signals.incidentCount[p.id] ?? 0;
                 const lastAt = signals.lastIncidentAt[p.id];
                 return (
                   <tr key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer border-b border-mist/60 hover:bg-paper-2">
@@ -269,19 +316,7 @@ export default function EventHealthPage({
                     </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{p.groupName || "—"}</td>
                     <td className="p-2 text-[14px] text-ink-secondary">{age !== null ? age : "—"}</td>
-                    <td className="p-2 text-[13px]">
-                      {count > 0 ? (
-                        <span
-                          className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2 py-0.5 text-red-700"
-                          title={lastAt ? t("healthPage.incidentTooltip", { date: new Date(lastAt).toLocaleString(lang === "cs" ? "cs-CZ" : "en-GB") }) : undefined}
-                        >
-                          <span className="h-[7px] w-[7px] rounded-full bg-red-600" />
-                          {count}
-                        </span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
+                    <td className="p-2 text-[13px]">{incidentPills(p.id, lastAt) ?? "—"}</td>
                     <td className="p-2 text-[13px]">
                       {medSet.has(p.id) ? medsCell(p.id) : "—"}
                     </td>
@@ -316,7 +351,6 @@ export default function EventHealthPage({
         <div className="flex flex-col gap-2 md:hidden">
           {filteredParticipants.map((p) => {
             const age = calculateAge(p.dateOfBirth);
-            const count = signals.incidentCount[p.id] ?? 0;
             return (
               <div key={p.id} onClick={() => openDetail(p.id)} className="cursor-pointer rounded-lg border border-mist bg-paper-2 p-3">
                 <div className="mb-1 flex items-start justify-between gap-2">
@@ -328,12 +362,7 @@ export default function EventHealthPage({
                     </span>
                   </span>
                   <div className="flex shrink-0 items-center gap-1.5 text-[12px]">
-                    {count > 0 && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2 py-0.5 text-red-700" title={t("healthPage.colIncidents")}>
-                        <span className="h-[7px] w-[7px] rounded-full bg-red-600" />
-                        {count}
-                      </span>
-                    )}
+                    {incidentPills(p.id, signals.lastIncidentAt[p.id])}
                     {medSet.has(p.id) && medsCell(p.id)}
                     {questionsPill(p.id)}
                   </div>

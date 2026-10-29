@@ -17,6 +17,7 @@ import { UploadReviewLink } from "@/components/participants/UploadReview";
 import DriveExportButton from "@/components/participants/DriveExportButton";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
 import { portalComposeHref } from "@/components/children/portal-link";
+import { useTableFilter, type FilterCol } from "@/components/TableFilter";
 
 type EventBasic = { id: string; name: string; participantsListColumns: string[] | null; kind: "event" | "membership"; registrationConnected: boolean; peopleUnlinked: boolean };
 type ChildOption = { id: string; name: string; firstName: string | null; lastName: string | null; dateOfBirth: string | null };
@@ -136,10 +137,23 @@ export default function EventParticipantsPage({
     load();
   }, [id]);
 
-  const filteredParticipants = useMemo(() => {
+  const searchedParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     return participants.filter((p) => (!query || p.name.toLowerCase().includes(query)) && (!stateFilter || p.state === stateFilter));
   }, [participants, searchQuery, stateFilter]);
+  // Excel-like sorting / filtering of the columns (2026-10-29).
+  const filterCols: FilterCol<Participant>[] = [
+    { key: "lastName", text: (p) => p.lastName || (p.firstName ? "—" : p.name) },
+    { key: "firstName", text: (p) => p.firstName || "—" },
+    { key: "group", text: (p) => p.groupName || "—" },
+    { key: "age", text: (p) => String(calculateAge(p.dateOfBirth) ?? "—"), sort: (p) => calculateAge(p.dateOfBirth) },
+    { key: "registration", text: (p) => (p.registrationStatus === "accepted" ? t("participantsPage.statusAccepted") : t("participantsPage.statusPendingAction")) },
+    { key: "documents", text: (p) => (p.documentsTotal > 0 ? `${p.documentsReceived}/${p.documentsTotal}` : "—"), sort: (p) => (p.documentsTotal > 0 ? p.documentsReceived / p.documentsTotal : null) },
+    { key: "email", text: (p) => p.computed.contact_email || "—" },
+    ...activeColumns.map((f) => ({ key: `f:${f.key}`, text: (p: Participant) => resolveDynamicValue(f, p) })),
+  ];
+  const table = useTableFilter(searchedParticipants, filterCols, `participantListFilter:${id}`, t);
+  const filteredParticipants = table.rows;
 
   function openDetail(participantId: string) {
     // The detail page's previous/next walk the list exactly as shown here (search included).
@@ -366,6 +380,11 @@ export default function EventParticipantsPage({
             </option>
           ))}
         </select>
+        {table.active > 0 && (
+          <button type="button" onClick={table.clear} className="text-[13px] text-ember hover:underline">
+            {t("healthPage.clearFilters", { n: String(table.active) })}
+          </button>
+        )}
         <a
           href={`/events/${id}/participants/import`}
           className="rounded-lg border border-mist bg-paper px-4 py-2 text-[14px] text-ink hover:bg-paper-2"
@@ -478,7 +497,7 @@ export default function EventParticipantsPage({
 
       {filteredParticipants.length === 0 ? (
         <p className="text-[14px] text-ink-secondary">
-          {searchQuery || stateFilter ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
+          {searchQuery || stateFilter || table.active ? t("participantsPage.searchNoMatches") : t("participantsPage.empty")}
         </p>
       ) : (
         <>
@@ -489,15 +508,15 @@ export default function EventParticipantsPage({
                 <th className="p-2">
                   <input type="checkbox" checked={allVisibleSelected} onChange={toggleSelectAll} />
                 </th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.lastNameLabel")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.firstNameLabel")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colGroup")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colAge")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colRegistration")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.colDocuments")}</th>
-                <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.contactEmailLabel")}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("lastName", t("participantsPage.lastNameLabel"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("firstName", t("participantsPage.firstNameLabel"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("group", t("participantsPage.colGroup"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("age", t("participantsPage.colAge"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("registration", t("participantsPage.colRegistration"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("documents", t("participantsPage.colDocuments"))}</th>
+                <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("email", t("participantsPage.contactEmailLabel"))}</th>
                 {activeColumns.map((f) => (
-                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}</th>
                 ))}
                 <th className="p-2"></th>
               </tr>

@@ -172,9 +172,12 @@ export default function MedChecklistPage({
     return data.slots.filter((s) => used.has(s.id));
   }, [data]);
 
+  // Reset the period filter only when the set of periods changes (another date range) -- not when a tick
+  // updates the grid data, or every click would show all periods again.
+  const usedKey = usedSlots.map((s) => s.id).join(",");
   useEffect(() => {
-    setVisibleSlotIds(new Set(usedSlots.map((s) => s.id)));
-  }, [usedSlots]);
+    setVisibleSlotIds(new Set(usedKey ? usedKey.split(",") : []));
+  }, [usedKey]);
 
   const visibleSlots = useMemo(
     () => usedSlots.filter((s) => visibleSlotIds?.has(s.id)),

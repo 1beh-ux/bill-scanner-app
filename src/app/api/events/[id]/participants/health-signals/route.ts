@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-
-const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+import { resolveIncidentState } from "@/lib/incident-state";
 
 /**
  * Per-participant health signals for the Zdraví working list (Part 2 of the
@@ -11,10 +10,9 @@ const RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
  * rather than adding these to the central roster's GET, since this list is
  * the only reader and the data (incidents, med plans) is health-gated.
  *
- * "unresolved incidents" from the prompt isn't representable -- Incident has
- * no resolved/closed concept anywhere in the schema (see
- * docs/participants-settings-change-notes.md) -- so the indicator is "an
- * incident (or follow-up) logged in the last 24h" only.
+ * Incidents (2026-10-29): cases = top-level incidents (not voided), counted
+ * as active (pink pill) and resolved ("Vyřešeno", grey pill); lastIncidentAt
+ * = the newest active case's (or follow-up's) time.
  */
 export async function GET(
   req: NextRequest,
@@ -28,11 +26,10 @@ export async function GET(
   const denied = await requireModuleAccess(user, eventId, "health");
   if (denied) return denied;
 
-  const since = new Date(Date.now() - RECENT_WINDOW_MS);
-  const [recentIncidents, activeMedPlans] = await Promise.all([
+  const [cases, activeMedPlans] = await Promise.all([
     prisma.incident.findMany({
-      where: { participant: { eventId }, createdAt: { gte: since } },
-      select: { participantId: true, createdAt: true },
+      where: { participant: { eventId }, parentIncidentId: null },
+      include: { updates: { orderBy: { updatedAt: "asc" } }, followUps: { select: { createdAt: true } } },
     }),
     prisma.participantMedPlan.findMany({
       where: { participant: { eventId }, active: true },
@@ -42,11 +39,19 @@ export async function GET(
   ]);
 
   const incidentCount: Record<string, number> = {};
+  const resolvedCount: Record<string, number> = {};
   const lastIncidentAt: Record<string, string> = {};
-  for (const i of recentIncidents) {
+  for (const i of cases) {
+    if (!resolveIncidentState(i, i.updates)) continue;
+    if (i.resolvedAt) {
+      resolvedCount[i.participantId] = (resolvedCount[i.participantId] ?? 0) + 1;
+      continue;
+    }
     incidentCount[i.participantId] = (incidentCount[i.participantId] ?? 0) + 1;
-    const prev = lastIncidentAt[i.participantId];
-    if (!prev || i.createdAt.toISOString() > prev) lastIncidentAt[i.participantId] = i.createdAt.toISOString();
+    for (const at of [i.createdAt, ...i.followUps.map((f) => f.createdAt)]) {
+      const prev = lastIncidentAt[i.participantId];
+      if (!prev || at.toISOString() > prev) lastIncidentAt[i.participantId] = at.toISOString();
+    }
   }
   const hasMedPlan = new Set(activeMedPlans.map((p) => p.participantId));
 
@@ -54,5 +59,5 @@ export async function GET(
   const medPlans: Record<string, { med: string; slot: string; dose: string | null; notes: string | null }[]> = {};
   for (const p of activeMedPlans) (medPlans[p.participantId] ??= []).push({ med: p.eventMed.name, slot: p.eventSlot.name, dose: p.dose, notes: p.notes });
 
-  return NextResponse.json({ incidentCount, lastIncidentAt, medPlanParticipantIds: [...hasMedPlan], medPlans });
+  return NextResponse.json({ incidentCount, resolvedCount, lastIncidentAt, medPlanParticipantIds: [...hasMedPlan], medPlans });
 }

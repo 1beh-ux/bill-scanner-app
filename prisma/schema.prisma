@@ -1238,6 +1238,10 @@ model Incident {
   bodyView         BodyView?        @map("body_view")
   bodyXPct         Decimal?         @map("body_x_pct") @db.Decimal(5, 2)
   bodyYPct         Decimal?         @map("body_y_pct") @db.Decimal(5, 2)
+  // "Vyřešeno" (2026-10-29): a case (top-level incident, with its follow-ups) needs no more attention.
+  // A status, not content: set / cleared directly, outside the IncidentUpdate correction history.
+  resolvedAt       DateTime?        @map("resolved_at")
+  resolvedByUserId String?          @map("resolved_by_user_id")
 
   participant    Participant      @relation(fields: [participantId], references: [id])
   createdBy      User             @relation("IncidentCreatedBy", fields: [createdByUserId], references: [id])

@@ -138,6 +138,8 @@ export async function POST(
       bodyYPct: bodyYPct === "" || bodyYPct === undefined ? null : bodyYPct,
     },
   });
+  // A follow-up on a resolved case means it needs attention again.
+  if (parent?.resolvedAt) await prisma.incident.update({ where: { id: parent.id }, data: { resolvedAt: null, resolvedByUserId: null } });
 
   return NextResponse.json(incident, { status: 201 });
 }
