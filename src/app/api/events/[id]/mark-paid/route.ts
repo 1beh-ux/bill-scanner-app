@@ -48,5 +48,13 @@ const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
         : { paidToAuthor: false, paidAt: null, paidByUserId: null },
   });
 
-  return NextResponse.json({ updated: result.count });
+  // Osobní účtenky: the payout is netted with the person's shares owed to the treasurer -- settled together.
+  const shares = event.treasurerAuthorId
+    ? await prisma.personalBillShare.updateMany({
+        where: { authorId, personalBill: { eventId, authorId: event.treasurerAuthorId }, settledAt: action === "pay" ? null : { not: null } },
+        data: action === "pay" ? { settledAt: new Date(), settledByUserId: user.id } : { settledAt: null, settledByUserId: null },
+      })
+    : { count: 0 };
+
+  return NextResponse.json({ updated: result.count, personal: shares.count });
 }

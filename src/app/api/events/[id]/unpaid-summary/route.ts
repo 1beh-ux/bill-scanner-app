@@ -5,6 +5,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
 import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
+import { openShares } from "@/lib/personal-bills-server";
+import { netSettlement } from "@/lib/personal-bills";
 
 // What is owed to whom in THIS event (never other events -- for admin too).
 //   scope=approved  approved, not-yet-paid bills only (the default, "to pay out")
@@ -13,6 +15,8 @@ import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 //                   the paid part is reported next to them.
 // Payers come from the bills themselves, so someone since removed from the
 // event's payer list (`attached: false`) still shows as long as they are owed.
+// Osobní účtenky (2026-10-30): a person's open shares of personal bills the event's treasurer paid are taken
+// off their payout (net; < 0 = they pay the treasurer); shares between other people come as `debts`.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -104,6 +108,25 @@ export async function GET(
     byAuthor.set(bill.payerAuthorId, entry);
   }
 
+  // Personal bills: people who only owe the treasurer get a row too.
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { treasurerAuthorId: true } });
+  const shares = await openShares(eventId);
+  const official = new Map([...byAuthor.values()].map((e) => [e.authorId, Number(e.unpaid.toString())]));
+  const net = netSettlement(event.treasurerAuthorId, official, shares);
+  const people = new Map(
+    (await prisma.author.findMany({ where: { id: { in: [...new Set([...shares.flatMap((s) => [s.debtorId, s.creditorId]), ...(event.treasurerAuthorId ? [event.treasurerAuthorId] : [])])] } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true } })).map((a) => [a.id, a])
+  );
+  for (const r of net.rows) {
+    if (byAuthor.has(r.authorId)) continue;
+    const a = people.get(r.authorId);
+    if (!a) continue;
+    byAuthor.set(r.authorId, { authorId: a.id, name: a.canonicalName, attached: attachedIds.has(a.id), bankAccountNumber: a.bankAccountNumber, bankCode: a.bankCode, lastBankChange: null, unpaid: new Prisma.Decimal(0), unpaidCount: 0, paid: new Prisma.Decimal(0), paidCount: 0, items: [] });
+  }
+  const netOf = new Map(net.rows.map((r) => [r.authorId, r]));
+  const personalItems = (authorId: string) =>
+    shares.filter((s) => s.debtorId === authorId && s.creditorId === event.treasurerAuthorId && s.debtorId !== s.creditorId).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk }));
+  const treasurer = event.treasurerAuthorId ? people.get(event.treasurerAuthorId) ?? null : null;
+
   const result = Array.from(byAuthor.values())
     .map((e) => ({
       authorId: e.authorId,
@@ -117,8 +140,19 @@ export async function GET(
       paidTotalCzk: e.paid.toString(),
       paidBillCount: e.paidCount,
       items: e.items,
+      personalTotalCzk: netOf.get(e.authorId)?.toTreasurer ?? 0,
+      personalItems: personalItems(e.authorId),
+      netCzk: netOf.get(e.authorId)?.net ?? Number(e.unpaid.toString()),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 
-  return NextResponse.json(result);
+  return NextResponse.json({
+    rows: result,
+    treasurer: treasurer && { id: treasurer.id, name: treasurer.canonicalName, bankAccountNumber: treasurer.bankAccountNumber, bankCode: treasurer.bankCode },
+    debts: net.debts.map((d) => {
+      const debtor = people.get(d.debtorId);
+      const creditor = people.get(d.creditorId);
+      return { ...d, debtorName: debtor?.canonicalName ?? "?", creditorName: creditor?.canonicalName ?? "?", creditorBankAccountNumber: creditor?.bankAccountNumber ?? null, creditorBankCode: creditor?.bankCode ?? null };
+    }),
+  });
 }

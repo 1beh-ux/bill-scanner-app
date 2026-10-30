@@ -11,7 +11,7 @@ export async function getPrices(): Promise<GcpPrices> {
   return (row && parsePrices(row.value)) || EMPTY_PRICES;
 }
 
-export type AiMeter = { eventId: string; billId?: string | null; userId?: string | null; purpose: "bill_extraction" | "bill_reprocess" | "recipe_import" };
+export type AiMeter = { eventId: string; billId?: string | null; userId?: string | null; purpose: "bill_extraction" | "bill_reprocess" | "recipe_import" | "personal_bill" };
 export type AiTokens = { model: string; input: number; output: number; thinking: number };
 
 /** Never throws: metering must not break the extraction it measures. */

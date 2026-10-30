@@ -465,6 +465,21 @@ const [processingAi, setProcessingAi] = useState(false);
     else router.push(backHref);
   }
 
+  // "Přesunout do osobních" (2026-10-30): a private purchase for people leaves the official bills.
+  async function handleToPersonal() {
+    if (!(await confirm({ message: t("personalBills.confirmToPersonal") }))) return;
+    setSaving(true);
+    setError(null);
+    const res = await fetch(`/api/bills/${billId}/to-personal`, { method: "POST" });
+    setSaving(false);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(t(`personalBills.error.${data.error}`) || t("billModal.deleteFailed"));
+      return;
+    }
+    router.push(`/events/${eventId}/bills/personal`);
+  }
+
   async function handleReopen() {
     setSaving(true);
     setError(null);
@@ -898,10 +913,15 @@ const statusLabel = t(
             )}
             {/* Not for an approved bill (reopen it first) or one the AI is working on. */}
             {!isLocked && (
+              <button onClick={handleToPersonal} disabled={saving} className="ml-auto rounded-lg border border-mist px-4 py-2 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50">
+                {t("personalBills.toPersonal")}
+              </button>
+            )}
+            {!isLocked && (
               <button
                 onClick={handleDelete}
                 disabled={saving}
-                className="ml-auto rounded-lg border border-red-300 px-4 py-2 text-[13px] text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-lg border border-red-300 px-4 py-2 text-[13px] text-red-700 hover:bg-red-50 disabled:opacity-50"
               >
                 {t("billModal.delete")}
               </button>

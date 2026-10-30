@@ -347,6 +347,25 @@ async function main() {
       );
     }
 
+    // ===== Osobní účtenky (2026-10-30): personal bills are per event; Záře's are "not found" =====
+    asUser(admin);
+    {
+      const pRoute = await import("@/app/api/events/[id]/personal-bills/route");
+      if (z.event) {
+        const r = await pRoute.GET(req(`/api/events/${z.event.id}/personal-bills`), params({ id: z.event.id }));
+        check("Záře event Osobní účtenky -> 404", r.status === 404, `HTTP ${r.status}`);
+      }
+      if (z.bill) {
+        const r = await (await import("@/app/api/bills/[id]/to-personal/route")).POST(req(`/api/bills/${z.bill.id}/to-personal`, { method: "POST" }), params({ id: z.bill.id }));
+        check("Záře bill -> Přesunout do osobních -> 404", r.status === 404 && !!(await prisma.bill.findUnique({ where: { id: z.bill.id }, select: { id: true } })), `HTTP ${r.status}`);
+      }
+      // Another organization's payer can't be the author or a share holder.
+      const foreign = await prisma.author.create({ data: { canonicalName: `Iso cizí ${stamp}`, organizationId: org2Id! } });
+      const r = await pRoute.POST(req(`/api/events/${eventId}/personal-bills`, { method: "POST", body: { billDate: "2027-07-02", totalAmount: 100, author: `a:${foreign.id}`, shares: [] } }), params({ id: eventId! }));
+      check("personal bill with another organization's payer -> refused", r.status === 400 || r.status === 404, `HTTP ${r.status}`);
+      await prisma.author.delete({ where: { id: foreign.id } });
+    }
+
     // ===== bank check (docs/bank-payments-design.md) =====
     asUser(admin);
     await prisma.organization.update({ where: { id: org.id }, data: { active: true } });
@@ -573,6 +592,7 @@ async function main() {
       await step("participant", () => prisma.participant.deleteMany({ where: ev }));
       await step("eventParticipantField", () => prisma.eventParticipantField.deleteMany({ where: ev }));
       await step("planEntry", () => prisma.planEntry.deleteMany({ where: ev }));
+      await step("personalBill", () => prisma.personalBill.deleteMany({ where: ev }));
       await step("eventListItem", () => prisma.eventListItem.deleteMany({ where: ev }));
       await step("eventCategory", () => prisma.eventCategory.deleteMany({ where: ev }));
       await step("eventModule", () => prisma.eventModule.deleteMany({ where: ev }));

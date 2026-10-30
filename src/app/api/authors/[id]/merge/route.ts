@@ -68,6 +68,17 @@ export async function POST(
     }
     await tx.authorEventAccess.deleteMany({ where: { authorId: sourceId } });
 
+    // Osobní účtenky (2026-10-30): the source's bills, shares (summed where both have one) and treasurer roles.
+    await tx.personalBill.updateMany({ where: { authorId: sourceId }, data: { authorId: targetId } });
+    await tx.event.updateMany({ where: { treasurerAuthorId: sourceId }, data: { treasurerAuthorId: targetId } });
+    for (const sh of await tx.personalBillShare.findMany({ where: { authorId: sourceId } })) {
+      const other = await tx.personalBillShare.findUnique({ where: { personalBillId_authorId: { personalBillId: sh.personalBillId, authorId: targetId } } });
+      if (other) {
+        await tx.personalBillShare.update({ where: { id: other.id }, data: { amountCzk: other.amountCzk.plus(sh.amountCzk) } });
+        await tx.personalBillShare.delete({ where: { id: sh.id } });
+      } else await tx.personalBillShare.update({ where: { id: sh.id }, data: { authorId: targetId } });
+    }
+
     if (bank) await setAuthorBank(tx, { authorId: targetId, bank, userId: user.id, eventId: null, source: "merge" });
 
     // Archive the source — reuses the schema's existing merge fields.

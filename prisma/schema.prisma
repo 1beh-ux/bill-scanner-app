@@ -508,6 +508,11 @@ model Event {
   bankTransactions       BankTransaction[]
   bankImportBatches      BankImportBatch[]
   ticketOrders           TicketOrder[]
+  // Osobní účtenky (2026-10-30): who pays out the event's reimbursements -- personal bills they paid for are
+  // netted with each person's payout (src/lib/personal-bills.ts).
+  treasurerAuthorId String? @map("treasurer_author_id")
+  treasurer         Author? @relation("EventTreasurer", fields: [treasurerAuthorId], references: [id], onDelete: SetNull)
+  personalBills     PersonalBill[]
   eventPersons           EventPerson[]
   kitchenSettings        EventKitchenSettings?
   planEntries            PlanEntry[]
@@ -574,7 +579,14 @@ model Author {
   payoutNeeded       Boolean  @default(true) @map("payout_needed")
   createdAt          DateTime @default(now()) @map("created_at")
 
+  // The person in Lidé this payer is (2026-10-30, personal bills: an adult picked as a share holder).
+  childId            String?  @map("child_id")
+
   mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
+  child       Child?              @relation(fields: [childId], references: [id], onDelete: SetNull)
+  personalBills      PersonalBill[]      @relation("PersonalBillAuthor")
+  personalShares     PersonalBillShare[]
+  treasurerOf        Event[]             @relation("EventTreasurer")
   mergedFrom  Author[]            @relation("AuthorMerge")
   eventAccess AuthorEventAccess[]
   bills       Bill[]
@@ -872,6 +884,7 @@ model Child {
   emailLogs    ChildEmailLog[]
   documents    PersonDocument[]
   eventPersons EventPerson[]
+  authors      Author[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -2503,4 +2516,60 @@ model ShoppingCheck {
 
   @@unique([eventId, ingredientId, forDate])
   @@map("shopping_checks")
+}
+
+// Osobní účtenky (2026-10-30): purchases for people that are NOT the event's official expense -- never in the
+// bill lists, the accounting export, Rozpočet or the settlement. The author paid; the shares are what each
+// person owes them. Shares are CZK (the bill's amountCzk split).
+enum PersonalSplitMode {
+  even
+  custom
+}
+
+model PersonalBill {
+  id               String            @id @default(uuid())
+  eventId          String            @map("event_id")
+  authorId         String            @map("author_id")
+  billDate         DateTime          @map("bill_date") @db.Date
+  merchantName     String?           @map("merchant_name")
+  totalAmount      Decimal           @map("total_amount") @db.Decimal(12, 2)
+  currency         Currency          @default(CZK)
+  // null = a foreign currency without a ČNB rate yet (can't be split).
+  amountCzk        Decimal?          @map("amount_czk") @db.Decimal(12, 2)
+  exchangeRateUsed Decimal?          @map("exchange_rate_used") @db.Decimal(12, 6)
+  splitMode        PersonalSplitMode @default(even) @map("split_mode")
+  note             String?
+  // An optional photo / PDF of the receipt.
+  gcsObjectPath    String?           @map("gcs_object_path")
+  originalFilename String?           @map("original_filename")
+  sizeBytes        BigInt?           @map("size_bytes")
+  // Moved here from the official bills: the fields needed to move it back.
+  fromBill         Json?             @map("from_bill")
+  createdByUserId  String            @map("created_by_user_id")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  event  Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  author Author              @relation("PersonalBillAuthor", fields: [authorId], references: [id])
+  shares PersonalBillShare[]
+
+  @@index([eventId])
+  @@map("personal_bills")
+}
+
+model PersonalBillShare {
+  id              String    @id @default(uuid())
+  personalBillId  String    @map("personal_bill_id")
+  // Who owes their part to the bill's author.
+  authorId        String    @map("author_id")
+  amountCzk       Decimal   @map("amount_czk") @db.Decimal(12, 2)
+  settledAt       DateTime? @map("settled_at")
+  settledByUserId String?   @map("settled_by_user_id")
+
+  personalBill PersonalBill @relation(fields: [personalBillId], references: [id], onDelete: Cascade)
+  author       Author       @relation(fields: [authorId], references: [id])
+
+  @@unique([personalBillId, authorId])
+  @@index([authorId])
+  @@map("personal_bill_shares")
 }
