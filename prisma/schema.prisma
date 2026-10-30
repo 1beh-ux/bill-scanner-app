@@ -138,6 +138,8 @@ enum ListTemplateKind {
   kitchen_band
   // Kuchyně diets (organization-wide, Šablony -> Kuchyně): data { keywords[], contents[], allergens[] }.
   kitchen_diet
+  // Osobní účtenky: repeated items with a base price per piece (pivo, limonáda); data { unitPrice }.
+  personal_item
 }
 
 enum IngredientUnit {
@@ -1259,6 +1261,8 @@ model Incident {
   // A status, not content: set / cleared directly, outside the IncidentUpdate correction history.
   resolvedAt       DateTime?        @map("resolved_at")
   resolvedByUserId String?          @map("resolved_by_user_id")
+  // "Poznámka pro vedoucí" (2026-10-30): for the organizers only -- never in the parents' summary / PDF.
+  internalNote     String?          @map("internal_note")
 
   participant    Participant      @relation(fields: [participantId], references: [id])
   createdBy      User             @relation("IncidentCreatedBy", fields: [createdByUserId], references: [id])
@@ -2529,7 +2533,8 @@ enum PersonalSplitMode {
 model PersonalBill {
   id               String            @id @default(uuid())
   eventId          String            @map("event_id")
-  authorId         String            @map("author_id")
+  // Who paid; null = the event itself (paid from the event's money / cash box).
+  authorId         String?           @map("author_id")
   billDate         DateTime          @map("bill_date") @db.Date
   merchantName     String?           @map("merchant_name")
   totalAmount      Decimal           @map("total_amount") @db.Decimal(12, 2)
@@ -2538,6 +2543,14 @@ model PersonalBill {
   amountCzk        Decimal?          @map("amount_czk") @db.Decimal(12, 2)
   exchangeRateUsed Decimal?          @map("exchange_rate_used") @db.Decimal(12, 6)
   splitMode        PersonalSplitMode @default(even) @map("split_mode")
+  // Through the event (the default): the event pays the author back and the people pay the event (netted with
+  // payouts on Platby). Off: the author settles with the people himself (person to person).
+  viaEvent         Boolean           @default(true) @map("via_event")
+  // Tally ("čárky": a keg of beer): price per piece; each share = quantity × unitPrice.
+  unitLabel        String?           @map("unit_label")
+  unitPrice        Decimal?          @map("unit_price") @db.Decimal(12, 2)
+  // The receipt's lines as the AI read them (shown next to the form).
+  lineItems        Json?             @map("line_items")
   note             String?
   // An optional photo / PDF of the receipt.
   gcsObjectPath    String?           @map("gcs_object_path")
@@ -2550,7 +2563,7 @@ model PersonalBill {
   updatedAt        DateTime          @updatedAt @map("updated_at")
 
   event  Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  author Author              @relation("PersonalBillAuthor", fields: [authorId], references: [id])
+  author Author?             @relation("PersonalBillAuthor", fields: [authorId], references: [id])
   shares PersonalBillShare[]
 
   @@index([eventId])
@@ -2563,8 +2576,13 @@ model PersonalBillShare {
   // Who owes their part to the bill's author.
   authorId        String    @map("author_id")
   amountCzk       Decimal   @map("amount_czk") @db.Decimal(12, 2)
+  // Tally: how many pieces.
+  quantity        Decimal?  @db.Decimal(10, 2)
+  // The debtor paid (to the event, or to the author person to person).
   settledAt       DateTime? @map("settled_at")
   settledByUserId String?   @map("settled_by_user_id")
+  // Through the event: the event paid this part back to the bill's author (with their payout).
+  creditorPaidAt  DateTime? @map("creditor_paid_at")
 
   personalBill PersonalBill @relation(fields: [personalBillId], references: [id], onDelete: Cascade)
   author       Author       @relation(fields: [authorId], references: [id])

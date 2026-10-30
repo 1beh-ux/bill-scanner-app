@@ -34,7 +34,7 @@ export async function GET(
   return NextResponse.json(effective);
 }
 
-// "Vyřešeno" / "Znovu otevřít": PATCH { resolved: boolean } on a case (a top-level incident; its follow-ups
+// "Vyřešeno" / "Znovu otevřít": PATCH { resolved: boolean }; or { internalNote } (the organizers' note) on a case (a top-level incident; its follow-ups
 // belong to it). A status only -- the incident's content and correction history stay as they are.
 export async function PATCH(
   req: NextRequest,
@@ -55,6 +55,11 @@ export async function PATCH(
   const denied = await requireModuleAccess(user, incident.participant.eventId, "health");
   if (denied) return denied;
   const body = await req.json().catch(() => ({}));
+  // "Poznámka pro vedoucí": any incident (follow-ups too), outside the correction history.
+  if (body.internalNote !== undefined && body.resolved === undefined) {
+    const note = typeof body.internalNote === "string" ? body.internalNote.trim().slice(0, 4000) || null : null;
+    return NextResponse.json(await prisma.incident.update({ where: { id }, data: { internalNote: note }, select: { id: true, internalNote: true } }));
+  }
   if (typeof body.resolved !== "boolean") {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }

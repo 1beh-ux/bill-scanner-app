@@ -18,6 +18,7 @@ export type IncidentClientData = {
   actionSummary: string;
   pillName: string | null;
   details: string | null;
+  internalNote?: string | null;
   photoGcsPath: string | null;
   tempC: string | null;
   bodyView: "front" | "back" | null;
@@ -119,6 +120,8 @@ export default function IncidentFormModal({
   const [incidentTime, setIncidentTime] = useState(isEdit ? (incident?.incidentTime ?? "") : "");
   const [actionSummary, setActionSummary] = useState(isEdit ? (incident?.actionSummary ?? "") : "");
   const [details, setDetails] = useState(isEdit ? (incident?.details ?? "") : "");
+  // For the organizers only (never in the parents' summary); a direct field, not part of the correction.
+  const [internalNote, setInternalNote] = useState(isEdit ? (incident?.internalNote ?? "") : "");
   const [tempC, setTempC] = useState(isEdit ? (incident?.tempC ?? "") : "");
   const [selectedMedId, setSelectedMedId] = useState<string>(FREE_TEXT_MED);
   const [pillName, setPillName] = useState(isEdit ? (incident?.pillName ?? "") : "");
@@ -237,8 +240,12 @@ export default function IncidentFormModal({
           category: isFollowUp ? undefined : category,
           templateType: isFollowUp ? undefined : templateType,
           parentIncidentId: isFollowUp ? incident?.id : undefined,
+          internalNote: internalNote.trim() || undefined,
         }),
       });
+    }
+    if (res.ok && isEdit && incident && internalNote.trim() !== (incident.internalNote ?? "").trim()) {
+      await fetch(`/api/incidents/${incident.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ internalNote }) }).catch(() => null);
     }
 
     setSaving(false);
@@ -390,6 +397,15 @@ export default function IncidentFormModal({
             onChange={(e) => setDetails(e.target.value)}
             className={inputClass}
             rows={3}
+          />
+
+          <div className="-mb-2 text-[13px] text-ink-secondary">{t("incidentForm.internalNoteLabel")}</div>
+          <textarea
+            placeholder={t("incidentForm.internalNoteHint")}
+            value={internalNote}
+            onChange={(e) => setInternalNote(e.target.value)}
+            className={inputClass + " border-amber-400/70 bg-amber-50/40"}
+            rows={2}
           />
 
     </>

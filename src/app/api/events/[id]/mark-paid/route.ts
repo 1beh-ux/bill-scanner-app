@@ -48,13 +48,20 @@ const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
         : { paidToAuthor: false, paidAt: null, paidByUserId: null },
   });
 
-  // Osobní účtenky: the payout is netted with the person's shares owed to the treasurer -- settled together.
-  const shares = event.treasurerAuthorId
-    ? await prisma.personalBillShare.updateMany({
-        where: { authorId, personalBill: { eventId, authorId: event.treasurerAuthorId }, settledAt: action === "pay" ? null : { not: null } },
-        data: action === "pay" ? { settledAt: new Date(), settledByUserId: user.id } : { settledAt: null, settledByUserId: null },
-      })
-    : { count: 0 };
+  // Osobní účtenky: the payout is netted with the personal bills through the event -- settled together: the
+  // person's own parts (they paid the event) and the others' parts of bills they paid (the event paid them).
+  const pay = action === "pay";
+  const [own, theirs] = await prisma.$transaction([
+    prisma.personalBillShare.updateMany({
+      where: { authorId, personalBill: { eventId, OR: [{ viaEvent: true }, { authorId: null }] }, settledAt: pay ? null : { not: null } },
+      data: pay ? { settledAt: new Date(), settledByUserId: user.id } : { settledAt: null, settledByUserId: null },
+    }),
+    prisma.personalBillShare.updateMany({
+      where: { authorId: { not: authorId }, personalBill: { eventId, viaEvent: true, authorId }, creditorPaidAt: pay ? null : { not: null } },
+      data: { creditorPaidAt: pay ? new Date() : null },
+    }),
+  ]);
+  const shares = { count: own.count + theirs.count };
 
   return NextResponse.json({ updated: result.count, personal: shares.count });
 }

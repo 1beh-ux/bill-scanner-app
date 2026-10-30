@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     eventStatus: g.event.status,
     people,
     bills: bills.map((b) => {
-      const shares = b.shares.map((s) => ({ authorId: s.authorId, name: s.author.canonicalName, amountCzk: Number(s.amountCzk), settled: !!s.settledAt }));
+      const shares = b.shares.map((s) => ({ authorId: s.authorId, name: s.author.canonicalName, amountCzk: Number(s.amountCzk), quantity: s.quantity == null ? null : Number(s.quantity), settled: !!s.settledAt || !!s.creditorPaidAt }));
       return {
         id: b.id,
         billDate: b.billDate.toISOString().slice(0, 10),
@@ -34,7 +34,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         note: b.note,
         hasFile: !!b.gcsObjectPath,
         fromBill: !!b.fromBill,
-        author: { id: b.author.id, name: b.author.canonicalName },
+        // null = paid from the event's money.
+        author: b.author && { id: b.author.id, name: b.author.canonicalName },
+        viaEvent: b.viaEvent,
+        unitLabel: b.unitLabel,
+        unitPrice: b.unitPrice == null ? null : Number(b.unitPrice),
+        lineItems: Array.isArray(b.lineItems) ? b.lineItems : [],
         shares: shares.sort((x, y) => x.name.localeCompare(y.name, "cs")),
         status: b.amountCzk == null ? null : splitStatus(Number(b.amountCzk), shares.map((s) => s.amountCzk)),
       };

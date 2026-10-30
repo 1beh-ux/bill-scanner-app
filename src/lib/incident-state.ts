@@ -10,6 +10,7 @@ export type EffectiveIncident = Pick<
   | "templateType"
   | "parentIncidentId"
   | "resolvedAt"
+  | "internalNote"
 > & {
   incidentDate: Incident["incidentDate"];
   incidentTime: string | null;
@@ -45,6 +46,7 @@ export function resolveIncidentState(
     templateType: incident.templateType,
     parentIncidentId: incident.parentIncidentId,
     resolvedAt: incident.resolvedAt,
+    internalNote: incident.internalNote,
     incidentDate: latest ? latest.incidentDate : incident.incidentDate,
     incidentTime: latest ? latest.incidentTime : incident.incidentTime,
     actionSummary: latest ? latest.actionSummary : incident.actionSummary,

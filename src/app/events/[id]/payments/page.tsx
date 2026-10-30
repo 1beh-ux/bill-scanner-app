@@ -24,12 +24,15 @@ type UnpaidRow = {
   paidTotalCzk: string;
   paidBillCount: number;
   items: { merchantName: string | null; amountCzk: string | null; paid: boolean }[];
-  // Osobní účtenky (2026-10-30): open shares owed to the treasurer, taken off the payout; net < 0 = they pay.
-  personalTotalCzk: number;
-  personalItems: { merchantName: string | null; amountCzk: number }[];
+  // Osobní účtenky (2026-10-30), through the event: their own parts (taken off) and the others' parts of personal
+  // bills they paid (added); net < 0 = they pay the event.
+  personalOutCzk: number;
+  personalInCzk: number;
+  personalOutItems: { merchantName: string | null; amountCzk: number }[];
+  personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string }[];
   netCzk: number;
 };
-type Person = { id: string; name: string; bankAccountNumber: string | null; bankCode: string | null };
+type Person = { name: string; bankAccountNumber: string | null; bankCode: string | null };
 type Debt = { debtorId: string; creditorId: string; amountCzk: number; debtorName: string; creditorName: string; creditorBankAccountNumber: string | null; creditorBankCode: string | null };
 
 const inputClassSm =
@@ -46,7 +49,8 @@ export default function EventPaymentsPage({
 
   const [event, setEvent] = useState<EventBasic | null>(null);
   const [rows, setRows] = useState<UnpaidRow[]>([]);
-  const [treasurer, setTreasurer] = useState<Person | null>(null);
+  // Where people pay the event (its bank account, else the treasurer's).
+  const [receiver, setReceiver] = useState<Person | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [debtQr, setDebtQr] = useState<Record<string, string>>({});
   const [scope, setScope] = useState<"approved" | "all">("approved");
@@ -76,7 +80,7 @@ export default function EventPaymentsPage({
     if (unpaidRes.ok) {
       const d = await unpaidRes.json();
       setRows(d.rows);
-      setTreasurer(d.treasurer);
+      setReceiver(d.receiver);
       setDebts(d.debts);
     }
     setLoading(false);
@@ -95,9 +99,9 @@ export default function EventPaymentsPage({
       const newReasons: Record<string, "no_bank" | "bad_bank" | "zero_amount"> = {};
 
       for (const row of rows) {
-        // Net < 0: the person pays the treasurer (QR to the treasurer's account).
+        // Net < 0: the person pays the event (QR to the event's account).
         const owes = row.netCzk < 0;
-        const account = owes ? treasurer : { bankAccountNumber: row.bankAccountNumber, bankCode: row.bankCode };
+        const account = owes ? receiver : { bankAccountNumber: row.bankAccountNumber, bankCode: row.bankCode };
         if (!account?.bankAccountNumber || !account.bankCode) {
           newIbans[row.authorId] = null;
           newReasons[row.authorId] = "no_bank";
@@ -124,7 +128,7 @@ export default function EventPaymentsPage({
                 .map((it) => ({ label: it.merchantName || "Uctenka", amountCzk: parseFloat(it.amountCzk!) })),
               55
             );
-        const message = owes ? `${row.name} osobni utraty ${event?.name ?? ""}`.slice(0, 60) : row.personalTotalCzk > 0 ? `${row.name} ${event?.name ?? ""} po zapocteni`.slice(0, 60) : itemized || `${row.name} ${event?.name ?? ""}`;
+        const message = owes ? `${row.name} osobni utraty ${event?.name ?? ""}`.slice(0, 60) : row.personalOutCzk > 0 || row.personalInCzk > 0 ? `${row.name} ${event?.name ?? ""} po zapocteni`.slice(0, 60) : itemized || `${row.name} ${event?.name ?? ""}`;
         const spayd = buildSpaydString(iban, amount, message);
         try {
           newUrls[row.authorId] = await QRCode.toDataURL(spayd, { margin: 1, width: 180 });
@@ -145,7 +149,7 @@ export default function EventPaymentsPage({
     return () => {
       cancelled = true;
     };
-  }, [rows, event?.name, treasurer]);
+  }, [rows, event?.name, receiver]);
 
   // Person to person (personal bills not paid by the treasurer): a QR to the creditor's account.
   useEffect(() => {
@@ -274,20 +278,34 @@ export default function EventPaymentsPage({
                   )}
                 </div>
 
-                {row.personalTotalCzk > 0 && (
+                {(row.personalOutCzk > 0 || row.personalInCzk > 0) && (
                   <div className="mb-2 rounded-md bg-paper px-2 py-1.5 text-[13px]">
-                    <div className="text-ink-secondary">
-                      − {t("personalBills.ownedToTreasurer", { name: treasurer?.name ?? "" })}: {formatCzk(row.personalTotalCzk)}
-                    </div>
-                    <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
-                      {row.personalItems.map((it, i) => (
-                        <li key={i}>
-                          {it.merchantName || "—"} — {formatCzk(it.amountCzk)}
-                        </li>
-                      ))}
-                    </ul>
+                    {row.personalInCzk > 0 && (
+                      <>
+                        <div className="text-ink-secondary">+ {t("personalBills.paidForOthers")}: {formatCzk(row.personalInCzk)}</div>
+                        <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
+                          {row.personalInItems.map((it, i) => (
+                            <li key={i}>
+                              {it.debtorName}: {it.merchantName || "—"} — {formatCzk(it.amountCzk)}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                    {row.personalOutCzk > 0 && (
+                      <>
+                        <div className="text-ink-secondary">− {t("personalBills.ownSpending")}: {formatCzk(row.personalOutCzk)}</div>
+                        <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
+                          {row.personalOutItems.map((it, i) => (
+                            <li key={i}>
+                              {it.merchantName || "—"} — {formatCzk(it.amountCzk)}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
                     <div className="font-semibold text-ink">
-                      {row.netCzk > 0 ? t("personalBills.netPayOut", { amount: formatCzk(row.netCzk) }) : row.netCzk < 0 ? t("personalBills.netTheyPay", { amount: formatCzk(-row.netCzk), name: treasurer?.name ?? "" }) : t("personalBills.netEven")}
+                      {row.netCzk > 0 ? t("personalBills.netPayOut", { amount: formatCzk(row.netCzk) }) : row.netCzk < 0 ? t("personalBills.netTheyPayEvent", { amount: formatCzk(-row.netCzk) }) : t("personalBills.netEven")}
                     </div>
                   </div>
                 )}
@@ -357,7 +375,7 @@ export default function EventPaymentsPage({
                   </div>
                 )}
 
-                {(row.unpaidBillCount > 0 || row.personalTotalCzk > 0) && (
+                {(row.unpaidBillCount > 0 || row.personalOutCzk > 0 || row.personalInCzk > 0) && (
                 <button
                   onClick={() => handleMarkPaid(row)}
                   disabled={markingPaidId === row.authorId || event.status === "closed"}
@@ -369,7 +387,7 @@ export default function EventPaymentsPage({
               </div>
 
               <div className="w-full text-center sm:w-[180px]">
-                {row.netCzk < 0 && qrDataUrls[row.authorId] && <div className="mb-1 text-[12px] text-amber-700">{t("personalBills.qrToTreasurer", { name: treasurer?.name ?? "" })}</div>}
+                {row.netCzk < 0 && qrDataUrls[row.authorId] && <div className="mb-1 text-[12px] text-amber-700">{t("personalBills.qrToEvent", { name: receiver?.name ?? "" })}</div>}
                 {qrDataUrls[row.authorId] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={qrDataUrls[row.authorId]} alt="QR Platba" width={180} height={180} className="mx-auto" />

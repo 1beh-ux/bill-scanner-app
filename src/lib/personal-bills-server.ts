@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { convertToCzk } from "@/lib/exchange-rates";
-import { evenSplit, toHal } from "@/lib/personal-bills";
+import { evenSplit, tallyAmount, toHal } from "@/lib/personal-bills";
 
 type GuardEvent = { id: string; name: string; organizationId: string; status: string; treasurerAuthorId: string | null };
 /** The Účtenky grant on the event (404 outside the acting organization). */
@@ -57,13 +57,20 @@ const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slic
 const CURRENCIES: Currency[] = ["CZK", "EUR", "PLN"];
 
 /**
- * Create / replace a personal bill from the form: { billDate, merchantName, totalAmount, currency, author (person key),
- * splitMode even|custom, shares: [{ person, amountCzk? }], note, gcsObjectPath?, originalFilename? }.
+ * Create / replace a personal bill from the form: { billDate, merchantName, totalAmount, currency, author (person
+ * key, "event" = paid from the event's money), viaEvent, splitMode even|custom, shares: [{ person, amountCzk? }],
+ * note, gcsObjectPath?, originalFilename?, lineItems? }.
  * Even = the CZK amount split to the haléř; custom = the given amounts (may not exceed the total; less = "nerozděleno").
+ * Tally (unitPrice set, "čárky"): shares [{ person, quantity }], each = quantity × unitPrice, the total = their sum.
  */
 export async function savePersonalBill(event: GuardEvent, userId: string, billId: string | null, b: Record<string, unknown>): Promise<{ id: string } | { error: string }> {
-  const total = Number(String(b.totalAmount ?? "").replace(",", "."));
-  const currency = CURRENCIES.includes(b.currency as Currency) ? (b.currency as Currency) : "CZK";
+  const unitPrice = b.unitPrice == null || b.unitPrice === "" ? null : Number(String(b.unitPrice).replace(",", "."));
+  if (unitPrice != null && !(unitPrice > 0 && unitPrice < 100000)) return { error: "bad_amount" };
+  const rawTally = (Array.isArray(b.shares) ? b.shares : []) as { quantity?: unknown }[];
+  const quantities = unitPrice != null ? rawTally.map((x) => Number(String(x.quantity ?? "").replace(",", "."))) : [];
+  if (quantities.some((q) => !(q >= 0 && q < 100000))) return { error: "bad_amount" };
+  const total = unitPrice != null ? quantities.reduce((sum, q) => sum + tallyAmount(q, unitPrice), 0) : Number(String(b.totalAmount ?? "").replace(",", "."));
+  const currency = unitPrice != null ? "CZK" : CURRENCIES.includes(b.currency as Currency) ? (b.currency as Currency) : "CZK";
   const billDate = typeof b.billDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.billDate) ? new Date(`${b.billDate}T00:00:00Z`) : null;
   if (!(total > 0 && total < 10_000_000) || !billDate) return { error: "bad_request" };
   const conv = await convertToCzk(total, currency, billDate);
@@ -73,8 +80,9 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
   if (rawShares.length > 500) return { error: "bad_request" };
 
   return prisma.$transaction(async (tx) => {
-    const authorId = await resolvePerson(tx, event.id, event.organizationId, b.author);
-    if (!authorId) return { error: "author_required" };
+    // "event" = paid from the event's money: the people pay the event, nobody is paid back.
+    const authorId = b.author === "event" ? null : await resolvePerson(tx, event.id, event.organizationId, b.author);
+    if (!authorId && b.author !== "event") return { error: "author_required" };
     const people: string[] = [];
     for (const s of rawShares) {
       const id = await resolvePerson(tx, event.id, event.organizationId, s.person);
@@ -83,7 +91,8 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
       people.push(id);
     }
     let amounts: number[] = [];
-    if (people.length) {
+    if (unitPrice != null) amounts = quantities.map((q) => tallyAmount(q, unitPrice));
+    else if (people.length) {
       if (amountCzk == null) return { error: "no_rate" };
       if (splitMode === "even") amounts = evenSplit(amountCzk, people.length);
       else {
@@ -101,28 +110,47 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
       amountCzk,
       exchangeRateUsed: conv ? conv.rateUsed : null,
       splitMode: splitMode as "even" | "custom",
+      viaEvent: !authorId || b.viaEvent !== false,
+      unitPrice,
+      unitLabel: unitPrice != null ? text(b.unitLabel, 60) || null : null,
       note: text(b.note, 2000) || null,
     } as const;
     let id = billId;
     if (id) {
       // Settled shares are history: such a bill isn't re-split (unsettle it on Platby first).
-      if (await tx.personalBillShare.count({ where: { personalBillId: id, settledAt: { not: null } } })) return { error: "settled_locked" };
+      if (await tx.personalBillShare.count({ where: { personalBillId: id, OR: [{ settledAt: { not: null } }, { creditorPaidAt: { not: null } }] } })) return { error: "settled_locked" };
       await tx.personalBill.update({ where: { id }, data });
       await tx.personalBillShare.deleteMany({ where: { personalBillId: id } });
     } else {
       const file = typeof b.gcsObjectPath === "string" && b.gcsObjectPath.startsWith(`events/${event.id}/personal/`) ? b.gcsObjectPath : null;
-      id = (await tx.personalBill.create({ data: { ...data, eventId: event.id, createdByUserId: userId, gcsObjectPath: file, originalFilename: file ? text(b.originalFilename, 200) || null : null }, select: { id: true } })).id;
+      // The AI's receipt lines (shown next to the form), kept small.
+      const lineItems = Array.isArray(b.lineItems)
+        ? (b.lineItems as { description?: unknown; total?: unknown }[]).slice(0, 200).map((l) => ({ description: text(l?.description, 200), total: typeof l?.total === "number" ? l.total : null }))
+        : null;
+      id = (await tx.personalBill.create({ data: { ...data, eventId: event.id, createdByUserId: userId, gcsObjectPath: file, originalFilename: file ? text(b.originalFilename, 200) || null : null, lineItems: lineItems ?? undefined }, select: { id: true } })).id;
     }
-    if (people.length) await tx.personalBillShare.createMany({ data: people.map((p, i) => ({ personalBillId: id!, authorId: p, amountCzk: amounts[i] })) });
+    // A tally keeps only who had something.
+    const rows = people.map((p, i) => ({ personalBillId: id!, authorId: p, amountCzk: amounts[i], quantity: unitPrice != null ? quantities[i] : null })).filter((r) => unitPrice == null || (r.quantity ?? 0) > 0);
+    if (rows.length) await tx.personalBillShare.createMany({ data: rows });
     return { id: id! };
   });
 }
 
-/** Unsettled shares of the event (for Platby). */
+/** Shares of the event still open on either side (for Platby). */
 export async function openShares(eventId: string) {
   const rows = await prisma.personalBillShare.findMany({
-    where: { settledAt: null, personalBill: { eventId } },
-    select: { authorId: true, amountCzk: true, author: { select: { canonicalName: true } }, personalBill: { select: { authorId: true, merchantName: true, billDate: true } } },
+    where: { personalBill: { eventId }, OR: [{ settledAt: null }, { creditorPaidAt: null }] },
+    select: { authorId: true, amountCzk: true, quantity: true, settledAt: true, creditorPaidAt: true, author: { select: { canonicalName: true } }, personalBill: { select: { authorId: true, viaEvent: true, merchantName: true, unitLabel: true, billDate: true } } },
   });
-  return rows.map((r) => ({ debtorId: r.authorId, debtorName: r.author.canonicalName, creditorId: r.personalBill.authorId, amountCzk: Number(r.amountCzk), merchantName: r.personalBill.merchantName, billDate: r.personalBill.billDate }));
+  return rows.map((r) => ({
+    debtorId: r.authorId,
+    debtorName: r.author.canonicalName,
+    creditorId: r.personalBill.authorId,
+    viaEvent: r.personalBill.viaEvent,
+    debtorOpen: !r.settledAt,
+    creditorOpen: !r.creditorPaidAt,
+    amountCzk: Number(r.amountCzk),
+    merchantName: [r.personalBill.merchantName, r.quantity != null ? `${Number(r.quantity)}× ${r.personalBill.unitLabel ?? ""}`.trim() : null].filter(Boolean).join(" · ") || null,
+    billDate: r.personalBill.billDate,
+  }));
 }

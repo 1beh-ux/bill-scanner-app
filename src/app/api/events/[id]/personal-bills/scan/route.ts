@@ -17,12 +17,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   await billsBucket.file(gcsObjectPath).save(Buffer.from(await file.arrayBuffer()), { contentType: file.type || "application/octet-stream" });
   // The AI needs the event's categories (it also guesses one); for a personal bill only shop / date / total matter.
   const categories = await prisma.eventCategory.findMany({ where: { eventId: id }, select: { name: true, description: true } });
-  let prefill: { merchantName: string | null; billDate: string | null; totalAmount: number | null; currency: string | null } = { merchantName: null, billDate: null, totalAmount: null, currency: null };
+  let prefill: { merchantName: string | null; billDate: string | null; totalAmount: number | null; currency: string | null; lineItems: { description: string | null; total: number | null }[] } = { merchantName: null, billDate: null, totalAmount: null, currency: null, lineItems: [] };
   try {
     const r = await extractBillWithAi(gcsObjectPath, file.name, categories.length ? categories : [{ name: "Ostatní", description: null }], { eventId: id, userId: g.user.id, purpose: "personal_bill" });
-    prefill = { merchantName: r.data?.merchant_name ?? null, billDate: r.data?.invoice_date ?? null, totalAmount: r.data?.total_amount ?? null, currency: r.data?.currency ?? null };
+    prefill = { merchantName: r.data?.merchant_name ?? null, billDate: r.data?.invoice_date ?? null, totalAmount: r.data?.total_amount ?? null, currency: r.data?.currency ?? null, lineItems: Array.isArray(r.data?.line_items) ? r.data.line_items : [] };
   } catch {
     // Read failed: the photo stays, the form is filled by hand.
   }
   return NextResponse.json({ gcsObjectPath, originalFilename: file.name, ...prefill });
+}
+
+// The just-uploaded receipt (before the bill is saved), for the preview next to the form.
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const g = await personalGuard(id);
+  if ("error" in g) return g.error;
+  const path = new URL(req.url).searchParams.get("path") ?? "";
+  if (!path.startsWith(`events/${id}/personal/`) || path.includes("..")) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const file = billsBucket.file(path);
+  const [[metadata], [buffer]] = await Promise.all([file.getMetadata(), file.download()]).catch(() => [[null], [null]] as const);
+  if (!buffer || !metadata) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  return new NextResponse(new Uint8Array(buffer), { headers: { "Content-Type": metadata.contentType || "application/octet-stream", "Cache-Control": "private, no-cache" } });
 }

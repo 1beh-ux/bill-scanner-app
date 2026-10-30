@@ -94,6 +94,12 @@ export default function IncidentDetailModal({
         {incident.details && (
           <p className="mb-3 whitespace-pre-line text-[14px] text-ink">{incident.details}</p>
         )}
+        {incident.internalNote && (
+          <div className="mb-3 rounded-lg border border-amber-400/70 bg-amber-50/40 px-3 py-2 text-[13px] text-ink">
+            <div className="text-[11.5px] font-medium text-amber-800">{t("incidentForm.internalNoteLabel")}</div>
+            <p className="whitespace-pre-line">{incident.internalNote}</p>
+          </div>
+        )}
 
         {previewUrl && (
           // eslint-disable-next-line @next/next/no-img-element

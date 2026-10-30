@@ -17,8 +17,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       personalBill: { eventId: id },
       settledAt: settle ? null : { not: null },
       OR: [
-        { authorId: b.debtorId, personalBill: { authorId: b.creditorId } },
-        { authorId: b.creditorId, personalBill: { authorId: b.debtorId } },
+        { authorId: b.debtorId, personalBill: { authorId: b.creditorId, viaEvent: false } },
+        { authorId: b.creditorId, personalBill: { authorId: b.debtorId, viaEvent: false } },
       ],
     },
     data: settle ? { settledAt: new Date(), settledByUserId: g.user.id } : { settledAt: null, settledByUserId: null },

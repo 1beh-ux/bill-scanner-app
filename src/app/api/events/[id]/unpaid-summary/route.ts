@@ -15,8 +15,9 @@ import { netSettlement } from "@/lib/personal-bills";
 //                   the paid part is reported next to them.
 // Payers come from the bills themselves, so someone since removed from the
 // event's payer list (`attached: false`) still shows as long as they are owed.
-// Osobní účtenky (2026-10-30): a person's open shares of personal bills the event's treasurer paid are taken
-// off their payout (net; < 0 = they pay the treasurer); shares between other people come as `debts`.
+// Osobní účtenky (2026-10-30): personal bills through the event are netted with the payouts -- the author is
+// paid back the others' parts, each person's own part is taken off (net < 0 = they pay the event, to
+// `receiver`: the event's bank account, else the treasurer's); person-to-person bills come as `debts`.
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -108,13 +109,13 @@ export async function GET(
     byAuthor.set(bill.payerAuthorId, entry);
   }
 
-  // Personal bills: people who only owe the treasurer get a row too.
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { treasurerAuthorId: true } });
+  // Personal bills: people with only personal parts get a row too.
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { treasurerAuthorId: true, bankAccount: { select: { label: true, accountNumber: true, bankCode: true } } } });
   const shares = await openShares(eventId);
   const official = new Map([...byAuthor.values()].map((e) => [e.authorId, Number(e.unpaid.toString())]));
-  const net = netSettlement(event.treasurerAuthorId, official, shares);
+  const net = netSettlement(official, shares);
   const people = new Map(
-    (await prisma.author.findMany({ where: { id: { in: [...new Set([...shares.flatMap((s) => [s.debtorId, s.creditorId]), ...(event.treasurerAuthorId ? [event.treasurerAuthorId] : [])])] } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true } })).map((a) => [a.id, a])
+    (await prisma.author.findMany({ where: { id: { in: [...new Set([...shares.flatMap((s) => [s.debtorId, s.creditorId].filter((x): x is string => !!x)), ...(event.treasurerAuthorId ? [event.treasurerAuthorId] : [])])] } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true } })).map((a) => [a.id, a])
   );
   for (const r of net.rows) {
     if (byAuthor.has(r.authorId)) continue;
@@ -123,9 +124,15 @@ export async function GET(
     byAuthor.set(r.authorId, { authorId: a.id, name: a.canonicalName, attached: attachedIds.has(a.id), bankAccountNumber: a.bankAccountNumber, bankCode: a.bankCode, lastBankChange: null, unpaid: new Prisma.Decimal(0), unpaidCount: 0, paid: new Prisma.Decimal(0), paidCount: 0, items: [] });
   }
   const netOf = new Map(net.rows.map((r) => [r.authorId, r]));
-  const personalItems = (authorId: string) =>
-    shares.filter((s) => s.debtorId === authorId && s.creditorId === event.treasurerAuthorId && s.debtorId !== s.creditorId).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk }));
+  const through = shares.filter((s) => (s.viaEvent || !s.creditorId) && s.debtorId !== s.creditorId);
+  // What they owe the event (their parts) and what the event owes them (others' parts of bills they paid).
+  const personalOutItems = (authorId: string) => through.filter((s) => s.debtorId === authorId && s.debtorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk }));
+  const personalInItems = (authorId: string) => through.filter((s) => s.creditorId === authorId && s.creditorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk, debtorName: s.debtorName }));
+  // Where people pay the event: its bank account (Banka), else the treasurer's.
   const treasurer = event.treasurerAuthorId ? people.get(event.treasurerAuthorId) ?? null : null;
+  const receiver = event.bankAccount
+    ? { name: event.bankAccount.label, bankAccountNumber: event.bankAccount.accountNumber, bankCode: event.bankAccount.bankCode }
+    : treasurer && { name: treasurer.canonicalName, bankAccountNumber: treasurer.bankAccountNumber, bankCode: treasurer.bankCode };
 
   const result = Array.from(byAuthor.values())
     .map((e) => ({
@@ -140,15 +147,17 @@ export async function GET(
       paidTotalCzk: e.paid.toString(),
       paidBillCount: e.paidCount,
       items: e.items,
-      personalTotalCzk: netOf.get(e.authorId)?.toTreasurer ?? 0,
-      personalItems: personalItems(e.authorId),
+      personalOutCzk: netOf.get(e.authorId)?.personalOut ?? 0,
+      personalInCzk: netOf.get(e.authorId)?.personalIn ?? 0,
+      personalOutItems: personalOutItems(e.authorId),
+      personalInItems: personalInItems(e.authorId),
       netCzk: netOf.get(e.authorId)?.net ?? Number(e.unpaid.toString()),
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 
   return NextResponse.json({
     rows: result,
-    treasurer: treasurer && { id: treasurer.id, name: treasurer.canonicalName, bankAccountNumber: treasurer.bankAccountNumber, bankCode: treasurer.bankCode },
+    receiver,
     debts: net.debts.map((d) => {
       const debtor = people.get(d.debtorId);
       const creditor = people.get(d.creditorId);

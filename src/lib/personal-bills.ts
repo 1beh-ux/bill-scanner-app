@@ -18,33 +18,40 @@ export function splitStatus(totalCzk: number, shares: number[]) {
   return { assigned: fromHal(assigned), remaining: fromHal(remaining), complete: remaining === 0 };
 }
 
-export type DebtShare = { debtorId: string; creditorId: string; amountCzk: number };
+// creditorId null = the event paid (its money / cash box). viaEvent: the event pays the author back and the
+// debtor pays the event; else the debtor pays the author directly. Open = not settled on that side yet.
+export type DebtShare = { debtorId: string; creditorId: string | null; amountCzk: number; viaEvent: boolean; debtorOpen: boolean; creditorOpen: boolean };
 
 /**
- * The payments page: per person, official = what the event owes them (approved, unpaid bills), toTreasurer = their
- * unsettled personal shares of bills the treasurer paid; net = official - toTreasurer (> 0: pay them, < 0: they
- * pay the treasurer). Shares between other people stay person to person (pairs), netted within each pair.
- * A share owed to oneself counts for nothing.
+ * The payments page, per person: official = what the event owes them (approved, unpaid bills); personalIn = what
+ * the event owes them for personal bills they paid (others' parts, through the event); personalOut = their parts
+ * of personal bills going through the event; net = official + personalIn - personalOut (> 0: pay them out,
+ * < 0: they pay the event). Person-to-person bills come as `debts`, netted within each pair.
+ * A part owed to oneself counts for nothing.
  */
-export function netSettlement(treasurerId: string | null, official: Map<string, number>, shares: DebtShare[]) {
-  const toTreasurer = new Map<string, number>();
+export function netSettlement(official: Map<string, number>, shares: DebtShare[]) {
+  const into = new Map<string, number>();
+  const out = new Map<string, number>();
   const pairs = new Map<string, number>();
+  const add = (m: Map<string, number>, id: string, h: number) => m.set(id, (m.get(id) ?? 0) + h);
   for (const s of shares) {
     if (s.debtorId === s.creditorId) continue;
     const h = toHal(s.amountCzk);
-    if (treasurerId && s.creditorId === treasurerId) toTreasurer.set(s.debtorId, (toTreasurer.get(s.debtorId) ?? 0) + h);
-    else {
+    if (s.viaEvent || !s.creditorId) {
+      if (s.debtorOpen) add(out, s.debtorId, h);
+      if (s.creditorId && s.creditorOpen) add(into, s.creditorId, h);
+    } else if (s.debtorOpen) {
       // One direction per pair (the smaller id first): + = a owes b.
       const [a, b] = [s.debtorId, s.creditorId].sort();
-      const key = `${a}|${b}`;
-      pairs.set(key, (pairs.get(key) ?? 0) + (s.debtorId === a ? h : -h));
+      add(pairs, `${a}|${b}`, s.debtorId === a ? h : -h);
     }
   }
-  const ids = new Set([...official.keys(), ...toTreasurer.keys()]);
+  const ids = new Set([...official.keys(), ...into.keys(), ...out.keys()]);
   const rows = [...ids].map((id) => {
     const off = toHal(official.get(id) ?? 0);
-    const tt = toTreasurer.get(id) ?? 0;
-    return { authorId: id, official: fromHal(off), toTreasurer: fromHal(tt), net: fromHal(off - tt) };
+    const i = into.get(id) ?? 0;
+    const o = out.get(id) ?? 0;
+    return { authorId: id, official: fromHal(off), personalIn: fromHal(i), personalOut: fromHal(o), net: fromHal(off + i - o) };
   });
   const debts = [...pairs]
     .filter(([, h]) => h !== 0)
@@ -54,3 +61,6 @@ export function netSettlement(treasurerId: string | null, official: Map<string, 
     });
   return { rows, debts };
 }
+
+/** Tally ("čárky"): quantity × price per piece, to the haléř. */
+export const tallyAmount = (quantity: number, unitPrice: number) => fromHal(Math.round(quantity * toHal(unitPrice)));

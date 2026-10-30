@@ -137,6 +137,7 @@ export default function HealthCasesPage({ params }: { params: Promise<{ id: stri
                   </div>
                   <div className="text-[12px] text-ink-secondary">{meta(c)}</div>
                   {c.details && <p className="mt-1 line-clamp-3 whitespace-pre-line text-[13px] text-ink-secondary">{c.details}</p>}
+                  {c.internalNote && <p className="mt-1 whitespace-pre-line rounded bg-amber-50/60 px-2 py-1 text-[12.5px] text-amber-900">🔒 {c.internalNote}</p>}
                 </div>
                 <div className="flex shrink-0 flex-wrap items-center gap-3">
                   {c.resolvedAt && <span className="rounded-full bg-mist px-2 py-0.5 text-[12px] text-ink-secondary">✓ {t("incidentsPage.resolved")}</span>}

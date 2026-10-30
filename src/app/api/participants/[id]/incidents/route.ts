@@ -136,6 +136,7 @@ export async function POST(
       bodyView: bodyView || null,
       bodyXPct: bodyXPct === "" || bodyXPct === undefined ? null : bodyXPct,
       bodyYPct: bodyYPct === "" || bodyYPct === undefined ? null : bodyYPct,
+      internalNote: typeof body.internalNote === "string" ? body.internalNote.trim().slice(0, 4000) || null : null,
     },
   });
   // A follow-up on a resolved case means it needs attention again.

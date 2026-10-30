@@ -13,9 +13,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const g = await personalGuard(id);
   if ("error" in g) return g.error;
   if (g.event.status === "closed") return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
-  const p = await prisma.personalBill.findFirst({ where: { id: billId, eventId: id }, include: { shares: { select: { settledAt: true } } } });
+  const p = await prisma.personalBill.findFirst({ where: { id: billId, eventId: id }, include: { shares: { select: { settledAt: true, creditorPaidAt: true } } } });
   if (!p) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (p.shares.some((s) => s.settledAt)) return NextResponse.json({ error: "settled_locked" }, { status: 409 });
+  if (p.shares.some((s) => s.settledAt || s.creditorPaidAt)) return NextResponse.json({ error: "settled_locked" }, { status: 409 });
   const from = (p.fromBill ?? {}) as FromBill;
   let contentHash = from.contentHash ?? crypto.createHash("sha256").update(`personal:${p.id}`).digest("hex");
   // The same document may have been uploaded again meanwhile (unique per event): keep both, distinguishable.
