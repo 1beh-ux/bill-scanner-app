@@ -363,6 +363,25 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
     setLines(left > 0 ? [...lines, { description: t("personalBills.restLine"), total: fromHal(left), assign: [restTo] }] : lines);
   }
 
+  // "Načíst znovu AI" on a saved bill's photo: fills only what is empty; the lines are replaced (asked first when
+  // some are already assigned). Nothing is saved until "Uložit".
+  const confirmAsk = useConfirm();
+  async function rescan() {
+    if (d.lineItems.some((l) => l.assign?.length) && !(await confirmAsk({ message: t("personalBills.rescanConfirm") }))) return;
+    setScanning(true);
+    setError(null);
+    const res = await fetch(`${base}/${d.id}/rescan`, { method: "POST" }).catch(() => null);
+    const r = res?.ok ? await res.json() : null;
+    setScanning(false);
+    if (!r) return setError(t("personalBills.error.ai_failed"));
+    set({
+      merchantName: d.merchantName || r.merchantName || "",
+      billDate: d.billDate || r.billDate || d.billDate,
+      totalAmount: d.totalAmount || (r.totalAmount != null ? String(r.totalAmount) : ""),
+      lineItems: Array.isArray(r.lineItems) ? r.lineItems.map((l: LineItem) => ({ description: l.description, total: l.total, assign: [] })) : d.lineItems,
+    });
+  }
+
   async function scan(file: File) {
     setScanning(true);
     const form = new FormData();
@@ -428,6 +447,11 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
             {scanning ? t("personalBills.reading") : d.gcsObjectPath ? `✓ ${d.originalFilename}` : t("personalBills.scan")}
             <input type="file" accept="image/*,.pdf" capture="environment" disabled={scanning} className="hidden" onChange={(e) => e.target.files?.[0] && scan(e.target.files[0])} />
           </label>
+        )}
+        {d.id && !tally && d.previewUrl && (
+          <button type="button" onClick={rescan} disabled={scanning} className={btn}>
+            {scanning ? t("personalBills.reading") : t("personalBills.rescan")}
+          </button>
         )}
         {!tally && <span className="text-[12px] text-ink-secondary">{t("personalBills.scanHint")}</span>}
       </div>
