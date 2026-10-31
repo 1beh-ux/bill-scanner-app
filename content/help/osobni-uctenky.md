@@ -20,7 +20,8 @@ Nahoře nastavte **pokladníka akce** – předvyplní se jako autor každé nov
 - **Ručně**: datum, obchod, částka (Kč, EUR nebo PLN – přepočte se kurzem ČNB), kdo zaplatil.
 - **Nahrát fotku** je nepovinné: AI předvyplní obchod, datum a částku.
 - S fotkou je formulář ve dvou sloupcích: vlevo účtenka a položky, které přečetla AI, vpravo rozdělení.
-- **Rozdělit mezi**: **rovným dílem** – zaškrtněte lidi (plátci akce a dospělí na akci), rozdělí se na haléře přesně; **podle částek** – u každého je rovnou políčko (0 = nic) a aplikace hlídá, kolik ještě zbývá. Dokud se části nesečtou, je účtenka červeně „nerozděleno“ a počítá se jen to, co je rozdělené.
+- **Rozdělit mezi**: **rovným dílem** – zaškrtněte lidi (plátci akce a dospělí na akci), rozdělí se na haléře přesně; **podle částek** – u každého je rovnou políčko (0 = nic) a aplikace hlídá, kolik ještě zbývá; **podle položek** – každý řádek účtenky (přečtený AI nebo dopsaný ručně) přiřadíte jednomu či více lidem („+ všichni“ pro společné věci), řádek pro více lidí se dělí rovným dílem.
+- **Zbytek přiřadit**: u „podle částek“ a „podle položek“ jedním klikem dáte vše, co zbývá, jednomu člověku – typicky sobě („200 Kč rozdělím, zbytek je můj“). Díl autora se nikomu nevrací ani neodečítá. Dokud se části nesečtou, je účtenka červeně „nerozděleno“ a počítá se jen to, co je rozdělené.
 - Vybraný dospělý, který ještě není plátce, se plátcem stane (propojený s Lidmi) – aby mu šel poslat i přijmout QR kód.
 - **Přesunout do osobních** (u oficiální účtenky) a **Přesunout do oficiálních** (u osobní) přesouvají účtenky mezi oběma světy.
 

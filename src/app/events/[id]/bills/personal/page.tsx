@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { formatCzk } from "@/lib/format";
-import { evenSplit, splitStatus, tallyAmount } from "@/lib/personal-bills";
+import { evenSplit, fromHal, splitStatus, tallyAmount, toHal } from "@/lib/personal-bills";
 
 // Osobní účtenky (2026-10-30): purchases for people that aren't the event's expense -- never in the official
 // bills, their export or Rozpočet. Each bill has an author (who paid; default the event's Pokladník, or the event's
@@ -12,7 +12,8 @@ import { evenSplit, splitStatus, tallyAmount } from "@/lib/personal-bills";
 // event (the default) Platby pays the author back and nets each person's part with their payout.
 type Person = { key: string; name: string; authorId: string | null; childId: string | null; hasBank: boolean };
 type Share = { authorId: string; name: string; amountCzk: number; quantity: number | null; settled: boolean };
-type LineItem = { description: string | null; total: number | null };
+// assign: who the line is for (person keys); empty = not assigned yet.
+type LineItem = { description: string | null; total: number | null; assign?: string[] };
 type Bill = {
   id: string;
   billDate: string;
@@ -43,7 +44,8 @@ type Draft = {
   currency: string;
   author: string;
   viaEvent: boolean;
-  splitMode: "even" | "custom";
+  // items ("podle položek"): each receipt line goes to its people (split evenly between them); saved as amounts.
+  splitMode: "even" | "custom" | "items";
   // even: the picked people; custom: everyone's amount; tally: everyone's pieces.
   picked: Record<string, string>;
   unitLabel: string;
@@ -63,6 +65,18 @@ const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-w
 const today = () => new Date().toISOString().slice(0, 10);
 const dec = (v: string) => Number(String(v).replace(",", "."));
 const QUICK = [1, 2, 3, 5, 10];
+
+/** "Podle položek": each line split evenly between its people, summed per person (to the haléř). */
+function itemAmounts(lines: LineItem[]) {
+  const per = new Map<string, number>();
+  for (const l of lines) {
+    const who = l.assign ?? [];
+    // Discount lines (negative) aren't split: what's left is assigned with "Zbytek".
+    if (!who.length || !l.total || l.total <= 0) continue;
+    evenSplit(l.total, who.length).forEach((part, i) => per.set(who[i], (per.get(who[i]) ?? 0) + toHal(part)));
+  }
+  return new Map([...per].map(([k, h]) => [k, fromHal(h)]));
+}
 
 export default function PersonalBillsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -128,7 +142,7 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
       currency: b.currency,
       author: b.author ? keyOfAuthor(b.author.id) : "event",
       viaEvent: b.viaEvent,
-      splitMode: b.splitMode,
+      splitMode: b.lineItems.some((l) => l.assign?.length) ? "items" : b.splitMode,
       picked: kind === "tally" || b.splitMode === "custom" ? { ...Object.fromEntries(data.people.map((p) => [p.key, kind === "tally" ? "" : "0"])), ...has } : has,
       unitLabel: b.unitLabel ?? "",
       unitPrice: b.unitPrice == null ? "" : String(b.unitPrice),
@@ -321,9 +335,10 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
   const set = (patch: Partial<Draft>) => setDraft({ ...d, ...patch });
   const tally = d.kind === "tally";
   const price = dec(d.unitPrice) || 0;
-  const keys = Object.keys(d.picked);
+  const byItems = itemAmounts(d.lineItems);
+  const keys = d.splitMode === "items" ? [...byItems.keys()] : Object.keys(d.picked);
   const total = tally ? keys.reduce((s, k) => s + tallyAmount(dec(d.picked[k]) || 0, price), 0) : dec(d.totalAmount) || 0;
-  const parts = d.splitMode === "even" ? evenSplit(total, keys.length) : keys.map((k) => dec(d.picked[k]) || 0);
+  const parts = d.splitMode === "even" ? evenSplit(total, keys.length) : d.splitMode === "items" ? keys.map((k) => byItems.get(k) ?? 0) : keys.map((k) => dec(d.picked[k]) || 0);
   const status = splitStatus(total, parts);
   const pieces = keys.reduce((s, k) => s + (dec(d.picked[k]) || 0), 0);
   const toggle = (key: string, on: boolean) => {
@@ -336,6 +351,17 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
   const setMode = (m: Draft["splitMode"]) =>
     set({ splitMode: m, picked: m === "custom" ? { ...Object.fromEntries(people.map((p) => [p.key, "0"])), ...Object.fromEntries(Object.entries(d.picked).filter(([, v]) => v !== "")) } : Object.fromEntries(Object.entries(d.picked).filter(([, v]) => dec(v) > 0 || v === "").map(([k]) => [k, ""])) });
   const addPieces = (key: string, n: number) => set({ picked: { ...d.picked, [key]: String(Math.max(0, (dec(d.picked[key]) || 0) + n)) } });
+  const setLines = (lineItems: LineItem[]) => set({ lineItems });
+  // "Zbytek →": whatever isn't assigned yet goes to one person (e.g. the author: "the rest is mine").
+  const [restTo, setRestTo] = useState("");
+  function assignRest() {
+    if (!restTo || status.remaining <= 0) return;
+    if (d.splitMode === "custom") return set({ picked: { ...d.picked, [restTo]: String(fromHal(toHal(dec(d.picked[restTo] ?? "0") || 0) + toHal(status.remaining))) } });
+    // Items: the unassigned lines, and what the lines don't cover (discounts, a total typed by hand) as a line.
+    const lines = d.lineItems.map((l) => (l.assign?.length || !l.total ? l : { ...l, assign: [restTo] }));
+    const left = toHal(total) - [...itemAmounts(lines).values()].reduce((sum, v) => sum + toHal(v), 0);
+    setLines(left > 0 ? [...lines, { description: t("personalBills.restLine"), total: fromHal(left), assign: [restTo] }] : lines);
+  }
 
   async function scan(file: File) {
     setScanning(true);
@@ -362,7 +388,9 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
     setError(null);
     const shares = tally
       ? keys.filter((k) => dec(d.picked[k]) > 0).map((k) => ({ person: k, quantity: d.picked[k] }))
-      : d.splitMode === "custom"
+      : d.splitMode === "items"
+        ? keys.filter((k) => (byItems.get(k) ?? 0) > 0).map((k) => ({ person: k, amountCzk: byItems.get(k) }))
+        : d.splitMode === "custom"
         ? keys.filter((k) => dec(d.picked[k]) > 0).map((k) => ({ person: k, amountCzk: d.picked[k] }))
         : keys.map((k) => ({ person: k }));
     const res = await fetch(d.id ? `${base}/${d.id}` : base, {
@@ -375,7 +403,7 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
         currency: d.currency,
         author: d.author,
         viaEvent: d.viaEvent,
-        splitMode: tally ? "custom" : d.splitMode,
+        splitMode: tally || d.splitMode === "items" ? "custom" : d.splitMode,
         unitPrice: tally ? d.unitPrice : null,
         unitLabel: tally ? d.unitLabel : null,
         shares,
@@ -390,7 +418,7 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
     onSaved();
   }
 
-  const preview = !tally && (d.previewUrl || d.lineItems.length > 0);
+  const preview = !tally && (d.previewUrl || (d.lineItems.length > 0 && d.splitMode !== "items"));
   const form = (
     <div className="flex min-w-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -524,9 +552,9 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3 text-[13px]">
             <span className="font-medium text-ink">{t("personalBills.splitBetween")}</span>
-            {(["even", "custom"] as const).map((m) => (
+            {(["even", "custom", "items"] as const).map((m) => (
               <label key={m} className="flex items-center gap-1.5">
-                <input type="radio" checked={d.splitMode === m} onChange={() => setMode(m)} />
+                <input type="radio" checked={d.splitMode === m} onChange={() => (m === "items" ? set({ splitMode: "items", lineItems: d.lineItems.length ? d.lineItems : [{ description: "", total: null, assign: [] }] }) : setMode(m))} />
                 {t(`personalBills.mode.${m}`)}
               </label>
             ))}
@@ -536,6 +564,9 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
               </button>
             )}
           </div>
+          {d.splitMode === "items" ? (
+            <ItemsSplit lines={d.lineItems} people={people} onChange={setLines} />
+          ) : (
           <div className="grid gap-1 sm:grid-cols-2">
             {people.map((p) => {
               const on = p.key in d.picked;
@@ -554,7 +585,33 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
               );
             })}
           </div>
-          {total > 0 && (keys.length > 0 || d.splitMode === "custom") && (
+          )}
+          {d.splitMode === "items" && keys.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 text-[12.5px]">
+              {keys.map((k) => (
+                <span key={k} className="rounded-full bg-paper-2 px-2 py-0.5 text-ink">
+                  {people.find((p) => p.key === k)?.name ?? "?"}: {formatCzk(byItems.get(k) ?? 0)}
+                </span>
+              ))}
+            </div>
+          )}
+          {d.splitMode !== "even" && total > 0 && status.remaining > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+              {t("personalBills.restTo")}
+              <select value={restTo} onChange={(e) => setRestTo(e.target.value)} className={inputSm}>
+                <option value="">—</option>
+                {people.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" disabled={!restTo} onClick={assignRest} className={btn}>
+                {t("personalBills.restAssign", { amount: formatCzk(status.remaining) })}
+              </button>
+            </div>
+          )}
+          {total > 0 && (keys.length > 0 || d.splitMode !== "even") && (
             <p className={"text-[13px] " + (status.complete ? "text-pine" : "text-red-700")}>
               {status.complete
                 ? t("personalBills.splitComplete", { total: formatCzk(total) })
@@ -597,7 +654,7 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
               {t("personalBills.openFile")}
             </a>
           )}
-          {d.lineItems.length > 0 && (
+          {d.lineItems.length > 0 && d.splitMode !== "items" && (
             <table className="w-full text-[12.5px]">
               <tbody>
                 {d.lineItems.map((l, i) => (
@@ -651,6 +708,51 @@ function TallyWizard({ index, people, value, price, onAdd, onSet, onGo }: { inde
           {index === people.length - 1 ? t("personalBills.wizardDone") : `${t("personalBills.wizardNext")} →`}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** "Podle položek": the receipt's lines (the AI's, or typed), each with its people -- a line for several people is
+ * split evenly between them. "+ všichni" puts everyone on a shared line (bread, a bottle of water). */
+function ItemsSplit({ lines, people, onChange }: { lines: LineItem[]; people: Person[]; onChange: (l: LineItem[]) => void }) {
+  const { t } = useTranslations();
+  const setLine = (i: number, patch: Partial<LineItem>) => onChange(lines.map((l, k) => (k === i ? { ...l, ...patch } : l)));
+  const name = (key: string) => people.find((p) => p.key === key)?.name ?? "?";
+  return (
+    <div className="flex flex-col gap-1.5">
+      {lines.map((l, i) => (
+        <div key={i} className={"flex flex-col gap-1 rounded-md border px-2 py-1.5 " + (l.assign?.length ? "border-mist/60" : "border-amber-400/70")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <input value={l.description ?? ""} onChange={(e) => setLine(i, { description: e.target.value })} placeholder={t("personalBills.lineName")} className={inputSm + " min-w-[10rem] flex-1"} />
+            <input value={l.total ?? ""} onChange={(e) => setLine(i, { total: e.target.value === "" ? null : dec(e.target.value) })} inputMode="decimal" placeholder="Kč" className={inputSm + " w-24 text-right"} />
+            <button type="button" onClick={() => onChange(lines.filter((_, k) => k !== i))} className="text-[12px] text-red-600" aria-label={t("common.delete")}>
+              ×
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1 text-[12px]">
+            {(l.assign ?? []).map((k) => (
+              <button key={k} type="button" onClick={() => setLine(i, { assign: (l.assign ?? []).filter((x) => x !== k) })} className="rounded-full bg-pine/15 px-2 py-0.5 text-pine hover:bg-pine/25" title={t("common.delete")}>
+                {name(k)} ×
+              </button>
+            ))}
+            <select value="" onChange={(e) => e.target.value && setLine(i, { assign: [...(l.assign ?? []), e.target.value] })} className={inputSm + " !py-0.5 text-[12px]"} aria-label={t("personalBills.addPerson")}>
+              <option value="">+ {t("personalBills.addPerson")}</option>
+              {people.filter((p) => !(l.assign ?? []).includes(p.key)).map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={() => setLine(i, { assign: people.map((p) => p.key) })} className="text-[12px] text-ember hover:underline">
+              + {t("personalBills.everyone")}
+            </button>
+            {(l.assign?.length ?? 0) > 1 && l.total ? <span className="text-ink-secondary">{t("personalBills.perPerson", { amount: formatCzk(evenSplit(l.total, l.assign!.length)[0]) })}</span> : null}
+          </div>
+        </div>
+      ))}
+      <button type="button" onClick={() => onChange([...lines, { description: "", total: null, assign: [] }])} className="self-start text-[12.5px] text-ember hover:underline">
+        + {t("personalBills.addLine")}
+      </button>
     </div>
   );
 }

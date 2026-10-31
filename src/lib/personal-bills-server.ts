@@ -123,11 +123,22 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
       await tx.personalBillShare.deleteMany({ where: { personalBillId: id } });
     } else {
       const file = typeof b.gcsObjectPath === "string" && b.gcsObjectPath.startsWith(`events/${event.id}/personal/`) ? b.gcsObjectPath : null;
-      // The AI's receipt lines (shown next to the form), kept small.
-      const lineItems = Array.isArray(b.lineItems)
-        ? (b.lineItems as { description?: unknown; total?: unknown }[]).slice(0, 200).map((l) => ({ description: text(l?.description, 200), total: typeof l?.total === "number" ? l.total : null }))
-        : null;
-      id = (await tx.personalBill.create({ data: { ...data, eventId: event.id, createdByUserId: userId, gcsObjectPath: file, originalFilename: file ? text(b.originalFilename, 200) || null : null, lineItems: lineItems ?? undefined }, select: { id: true } })).id;
+      id = (await tx.personalBill.create({ data: { ...data, eventId: event.id, createdByUserId: userId, gcsObjectPath: file, originalFilename: file ? text(b.originalFilename, 200) || null : null }, select: { id: true } })).id;
+    }
+    // The receipt's lines (the AI's, or typed) with who each one is for ("podle položek"); the people are stored
+    // as payers ("a:<id>"), so an adult picked before having a payer is still found when the bill is edited.
+    if (Array.isArray(b.lineItems)) {
+      const lineItems = [];
+      for (const l of (b.lineItems as { description?: unknown; total?: unknown; assign?: unknown }[]).slice(0, 300)) {
+        const assign: string[] = [];
+        for (const k of Array.isArray(l?.assign) ? l.assign.slice(0, 200) : []) {
+          const a = await resolvePerson(tx, event.id, event.organizationId, k);
+          if (a && !assign.includes(`a:${a}`)) assign.push(`a:${a}`);
+        }
+        const total = Number(String(l?.total ?? "").replace(",", "."));
+        lineItems.push({ description: text(l?.description, 200), total: Number.isFinite(total) && String(l?.total ?? "") !== "" ? total : null, assign });
+      }
+      await tx.personalBill.update({ where: { id: id! }, data: { lineItems } });
     }
     // A tally keeps only who had something.
     const rows = people.map((p, i) => ({ personalBillId: id!, authorId: p, amountCzk: amounts[i], quantity: unitPrice != null ? quantities[i] : null })).filter((r) => unitPrice == null || (r.quantity ?? 0) > 0);
