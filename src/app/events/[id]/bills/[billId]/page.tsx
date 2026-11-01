@@ -41,7 +41,7 @@ type BillDetail = {
   gcsObjectPath: string | null;
   documentMissing: boolean;
   documentFromStatement: boolean;
-  ingestChannel: "drive" | "upload" | "camera" | "bank";
+  ingestChannel: "drive" | "upload" | "camera" | "bank" | "manual";
   driveSourceFileId: string | null;
   createdAt: string;
   createdBy?: { displayName: string } | null;
@@ -449,6 +449,25 @@ const [processingAi, setProcessingAi] = useState(false);
     }
   }
 
+  const [replacing, setReplacing] = useState(false);
+  const [replaceWithAi, setReplaceWithAi] = useState(false);
+  async function replaceFile(file: File) {
+    if (!(await confirm({ message: t(replaceWithAi ? "billFile.replaceConfirmAi" : "billFile.replaceConfirm") }))) return;
+    setReplacing(true);
+    setError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    if (replaceWithAi) fd.append("ai", "1");
+    const res = await fetch(`/api/bills/${billId}/replace-file`, { method: "POST", body: fd });
+    setReplacing(false);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(t(`billFile.error.${data.error}`) || t("billModal.deleteFailed"));
+      return;
+    }
+    load();
+  }
+
   // Delete, then on to the next bill of the list as shown (or back to the list).
   async function handleDelete() {
     if (!(await confirm({ message: t("billModal.deleteConfirm", { name: bill?.displayFilename ?? bill?.originalFilename ?? "" }), confirmLabel: t("billModal.delete"), danger: true }))) return;
@@ -661,6 +680,19 @@ const statusLabel = t(
             >
               {t("imageEditor.openButton")}
             </button>
+          )}
+          {/* "Nahradit soubor": a better scan or the downloaded PDF; the data stay, the AI reads it only if asked. */}
+          {!isLocked && bill.gcsObjectPath && (
+            <span className="mt-1.5 flex flex-wrap items-center gap-3 text-[13px]">
+              <label className="cursor-pointer text-ember hover:underline">
+                {replacing ? t("common.loading") : t("billFile.replace")}
+                <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" className="hidden" disabled={replacing} onChange={(e) => e.target.files?.[0] && replaceFile(e.target.files[0])} />
+              </label>
+              <label className="flex items-center gap-1 text-[12.5px] text-ink-secondary">
+                <input type="checkbox" checked={replaceWithAi} onChange={(e) => setReplaceWithAi(e.target.checked)} />
+                {t("billFile.replaceWithAi")}
+              </label>
+            </span>
           )}
         </div>
 

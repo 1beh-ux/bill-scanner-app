@@ -55,6 +55,8 @@ enum IngestChannel {
   camera
   // Banka: created from a bank transaction ("Vytvořit doklad z platby").
   bank
+  // Typed in by hand (2026-11-01): an estimate or a bill whose document isn't here yet (documentMissing).
+  manual
 }
 
 enum BillStatus {

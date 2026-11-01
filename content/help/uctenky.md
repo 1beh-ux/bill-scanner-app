@@ -36,3 +36,8 @@ Když se účtenky rozdělily omylem, vyberte je v seznamu účtenek a dejte **S
 V menu **Úklid Disku** zadáte jednu nebo více složek na Disku (i s podsložkami). Aplikace u každého souboru zjistí, jestli ho používá účtenka — podle obsahu souboru, takže nezáleží na jménu — a ukáže, ve které akci, v jakém stavu je a jestli je proplacená. Soubory se stejným obsahem označí jako duplicity: ponechá kopii, kterou používá účtenka, ostatní navrhne smazat. Soubory se stejným jménem ve stejné složce (např. dvakrát nahraný export) označí také: ponechá nejstarší, ostatní navrhne smazat (soubor, který účtenka používá podle obsahu, nikdy). Zadané složky si aplikace pro každou akci pamatuje. Vybrané soubory pak přesunete do uklizené složky (odkazy na ně zůstanou funkční) nebo kopie do koše na Disku, odkud jdou 30 dní obnovit.
 
 U každé účtenky je pod náhledem **Zdroj**: import z Disku (s odkazem na původní soubor), nahráno, vyfoceno nebo vytvořeno z platby v bance.
+
+## Ruční zadání a výměna souboru
+
+- **Ruční zadání** (nahoře v seznamu účtenek): účtenka zadaná ručně – odhad nebo účtenka, jejíž doklad ještě nemáte. Datum, obchod, částka, kdo platil (nebo Akce) a kategorie. Počítá se do rozpočtu a součtů jako každá jiná a je označená **chybí doklad**; až doklad přijde, nahrajte ho v detailu účtenky (**Nahrát doklad** – AI ho přečte).
+- **Nahradit soubor** (v detailu účtenky pod dokladem): lepší sken nebo stažené PDF místo původního souboru. Údaje účtenky zůstanou; zaškrtnutím „a nechat ho přečíst AI“ je AI přečte znovu. Schválenou účtenku nejdřív znovu otevřete.

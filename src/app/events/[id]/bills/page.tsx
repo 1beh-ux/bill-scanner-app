@@ -9,6 +9,7 @@ import { formatCzk } from "@/lib/format";
 import ColumnFilter from "@/components/bills/ColumnFilter";
 import BillBulkEdit, { type BulkEditFailure } from "@/components/bills/BillBulkEdit";
 import DriveBillsSync from "@/components/bills/DriveBillsSync";
+import ManualBill from "@/components/bills/ManualBill";
 import { needsPayout } from "@/lib/payout";
 import { readListFilters, saveListFilters, saveListOrder } from "@/lib/bill-nav";
 import { nextSort, sortBy, type SortDir, type SortValue } from "@/lib/bill-sort";
@@ -19,7 +20,7 @@ type EventDetail = { id: string; name: string; billsListColumns: unknown; billsL
 type BillItem = {
   id: string;
   originalFilename: string;
-  ingestChannel: "drive" | "upload" | "camera" | "bank";
+  ingestChannel: "drive" | "upload" | "camera" | "bank" | "manual";
   status: string;
   merchantName: string | null;
   totalAmount: string | null;
@@ -115,6 +116,7 @@ export default function EventBillsPage({
   const [bills, setBills] = useState<BillItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -799,11 +801,15 @@ export default function EventBillsPage({
             {t("billDup.findAll")}
             {bills.some((b) => b.possibleDuplicate) && ` (${bills.filter((b) => b.possibleDuplicate).length})`}
           </a>
+          <button type="button" onClick={() => setManualOpen(!manualOpen)} className={btnSecondary}>
+            + {t("manualBill.button")}
+          </button>
           <a href={`/events/${id}/import`} className={btnPrimary}>
             {t("billsPage.uploadButton")}
           </a>
         </div>
       </div>
+      {manualOpen && <ManualBill eventId={id} t={t} onClose={() => setManualOpen(false)} />}
 
       <DriveBillsSync
         eventId={id}
