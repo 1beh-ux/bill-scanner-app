@@ -50,7 +50,7 @@ export async function GET(
         // Latest bank-detail change; the UI shows the "changed <date> by <name>"
         // hint only when it is recent (RECENT_BANK_CHANGE_DAYS).
         lastBankChange: last
-          ? { at: last.createdAt, byName: last.changedByUser.displayName, source: last.source }
+          ? { at: last.createdAt, byName: last.changedByUser?.displayName ?? "odkaz pro vyúčtování", source: last.source }
           : null,
       };
     })

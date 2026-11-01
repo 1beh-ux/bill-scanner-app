@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
-import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
+import { markPersonPaid } from "@/lib/settlement-links";
 
 export async function POST(
   req: NextRequest,
@@ -32,36 +32,11 @@ export async function POST(
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
   }
 
-const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
-
-  const result = await prisma.bill.updateMany({
-    where: {
-      eventId,
-      payerAuthorId: authorId,
-      payerAuthor: PAYOUT_PAYER_WHERE,
-      ...(scope === "approved" ? { status: "approved" } : {}),
-      paidToAuthor: action === "pay" ? false : true,
-    },
-    data:
-      action === "pay"
-        ? { paidToAuthor: true, paidAt: new Date(), paidByUserId: user.id }
-        : { paidToAuthor: false, paidAt: null, paidByUserId: null },
-  });
-
-  // Osobní účtenky: the payout is netted with the personal bills through the event -- settled together: the
-  // person's own parts (they paid the event) and the others' parts of bills they paid (the event paid them).
-  const pay = action === "pay";
-  const [own, theirs] = await prisma.$transaction([
-    prisma.personalBillShare.updateMany({
-      where: { authorId, personalBill: { eventId, OR: [{ viaEvent: true }, { authorId: null }] }, settledAt: pay ? null : { not: null } },
-      data: pay ? { settledAt: new Date(), settledByUserId: user.id } : { settledAt: null, settledByUserId: null },
-    }),
-    prisma.personalBillShare.updateMany({
-      where: { authorId: { not: authorId }, personalBill: { eventId, viaEvent: true, authorId }, creditorPaidAt: pay ? null : { not: null } },
-      data: { creditorPaidAt: pay ? new Date() : null },
-    }),
-  ]);
-  const shares = { count: own.count + theirs.count };
+  const scope: "approved" | "all" = body.scope === "all" ? "all" : "approved";
+  // Official bills + the personal parts netted with them (src/lib/settlement-links.ts).
+  const r = await markPersonPaid(eventId, authorId, user.id, action === "pay", scope);
+  const result = { count: r.bills };
+  const shares = { count: r.personal };
 
   return NextResponse.json({ updated: result.count, personal: shares.count });
 }

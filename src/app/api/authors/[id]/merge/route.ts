@@ -68,6 +68,11 @@ export async function POST(
     }
     await tx.authorEventAccess.deleteMany({ where: { authorId: sourceId } });
 
+    // Vyúčtování links: the target's own link wins on an event where both have one.
+    for (const l of await tx.settlementLink.findMany({ where: { authorId: sourceId } })) {
+      if (await tx.settlementLink.findUnique({ where: { eventId_authorId: { eventId: l.eventId, authorId: targetId } } })) await tx.settlementLink.delete({ where: { id: l.id } });
+      else await tx.settlementLink.update({ where: { id: l.id }, data: { authorId: targetId } });
+    }
     // Osobní účtenky (2026-10-30): the source's bills, shares (summed where both have one) and treasurer roles.
     await tx.personalBill.updateMany({ where: { authorId: sourceId }, data: { authorId: targetId } });
     await tx.event.updateMany({ where: { treasurerAuthorId: sourceId }, data: { treasurerAuthorId: targetId } });

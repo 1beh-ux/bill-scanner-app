@@ -54,8 +54,9 @@ function route(req: NextRequest): NextResponse {
   // (src/lib/portal-server.ts).
   // /r/<slug> is the public registration page (docs/registration-slice3-spec.md
   // D): no login, its API validates + rate-limits every submit itself.
+  // /vyuctovani/<event>/<token> is a person's settlement statement (its API checks the token).
   // /vstup/<token> is the door check-in of a public event without a login (its API checks the token).
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/") || pathname.startsWith("/u/");
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/") || pathname.startsWith("/u/") || pathname.startsWith("/vyuctovani/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
     pathname.startsWith("/api/portal/") ||

@@ -366,6 +366,22 @@ async function main() {
       await prisma.author.delete({ where: { id: foreign.id } });
     }
 
+    // ===== Vyúčtování links (2026-11-01): only the event's own people; the public page shows one person =====
+    asUser(admin);
+    {
+      const lRoute = await import("@/app/api/events/[id]/settlement-links/route");
+      const foreign = await prisma.author.create({ data: { canonicalName: `Iso link ${stamp}`, organizationId: org2Id! } });
+      const r = await lRoute.POST(req(`/api/events/${eventId}/settlement-links`, { method: "POST", body: { authorId: foreign.id } }), params({ id: eventId! }));
+      check("settlement link for another organization's payer -> 404", r.status === 404 && !(await prisma.settlementLink.count({ where: { authorId: foreign.id } })), `HTTP ${r.status}`);
+      await prisma.author.delete({ where: { id: foreign.id } });
+      if (z.event) {
+        const r2 = await (await import("@/app/api/events/[id]/settlement-settings/route")).GET(req(`/api/events/${z.event.id}/settlement-settings`), params({ id: z.event.id }));
+        check("Záře event settlement settings -> 404", r2?.status === 404, `HTTP ${r2?.status}`);
+      }
+      const pub = await (await import("@/app/api/public/vyuctovani/[token]/route")).GET(req("/api/public/vyuctovani/not-a-real-token-1234567"), params({ token: "not-a-real-token-1234567" }));
+      check("unknown settlement token -> 404", pub.status === 404, `HTTP ${pub.status}`);
+    }
+
     // ===== bank check (docs/bank-payments-design.md) =====
     asUser(admin);
     await prisma.organization.update({ where: { id: org.id }, data: { active: true } });

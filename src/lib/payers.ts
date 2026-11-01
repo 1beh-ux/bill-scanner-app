@@ -71,7 +71,7 @@ export async function findSimilarAuthors(name: string, organizationId: string): 
  */
 export async function setAuthorBank(
   tx: Prisma.TransactionClient,
-  opts: { authorId: string; bank: BankPair; userId: string; eventId: string | null; source: AuthorBankAuditSource }
+  opts: { authorId: string; bank: BankPair; userId: string | null; eventId: string | null; source: AuthorBankAuditSource }
 ): Promise<boolean> {
   const current = await tx.author.findUniqueOrThrow({
     where: { id: opts.authorId },

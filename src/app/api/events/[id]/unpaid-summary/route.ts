@@ -7,6 +7,7 @@ import { effectiveAmountCzk } from "@/lib/bill-amount";
 import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 import { openShares } from "@/lib/personal-bills-server";
 import { netSettlement } from "@/lib/personal-bills";
+import { linkPath } from "@/lib/settlement-links";
 
 // What is owed to whom in THIS event (never other events -- for admin too).
 //   scope=approved  approved, not-yet-paid bills only (the default, "to pay out")
@@ -86,7 +87,7 @@ export async function GET(
         attached: attachedIds.has(bill.payerAuthorId),
         bankAccountNumber: bill.payerAuthor.bankAccountNumber,
         bankCode: bill.payerAuthor.bankCode,
-        lastBankChange: last ? { at: last.createdAt, byName: last.changedByUser.displayName } : null,
+        lastBankChange: last ? { at: last.createdAt, byName: last.changedByUser?.displayName ?? "odkaz pro vyúčtování" } : null,
         unpaid: new Prisma.Decimal(0),
         unpaidCount: 0,
         paid: new Prisma.Decimal(0),
@@ -134,6 +135,10 @@ export async function GET(
     ? { name: event.bankAccount.label, bankAccountNumber: event.bankAccount.accountNumber, bankCode: event.bankAccount.bankCode }
     : treasurer && { name: treasurer.canonicalName, bankAccountNumber: treasurer.bankAccountNumber, bankCode: treasurer.bankCode };
 
+  // Vyúčtování links (src/lib/settlement-links.ts): each person's link and what they marked there.
+  const eventName = (await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true } })).name;
+  const links = new Map((await prisma.settlementLink.findMany({ where: { eventId } })).map((l) => [l.authorId, l]));
+
   const result = Array.from(byAuthor.values())
     .map((e) => ({
       authorId: e.authorId,
@@ -152,6 +157,7 @@ export async function GET(
       personalOutItems: personalOutItems(e.authorId),
       personalInItems: personalInItems(e.authorId),
       netCzk: netOf.get(e.authorId)?.net ?? Number(e.unpaid.toString()),
+      link: links.has(e.authorId) ? { path: linkPath(eventName, links.get(e.authorId)!.token), claimedAt: links.get(e.authorId)!.claimedAt, receivedAt: links.get(e.authorId)!.receivedAt } : null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 
@@ -159,9 +165,10 @@ export async function GET(
     rows: result,
     receiver,
     debts: net.debts.map((d) => {
+      const claimed = ((links.get(d.debtorId)?.pairClaims ?? {}) as Record<string, string>)[d.creditorId] ?? null;
       const debtor = people.get(d.debtorId);
       const creditor = people.get(d.creditorId);
-      return { ...d, debtorName: debtor?.canonicalName ?? "?", creditorName: creditor?.canonicalName ?? "?", creditorBankAccountNumber: creditor?.bankAccountNumber ?? null, creditorBankCode: creditor?.bankCode ?? null };
+      return { ...d, claimedAt: claimed, debtorName: debtor?.canonicalName ?? "?", creditorName: creditor?.canonicalName ?? "?", creditorBankAccountNumber: creditor?.bankAccountNumber ?? null, creditorBankCode: creditor?.bankCode ?? null };
     }),
   });
 }

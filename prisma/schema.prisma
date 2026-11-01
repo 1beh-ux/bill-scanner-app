@@ -517,6 +517,10 @@ model Event {
   treasurerAuthorId String? @map("treasurer_author_id")
   treasurer         Author? @relation("EventTreasurer", fields: [treasurerAuthorId], references: [id], onDelete: SetNull)
   personalBills     PersonalBill[]
+  // Where people pay the event (settlement links): "treasurer" = the Pokladník's own account (and Fio token),
+  // "event" = the event's bank account (Banka).
+  settlementReceiver String @default("treasurer") @map("settlement_receiver")
+  settlementLinks    SettlementLink[]
   eventPersons           EventPerson[]
   kitchenSettings        EventKitchenSettings?
   planEntries            PlanEntry[]
@@ -585,11 +589,20 @@ model Author {
 
   // The person in Lidé this payer is (2026-10-30, personal bills: an adult picked as a share holder).
   childId            String?  @map("child_id")
+  // Their own Fio API token (read-only), encrypted (src/lib/bank/token-crypto.ts): payments into their account
+  // carrying a settlement link's variable symbol are confirmed automatically. Never sent to a client.
+  fioTokenEncrypted  String?   @map("fio_token_encrypted")
+  fioTokenSetAt      DateTime? @map("fio_token_set_at")
+  // One Fio call per token per 30 s: claimed here before each call (src/lib/settlement-links.ts).
+  fioLastCheckedAt   DateTime? @map("fio_last_checked_at")
+  fioLastSuccessAt   DateTime? @map("fio_last_success_at")
+  fioLastError       String?   @map("fio_last_error")
 
   mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
   child       Child?              @relation(fields: [childId], references: [id], onDelete: SetNull)
   personalBills      PersonalBill[]      @relation("PersonalBillAuthor")
   personalShares     PersonalBillShare[]
+  settlementLinks    SettlementLink[]
   treasurerOf        Event[]             @relation("EventTreasurer")
   mergedFrom  Author[]            @relation("AuthorMerge")
   eventAccess AuthorEventAccess[]
@@ -610,6 +623,8 @@ enum AuthorBankAuditSource {
   merge
   create
   import
+  // The person themselves, on their settlement link (/vyuctovani).
+  settlement_link
 }
 
 // Every change of a payer's bank account/code (who, when, old -> new, and
@@ -617,7 +632,8 @@ enum AuthorBankAuditSource {
 model AuthorBankAudit {
   id                   String                @id @default(uuid())
   authorId             String                @map("author_id")
-  changedByUserId      String                @map("changed_by_user_id")
+  // null = the person themselves on their settlement link.
+  changedByUserId      String?               @map("changed_by_user_id")
   eventId              String?               @map("event_id")
   oldBankAccountNumber String?               @map("old_bank_account_number")
   oldBankCode          String?               @map("old_bank_code")
@@ -627,7 +643,7 @@ model AuthorBankAudit {
   createdAt            DateTime              @default(now()) @map("created_at")
 
   author        Author @relation(fields: [authorId], references: [id])
-  changedByUser User   @relation("AuthorBankAuditChangedBy", fields: [changedByUserId], references: [id])
+  changedByUser User?  @relation("AuthorBankAuditChangedBy", fields: [changedByUserId], references: [id])
   event         Event? @relation(fields: [eventId], references: [id])
 
   @@index([authorId, createdAt])
@@ -2592,4 +2608,30 @@ model PersonalBillShare {
   @@unique([personalBillId, authorId])
   @@index([authorId])
   @@map("personal_bill_shares")
+}
+
+// Vyúčtování (2026-11-01): one link per person per event (/vyuctovani/<event>/<token>, no login) showing what was
+// counted -- official bills, personal parts -- the result, a QR and the confirmations. Amounts are always computed
+// live (src/lib/settlement-links.ts); settling uses the bills' / shares' own flags.
+model SettlementLink {
+  id             String    @id @default(uuid())
+  eventId        String    @map("event_id")
+  authorId       String    @map("author_id")
+  token          String    @unique
+  // 7 digits starting with 9: matched on incoming payments (Fio) to settle automatically.
+  variableSymbol String    @unique @map("variable_symbol")
+  // "Zaplatil(a) jsem" (their claim, not proof) / "Peníze jsem dostal(a)" (their payout arrived).
+  claimedAt      DateTime? @map("claimed_at")
+  receivedAt     DateTime? @map("received_at")
+  // Person to person: { [creditorAuthorId]: ISO } -- "I paid them".
+  pairClaims     Json      @default("{}") @map("pair_claims")
+  // Bank movements already used to settle (never twice).
+  paidMovementIds String[] @default([]) @map("paid_movement_ids")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, authorId])
+  @@map("settlement_links")
 }

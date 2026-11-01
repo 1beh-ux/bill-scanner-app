@@ -24,7 +24,7 @@ export async function GET(
     rows.map((r) => ({
       id: r.id,
       at: r.createdAt,
-      byName: r.changedByUser.displayName,
+      byName: r.changedByUser?.displayName ?? "odkaz pro vyúčtování",
       eventName: r.event?.name ?? null,
       source: r.source,
       old: { account: r.oldBankAccountNumber, code: r.oldBankCode },

@@ -36,3 +36,15 @@ U každého člověka: kolik mu akce dluží za oficiální účtenky **plus** c
 **Zaplaceno** označí proplacené účtenky i osobní díly najednou. Účtenky vyúčtované mimo akci jsou dole v **Osobní dluhy mezi lidmi** – s QR kódem na účet toho, kdo platil, a tlačítkem **Vyrovnáno**.
 
 Vyrovnanou osobní účtenku už nejde upravit ani smazat – nejdřív vraťte „Zaplaceno“ na stránce Platby.
+
+## Vyúčtování – odkaz pro každého
+
+Na stránce **Platby** má každý člověk **jeden odkaz na akci** (`tabornik.online/vyuctovani/<akce>/…`, bez přihlášení). Na něm vidí, co přesně se mu započítalo: účtenky, které za akci zaplatil, své osobní útraty (i s položkami, které mu byly přiřazené, a čárkami), co zaplatil za ostatní, a výsledek.
+
+- **Akce vám pošle X Kč**: vidí, na jaký účet; může ho zadat nebo opravit (na Platbách se pak ukáže „účet nedávno změněn“). Až peníze odešlete (Zaplaceno), může potvrdit **Peníze jsem dostal(a)**.
+- **Zaplaťte akci X Kč**: QR platba, účet a částka ke zkopírování, tlačítko **Zaplatil(a) jsem** (jen jeho tvrzení, jde vrátit). Vyrovnáno je, až to potvrdíte (Zaplaceno) nebo banka.
+- **Mezi lidmi**: komu dluží (QR na účet toho člověka) a kdo dluží jemu – tam potvrdí **Od … jsem peníze dostal(a)**.
+
+**Kam lidé platí** (nahoře na Platbách): na **účet pokladníka** (výchozí) nebo na **účet akce v Bance**. Když má pokladník zadaný svůj **Fio token** (jen pro čtení), platba s variabilním symbolem odkazu a aspoň plnou částkou se potvrdí sama; nedoplatek nikdy. Bez Fio se variabilní symbol neukazuje a platbu potvrdíte ručně. Fio dovolí jedno volání za 30 s na token – odkazy se kontrolují nejvýš tak často (a v pozadí každých 10 minut).
+
+**Odkazy pro všechny** vytvoří odkazy všem a vypíše je ke zkopírování (např. do skupinového chatu). **Nový odkaz** starý zruší.

@@ -8,6 +8,7 @@ import { formatCzk } from "@/lib/format";
 import { pluralForm } from "@/lib/plural";
 import { updatePayer, isRecentBankChange } from "@/lib/payers-client";
 import { useConfirm } from "@/components/ConfirmDialog";
+import SettlementLinks, { LinkCell } from "@/components/bills/SettlementLinks";
 
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
 
@@ -31,9 +32,11 @@ type UnpaidRow = {
   personalOutItems: { merchantName: string | null; amountCzk: number }[];
   personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string }[];
   netCzk: number;
+  // Vyúčtování (2026-11-01): the person's link and what they marked there.
+  link: { path: string; claimedAt: string | null; receivedAt: string | null } | null;
 };
 type Person = { name: string; bankAccountNumber: string | null; bankCode: string | null };
-type Debt = { debtorId: string; creditorId: string; amountCzk: number; debtorName: string; creditorName: string; creditorBankAccountNumber: string | null; creditorBankCode: string | null };
+type Debt = { debtorId: string; creditorId: string; amountCzk: number; claimedAt: string | null; debtorName: string; creditorName: string; creditorBankAccountNumber: string | null; creditorBankCode: string | null };
 
 const inputClassSm =
   "rounded-lg border border-mist bg-paper px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -255,6 +258,8 @@ export default function EventPaymentsPage({
         </button>
       </div>
 
+      <SettlementLinks eventId={id} people={[...new Set([...rows.map((r) => r.authorId), ...debts.flatMap((d) => [d.debtorId, d.creditorId])])]} names={Object.fromEntries([...rows.map((r) => [r.authorId, r.name]), ...debts.flatMap((d) => [[d.debtorId, d.debtorName], [d.creditorId, d.creditorName]])])} t={t} onChanged={load} />
+
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
       {rows.length === 0 ? (
@@ -384,6 +389,7 @@ export default function EventPaymentsPage({
                   {t("paymentsPage.markPaidButton")}
                 </button>
                 )}
+                <LinkCell eventId={id} authorId={row.authorId} link={row.link} t={t} onChanged={load} />
               </div>
 
               <div className="w-full text-center sm:w-[180px]">
@@ -417,6 +423,7 @@ export default function EventPaymentsPage({
               <div key={`${d.debtorId}|${d.creditorId}`} className="flex flex-col gap-3 rounded-lg border border-mist bg-paper-2 p-3 sm:flex-row sm:items-center">
                 <div className="flex-1 text-[14px] text-ink">
                   {t("personalBills.debtLine", { debtor: d.debtorName, creditor: d.creditorName, amount: formatCzk(d.amountCzk) })}
+                  {d.claimedAt && <div className="text-[12px] text-amber-700">{t("settlementLinks.claimedPair", { date: new Date(d.claimedAt).toLocaleDateString("cs-CZ") })}</div>}
                   {!d.creditorBankAccountNumber && <div className="text-[12px] text-red-600">{t("paymentsPage.noBankDetails")}</div>}
                   <div>
                     <button type="button" onClick={() => settleDebt(d)} disabled={event.status === "closed"} className="mt-2 rounded-lg bg-ember px-3 py-1.5 text-[13px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
