@@ -12,7 +12,7 @@ const rows: Row[] = [
   r("settlementPage.notFound", "Odkaz neexistuje nebo byl zrušen.", "The link doesn't exist or was revoked."),
   r("settlementPage.failed", "Nepovedlo se, zkuste to znovu.", "That failed, try again."),
   r("settlementPage.throttled", "Moc pokusů najednou – zkuste to za chvíli.", "Too many attempts – try again in a moment."),
-  r("settlementPage.youPayEvent", "Zaplaťte akci {amount}", "Pay the event {amount}"),
+  r("settlementPage.youPayEvent", "Zaplaťte {amount}", "Pay {amount}"),
   r("settlementPage.eventPaysYou", "Akce vám pošle {amount}", "The event will send you {amount}"),
   r("settlementPage.settled", "Vyrovnáno – děkujeme", "Settled — thank you"),
   r("settlementPage.even", "Nic k zaplacení ani k vrácení", "Nothing to pay or to get back"),

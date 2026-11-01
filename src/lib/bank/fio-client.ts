@@ -87,10 +87,15 @@ export function fetchFioStatement(token: string, from: string, to: string): Prom
           if ((status === 500 || status === 422) && /token/i.test(body)) return fail("token_invalid");
           if (status === 422) return fail("history_locked");
           if (status >= 500) return fail("unreachable");
-          if (status !== 200) return fail("bad_response");
+          // The status only (never the URL: it carries the token) -- to tell a mistyped token from an outage.
+          if (status !== 200) {
+            console.log("[fio] unexpected HTTP status", status);
+            return fail("bad_response");
+          }
           try {
             resolve(JSON.parse(body));
           } catch {
+            console.log("[fio] answer is not JSON, length", body.length);
             fail("bad_response");
           }
         });

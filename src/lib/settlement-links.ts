@@ -117,6 +117,15 @@ export async function settlePair(eventId: string, debtorId: string, creditorId: 
   return r.count;
 }
 
+/** Where a person-to-person creditor's payments can be read: their own Fio token, or the receiver's when it is
+ * the same bank account (e.g. the Pokladník's direct bills with the event's money going to the same account). */
+export function pairSource(c: { id: string; bankAccountNumber: string | null; bankCode: string | null; fioTokenEncrypted: string | null } | undefined, receiver: Receiver | null): { kind: "event" | "author"; id: string } | null {
+  if (!c) return null;
+  if (c.fioTokenEncrypted) return { kind: "author", id: c.id };
+  const same = !!c.bankAccountNumber && receiver?.autoConfirm && receiver.bankAccountNumber === c.bankAccountNumber && receiver.bankCode === c.bankCode;
+  return same ? { kind: receiver!.kind, id: receiver!.id } : null;
+}
+
 /** One Fio call per payer token per 30 s (and at most every `minMs`): claimed before the call. */
 async function claimAuthorFio(authorId: string, minMs: number) {
   const secs = Math.max(35, Math.round(minMs / 1000));
@@ -146,7 +155,14 @@ export async function checkSettlementPayments(eventId: string, minMs = 35_000): 
   let checked = 0;
   let settled = 0;
 
-  const fetchFor = async (kind: "event" | "author", id: string): Promise<FioMovement[] | null> => {
+  // One read per account and run: the receiver and a creditor are often the same person (the Pokladník).
+  const cache = new Map<string, Promise<FioMovement[] | null>>();
+  const fetchFor = (kind: "event" | "author", id: string) => {
+    const k = `${kind}:${id}`;
+    if (!cache.has(k)) cache.set(k, fetchOnce(kind, id));
+    return cache.get(k)!;
+  };
+  const fetchOnce = async (kind: "event" | "author", id: string): Promise<FioMovement[] | null> => {
     if (kind === "event") {
       const a = await prisma.bankAccount.findUnique({ where: { id }, select: { tokenEncrypted: true, lastCheckedAt: true } });
       if (!a?.tokenEncrypted || (a.lastCheckedAt && Date.now() - a.lastCheckedAt.getTime() < minMs) || !(await claimFioSlot(id))) return null;
@@ -173,6 +189,14 @@ export async function checkSettlementPayments(eventId: string, minMs = 35_000): 
     await prisma.settlementLink.update({ where: { id: linkId }, data: { paidMovementIds: { push: m.movementId } } });
   };
 
+  const byCreditor = new Map<string, { debtorId: string; amountCzk: number }[]>();
+  for (const d of net.debts) byCreditor.set(d.creditorId, [...(byCreditor.get(d.creditorId) ?? []), d]);
+  const creditors = new Map((await prisma.author.findMany({ where: { id: { in: [...byCreditor.keys()] } }, select: { id: true, bankAccountNumber: true, bankCode: true, fioTokenEncrypted: true } })).map((a) => [a.id, a]));
+  const sameAsReceiver = (creditorId: string) => {
+    const src = pairSource(creditors.get(creditorId), receiver);
+    return !!receiver && !!src && src.kind === receiver.kind && src.id === receiver.id;
+  };
+
   // Payments to the event.
   if (receiver?.autoConfirm && owesEvent.size) {
     const movements = await fetchFor(receiver.kind, receiver.id);
@@ -186,6 +210,16 @@ export async function checkSettlementPayments(eventId: string, minMs = 35_000): 
         await markPersonPaid(eventId, link.authorId, null);
         owesEvent.delete(link.authorId);
         settled++;
+        // One payment for both (the same QR VS, the same account): the direct debts to it are covered by the rest.
+        let rest = m.amount - owed;
+        for (const [creditorId, debts] of byCreditor) {
+          const debt = sameAsReceiver(creditorId) ? debts.find((d) => d.debtorId === link.authorId) : undefined;
+          if (!debt || rest + 0.004 < debt.amountCzk) continue;
+          await settlePair(eventId, link.authorId, creditorId, null);
+          debts.splice(debts.indexOf(debt), 1);
+          rest -= debt.amountCzk;
+          settled++;
+        }
         // Banka keeps the movement as settled (not "unmatched" in its review).
         if (receiver.kind === "event")
           await prisma.bankMovement.upsert({
@@ -196,11 +230,11 @@ export async function checkSettlementPayments(eventId: string, minMs = 35_000): 
       }
     }
   }
-  // Person to person, into creditors' own accounts (their Fio token).
-  const byCreditor = new Map<string, { debtorId: string; amountCzk: number }[]>();
-  for (const d of net.debts) byCreditor.set(d.creditorId, [...(byCreditor.get(d.creditorId) ?? []), d]);
+  // Person to person, into creditors' own accounts (their Fio token, or the receiver's same account).
   for (const [creditorId, debts] of byCreditor) {
-    const movements = await fetchFor("author", creditorId);
+    const src = pairSource(creditors.get(creditorId), receiver);
+    if (!src) continue;
+    const movements = await fetchFor(src.kind, src.id);
     if (!movements) continue;
     checked++;
     for (const m of movements) {

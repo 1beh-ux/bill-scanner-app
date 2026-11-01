@@ -42,6 +42,8 @@ export default function SettlementApp({ token, strings }: { token: string; strin
   const r = s.result;
   const owes = r.net < -0.004;
   const getsPaid = r.net > 0.004;
+  // Only person-to-person payments: no "nothing to pay" box above them.
+  const showResult = owes || getsPaid || s.status.paidOut || !!s.status.claimedAt || (!s.iOwe.length && !s.owedToMe.length);
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-5 p-4 md:p-8">
       <header>
@@ -53,6 +55,7 @@ export default function SettlementApp({ token, strings }: { token: string; strin
       </header>
 
       {/* The result first: what to do. */}
+      {showResult && (
       <section className={"rounded-xl border p-4 " + (owes ? "border-ember/50 bg-ember/5" : "border-mist bg-paper-2")}>
         {owes ? (
           <PayBox
@@ -104,19 +107,20 @@ export default function SettlementApp({ token, strings }: { token: string; strin
           </table>
         )}
       </section>
+      )}
 
       {s.iOwe.map((d) => (
         <section key={d.creditorId} className="rounded-xl border border-mist p-4">
           <PayBox
             amount={d.amountCzk}
-            to={{ name: d.name, bankAccountNumber: d.bankAccountNumber, bankCode: d.bankCode, autoConfirm: false }}
-            vs={s.variableSymbol}
+            to={{ name: d.name, bankAccountNumber: d.bankAccountNumber, bankCode: d.bankCode, autoConfirm: d.autoConfirm }}
+            vs={d.variableSymbol}
             message={`${s.person.name} ${s.event.name}`}
             claimedAt={d.claimedAt}
             busy={busy}
             t={t}
             onClaim={(on) => act({ action: on ? "pairPaid" : "pairUnpaid", creditorId: d.creditorId })}
-            onCheck={null}
+            onCheck={d.autoConfirm ? () => act({ action: "check" }) : null}
             title={t("youOwePerson", { name: d.name, amount: czk(d.amountCzk) })}
           />
         </section>

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
 import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
 import { evenSplit } from "@/lib/personal-bills";
-import { eventNetting, receiverOf } from "@/lib/settlement-links";
+import { eventNetting, pairSource, receiverOf } from "@/lib/settlement-links";
 
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 type LineItem = { description?: string | null; total?: number | null; assign?: string[] };
@@ -34,7 +34,7 @@ export async function buildStatement(link: { id: string; eventId: string; author
   ]);
 
   const row = netting.net.rows.find((r) => r.authorId === person.id);
-  const names = new Map((await prisma.author.findMany({ where: { id: { in: netting.net.debts.flatMap((d) => [d.debtorId, d.creditorId]) } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true } })).map((a) => [a.id, a]));
+  const names = new Map((await prisma.author.findMany({ where: { id: { in: netting.net.debts.flatMap((d) => [d.debtorId, d.creditorId]) } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true, fioTokenEncrypted: true } })).map((a) => [a.id, a]));
   const claims = (link.pairClaims && typeof link.pairClaims === "object" ? link.pairClaims : {}) as Record<string, string>;
   // The debtors' own claims, for what is owed to this person.
   const debtorLinks = await prisma.settlementLink.findMany({ where: { eventId: event.id, authorId: { in: netting.net.debts.filter((d) => d.creditorId === person.id).map((d) => d.debtorId) } }, select: { authorId: true, pairClaims: true } });
@@ -72,7 +72,9 @@ export async function buildStatement(link: { id: string; eventId: string; author
       .filter((d) => d.debtorId === person.id)
       .map((d) => {
         const c = names.get(d.creditorId);
-        return { creditorId: d.creditorId, name: c?.canonicalName ?? "?", amountCzk: d.amountCzk, bankAccountNumber: c?.bankAccountNumber ?? null, bankCode: c?.bankCode ?? null, claimedAt: claims[d.creditorId] ?? null };
+        // Readable by the bank (their own Fio token, or the receiver's same account): the VS + "Zkontrolovat platbu".
+        const autoConfirm = !!pairSource(c, receiver);
+        return { creditorId: d.creditorId, name: c?.canonicalName ?? "?", amountCzk: d.amountCzk, bankAccountNumber: c?.bankAccountNumber ?? null, bankCode: c?.bankCode ?? null, claimedAt: claims[d.creditorId] ?? null, autoConfirm, variableSymbol: autoConfirm ? link.variableSymbol : null };
       }),
     owedToMe: netting.net.debts
       .filter((d) => d.creditorId === person.id)
