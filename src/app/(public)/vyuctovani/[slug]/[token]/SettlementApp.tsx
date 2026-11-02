@@ -51,7 +51,7 @@ export default function SettlementApp({ token, strings }: { token: string; strin
   // Only person-to-person payments: no "nothing to pay" box above them.
   const showResult = owes || getsPaid || s.status.paidOut || !!s.status.claimedAt || (!s.iOwe.length && !s.owedToMe.length);
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-5 p-4 md:p-8">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-3 py-4 sm:px-6 md:p-8">
       <header>
         <p className="text-[13px] text-ink-secondary">{s.event.organization}</p>
         <h1 className="text-[22px] font-semibold">{s.event.name}</h1>
@@ -151,13 +151,16 @@ export default function SettlementApp({ token, strings }: { token: string; strin
             <tbody>
               {s.official.map((b, i) => (
                 <tr key={i} className="border-b border-mist/60">
-                  <td className="py-1 pr-2 text-ink-secondary">{date(b.date)}</td>
-                  <td className="py-1">
+                  <td className="hidden whitespace-nowrap py-1.5 pr-3 align-top text-ink-secondary sm:table-cell">{date(b.date)}</td>
+                  <td className="py-1.5 align-top [overflow-wrap:anywhere]">
                     {b.merchant || "—"}
                     {b.hasFile && fileLink("official", b.billId)}
+                    <span className="block text-[12px] text-ink-secondary sm:hidden">
+                      {date(b.date)} · {t(`state.${b.state}`)}
+                    </span>
                   </td>
-                  <td className="py-1 text-[12px] text-ink-secondary">{t(`state.${b.state}`)}</td>
-                  <td className="py-1 text-right tabular-nums">{czk(b.amountCzk)}</td>
+                  <td className="hidden whitespace-nowrap py-1.5 pr-3 align-top text-[12px] text-ink-secondary sm:table-cell">{t(`state.${b.state}`)}</td>
+                  <td className="whitespace-nowrap py-1.5 pl-3 text-right align-top tabular-nums">{czk(b.amountCzk)}</td>
                 </tr>
               ))}
             </tbody>
@@ -171,12 +174,12 @@ export default function SettlementApp({ token, strings }: { token: string; strin
           <div className="flex flex-col gap-2">
             {s.own.map((o, i) => (
               <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
-                <div className="flex justify-between gap-2">
-                  <span>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
                     {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
                     {o.hasFile && fileLink("personal", o.billId)}
                   </span>
-                  <span className="font-medium tabular-nums">{czk(o.amountCzk)}</span>
+                  <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
                 </div>
                 <div className="text-[12.5px] text-ink-secondary">
                   {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)} · `}
@@ -189,12 +192,12 @@ export default function SettlementApp({ token, strings }: { token: string; strin
                 {o.lines.length > 0 && (
                   <ul className="mt-1 text-[12.5px] text-ink-secondary">
                     {o.lines.map((l, k) => (
-                      <li key={k} className="flex justify-between gap-2">
-                        <span>
+                      <li key={k} className="flex justify-between gap-3">
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
                           {l.description || "—"}
                           {l.people > 1 && ` (${czk(l.total)} / ${l.people})`}
                         </span>
-                        <span className="tabular-nums">{czk(l.share)}</span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{czk(l.share)}</span>
                       </li>
                     ))}
                   </ul>
@@ -211,12 +214,12 @@ export default function SettlementApp({ token, strings }: { token: string; strin
           <div className="flex flex-col gap-2">
             {s.paidForOthers.map((o, i) => (
               <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
-                <div className="flex justify-between gap-2">
-                  <span>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
                     <b>{o.debtor}</b>: {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
                     {o.hasFile && fileLink("personal", o.billId)}
                   </span>
-                  <span className="font-medium tabular-nums">{czk(o.amountCzk)}</span>
+                  <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
                 </div>
                 {(o.quantity != null && o.unitPrice != null) || o.paidOut ? (
                   <div className="text-[12.5px] text-ink-secondary">
@@ -227,12 +230,12 @@ export default function SettlementApp({ token, strings }: { token: string; strin
                 {o.lines.length > 0 && (
                   <ul className="mt-1 text-[12.5px] text-ink-secondary">
                     {o.lines.map((l, k) => (
-                      <li key={k} className="flex justify-between gap-2">
-                        <span>
+                      <li key={k} className="flex justify-between gap-3">
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
                           {l.description || "—"}
                           {l.people > 1 && ` (${czk(l.total)} / ${l.people})`}
                         </span>
-                        <span className="tabular-nums">{czk(l.share)}</span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{czk(l.share)}</span>
                       </li>
                     ))}
                   </ul>
@@ -252,7 +255,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   return (
     <tr className={strong ? "border-t border-mist font-semibold" : ""}>
       <td className="py-0.5">{label}</td>
-      <td className="py-0.5 text-right tabular-nums">{value}</td>
+      <td className="whitespace-nowrap py-0.5 pl-3 text-right tabular-nums">{value}</td>
     </tr>
   );
 }
@@ -335,19 +338,19 @@ function PayBox(p: {
       ) : (
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:items-start">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {qr && <img src={qr} alt="QR Platba" width={240} height={240} className="rounded-lg bg-white p-1" />}
+          {qr && <img src={qr} alt="QR Platba" width={240} height={240} className="h-auto w-[240px] max-w-full shrink-0 rounded-lg bg-white p-1" />}
           <div className="flex flex-col gap-1.5 text-[14px]">
             <span>
               {t("to")} <b>{p.to!.name}</b>
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex flex-wrap items-center gap-x-2">
               {t("account")} <b className="tabular-nums">{p.to!.bankAccountNumber}/{p.to!.bankCode}</b>
               <button type="button" onClick={() => copy(`${p.to!.bankAccountNumber}/${p.to!.bankCode}`)} className="text-[12px] text-ember underline">
                 {t("copy")}
               </button>
             </span>
             {p.vs && (
-              <span className="flex items-center gap-2">
+              <span className="flex flex-wrap items-center gap-x-2">
                 {t("vs")} <b className="tabular-nums">{p.vs}</b>
                 <button type="button" onClick={() => copy(p.vs!)} className="text-[12px] text-ember underline">
                   {t("copy")}
