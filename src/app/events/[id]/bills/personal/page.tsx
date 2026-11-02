@@ -57,6 +57,8 @@ type Draft = {
   previewUrl: string | null;
   previewIsPdf: boolean;
   lineItems: LineItem[];
+  // Paid parts per person (locked): the form's amounts are totals, these can't go lower.
+  paid: Record<string, { amount: number; qty: number }>;
 };
 
 const inputSm = "rounded-lg border border-mist bg-paper-2 px-2 py-1.5 text-[13px] text-ink";
@@ -128,11 +130,20 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
       previewUrl: null,
       previewIsPdf: false,
       lineItems: [],
+      paid: {},
     };
   };
   const editDraft = (b: Bill): Draft => {
     const kind = b.unitPrice != null ? "tally" : "bill";
-    const has = Object.fromEntries(b.shares.map((s) => [keyOfAuthor(s.authorId), String(kind === "tally" ? s.quantity ?? "" : s.amountCzk)]));
+    // A person may have several parts (a paid one + one added later): their total.
+    const sum = new Map<string, number>();
+    const paid: Draft["paid"] = {};
+    for (const sh of b.shares) {
+      const k = keyOfAuthor(sh.authorId);
+      sum.set(k, Math.round(((sum.get(k) ?? 0) + (kind === "tally" ? sh.quantity ?? 0 : sh.amountCzk)) * 100) / 100);
+      if (sh.settled) paid[k] = { amount: (paid[k]?.amount ?? 0) + sh.amountCzk, qty: (paid[k]?.qty ?? 0) + (sh.quantity ?? 0) };
+    }
+    const has = Object.fromEntries([...sum].map(([k, v]) => [k, String(v)]));
     return {
       id: b.id,
       kind,
@@ -152,6 +163,7 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
       previewUrl: b.hasFile ? `${base}/${b.id}/file` : null,
       previewIsPdf: false,
       lineItems: b.lineItems,
+      paid,
     };
   };
 
@@ -251,7 +263,7 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
                 <div className="flex flex-wrap items-center gap-3 text-[12.5px]">
                   {!tally && b.status && !b.status.complete && <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700">{t("personalBills.notSplit", { remaining: formatCzk(b.status.remaining) })}</span>}
                   {b.amountCzk == null && <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-amber-800">{t("personalBills.noRate")}</span>}
-                  <button type="button" disabled={closed || settled} title={settled ? t("personalBills.settledLocked") : undefined} onClick={() => { setError(null); setDraft(editDraft(b)); }} className="text-ember hover:underline disabled:opacity-40">
+                  <button type="button" disabled={closed} title={settled ? t("personalBills.editPaidHint") : undefined} onClick={() => { setError(null); setDraft(editDraft(b)); }} className="text-ember hover:underline disabled:opacity-40">
                     {t("common.edit")}
                   </button>
                   {!tally && (
@@ -334,6 +346,9 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
   const [wizard, setWizard] = useState<number | null>(null);
   const set = (patch: Partial<Draft>) => setDraft({ ...d, ...patch });
   const tally = d.kind === "tally";
+  const anyPaid = Object.keys(d.paid).length > 0;
+  const paidNote = (key: string) =>
+    d.paid[key] ? <span className="ml-1.5 text-[11.5px] text-pine">✓ {t("personalBills.paidPart", { amount: formatCzk(d.paid[key].amount) })}{tally && d.paid[key].qty ? ` (${d.paid[key].qty}×)` : ""}</span> : null;
   const price = dec(d.unitPrice) || 0;
   const byItems = itemAmounts(d.lineItems);
   const keys = d.splitMode === "items" ? [...byItems.keys()] : Object.keys(d.picked);
@@ -515,7 +530,7 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
       <div className="flex flex-wrap items-center gap-3 text-[13px] text-ink">
         <label className="flex flex-wrap items-center gap-2">
           {t("personalBills.author")}
-          <select value={d.author} onChange={(e) => set({ author: e.target.value })} className={inputSm}>
+          <select value={d.author} disabled={anyPaid} title={anyPaid ? t("personalBills.authorLockedPaid") : undefined} onChange={(e) => set({ author: e.target.value })} className={inputSm}>
             <option value="">—</option>
             <option value="event">{t("personalBills.authorEvent")}</option>
             {people.map((p) => (
@@ -527,11 +542,12 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
         </label>
         {d.author && d.author !== "event" && (
           <label className="flex items-center gap-1.5">
-            <input type="checkbox" checked={d.viaEvent} onChange={(e) => set({ viaEvent: e.target.checked })} />
+            <input type="checkbox" checked={d.viaEvent} disabled={anyPaid} onChange={(e) => set({ viaEvent: e.target.checked })} />
             {t("personalBills.viaEvent")}
           </label>
         )}
       </div>
+      {anyPaid && <p className="rounded-md bg-pine/10 px-2 py-1 text-[12.5px] text-pine">{t("personalBills.paidEditHint")}</p>}
       <p className="-mt-2 text-[12px] text-ink-secondary">
         {d.author === "event" ? t("personalBills.authorEventHint") : d.viaEvent ? t("personalBills.viaEventHint") : t("personalBills.directHint")}
       </p>
@@ -559,7 +575,10 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
             <div className="grid gap-1 md:grid-cols-2">
               {people.map((p) => (
                 <div key={p.key} className="flex items-center gap-1.5 text-[13.5px] text-ink">
-                  <span className="min-w-0 flex-1 truncate">{p.name}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {p.name}
+                    {paidNote(p.key)}
+                  </span>
                   <input value={d.picked[p.key] ?? ""} onChange={(e) => set({ picked: { ...d.picked, [p.key]: e.target.value } })} inputMode="decimal" placeholder="0" className={inputSm + " w-14 text-right"} />
                   {QUICK.slice(0, 3).map((n) => (
                     <button key={n} type="button" onClick={() => addPieces(p.key, n)} className="rounded border border-mist px-1.5 text-[12px] hover:bg-paper-2">
@@ -597,13 +616,19 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
               const i = keys.indexOf(p.key);
               return d.splitMode === "custom" ? (
                 <label key={p.key} className="flex items-center gap-2 text-[13.5px] text-ink">
-                  <span className="flex-1">{p.name}</span>
+                  <span className="flex-1">
+                    {p.name}
+                    {paidNote(p.key)}
+                  </span>
                   <input value={d.picked[p.key] ?? "0"} onFocus={(e) => e.target.select()} onChange={(e) => set({ picked: { ...d.picked, [p.key]: e.target.value } })} inputMode="decimal" className={inputSm + " w-24 text-right"} />
                 </label>
               ) : (
                 <label key={p.key} className="flex items-center gap-2 text-[13.5px] text-ink">
                   <input type="checkbox" checked={on} onChange={(e) => toggle(p.key, e.target.checked)} />
-                  <span className="flex-1">{p.name}</span>
+                  <span className="flex-1">
+                    {p.name}
+                    {paidNote(p.key)}
+                  </span>
                   {on && <span className="tabular-nums text-ink-secondary">{formatCzk(parts[i] ?? 0)}</span>}
                 </label>
               );

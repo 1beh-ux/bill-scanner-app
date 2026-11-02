@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { convertToCzk } from "@/lib/exchange-rates";
-import { evenSplit, tallyAmount, toHal } from "@/lib/personal-bills";
+import { evenSplit, fromHal, tallyAmount, toHal } from "@/lib/personal-bills";
 
 type GuardEvent = { id: string; name: string; organizationId: string; status: string; treasurerAuthorId: string | null };
 /** The Účtenky grant on the event (404 outside the acting organization). */
@@ -116,11 +116,24 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
       note: text(b.note, 2000) || null,
     } as const;
     let id = billId;
+    // Paid parts are history (2026-11-02): they stay exactly as they are; the form's amounts are each person's total,
+    // so what's above their paid part becomes a new open part. Less than what someone already paid is refused,
+    // and so is changing who is paid back (the author / through the event) once anyone paid.
+    const paid = new Map<string, { amount: number; qty: number }>();
     if (id) {
-      // Settled shares are history: such a bill isn't re-split (unsettle it on Platby first).
-      if (await tx.personalBillShare.count({ where: { personalBillId: id, OR: [{ settledAt: { not: null } }, { creditorPaidAt: { not: null } }] } })) return { error: "settled_locked" };
+      const before = await tx.personalBill.findUniqueOrThrow({ where: { id }, select: { authorId: true, viaEvent: true, shares: { where: { OR: [{ settledAt: { not: null } }, { creditorPaidAt: { not: null } }] }, select: { authorId: true, amountCzk: true, quantity: true } } } });
+      for (const sh of before.shares) {
+        const p = paid.get(sh.authorId) ?? { amount: 0, qty: 0 };
+        paid.set(sh.authorId, { amount: p.amount + Number(sh.amountCzk), qty: p.qty + Number(sh.quantity ?? 0) });
+      }
+      if (paid.size && (before.authorId !== authorId || before.viaEvent !== data.viaEvent)) return { error: "settled_author_locked" };
+      for (const [person, p] of paid) {
+        const i = people.indexOf(person);
+        const want = i < 0 ? 0 : amounts[i] ?? 0;
+        if (toHal(want) < toHal(p.amount)) return { error: "below_paid" };
+      }
       await tx.personalBill.update({ where: { id }, data });
-      await tx.personalBillShare.deleteMany({ where: { personalBillId: id } });
+      await tx.personalBillShare.deleteMany({ where: { personalBillId: id, settledAt: null, creditorPaidAt: null } });
     } else {
       const file = typeof b.gcsObjectPath === "string" && b.gcsObjectPath.startsWith(`events/${event.id}/personal/`) ? b.gcsObjectPath : null;
       id = (await tx.personalBill.create({ data: { ...data, eventId: event.id, createdByUserId: userId, gcsObjectPath: file, originalFilename: file ? text(b.originalFilename, 200) || null : null }, select: { id: true } })).id;
@@ -141,7 +154,15 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
       await tx.personalBill.update({ where: { id: id! }, data: { lineItems } });
     }
     // A tally keeps only who had something.
-    const rows = people.map((p, i) => ({ personalBillId: id!, authorId: p, amountCzk: amounts[i], quantity: unitPrice != null ? quantities[i] : null })).filter((r) => unitPrice == null || (r.quantity ?? 0) > 0);
+    const rows = people
+      .map((p, i) => ({
+        personalBillId: id!,
+        authorId: p,
+        amountCzk: fromHal(toHal(amounts[i]) - toHal(paid.get(p)?.amount ?? 0)),
+        quantity: unitPrice != null ? Math.round((quantities[i] - (paid.get(p)?.qty ?? 0)) * 100) / 100 : null,
+      }))
+      // Only what's left to pay (a tally: only who had something more).
+      .filter((r) => r.amountCzk > 0 && (unitPrice == null || (r.quantity ?? 0) > 0));
     if (rows.length) await tx.personalBillShare.createMany({ data: rows });
     return { id: id! };
   });

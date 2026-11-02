@@ -77,9 +77,10 @@ export async function POST(
     await tx.personalBill.updateMany({ where: { authorId: sourceId }, data: { authorId: targetId } });
     await tx.event.updateMany({ where: { treasurerAuthorId: sourceId }, data: { treasurerAuthorId: targetId } });
     for (const sh of await tx.personalBillShare.findMany({ where: { authorId: sourceId } })) {
-      const other = await tx.personalBillShare.findUnique({ where: { personalBillId_authorId: { personalBillId: sh.personalBillId, authorId: targetId } } });
+      // An open part merges into the target's open part; a settled one moves as it is.
+      const other = sh.settledAt || sh.creditorPaidAt ? null : await tx.personalBillShare.findFirst({ where: { personalBillId: sh.personalBillId, authorId: targetId, settledAt: null, creditorPaidAt: null } });
       if (other) {
-        await tx.personalBillShare.update({ where: { id: other.id }, data: { amountCzk: other.amountCzk.plus(sh.amountCzk) } });
+        await tx.personalBillShare.update({ where: { id: other.id }, data: { amountCzk: other.amountCzk.plus(sh.amountCzk), ...(other.quantity && sh.quantity && { quantity: other.quantity.plus(sh.quantity) }) } });
         await tx.personalBillShare.delete({ where: { id: sh.id } });
       } else await tx.personalBillShare.update({ where: { id: sh.id }, data: { authorId: targetId } });
     }

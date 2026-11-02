@@ -2605,7 +2605,8 @@ model PersonalBillShare {
   personalBill PersonalBill @relation(fields: [personalBillId], references: [id], onDelete: Cascade)
   author       Author       @relation(fields: [authorId], references: [id])
 
-  @@unique([personalBillId, authorId])
+  // Several parts per person: a paid part stays as it was, what's added later is a new open part.
+  @@index([personalBillId])
   @@index([authorId])
   @@map("personal_bill_shares")
 }
