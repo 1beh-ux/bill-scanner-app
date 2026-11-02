@@ -37,6 +37,12 @@ export default function SettlementApp({ token, strings }: { token: string; strin
     else setError(t(r?.status === 429 ? "throttled" : "failed"));
   }
 
+  const fileLink = (kind: "official" | "personal", id: string) => (
+    <a href={`${api}/file?kind=${kind}&id=${id}`} target="_blank" rel="noreferrer" className="ml-1.5 text-[12px] text-ember underline">
+      {t("viewBill")}
+    </a>
+  );
+
   if (error && !s) return <p className="p-8 text-center text-[15px]">{error}</p>;
   if (!s) return <p className="p-8 text-center text-[15px] text-ink-secondary">…</p>;
   const r = s.result;
@@ -146,7 +152,10 @@ export default function SettlementApp({ token, strings }: { token: string; strin
               {s.official.map((b, i) => (
                 <tr key={i} className="border-b border-mist/60">
                   <td className="py-1 pr-2 text-ink-secondary">{date(b.date)}</td>
-                  <td className="py-1">{b.merchant || "—"}</td>
+                  <td className="py-1">
+                    {b.merchant || "—"}
+                    {b.hasFile && fileLink("official", b.billId)}
+                  </td>
                   <td className="py-1 text-[12px] text-ink-secondary">{t(`state.${b.state}`)}</td>
                   <td className="py-1 text-right tabular-nums">{czk(b.amountCzk)}</td>
                 </tr>
@@ -165,6 +174,7 @@ export default function SettlementApp({ token, strings }: { token: string; strin
                 <div className="flex justify-between gap-2">
                   <span>
                     {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
+                    {o.hasFile && fileLink("personal", o.billId)}
                   </span>
                   <span className="font-medium tabular-nums">{czk(o.amountCzk)}</span>
                 </div>
@@ -198,19 +208,38 @@ export default function SettlementApp({ token, strings }: { token: string; strin
       {s.paidForOthers.length > 0 && (
         <section>
           <h2 className="mb-1 text-[16px] font-semibold">{t("othersTitle")}</h2>
-          <table className="w-full text-[14px]">
-            <tbody>
-              {s.paidForOthers.map((o, i) => (
-                <tr key={i} className="border-b border-mist/60">
-                  <td className="py-1 pr-2 text-ink-secondary">{date(o.date)}</td>
-                  <td className="py-1">
-                    {o.debtor}: {o.title || "—"}
-                  </td>
-                  <td className="py-1 text-right tabular-nums">{czk(o.amountCzk)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex flex-col gap-2">
+            {s.paidForOthers.map((o, i) => (
+              <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
+                <div className="flex justify-between gap-2">
+                  <span>
+                    <b>{o.debtor}</b>: {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
+                    {o.hasFile && fileLink("personal", o.billId)}
+                  </span>
+                  <span className="font-medium tabular-nums">{czk(o.amountCzk)}</span>
+                </div>
+                {(o.quantity != null && o.unitPrice != null) || o.paidOut ? (
+                  <div className="text-[12.5px] text-ink-secondary">
+                    {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)}`}
+                    {o.paidOut && `${o.quantity != null ? " · " : ""}✓ ${t("partSettled")}`}
+                  </div>
+                ) : null}
+                {o.lines.length > 0 && (
+                  <ul className="mt-1 text-[12.5px] text-ink-secondary">
+                    {o.lines.map((l, k) => (
+                      <li key={k} className="flex justify-between gap-2">
+                        <span>
+                          {l.description || "—"}
+                          {l.people > 1 && ` (${czk(l.total)} / ${l.people})`}
+                        </span>
+                        <span className="tabular-nums">{czk(l.share)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
       )}
       {error && <p className="text-[14px] text-red-600">{error}</p>}

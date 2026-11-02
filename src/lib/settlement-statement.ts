@@ -18,16 +18,16 @@ export async function buildStatement(link: { id: string; eventId: string; author
   const [bills, myShares, othersShares, netting, receiver] = await Promise.all([
     prisma.bill.findMany({
       where: { eventId: event.id, payerAuthorId: person.id, payerAuthor: PAYOUT_PAYER_WHERE, status: { not: "failed" } },
-      select: { billDate: true, merchantName: true, amountCzk: true, totalAmount: true, currency: true, status: true, paidToAuthor: true },
+      select: { id: true, gcsObjectPath: true, billDate: true, merchantName: true, amountCzk: true, totalAmount: true, currency: true, status: true, paidToAuthor: true },
       orderBy: { billDate: "asc" },
     }),
     prisma.personalBillShare.findMany({
       where: { authorId: person.id, personalBill: { eventId: event.id } },
-      include: { personalBill: { select: { authorId: true, viaEvent: true, merchantName: true, billDate: true, unitLabel: true, unitPrice: true, lineItems: true, splitMode: true, amountCzk: true, author: { select: { canonicalName: true } }, _count: { select: { shares: true } } } } },
+      include: { personalBill: { select: { id: true, gcsObjectPath: true, authorId: true, viaEvent: true, merchantName: true, billDate: true, unitLabel: true, unitPrice: true, lineItems: true, splitMode: true, amountCzk: true, author: { select: { canonicalName: true } }, _count: { select: { shares: true } } } } },
     }),
     prisma.personalBillShare.findMany({
       where: { authorId: { not: person.id }, personalBill: { eventId: event.id, authorId: person.id, viaEvent: true } },
-      include: { author: { select: { canonicalName: true } }, personalBill: { select: { merchantName: true, unitLabel: true, billDate: true } } },
+      include: { author: { select: { id: true, canonicalName: true } }, personalBill: { select: { id: true, gcsObjectPath: true, merchantName: true, unitLabel: true, unitPrice: true, billDate: true, lineItems: true } } },
     }),
     eventNetting(event.id),
     receiverOf(event),
@@ -45,13 +45,15 @@ export async function buildStatement(link: { id: string; eventId: string; author
     receiver: receiver && { name: receiver.name, bankAccountNumber: receiver.bankAccountNumber, bankCode: receiver.bankCode, autoConfirm: receiver.autoConfirm },
     // Without a bank connection no VS is shown (the QR still works; confirmed by hand).
     variableSymbol: receiver?.autoConfirm ? link.variableSymbol : null,
-    official: bills.map((b) => ({ date: iso(b.billDate), merchant: b.merchantName, amountCzk: Number(effectiveAmountCzk(b) ?? 0), state: b.paidToAuthor ? "paid" : b.status === "approved" ? "approved" : "waiting" })),
+    official: bills.map((b) => ({ billId: b.id, hasFile: !!b.gcsObjectPath, date: iso(b.billDate), merchant: b.merchantName, amountCzk: Number(effectiveAmountCzk(b) ?? 0), state: b.paidToAuthor ? "paid" : b.status === "approved" ? "approved" : "waiting" })),
     own: myShares.map((s) => {
       const b = s.personalBill;
       const lines = (Array.isArray(b.lineItems) ? (b.lineItems as LineItem[]) : [])
         .filter((l) => l.assign?.includes(key) && l.total && l.total > 0)
         .map((l) => ({ description: l.description ?? "", total: l.total!, share: evenSplit(l.total!, l.assign!.length)[l.assign!.indexOf(key)] ?? 0, people: l.assign!.length }));
       return {
+        billId: b.id,
+        hasFile: !!b.gcsObjectPath,
         date: iso(b.billDate),
         title: b.unitLabel ?? b.merchantName ?? "",
         amountCzk: Number(s.amountCzk),
@@ -66,7 +68,26 @@ export async function buildStatement(link: { id: string; eventId: string; author
         settled: !!s.settledAt,
       };
     }),
-    paidForOthers: othersShares.map((s) => ({ date: iso(s.personalBill.billDate), title: s.personalBill.unitLabel ?? s.personalBill.merchantName ?? "", debtor: s.author.canonicalName, amountCzk: Number(s.amountCzk), paidOut: !!s.creditorPaidAt })),
+    // With the same detail as their own parts: the debtor's receipt lines / tally pieces.
+    paidForOthers: othersShares.map((s) => {
+      const b = s.personalBill;
+      const dk = `a:${s.author.id}`;
+      const lines = (Array.isArray(b.lineItems) ? (b.lineItems as LineItem[]) : [])
+        .filter((l) => l.assign?.includes(dk) && l.total && l.total > 0)
+        .map((l) => ({ description: l.description ?? "", total: l.total!, share: evenSplit(l.total!, l.assign!.length)[l.assign!.indexOf(dk)] ?? 0, people: l.assign!.length }));
+      return {
+        billId: b.id,
+        hasFile: !!b.gcsObjectPath,
+        date: iso(b.billDate),
+        title: b.unitLabel ?? b.merchantName ?? "",
+        debtor: s.author.canonicalName,
+        amountCzk: Number(s.amountCzk),
+        quantity: s.quantity == null ? null : Number(s.quantity),
+        unitPrice: b.unitPrice == null ? null : Number(b.unitPrice),
+        lines,
+        paidOut: !!s.creditorPaidAt,
+      };
+    }),
     result: { official: row?.official ?? 0, personalIn: row?.personalIn ?? 0, personalOut: row?.personalOut ?? 0, net: row?.net ?? 0 },
     iOwe: netting.net.debts
       .filter((d) => d.debtorId === person.id)

@@ -27,6 +27,7 @@ type Bill = {
   unitPrice: number | null;
   note: string | null;
   hasFile: boolean;
+  isPdf: boolean;
   fromBill: boolean;
   lineItems: LineItem[];
   author: { id: string; name: string } | null;
@@ -161,7 +162,7 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
       gcsObjectPath: null,
       originalFilename: null,
       previewUrl: b.hasFile ? `${base}/${b.id}/file` : null,
-      previewIsPdf: false,
+      previewIsPdf: b.isPdf,
       lineItems: b.lineItems,
       paid,
     };

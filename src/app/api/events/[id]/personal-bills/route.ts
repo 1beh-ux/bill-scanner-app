@@ -33,6 +33,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         splitMode: b.splitMode,
         note: b.note,
         hasFile: !!b.gcsObjectPath,
+        // The preview next to the form: a PDF in a frame, anything else as an image.
+        isPdf: /\.pdf$/i.test(b.originalFilename ?? b.gcsObjectPath ?? ""),
         fromBill: !!b.fromBill,
         // null = paid from the event's money.
         author: b.author && { id: b.author.id, name: b.author.canonicalName },
