@@ -8,7 +8,8 @@ import { formatCzk } from "@/lib/format";
 import { pluralForm } from "@/lib/plural";
 import { updatePayer, isRecentBankChange } from "@/lib/payers-client";
 import { useConfirm } from "@/components/ConfirmDialog";
-import SettlementLinks, { LinkCell } from "@/components/bills/SettlementLinks";
+import SettlementLinks, { LinkCell, PaymentHistory } from "@/components/bills/SettlementLinks";
+import { DEFAULT_MESSAGES, fillMessage, messageCase, type Messages } from "@/lib/settlement-message";
 
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
 
@@ -33,7 +34,7 @@ type UnpaidRow = {
   personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string }[];
   netCzk: number;
   // Vyúčtování (2026-11-01): the person's link and what they marked there.
-  link: { path: string; claimedAt: string | null; receivedAt: string | null } | null;
+  link: { path: string; claimedAt: string | null; receivedAt: string | null; acceptedAt: string | null; acceptedAmount: number | null } | null;
 };
 type Person = { name: string; bankAccountNumber: string | null; bankCode: string | null };
 type Debt = { debtorId: string; creditorId: string; amountCzk: number; claimedAt: string | null; debtorName: string; creditorName: string; creditorBankAccountNumber: string | null; creditorBankCode: string | null };
@@ -56,6 +57,15 @@ export default function EventPaymentsPage({
   const [receiver, setReceiver] = useState<Person | null>(null);
   const [debts, setDebts] = useState<Debt[]>([]);
   const [debtQr, setDebtQr] = useState<Record<string, string>>({});
+  // The texts sent with the links (Platby settings): the right variant per person.
+  const [messages, setMessages] = useState<Messages>(DEFAULT_MESSAGES);
+  const messageFor = (authorId: string, name: string, url: string) => {
+    const row = rows.find((r) => r.authorId === authorId);
+    const owesPeople = debts.filter((d) => d.debtorId === authorId).reduce((s, d) => s + d.amountCzk, 0);
+    const owedByPeople = debts.filter((d) => d.creditorId === authorId).reduce((s, d) => s + d.amountCzk, 0);
+    const c = messageCase({ official: Number(row?.unpaidTotalCzk ?? 0), personalIn: row?.personalInCzk ?? 0, personalOut: row?.personalOutCzk ?? 0, owedByPeople, owesPeople });
+    return fillMessage(messages[c], { name: name.split(" ")[0] || name, event: event?.name ?? "", net: row?.netCzk ?? 0, owesPeople, owedByPeople, link: url });
+  };
   const [scope, setScope] = useState<"approved" | "all">("approved");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -258,7 +268,7 @@ export default function EventPaymentsPage({
         </button>
       </div>
 
-      <SettlementLinks eventId={id} people={[...new Set([...rows.map((r) => r.authorId), ...debts.flatMap((d) => [d.debtorId, d.creditorId])])]} names={Object.fromEntries([...rows.map((r) => [r.authorId, r.name]), ...debts.flatMap((d) => [[d.debtorId, d.debtorName], [d.creditorId, d.creditorName]])])} t={t} onChanged={load} />
+      <SettlementLinks eventId={id} people={[...new Set([...rows.map((r) => r.authorId), ...debts.flatMap((d) => [d.debtorId, d.creditorId])])]} names={Object.fromEntries([...rows.map((r) => [r.authorId, r.name]), ...debts.flatMap((d) => [[d.debtorId, d.debtorName], [d.creditorId, d.creditorName]])])} t={t} onChanged={load} onMessages={setMessages} messageFor={messageFor} />
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
@@ -389,7 +399,7 @@ export default function EventPaymentsPage({
                   {t("paymentsPage.markPaidButton")}
                 </button>
                 )}
-                <LinkCell eventId={id} authorId={row.authorId} link={row.link} t={t} onChanged={load} />
+                <LinkCell eventId={id} authorId={row.authorId} link={row.link} net={row.netCzk} message={(url) => messageFor(row.authorId, row.name, url)} t={t} onChanged={load} />
               </div>
 
               <div className="w-full text-center sm:w-[180px]">
@@ -413,6 +423,8 @@ export default function EventPaymentsPage({
           ))}
         </div>
       )}
+
+      <PaymentHistory eventId={id} t={t} />
 
       {debts.length > 0 && (
         <section className="mt-8">

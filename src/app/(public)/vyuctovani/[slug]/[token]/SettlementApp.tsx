@@ -79,6 +79,23 @@ export default function SettlementApp({ token, strings }: { token: string; strin
         ) : getsPaid ? (
           <div className="flex flex-col gap-2">
             <p className="text-[18px] font-semibold">{t("eventPaysYou", { amount: czk(r.net) })}</p>
+            {/* "Souhlasím s vyúčtováním": valid while the amount is the one they accepted. */}
+            {s.status.acceptedAt && s.status.acceptedAmount != null && Math.abs(s.status.acceptedAmount - r.net) < 0.005 ? (
+              <p className="flex flex-wrap items-center gap-2 text-[14px] text-pine">
+                ✓ {t("accepted", { date: new Date(String(s.status.acceptedAt)).toLocaleDateString("cs-CZ") })}
+                <button type="button" disabled={busy} onClick={() => act({ action: "unaccept" })} className="text-[13px] text-ink-secondary underline">
+                  {t("undo")}
+                </button>
+              </p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {s.status.acceptedAt && <p className="text-[13px] text-amber-700">{t("acceptedChanged", { amount: czk(s.status.acceptedAmount ?? 0) })}</p>}
+                <button type="button" disabled={busy} onClick={() => act({ action: "accept" })} className={btnPrimary + " self-start"}>
+                  {t("accept", { amount: czk(r.net) })}
+                </button>
+                <p className="text-[12px] text-ink-secondary">{t("acceptHint")}</p>
+              </div>
+            )}
             <BankBox s={s} busy={busy} t={t} onSave={(account, code) => act({ action: "bank", account, code })} />
           </div>
         ) : (

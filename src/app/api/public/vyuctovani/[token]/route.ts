@@ -9,6 +9,7 @@ import { checkSettlementPayments, settlePair } from "@/lib/settlement-links";
 // person's statement; POST { action }:
 //   paid / unpaid          "Zaplatil(a) jsem" to the event (their claim) / undone
 //   received / unreceived  "Peníze jsem dostal(a)" (their payout arrived) / undone
+//   accept / unaccept      "Souhlasím s vyúčtováním" (the event pays them: this amount and content are right)
 //   pairPaid / pairUnpaid { creditorId }  person to person: "I paid them"
 //   pairReceived { debtorId }  the creditor confirms -> those shares settled
 //   bank { account, code }  where their payout goes (logged, shown as "recently changed" on Platby)
@@ -43,6 +44,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     case "unreceived":
       await prisma.settlementLink.update({ where: { id: link.id }, data: { receivedAt: b.action === "received" ? new Date() : null } });
       break;
+    case "accept":
+    case "unaccept": {
+      const { eventNetting } = await import("@/lib/settlement-links");
+      const net = (await eventNetting(link.eventId)).net.rows.find((r) => r.authorId === link.authorId)?.net ?? 0;
+      await prisma.settlementLink.update({ where: { id: link.id }, data: b.action === "accept" ? { acceptedAt: new Date(), acceptedAmount: net } : { acceptedAt: null, acceptedAmount: null } });
+      break;
+    }
     case "pairPaid":
     case "pairUnpaid":
       if (typeof b.creditorId !== "string") return NextResponse.json({ error: "bad_request" }, { status: 400 });

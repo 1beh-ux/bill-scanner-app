@@ -10,7 +10,7 @@ import { eventNetting, pairSource, receiverOf } from "@/lib/settlement-links";
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 type LineItem = { description?: string | null; total?: number | null; assign?: string[] };
 
-export async function buildStatement(link: { id: string; eventId: string; authorId: string; variableSymbol: string; claimedAt: Date | null; receivedAt: Date | null; pairClaims: unknown }) {
+export async function buildStatement(link: { id: string; eventId: string; authorId: string; variableSymbol: string; claimedAt: Date | null; receivedAt: Date | null; acceptedAt: Date | null; acceptedAmount: { toString(): string } | null; pairClaims: unknown }) {
   const event = await prisma.event.findUniqueOrThrow({ where: { id: link.eventId }, select: { id: true, name: true, startDate: true, endDate: true, status: true, treasurerAuthorId: true, settlementReceiver: true, bankAccountId: true, organization: { select: { name: true } } } });
   const person = await prisma.author.findUniqueOrThrow({ where: { id: link.authorId }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true, payoutNeeded: true, isOfficialAccount: true } });
   const key = `a:${person.id}`;
@@ -103,6 +103,9 @@ export async function buildStatement(link: { id: string; eventId: string; author
     status: {
       claimedAt: link.claimedAt,
       receivedAt: link.receivedAt,
+      // "Souhlasím s vyúčtováním": still valid only while the amount is the one they accepted.
+      acceptedAt: link.acceptedAt,
+      acceptedAmount: link.acceptedAmount == null ? null : Number(link.acceptedAmount.toString()),
       // Something was paid out to them (the event sent money): "Peníze jsem dostal(a)" makes sense.
       paidOut: bills.some((b) => b.paidToAuthor) || othersShares.some((s) => s.creditorPaidAt),
     },

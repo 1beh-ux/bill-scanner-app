@@ -157,7 +157,9 @@ export async function GET(
       personalOutItems: personalOutItems(e.authorId),
       personalInItems: personalInItems(e.authorId),
       netCzk: netOf.get(e.authorId)?.net ?? Number(e.unpaid.toString()),
-      link: links.has(e.authorId) ? { path: linkPath(eventName, links.get(e.authorId)!.token), claimedAt: links.get(e.authorId)!.claimedAt, receivedAt: links.get(e.authorId)!.receivedAt } : null,
+      link: links.has(e.authorId)
+        ? (({ token, claimedAt, receivedAt, acceptedAt, acceptedAmount }) => ({ path: linkPath(eventName, token), claimedAt, receivedAt, acceptedAt, acceptedAmount: acceptedAmount == null ? null : Number(acceptedAmount) }))(links.get(e.authorId)!)
+        : null,
     }))
     .sort((a, b) => a.name.localeCompare(b.name, "cs"));
 

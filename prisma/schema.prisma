@@ -521,6 +521,8 @@ model Event {
   // "event" = the event's bank account (Banka).
   settlementReceiver String @default("treasurer") @map("settlement_receiver")
   settlementLinks    SettlementLink[]
+  // The texts sent with the links (Platby): { owes, owed, both } with {jmeno} {akce} {castka} {odkaz}.
+  settlementMessages Json?  @map("settlement_messages")
   eventPersons           EventPerson[]
   kitchenSettings        EventKitchenSettings?
   planEntries            PlanEntry[]
@@ -2624,6 +2626,9 @@ model SettlementLink {
   // "Zaplatil(a) jsem" (their claim, not proof) / "Peníze jsem dostal(a)" (their payout arrived).
   claimedAt      DateTime? @map("claimed_at")
   receivedAt     DateTime? @map("received_at")
+  // "Souhlasím s vyúčtováním" (the event pays them): when, and the amount it was then.
+  acceptedAt     DateTime? @map("accepted_at")
+  acceptedAmount Decimal?  @map("accepted_amount") @db.Decimal(12, 2)
   // Person to person: { [creditorAuthorId]: ISO } -- "I paid them".
   pairClaims     Json      @default("{}") @map("pair_claims")
   // Bank movements already used to settle (never twice).
