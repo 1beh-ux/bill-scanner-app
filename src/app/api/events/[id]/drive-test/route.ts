@@ -5,7 +5,19 @@ import { requireModuleAccess } from "@/lib/module-access";
 import { getDriveIdentity, testFolder } from "@/lib/drive";
 import { DriveError, parseFolderId, type DriveErrorCode, type DriveErrorParams } from "@/lib/drive-errors";
 
-type Label = "ingest" | "export" | "participants" | "processed";
+type Label = "ingest" | "export" | "participants" | "processed" | "manifest" | "health" | "participantsList" | "planning" | "tickets";
+// Body key -> event field per folder.
+const FOLDERS: Record<Label, { body: string; field: "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId" | "driveManifestFolderId" | "driveHealthFolderId" | "driveParticipantsListFolderId" | "drivePlanningFolderId" | "driveTicketsFolderId" }> = {
+  ingest: { body: "ingestFolderId", field: "driveIngestFolderId" },
+  export: { body: "exportFolderId", field: "driveExportFolderId" },
+  participants: { body: "participantsFolderId", field: "driveParticipantsFolderId" },
+  processed: { body: "processedFolderId", field: "driveProcessedFolderId" },
+  manifest: { body: "manifestFolderId", field: "driveManifestFolderId" },
+  health: { body: "healthFolderId", field: "driveHealthFolderId" },
+  participantsList: { body: "participantsListFolderId", field: "driveParticipantsListFolderId" },
+  planning: { body: "planningFolderId", field: "drivePlanningFolderId" },
+  tickets: { body: "ticketsFolderId", field: "driveTicketsFolderId" },
+};
 type Item =
   | { ok: true; folderId: string; name: string; inSharedDrive: boolean }
   | { ok: false; folderId: string | null; error: DriveErrorCode; params: DriveErrorParams };
@@ -29,22 +41,21 @@ export async function POST(
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) return NextResponse.json({ error: "event_not_found" }, { status: 404 });
 
-  const raw: Record<Label, string | null> = {
-    ingest: typeof body.ingestFolderId === "string" ? body.ingestFolderId : (body.ingestFolderId === undefined ? event.driveIngestFolderId : null),
-    export: typeof body.exportFolderId === "string" ? body.exportFolderId : (body.exportFolderId === undefined ? event.driveExportFolderId : null),
-    participants:
-      typeof body.participantsFolderId === "string" ? body.participantsFolderId : (body.participantsFolderId === undefined ? event.driveParticipantsFolderId : null),
-    processed: typeof body.processedFolderId === "string" ? body.processedFolderId : (body.processedFolderId === undefined ? event.driveProcessedFolderId : null),
-  };
+  const raw = Object.fromEntries(
+    (Object.keys(FOLDERS) as Label[]).map((l) => {
+      const v = body[FOLDERS[l].body];
+      return [l, typeof v === "string" ? v : v === undefined ? event[FOLDERS[l].field] : null];
+    })
+  ) as Record<Label, string | null>;
 
   const identity = await getDriveIdentity(id);
   const baseParams: DriveErrorParams = { identity: identity.email, identityKind: identity.kind, serviceAccount: identity.serviceAccountEmail };
   // processed: files are moved in (and out of the ingest folder -- moving needs write there too).
-  const need: Record<Label, "read" | "write"> = { ingest: "read", export: "write", participants: "write", processed: "write" };
+  const need: Record<Label, "read" | "write"> = { ingest: "read", export: "write", participants: "write", processed: "write", manifest: "write", health: "write", participantsList: "write", planning: "write", tickets: "write" };
 
   const results: Partial<Record<Label, Item>> = {};
   const ids: Partial<Record<Label, string>> = {};
-  for (const label of ["ingest", "export", "participants", "processed"] as Label[]) {
+  for (const label of Object.keys(FOLDERS) as Label[]) {
     const input = raw[label];
     if (!input || !input.trim()) continue;
     const folderId = parseFolderId(input);

@@ -198,8 +198,8 @@ export default function ParticipantDetailPage({
     // just whether the event has a participants-root (or export) folder set.
     fetch(`/api/events/${eventId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((d: { driveParticipantsFolderId: string | null; driveExportFolderId: string | null } | null) =>
-        setHasDriveFolder(!!(d?.driveParticipantsFolderId || d?.driveExportFolderId))
+      .then((d: { driveParticipantsFolderId: string | null; driveExportFolderId: string | null; driveHealthFolderId?: string | null } | null) =>
+        setHasDriveFolder(!!(d?.driveParticipantsFolderId || d?.driveHealthFolderId || d?.driveExportFolderId))
       )
       .catch(() => {});
   }, [participantId, eventId]);

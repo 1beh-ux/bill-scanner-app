@@ -20,16 +20,18 @@ type IdentityResponse = {
   isConfiguredByMe: boolean;
   sameFolder: boolean;
 };
-type Label = "ingest" | "export" | "participants" | "processed";
+type Label = "ingest" | "export" | "participants" | "processed" | "manifest" | "health" | "participantsList" | "planning" | "tickets";
 type FolderResult =
   | { ok: true; folderId: string; name: string }
   | { ok: false; folderId: string | null; error: string; params: DriveErrorInfo };
+type FolderField =
+  | "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId"
+  | "driveManifestFolderId" | "driveHealthFolderId" | "driveParticipantsListFolderId" | "drivePlanningFolderId" | "driveTicketsFolderId";
 type EventDrive = {
   driveIngestFolderId: string | null;
   driveExportFolderId: string | null;
   driveParticipantsFolderId: string | null;
-  driveProcessedFolderId?: string | null;
-};
+} & Partial<Record<FolderField, string | null>>;
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -38,13 +40,20 @@ const btnPrimary =
 const btnSecondary =
   "rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
 
-const FIELDS: { label: Label; field: "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId"; prop: keyof EventDrive; labelKey: string }[] = [
-  { label: "ingest", field: "driveIngestFolderId", prop: "driveIngestFolderId", labelKey: "driveSettings.ingestFolderLabel" },
-  { label: "export", field: "driveExportFolderId", prop: "driveExportFolderId", labelKey: "driveSettings.exportFolderLabel" },
-  { label: "participants", field: "driveParticipantsFolderId", prop: "driveParticipantsFolderId", labelKey: "driveSettings.participantsFolderLabel" },
+// group: import (bills come in) / export (each export in its own folder; empty = the bill export folder).
+const FIELDS: { label: Label; field: FolderField; body: string; labelKey: string; group: "import" | "export"; fallback?: boolean }[] = [
+  { label: "ingest", field: "driveIngestFolderId", body: "ingestFolderId", labelKey: "driveSettings.ingestFolderLabel", group: "import" },
   // Imported files are moved here after a Drive import (and the cleanup tool's default target).
-  { label: "processed", field: "driveProcessedFolderId", prop: "driveProcessedFolderId", labelKey: "driveSettings.processedFolderLabel" },
+  { label: "processed", field: "driveProcessedFolderId", body: "processedFolderId", labelKey: "driveSettings.processedFolderLabel", group: "import" },
+  { label: "export", field: "driveExportFolderId", body: "exportFolderId", labelKey: "driveSettings.exportFolderLabel", group: "export" },
+  { label: "manifest", field: "driveManifestFolderId", body: "manifestFolderId", labelKey: "driveSettings.manifestFolderLabel", group: "export", fallback: true },
+  { label: "health", field: "driveHealthFolderId", body: "healthFolderId", labelKey: "driveSettings.healthFolderLabel", group: "export", fallback: true },
+  { label: "participantsList", field: "driveParticipantsListFolderId", body: "participantsListFolderId", labelKey: "driveSettings.participantsListFolderLabel", group: "export", fallback: true },
+  { label: "participants", field: "driveParticipantsFolderId", body: "participantsFolderId", labelKey: "driveSettings.participantsFolderLabel", group: "export", fallback: true },
+  { label: "planning", field: "drivePlanningFolderId", body: "planningFolderId", labelKey: "driveSettings.planningFolderLabel", group: "export", fallback: true },
+  { label: "tickets", field: "driveTicketsFolderId", body: "ticketsFolderId", labelKey: "driveSettings.ticketsFolderLabel", group: "export", fallback: true },
 ];
+const valuesOf = (ev: Partial<Record<FolderField, string | null>>) => Object.fromEntries(FIELDS.map((f) => [f.label, ev[f.field] ?? ""])) as Record<Label, string>;
 
 // The event's Drive settings: whose Google account does the work, the three
 // folders (ids or pasted URLs), an explicit per-folder connection test, and the
@@ -63,12 +72,7 @@ export default function DriveSettingsTab({
 }) {
   const { t } = useTranslations();
   const [info, setInfo] = useState<IdentityResponse | null>(null);
-  const [values, setValues] = useState<Record<Label, string>>({
-    ingest: event.driveIngestFolderId ?? "",
-    export: event.driveExportFolderId ?? "",
-    participants: event.driveParticipantsFolderId ?? "",
-    processed: event.driveProcessedFolderId ?? "",
-  });
+  const [values, setValues] = useState<Record<Label, string>>(valuesOf(event));
   const [saving, setSaving] = useState(false);
   // Manifest category layout: pairs (Kategorie n + Částka n) or one column per category.
   const [categoryMode, setCategoryMode] = useState(event.manifestCategoryMode === "columns" ? "columns" : "pairs");
@@ -103,12 +107,7 @@ export default function DriveSettingsTab({
     };
   }, [eventId]);
 
-  const parsed: Record<Label, string | null> = {
-    ingest: parseFolderId(values.ingest),
-    export: parseFolderId(values.export),
-    participants: parseFolderId(values.participants),
-    processed: parseFolderId(values.processed),
-  };
+  const parsed = Object.fromEntries(FIELDS.map((f) => [f.label, parseFolderId(values[f.label])])) as Record<Label, string | null>;
   const sameFolder = !!parsed.ingest && parsed.ingest === parsed.export;
   const anyFolder = FIELDS.some((f) => values[f.label].trim());
 
@@ -137,12 +136,7 @@ export default function DriveSettingsTab({
     const res = await fetch(`/api/events/${eventId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        driveIngestFolderId: values.ingest.trim() || null,
-        driveExportFolderId: values.export.trim() || null,
-        driveParticipantsFolderId: values.participants.trim() || null,
-        driveProcessedFolderId: values.processed.trim() || null,
-      }),
+      body: JSON.stringify(Object.fromEntries(FIELDS.map((f) => [f.field, values[f.label].trim() || null]))),
     });
     setSaving(false);
     if (!res.ok) {
@@ -152,7 +146,7 @@ export default function DriveSettingsTab({
     }
     // Show the ids as saved (a pasted URL becomes its id) and check the connection right away.
     const ev = await res.json();
-    setValues({ ingest: ev.driveIngestFolderId ?? "", export: ev.driveExportFolderId ?? "", participants: ev.driveParticipantsFolderId ?? "", processed: ev.driveProcessedFolderId ?? "" });
+    setValues(valuesOf(ev));
     setSaved(true);
     onSaved();
     loadIdentity();
@@ -245,15 +239,21 @@ export default function DriveSettingsTab({
 
       {/* --- folders --- */}
       <form onSubmit={save} className="mb-1 flex max-w-xl flex-col gap-3">
-        {FIELDS.map((f) => (
+        {FIELDS.map((f, i) => (
           <div key={f.label}>
+            {FIELDS[i - 1]?.group !== f.group && (
+              <h3 className="mb-1 mt-2 text-[14px] font-semibold text-ink">
+                {t(f.group === "import" ? "driveSettings.groupImport" : "driveSettings.groupExport")}
+                {f.group === "export" && <span className="ml-2 text-[12px] font-normal text-ink-secondary">{t("driveSettings.groupExportHint")}</span>}
+              </h3>
+            )}
             <label className="text-[13px] text-ink-secondary">
               {t(f.labelKey)}
               <input
                 type="text"
                 value={values[f.label]}
                 onChange={(e) => setValue(f.label, e.target.value)}
-                placeholder={t("driveSettings.folderPlaceholder")}
+                placeholder={f.fallback ? t("driveSettings.folderFallbackPlaceholder") : t("driveSettings.folderPlaceholder")}
                 className={inputClass + " mt-1"}
               />
             </label>
@@ -291,7 +291,7 @@ export default function DriveSettingsTab({
             type="button"
             disabled={testing || !anyFolder}
             onClick={() =>
-              runTest({ ingestFolderId: values.ingest, exportFolderId: values.export, participantsFolderId: values.participants, processedFolderId: values.processed })
+              runTest(Object.fromEntries(FIELDS.map((f) => [f.body, values[f.label]])))
             }
             className={btnSecondary}
           >

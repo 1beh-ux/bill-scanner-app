@@ -1,3 +1,4 @@
+import { exportFolder } from "@/lib/drive-folders";
 import { prisma } from "@/lib/prisma";
 import { renderPdf } from "@/lib/pdf-service";
 import { billsBucket } from "@/lib/gcs";
@@ -104,9 +105,11 @@ export async function generateParticipantSummaryPdf(
   const gcsPath = `events/${participant.eventId}/health/parent-summaries/${filename}`;
   await billsBucket.file(gcsPath).save(buffer, { contentType: "application/pdf" });
 
-  if (participant.event.driveExportFolderId) {
+  // The health summaries' own folder (Připojení), else the bill export folder.
+  const healthFolder = exportFolder(participant.event, "health");
+  if (healthFolder) {
     try {
-      await uploadFileToFolder(participant.eventId, participant.event.driveExportFolderId, filename, buffer, "application/pdf", "export");
+      await uploadFileToFolder(participant.eventId, healthFolder, filename, buffer, "application/pdf", "health");
     } catch (err) {
       // Archive copy is best-effort -- the GCS path + email log are the
       // record of truth, so a Drive hiccup shouldn't block the download/send.

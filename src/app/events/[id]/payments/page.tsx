@@ -63,7 +63,7 @@ export default function EventPaymentsPage({
     const row = rows.find((r) => r.authorId === authorId);
     const owesPeople = debts.filter((d) => d.debtorId === authorId).reduce((s, d) => s + d.amountCzk, 0);
     const owedByPeople = debts.filter((d) => d.creditorId === authorId).reduce((s, d) => s + d.amountCzk, 0);
-    const c = messageCase({ official: Number(row?.unpaidTotalCzk ?? 0), personalIn: row?.personalInCzk ?? 0, personalOut: row?.personalOutCzk ?? 0, owedByPeople, owesPeople });
+    const c = messageCase({ official: Number(row?.unpaidTotalCzk ?? 0), personalIn: row?.personalInCzk ?? 0, personalOut: row?.personalOutCzk ?? 0, owedByPeople, owesPeople, net: row?.netCzk ?? 0 });
     return fillMessage(messages[c], { name: name.split(" ")[0] || name, event: event?.name ?? "", net: row?.netCzk ?? 0, owesPeople, owedByPeople, link: url });
   };
   const [scope, setScope] = useState<"approved" | "all">("approved");

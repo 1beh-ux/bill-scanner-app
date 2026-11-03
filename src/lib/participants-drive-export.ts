@@ -3,6 +3,7 @@
 // rule, allowedParticipantFieldKeys) and one per tracked document (přijato / ke kontrole / zamítnuto /
 // chybí); the same sheet is rewritten on every export. Then the received files go to the participants
 // folder too (src/lib/mail-drive-sync.ts: a folder per participant, "<jméno>_<dokument>_prijato.pdf").
+import { exportFolder } from "@/lib/drive-folders";
 import type { User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { allowedParticipantFieldKeys } from "@/lib/module-access";
@@ -24,7 +25,9 @@ export async function exportParticipantsToDrive(
   user: User
 ): Promise<{ count: number; spreadsheetId: string; files: { synced: number; skipped: number } | null } | { error: "no_export_folder" }> {
   const event = await withMembers(await prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { organization: { select: { exportColumns: true } } } }));
-  if (!event.driveExportFolderId) return { error: "no_export_folder" };
+  // The attendee list's own folder (Připojení), else the bill export folder.
+  const folder = exportFolder(event, "participantsList");
+  if (!folder) return { error: "no_export_folder" };
   const [allowed, fields, participants, docTypes] = await Promise.all([
     allowedParticipantFieldKeys(user, eventId),
     prisma.eventParticipantField.findMany({ where: { eventId, active: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
@@ -56,6 +59,6 @@ export async function exportParticipantsToDrive(
       return [p.registrationStatus === "accepted" ? "přijatá" : "čeká", ...shown.map((f) => sheetText(values[f.key] ?? "")), ...tracked.map((d) => DOC_STATE_TEXT[docState(docs, d.id).state]), ...(root ? [folderCell(p.name)] : [])];
     }),
   ];
-  const spreadsheetId = await upsertSheetByName(eventId, event.driveExportFolderId, `Účastníci – ${event.name}`, rows);
+  const spreadsheetId = await upsertSheetByName(eventId, folder, `Účastníci – ${event.name}`, rows);
   return { count: participants.length, spreadsheetId, files };
 }

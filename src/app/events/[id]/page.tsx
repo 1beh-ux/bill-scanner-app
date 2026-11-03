@@ -8,6 +8,7 @@ import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
 import PlanningEventSettings from "@/components/planning/PlanningEventSettings";
 import KitchenSettings from "@/components/kitchen/KitchenSettings";
+import { SettlementSettings } from "@/components/bills/SettlementLinks";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import HealthNotesSettings from "@/components/health/HealthNotesSettings";
@@ -108,8 +109,8 @@ const btnPrimary =
 // used to appear on both "Zdraví" and "Pošta", camp fee lived under "Pošta"). Old
 // `?tab=` values still work via OLD_TAB_MAP below -- nothing that links here needed
 // to change, including bookmarks and the mail-oauth callback redirect.
-type Tab = "akce" | "vstupenky" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani" | "kuchyne";
-const SECTION_KEYS: Tab[] = ["akce", "vstupenky", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani"];
+type Tab = "akce" | "vstupenky" | "platba" | "portal" | "verejna" | "lide" | "pripojeni" | "uctenky" | "ucastnici" | "zdravi" | "posta" | "dokumenty" | "planovani" | "kuchyne" | "vyuctovani";
+const SECTION_KEYS: Tab[] = ["akce", "vstupenky", "platba", "portal", "verejna", "lide", "pripojeni", "uctenky", "ucastnici", "zdravi", "posta", "dokumenty", "planovani", "kuchyne", "vyuctovani"];
 const OLD_TAB_MAP: Record<string, Tab> = {
   categories: "uctenky",
   drive: "pripojeni",
@@ -395,6 +396,8 @@ export default function EventDetailPage({
     ...(roster ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
     ...(roster ? [{ key: "dokumenty" as Tab, labelKey: "eventSettings.tabDocuments", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.planning ? [{ key: "planovani" as Tab, labelKey: "eventSettings.tabPlanning" }] : []),
+    // Osobní účtenky a platby (Vyúčtování): the Pokladník, where people pay, Fio, the texts with the links.
+    ...(moduleAccess.bills ? [{ key: "vyuctovani" as Tab, labelKey: "settlementLinks.settingsTab", help: "osobni-uctenky" }] : []),
     ...(moduleAccess.kitchen ? [{ key: "kuchyne" as Tab, labelKey: "kitchen.navSection", help: "kuchyne" }] : []),
   ];
   const currentHelp = visibleSections.find((s) => s.key === tab)?.help;
@@ -774,6 +777,7 @@ export default function EventDetailPage({
           )}
 
           {tab === "kuchyne" && moduleAccess.kitchen && <KitchenSettings eventId={id} />}
+          {tab === "vyuctovani" && moduleAccess.bills && <SettlementSettings eventId={id} t={t} />}
 
           {tab === "planovani" && moduleAccess.planning && (
             <div className="flex flex-col gap-6">

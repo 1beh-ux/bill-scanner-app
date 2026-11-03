@@ -45,6 +45,8 @@ Na stránce **Platby** má každý člověk **jeden odkaz na akci** (`tabornik.o
 - **Zaplaťte akci X Kč**: QR platba, účet a částka ke zkopírování, tlačítko **Zaplatil(a) jsem** (jen jeho tvrzení, jde vrátit). Vyrovnáno je, až to potvrdíte (Zaplaceno) nebo banka.
 - **Mezi lidmi**: komu dluží (QR na účet toho člověka) a kdo dluží jemu – tam potvrdí **Od … jsem peníze dostal(a)**.
 
-**Kam lidé platí** (nahoře na Platbách): na **účet pokladníka** (výchozí) nebo na **účet akce v Bance**. Když má pokladník zadaný svůj **Fio token** (jen pro čtení), platba s variabilním symbolem odkazu a aspoň plnou částkou se potvrdí sama; nedoplatek nikdy. Bez Fio se variabilní symbol neukazuje a platbu potvrdíte ručně. Fio dovolí jedno volání za 30 s na token – odkazy se kontrolují nejvýš tak často (a v pozadí každých 10 minut).
+**Nastavení** (Nastavení akce → **Osobní účtenky a platby**, z Plateb tlačítko **Nastavení vyúčtování**): pokladník, kam lidé platí, Fio token a **texty zpráv** ke čtyřem případům – jen útraty (dluží nám), jen platil(a) za akci (posíláme my), obojí s výsledkem „dluží nám“ a obojí s výsledkem „posíláme my“. **Kopírovat s textem** u člověka vloží ten správný text i s odkazem.
+
+**Kam lidé platí**: na **účet pokladníka** (výchozí) nebo na **účet akce v Bance**. Když má pokladník zadaný svůj **Fio token** (jen pro čtení), platba s variabilním symbolem odkazu a aspoň plnou částkou se potvrdí sama; nedoplatek nikdy. Bez Fio se variabilní symbol neukazuje a platbu potvrdíte ručně. Fio dovolí jedno volání za 30 s na token – odkazy se kontrolují nejvýš tak často (a v pozadí každých 10 minut).
 
 **Odkazy pro všechny** vytvoří odkazy všem a vypíše je ke zkopírování (např. do skupinového chatu). **Nový odkaz** starý zruší.

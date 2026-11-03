@@ -317,6 +317,13 @@ model Event {
   driveIngestFolderId           String?        @map("drive_ingest_folder_id")
   driveExportFolderId           String?        @map("drive_export_folder_id")
   driveManifestSpreadsheetId    String?        @map("drive_manifest_spreadsheet_id")
+  // Each export in its own folder (2026-11-03, Nastavení akce -> Připojení); null = the bill export folder
+  // (driveExportFolderId) as before. src/lib/drive-folders.ts.
+  driveManifestFolderId         String?        @map("drive_manifest_folder_id")
+  driveHealthFolderId           String?        @map("drive_health_folder_id")
+  driveParticipantsListFolderId String?        @map("drive_participants_list_folder_id")
+  drivePlanningFolderId         String?        @map("drive_planning_folder_id")
+  driveTicketsFolderId          String?        @map("drive_tickets_folder_id")
   // Where per-participant folders (registration documents, received/generated
   // files) live -- separate from the bills export folder above. Null falls
   // back to driveExportFolderId (the old shared behavior).

@@ -4,10 +4,10 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { encryptBankToken } from "@/lib/bank/token-crypto";
 import { receiverOf } from "@/lib/settlement-links";
-import { messagesOf } from "@/lib/settlement-message";
+import { MESSAGE_CASES, messagesOf } from "@/lib/settlement-message";
 
 // Vyúčtování settings (Platby): GET where people pay the event and whether it's confirmed automatically;
-// PATCH { receiver: "treasurer" | "event" }, { messages: { owes, owed, both } } (the texts sent with the links)
+// PATCH { receiver: "treasurer" | "event" }, { messages: { owes, owed, bothOwes, bothOwed } } (the texts sent with the links)
 // and/or { fioToken: string | null } -- the Pokladník's own Fio API
 // token (read-only), stored encrypted, never sent back.
 async function guard(eventId: string) {
@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const b = (await req.json().catch(() => ({}))) as { receiver?: unknown; fioToken?: unknown; messages?: unknown };
   if (b.messages && typeof b.messages === "object") {
     const m = b.messages as Record<string, unknown>;
-    const clean = Object.fromEntries((["owes", "owed", "both"] as const).map((k) => [k, typeof m[k] === "string" ? (m[k] as string).slice(0, 2000) : ""]));
+    const clean = Object.fromEntries(MESSAGE_CASES.map((k) => [k, typeof m[k] === "string" ? (m[k] as string).slice(0, 2000) : ""]));
     await prisma.event.update({ where: { id }, data: { settlementMessages: clean } });
   }
   if (b.receiver === "treasurer" || b.receiver === "event") await prisma.event.update({ where: { id }, data: { settlementReceiver: b.receiver } });

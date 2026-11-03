@@ -1,3 +1,4 @@
+import { exportFolder } from "@/lib/drive-folders";
 import path from "path";
 import { PDFDocument } from "pdf-lib";
 import { prisma } from "@/lib/prisma";
@@ -229,7 +230,8 @@ async function runExport(eventId: string, event: NonNullable<Awaited<ReturnType<
   const manifestTitle = `Manifest - ${event.name}`;
 
   const manifestSpreadsheetId = await upsertManifest(eventId, {
-    exportFolderId: event.driveExportFolderId,
+    // The manifest's own folder (Připojení), else next to the bills.
+    exportFolderId: exportFolder(event, "manifest")!,
     cachedSpreadsheetId: event.driveManifestSpreadsheetId,
     title: manifestTitle,
     rows: manifestRows,

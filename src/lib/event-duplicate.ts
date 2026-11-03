@@ -87,7 +87,7 @@ export async function duplicateEvent(sourceId: string, o: { name: string; startD
         }),
         ...(has("tickets") && src.kind === "public_event" && { ticketSettings: json(src.ticketSettings), ...(!has("payment") && { priceRules: json(src.priceRules) }) }),
         ...(has("drive") && {
-          driveIngestFolderId: src.driveIngestFolderId, driveExportFolderId: src.driveExportFolderId, driveParticipantsFolderId: src.driveParticipantsFolderId, driveProcessedFolderId: src.driveProcessedFolderId,
+          driveIngestFolderId: src.driveIngestFolderId, driveExportFolderId: src.driveExportFolderId, driveParticipantsFolderId: src.driveParticipantsFolderId, driveManifestFolderId: src.driveManifestFolderId, driveHealthFolderId: src.driveHealthFolderId, driveParticipantsListFolderId: src.driveParticipantsListFolderId, drivePlanningFolderId: src.drivePlanningFolderId, driveTicketsFolderId: src.driveTicketsFolderId, driveProcessedFolderId: src.driveProcessedFolderId,
           driveDocSyncEnabled: src.driveDocSyncEnabled, participantsSheetId: src.participantsSheetId, participantsColumnMapping: json(src.participantsColumnMapping), participantSyncs: json(src.participantSyncs),
         }),
         ...(Object.keys(attachments).length && { emailAttachments: attachments }),

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { formatCzk } from "@/lib/format";
-import type { MessageCase, Messages } from "@/lib/settlement-message";
+import { MESSAGE_CASES, type Messages } from "@/lib/settlement-message";
 
 // Vyúčtování on Platby (src/lib/settlement-links.ts): where people pay the event (the Pokladník's own account
 // with their Fio token, or the event's Banka account), the links for everyone, and per person the link + what
@@ -21,34 +21,20 @@ const inputSm = "rounded-lg border border-mist bg-paper px-2 py-1.5 text-[13px] 
 const btn = "rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2 disabled:opacity-50";
 const full = (path: string) => `${window.location.origin}${path}`;
 
+/** Platby: where people pay (a summary; set in Nastavení akce -> Osobní účtenky a platby) and the links for everyone. */
 export default function SettlementLinks({ eventId, people, names, t, onChanged, onMessages, messageFor }: { eventId: string; people: string[]; names: Record<string, string>; t: T; onChanged: () => void; onMessages: (m: Messages) => void; messageFor: (authorId: string, name: string, url: string) => string }) {
   const [st, setSt] = useState<State | null>(null);
-  const [token, setToken] = useState("");
   const [list, setList] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const url = `/api/events/${eventId}/settlement-settings`;
-  const [editTexts, setEditTexts] = useState<Messages | null>(null);
-  const load = useCallback(() => {
-    fetch(url)
+  useEffect(() => {
+    fetch(`/api/events/${eventId}/settlement-settings`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: State | null) => {
         setSt(d);
         if (d) onMessages(d.messages);
       })
       .catch(() => setSt(null));
-  }, [url, onMessages]);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the first load
-    load();
-  }, [load]);
-  async function patch(body: Record<string, unknown>) {
-    const r = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
-    if (r?.ok) {
-      const d = (await r.json()) as State;
-      setSt(d);
-      onMessages(d.messages);
-    }
-  }
+  }, [eventId, onMessages]);
   async function allLinks() {
     setBusy(true);
     const r = await fetch(`/api/events/${eventId}/settlement-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorIds: people }) }).catch(() => null);
@@ -63,69 +49,14 @@ export default function SettlementLinks({ eventId, people, names, t, onChanged, 
   return (
     <section className="mb-5 flex flex-col gap-2 rounded-lg border border-mist bg-paper p-3 text-[13px]">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-medium text-ink">{t("settlementLinks.receiver")}</span>
-        <label className="flex items-center gap-1.5">
-          <input type="radio" checked={st.receiverMode === "treasurer"} onChange={() => patch({ receiver: "treasurer" })} />
-          {t("settlementLinks.receiverTreasurer", { name: st.treasurer?.name ?? "—" })}
-        </label>
-        <label className={"flex items-center gap-1.5 " + (st.eventAccount ? "" : "opacity-50")}>
-          <input type="radio" disabled={!st.eventAccount} checked={st.receiverMode === "event"} onChange={() => patch({ receiver: "event" })} />
-          {t("settlementLinks.receiverEvent", { name: st.eventAccount?.label ?? "—" })}
-        </label>
+        <span className="text-ink">
+          {t("settlementLinks.receiverShort", { name: st.receiver?.name ?? "—" })} · {st.receiver?.autoConfirm ? t("settlementLinks.autoShortOn") : t("settlementLinks.autoShortOff")}
+        </span>
+        <a href={`/events/${eventId}?tab=vyuctovani`} className={btn}>
+          {t("settlementLinks.settingsButton")}
+        </a>
       </div>
-      {!st.treasurer && st.receiverMode === "treasurer" && <p className="text-amber-700">{t("settlementLinks.noTreasurer")}</p>}
-      {st.receiver && !st.receiver.hasAccount && <p className="text-amber-700">{t("settlementLinks.noAccount", { name: st.receiver.name })}</p>}
-      {st.receiverMode === "treasurer" && st.treasurer && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-ink-secondary">{t("settlementLinks.fio", { name: st.treasurer.name })}</span>
-          {st.treasurer.fioToken ? (
-            <>
-              <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">{t("settlementLinks.fioSet")}</span>
-              {st.treasurer.fioLastError && <span className="text-red-700">{t("settlementLinks.fioError", { code: st.treasurer.fioLastError })}</span>}
-              <button type="button" onClick={() => patch({ fioToken: null })} className="text-red-600 hover:underline">
-                {t("settlementLinks.fioRemove")}
-              </button>
-            </>
-          ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                patch({ fioToken: token });
-                setToken("");
-              }}
-              className="flex flex-wrap items-center gap-2"
-            >
-              <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={t("settlementLinks.fioPlaceholder")} autoComplete="off" className={inputSm + " w-64"} />
-              <button type="submit" disabled={token.trim().length < 20} className={btn}>
-                {t("common.save")}
-              </button>
-            </form>
-          )}
-        </div>
-      )}
-      <p className="text-[12px] text-ink-secondary">{st.receiver?.autoConfirm ? t("settlementLinks.autoOn") : t("settlementLinks.autoOff")}</p>
-      <button type="button" onClick={() => setEditTexts(editTexts ? null : st.messages)} className="self-start text-[12.5px] text-ember hover:underline">
-        {t("settlementLinks.texts")}
-      </button>
-      {editTexts && (
-        <div className="flex flex-col gap-2 rounded-md bg-paper-2 p-2">
-          <p className="text-[12px] text-ink-secondary">{t("settlementLinks.textsHint")}</p>
-          {(["owes", "owed", "both"] as MessageCase[]).map((k) => (
-            <label key={k} className="flex flex-col gap-1 text-[12.5px] text-ink-secondary">
-              {t(`settlementLinks.text.${k}`)}
-              <textarea value={editTexts[k]} onChange={(e) => setEditTexts({ ...editTexts, [k]: e.target.value })} rows={3} className={inputSm} />
-            </label>
-          ))}
-          <div className="flex gap-3">
-            <button type="button" onClick={async () => { await patch({ messages: editTexts }); setEditTexts(null); }} className={btn}>
-              {t("common.save")}
-            </button>
-            <button type="button" onClick={() => setEditTexts(null)} className="text-[12.5px] text-ink-secondary hover:underline">
-              {t("common.cancel")}
-            </button>
-          </div>
-        </div>
-      )}
+      {(!st.receiver || !st.receiver.hasAccount) && <p className="text-amber-700">{st.receiver ? t("settlementLinks.noAccount", { name: st.receiver.name }) : t("settlementLinks.noTreasurer")}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={allLinks} disabled={busy || !people.length} className={btn}>
           {t("settlementLinks.allLinks")}
@@ -141,6 +72,122 @@ export default function SettlementLinks({ eventId, people, names, t, onChanged, 
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Nastavení akce -> Osobní účtenky a platby: the Pokladník (default author of personal bills), where people pay
+ * the event, the Pokladník's Fio token (automatic confirmation) and the texts sent with the links.
+ */
+export function SettlementSettings({ eventId, t }: { eventId: string; t: T }) {
+  const [st, setSt] = useState<State | null>(null);
+  const [people, setPeople] = useState<{ key: string; name: string; authorId: string | null }[]>([]);
+  const [treasurerId, setTreasurerId] = useState<string | null>(null);
+  const [token, setToken] = useState("");
+  const [texts, setTexts] = useState<Messages | null>(null);
+  const [saved, setSaved] = useState(false);
+  const url = `/api/events/${eventId}/settlement-settings`;
+  const load = useCallback(async () => {
+    const [a, b] = await Promise.all([fetch(url).then((r) => (r.ok ? r.json() : null)), fetch(`/api/events/${eventId}/personal-bills`).then((r) => (r.ok ? r.json() : null))]);
+    setSt(a);
+    if (a) setTexts(a.messages);
+    if (b) {
+      setPeople(b.people);
+      setTreasurerId(b.treasurerAuthorId);
+    }
+  }, [url, eventId]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the first load
+    load();
+  }, [load]);
+  async function patch(body: Record<string, unknown>) {
+    const r = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (r?.ok) setSt(await r.json());
+  }
+  async function setTreasurer(key: string) {
+    await fetch(`/api/events/${eventId}/personal-bills/settings`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ treasurer: key || null }) }).catch(() => null);
+    load();
+  }
+  if (!st || !texts) return null;
+  const treasurerKey = people.find((p) => p.authorId === treasurerId)?.key ?? "";
+  return (
+    <div className="flex flex-col gap-5 text-[13px]">
+      <section className="flex flex-col gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">{t("settlementLinks.treasurerTitle")}</h3>
+        <label className="flex flex-wrap items-center gap-2">
+          {t("personalBills.treasurer")}
+          <select value={treasurerKey} onChange={(e) => setTreasurer(e.target.value)} className={inputSm}>
+            <option value="">—</option>
+            {people.map((p) => (
+              <option key={p.key} value={p.key}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-[12px] text-ink-secondary">{t("personalBills.treasurerHint")}</p>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">{t("settlementLinks.receiver")}</h3>
+        <label className="flex items-center gap-1.5">
+          <input type="radio" checked={st.receiverMode === "treasurer"} onChange={() => patch({ receiver: "treasurer" })} />
+          {t("settlementLinks.receiverTreasurer", { name: st.treasurer?.name ?? "—" })}
+        </label>
+        <label className={"flex items-center gap-1.5 " + (st.eventAccount ? "" : "opacity-50")}>
+          <input type="radio" disabled={!st.eventAccount} checked={st.receiverMode === "event"} onChange={() => patch({ receiver: "event" })} />
+          {t("settlementLinks.receiverEvent", { name: st.eventAccount?.label ?? "—" })}
+        </label>
+        {!st.treasurer && st.receiverMode === "treasurer" && <p className="text-amber-700">{t("settlementLinks.noTreasurer")}</p>}
+        {st.receiver && !st.receiver.hasAccount && <p className="text-amber-700">{t("settlementLinks.noAccount", { name: st.receiver.name })}</p>}
+        {st.receiverMode === "treasurer" && st.treasurer && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-ink-secondary">{t("settlementLinks.fio", { name: st.treasurer.name })}</span>
+            {st.treasurer.fioToken ? (
+              <>
+                <span className="rounded-full bg-pine/15 px-2 py-0.5 text-pine">{t("settlementLinks.fioSet")}</span>
+                {st.treasurer.fioLastError && <span className="text-red-700">{t("settlementLinks.fioError", { code: st.treasurer.fioLastError })}</span>}
+                <button type="button" onClick={() => patch({ fioToken: null })} className="text-red-600 hover:underline">
+                  {t("settlementLinks.fioRemove")}
+                </button>
+              </>
+            ) : (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  patch({ fioToken: token });
+                  setToken("");
+                }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder={t("settlementLinks.fioPlaceholder")} autoComplete="off" className={inputSm + " w-64 max-w-full"} />
+                <button type="submit" disabled={token.trim().length < 20} className={btn}>
+                  {t("common.save")}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+        <p className="text-[12px] text-ink-secondary">{st.receiver?.autoConfirm ? t("settlementLinks.autoOn") : t("settlementLinks.autoOff")}</p>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="text-[15px] font-semibold text-ink">{t("settlementLinks.texts")}</h3>
+        <p className="text-[12px] text-ink-secondary">{t("settlementLinks.textsHint")}</p>
+        {MESSAGE_CASES.map((k) => (
+          <label key={k} className="flex flex-col gap-1 text-[12.5px] text-ink-secondary">
+            {t(`settlementLinks.text.${k}`)}
+            <textarea value={texts[k]} onChange={(e) => { setTexts({ ...texts, [k]: e.target.value }); setSaved(false); }} rows={3} className={inputSm} />
+          </label>
+        ))}
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={async () => { await patch({ messages: texts }); setSaved(true); }} className={btn}>
+            {t("common.save")}
+          </button>
+          {saved && <span className="text-pine">{t("driveSettings.saved")}</span>}
+        </div>
+      </section>
+    </div>
   );
 }
 

@@ -192,11 +192,21 @@ export async function PATCH(
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
   // is not recognisably an id is rejected (and says which field). Empty = unset.
-  const folderIds: Record<"driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId", string | null | undefined> = {
+  const folderIds: Record<
+    | "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId"
+    | "driveManifestFolderId" | "driveHealthFolderId" | "driveParticipantsListFolderId" | "drivePlanningFolderId" | "driveTicketsFolderId",
+    string | null | undefined
+  > = {
     driveIngestFolderId: undefined,
     driveExportFolderId: undefined,
     driveParticipantsFolderId: undefined,
     driveProcessedFolderId: undefined,
+    // Each export in its own folder (src/lib/drive-folders.ts); unset = the bill export folder.
+    driveManifestFolderId: undefined,
+    driveHealthFolderId: undefined,
+    driveParticipantsListFolderId: undefined,
+    drivePlanningFolderId: undefined,
+    driveTicketsFolderId: undefined,
   };
   for (const field of Object.keys(folderIds) as (keyof typeof folderIds)[]) {
     const raw = body[field];
@@ -215,7 +225,10 @@ export async function PATCH(
   const driveProcessedFolderId = folderIds.driveProcessedFolderId;
   // Whoever saves the Drive folders becomes the person whose Google account the
   // event's Drive work runs as (see DriveAccount / getDriveIdentity).
-  const savesDrive = driveIngestFolderId !== undefined || driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined || driveProcessedFolderId !== undefined;
+  const savesDrive = Object.values(folderIds).some((v) => v !== undefined);
+  const exportTargets = Object.fromEntries(
+    (["driveManifestFolderId", "driveHealthFolderId", "driveParticipantsListFolderId", "drivePlanningFolderId", "driveTicketsFolderId"] as const).filter((k) => folderIds[k] !== undefined).map((k) => [k, folderIds[k]])
+  );
 
   // Everything already exported/synced was written to the *old* folder, and
   // the manifest sheet id is remembered per event -- so after a folder change
@@ -223,12 +236,14 @@ export async function PATCH(
   // sheet. Forget all of that so the next export/sync starts fresh in the new
   // folder. (Files already in the old folder are left alone.)
   const before =
-    driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined
-      ? await prisma.event.findUnique({ where: { id }, select: { driveExportFolderId: true, driveParticipantsFolderId: true } })
+    driveExportFolderId !== undefined || driveParticipantsFolderId !== undefined || folderIds.driveManifestFolderId !== undefined
+      ? await prisma.event.findUnique({ where: { id }, select: { driveExportFolderId: true, driveParticipantsFolderId: true, driveManifestFolderId: true } })
       : null;
   const nextExport = driveExportFolderId !== undefined ? driveExportFolderId : before?.driveExportFolderId;
   const nextParticipants = driveParticipantsFolderId !== undefined ? driveParticipantsFolderId : before?.driveParticipantsFolderId;
-  const exportFolderChanged = before !== null && (before.driveExportFolderId ?? null) !== (nextExport ?? null);
+  // The manifest sheet lives in the manifest folder (else the export folder): it changed -> a new sheet there.
+  const nextManifest = folderIds.driveManifestFolderId !== undefined ? folderIds.driveManifestFolderId : before?.driveManifestFolderId;
+  const exportFolderChanged = before !== null && (before.driveManifestFolderId ?? before.driveExportFolderId ?? null) !== (nextManifest ?? nextExport ?? null);
   // Participant files go to the participants folder, else the export folder.
   const participantsTargetChanged =
     before !== null &&
@@ -246,6 +261,7 @@ export async function PATCH(
       ...(driveProcessedFolderId !== undefined && { driveProcessedFolderId }),
       ...(driveExportFolderId !== undefined && { driveExportFolderId }),
       ...(driveParticipantsFolderId !== undefined && { driveParticipantsFolderId }),
+      ...exportTargets,
       ...(memberPriceCzk !== undefined && { memberPriceCzk }),
       ...(nonMemberPriceCzk !== undefined && { nonMemberPriceCzk }),
       ...(registrationBankAccountNumber !== undefined && { registrationBankAccountNumber }),

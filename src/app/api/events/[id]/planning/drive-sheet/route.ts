@@ -1,3 +1,4 @@
+import { exportFolder } from "@/lib/drive-folders";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createManifestSheet, toDriveError, writeFormattedSheet } from "@/lib/drive";
@@ -28,8 +29,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const denied = await authorizePlanning(eventId);
   if (denied) return denied;
 
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, driveExportFolderId: true } });
-  if (!event.driveExportFolderId) return NextResponse.json({ error: "no_export_folder" }, { status: 409 });
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, driveExportFolderId: true, drivePlanningFolderId: true } });
+  // The program's own folder (Připojení), else the bill export folder.
+  const folder = exportFolder(event, "planning");
+  if (!folder) return NextResponse.json({ error: "no_export_folder" }, { status: 409 });
 
   const [payload, settings] = await Promise.all([loadPlanPayload(eventId), getPlanningSettings(eventId)]);
   const style = sanitizeSheetStyle(settings.sheetStyle);
@@ -46,7 +49,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
     if (!sheetId) {
-      sheetId = await createManifestSheet(eventId, event.driveExportFolderId, `${event.name} – program`, [[""]]);
+      sheetId = await createManifestSheet(eventId, folder, `${event.name} – program`, [[""]]);
       await writeFormattedSheet(eventId, sheetId, model, style.fontSize);
     }
 
