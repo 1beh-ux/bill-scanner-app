@@ -30,7 +30,7 @@ type UnpaidRow = {
   // bills they paid (added); net < 0 = they pay the event.
   personalOutCzk: number;
   personalInCzk: number;
-  personalOutItems: { merchantName: string | null; amountCzk: number }[];
+  personalOutItems: { merchantName: string | null; amountCzk: number; paidBy: string | null }[];
   personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string }[];
   netCzk: number;
   // Vyúčtování (2026-11-01): the person's link and what they marked there.
@@ -55,6 +55,10 @@ export default function EventPaymentsPage({
   const [rows, setRows] = useState<UnpaidRow[]>([]);
   // Where people pay the event (its bank account, else the treasurer's).
   const [receiver, setReceiver] = useState<Person | null>(null);
+  // Which summary lines are opened ("<authorId>:in|out|official").
+  const [opened, setOpened] = useState<Set<string>>(new Set());
+  const isOpen = (id: string, k: string) => opened.has(`${id}:${k}`);
+  const toggleOpen = (id: string, k: string) => setOpened((o) => { const n = new Set(o); if (n.has(`${id}:${k}`)) n.delete(`${id}:${k}`); else n.add(`${id}:${k}`); return n; });
   const [debts, setDebts] = useState<Debt[]>([]);
   const [debtQr, setDebtQr] = useState<Record<string, string>>({});
   // The texts sent with the links (Platby settings): the right variant per person.
@@ -283,56 +287,57 @@ export default function EventPaymentsPage({
                 {!row.attached && (
                   <div className="mb-1 text-[12px] text-amber-700">{t("paymentsPage.removedFromEvent")}</div>
                 )}
-                <div className="mb-2 text-[14px] text-ink-secondary">
-                  {formatCzk(row.unpaidTotalCzk)} · {row.unpaidBillCount}{" "}
-                  {t(`paymentsPage.bills.${pluralForm(row.unpaidBillCount, lang)}`)}
-                  {row.paidBillCount > 0 && (
-                    <span className="ml-2 text-[12px]">
-                      ({t("paymentsPage.alreadyPaidOut", { amount: formatCzk(row.paidTotalCzk), count: String(row.paidBillCount) })})
-                    </span>
+                {/* A short summary; each line opens its items (what exactly, per bill / person). */}
+                <div className="mb-2 flex flex-col text-[14px]">
+                  {row.personalInCzk > 0 && (
+                    <SummaryLine label={t("personalBills.paidForOthers")} value={`+ ${formatCzk(row.personalInCzk)}`} open={isOpen(row.authorId, "in")} onToggle={() => toggleOpen(row.authorId, "in")}>
+                      {row.personalInItems.map((it, i) => (
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {it.debtorName}: {it.merchantName || "—"}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                        </li>
+                      ))}
+                    </SummaryLine>
                   )}
-                </div>
-
-                {(row.personalOutCzk > 0 || row.personalInCzk > 0) && (
-                  <div className="mb-2 rounded-md bg-paper px-2 py-1.5 text-[13px]">
-                    {row.personalInCzk > 0 && (
-                      <>
-                        <div className="text-ink-secondary">+ {t("personalBills.paidForOthers")}: {formatCzk(row.personalInCzk)}</div>
-                        <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
-                          {row.personalInItems.map((it, i) => (
-                            <li key={i}>
-                              {it.debtorName}: {it.merchantName || "—"} — {formatCzk(it.amountCzk)}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    {row.personalOutCzk > 0 && (
-                      <>
-                        <div className="text-ink-secondary">− {t("personalBills.ownSpending")}: {formatCzk(row.personalOutCzk)}</div>
-                        <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
-                          {row.personalOutItems.map((it, i) => (
-                            <li key={i}>
-                              {it.merchantName || "—"} — {formatCzk(it.amountCzk)}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    )}
-                    <div className="font-semibold text-ink">
-                      {row.netCzk > 0 ? t("personalBills.netPayOut", { amount: formatCzk(row.netCzk) }) : row.netCzk < 0 ? t("personalBills.netTheyPayEvent", { amount: formatCzk(-row.netCzk) }) : t("personalBills.netEven")}
-                    </div>
+                  {row.personalOutCzk > 0 && (
+                    <SummaryLine label={t("personalBills.ownSpending")} value={`− ${formatCzk(row.personalOutCzk)}`} open={isOpen(row.authorId, "out")} onToggle={() => toggleOpen(row.authorId, "out")}>
+                      {row.personalOutItems.map((it, i) => (
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {it.merchantName || "—"}
+                            {it.paidBy && <span className="text-ink-secondary/80"> · {t("personalBills.paidBy", { name: it.paidBy })}</span>}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                        </li>
+                      ))}
+                    </SummaryLine>
+                  )}
+                  {(row.unpaidBillCount > 0 || row.paidBillCount > 0) && (
+                    <SummaryLine
+                      label={`${t("paymentsPage.officialBills")} (${row.unpaidBillCount} ${t(`paymentsPage.bills.${pluralForm(row.unpaidBillCount, lang)}`)})`}
+                      value={formatCzk(row.unpaidTotalCzk)}
+                      open={isOpen(row.authorId, "official")}
+                      onToggle={() => toggleOpen(row.authorId, "official")}
+                    >
+                      {row.items.map((it, i) => (
+                        <li key={i} className={"flex justify-between gap-3 " + (it.paid ? "text-ink-secondary/70 line-through" : "")}>
+                          <span className="min-w-0 [overflow-wrap:anywhere]">
+                            {it.merchantName || "—"}
+                            {it.paid && ` (${t("paymentsPage.itemPaidOut")})`}
+                          </span>
+                          <span className="shrink-0 whitespace-nowrap tabular-nums">{it.amountCzk !== null ? formatCzk(it.amountCzk) : "—"}</span>
+                        </li>
+                      ))}
+                    </SummaryLine>
+                  )}
+                  {row.paidBillCount > 0 && <span className="text-[12px] text-ink-secondary">{t("paymentsPage.alreadyPaidOut", { amount: formatCzk(row.paidTotalCzk), count: String(row.paidBillCount) })}</span>}
+                  <div className="mt-1 flex justify-between gap-3 border-t border-mist pt-1 font-semibold text-ink">
+                    <span>{row.netCzk > 0 ? t("paymentsPage.netPayOut") : row.netCzk < 0 ? t("paymentsPage.netTheyPay") : t("personalBills.netEven")}</span>
+                    {Math.abs(row.netCzk) > 0.004 && <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(Math.abs(row.netCzk))}</span>}
                   </div>
-                )}
-                <ul className="mb-2 list-disc pl-5 text-[12px] text-ink-secondary">
-                  {row.items.map((it, i) => (
-                    <li key={i} className={it.paid ? "text-ink-secondary/70 line-through" : ""}>
-                      {it.merchantName || "—"}
-                      {it.amountCzk !== null && ` — ${formatCzk(it.amountCzk)}`}
-                      {it.paid && ` (${t("paymentsPage.itemPaidOut")})`}
-                    </li>
-                  ))}
-                </ul>
+                </div>
 
                 {editingAuthorId === row.authorId ? (
                   <div className="mb-2 flex flex-wrap gap-2">
@@ -384,11 +389,7 @@ export default function EventPaymentsPage({
                   </div>
                 )}
 
-                {ibans[row.authorId] && (
-                  <div className="font-mono text-[12px] text-ink-secondary">
-                    {t("paymentsPage.ibanLabel")}: {ibans[row.authorId]}
-                  </div>
-                )}
+
 
                 {(row.unpaidBillCount > 0 || row.personalOutCzk > 0 || row.personalInCzk > 0) && (
                 <button
@@ -404,6 +405,7 @@ export default function EventPaymentsPage({
 
               <div className="w-full text-center sm:w-[180px]">
                 {row.netCzk < 0 && qrDataUrls[row.authorId] && <div className="mb-1 text-[12px] text-amber-700">{t("personalBills.qrToEvent", { name: receiver?.name ?? "" })}</div>}
+                {row.netCzk > 0 && qrDataUrls[row.authorId] && <div className="mb-1 text-[12px] text-amber-700">{t("personalBills.qrPayout", { name: row.name })}</div>}
                 {qrDataUrls[row.authorId] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={qrDataUrls[row.authorId]} alt="QR Platba" width={180} height={180} className="mx-auto" />
@@ -452,6 +454,22 @@ export default function EventPaymentsPage({
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+/** One summary line on a person's card: label + amount; a click shows its items. */
+function SummaryLine({ label, value, open, onToggle, children }: { label: string; value: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div>
+      <button type="button" onClick={onToggle} aria-expanded={open} className="flex w-full justify-between gap-3 py-0.5 text-left text-ink hover:text-ember">
+        <span>
+          <span className="mr-1 inline-block w-3 text-[11px] text-ink-secondary">{open ? "▾" : "▸"}</span>
+          {label}
+        </span>
+        <span className="shrink-0 whitespace-nowrap tabular-nums">{value}</span>
+      </button>
+      {open && <ul className="mb-1 ml-4 flex flex-col gap-0.5 text-[12.5px] text-ink-secondary">{children}</ul>}
     </div>
   );
 }

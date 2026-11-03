@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import QRCode from "qrcode";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { formatCzk } from "@/lib/format";
 import { MESSAGE_CASES, type Messages } from "@/lib/settlement-message";
@@ -194,7 +193,6 @@ export function SettlementSettings({ eventId, t }: { eventId: string; t: T }) {
 /** One person on Platby: their link (copy / open / QR / new) and what they marked there. */
 export function LinkCell({ eventId, authorId, link, net, message, t, onChanged }: { eventId: string; authorId: string; link: { path: string; claimedAt: string | null; receivedAt: string | null; acceptedAt: string | null; acceptedAmount: number | null } | null; net: number; message: (url: string) => string; t: T; onChanged: () => void }) {
   const [copiedText, setCopiedText] = useState(false);
-  const [qr, setQr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const confirm = useConfirm();
   async function make(reissue = false) {
@@ -221,9 +219,7 @@ export function LinkCell({ eventId, authorId, link, net, message, t, onChanged }
         <a href={link.path} target="_blank" rel="noreferrer" className="text-ember hover:underline">
           {t("settlementLinks.open")}
         </a>
-        <button type="button" onClick={async () => setQr(qr ? null : await QRCode.toDataURL(full(link.path), { margin: 1, width: 160 }))} className="text-ember hover:underline">
-          QR
-        </button>
+
         <button type="button" onClick={() => make(true)} className="text-ink-secondary hover:underline" title={t("settlementLinks.reissueHint")}>
           {t("settlementLinks.reissue")}
         </button>
@@ -236,13 +232,26 @@ export function LinkCell({ eventId, authorId, link, net, message, t, onChanged }
           <span className="text-amber-700">{t("settlementLinks.acceptedChanged", { amount: formatCzk(link.acceptedAmount ?? 0) })}</span>
         ))}
       {link.receivedAt && <span className="text-pine">{t("settlementLinks.received", { date: new Date(link.receivedAt).toLocaleDateString("cs-CZ") })}</span>}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {qr && <img src={qr} alt="QR" width={160} height={160} />}
+
     </div>
   );
 }
 
-type HistoryItem = { at: string | null; personId: string; person: string; kind: "payout" | "paid" | "paidBack" | "direct"; title: string; amountCzk: number; by: string | null; counterpart: string | null };
+type HistoryItem = {
+  at: string | null;
+  personId: string;
+  person: string;
+  kind: "payout" | "paid" | "paidBack" | "direct" | "voided";
+  title: string;
+  amountCzk: number;
+  by: string | null;
+  counterpart: string | null;
+  lines?: { description: string; share: number; people: number; total: number }[];
+  quantity?: number | null;
+  unitPrice?: number | null;
+  note?: string;
+  paidAt?: string | null;
+};
 
 /** "Historie plateb": what has already been paid out / paid / settled, newest first, by person or by date. */
 export function PaymentHistory({ eventId, t }: { eventId: string; t: T }) {
@@ -254,17 +263,35 @@ export function PaymentHistory({ eventId, t }: { eventId: string; t: T }) {
     fetch(`/api/events/${eventId}/payment-history`, { cache: "no-store" }).then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
   }, [open, eventId]);
   const line = (i: HistoryItem, k: number, showPerson: boolean) => (
-    <li key={k} className="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-mist/50 py-1 text-[13px]">
-      <span className="min-w-0 [overflow-wrap:anywhere]">
-        <span className="text-ink-secondary">{i.at ? new Date(i.at).toLocaleDateString("cs-CZ") : "—"}</span> {showPerson && <b>{i.person} </b>}
-        {t(`settlementLinks.history.${i.kind}`, { name: i.counterpart ?? "" })}
-        {i.title && <span className="text-ink-secondary"> · {i.title}</span>}
-        <span className="text-[11.5px] text-ink-secondary"> · {i.by ?? t("settlementLinks.history.auto")}</span>
-      </span>
-      <span className={"shrink-0 whitespace-nowrap tabular-nums " + (i.kind === "payout" || i.kind === "paidBack" ? "text-ink" : "text-pine")}>
-        {i.kind === "payout" || i.kind === "paidBack" ? "− " : "+ "}
-        {formatCzk(i.amountCzk)}
-      </span>
+    <li key={k} className={"border-b border-mist/50 py-1 text-[13px] " + (i.kind === "voided" ? "opacity-80" : "")}>
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="min-w-0 [overflow-wrap:anywhere]">
+          <span className="text-ink-secondary">{i.at ? new Date(i.at).toLocaleDateString("cs-CZ") : "—"}</span> {showPerson && <b>{i.person} </b>}
+          {t(`settlementLinks.history.${i.kind}`, { name: i.counterpart ?? "", date: i.paidAt ? new Date(i.paidAt).toLocaleDateString("cs-CZ") : "" })}
+          {i.title && <span className="text-ink-secondary"> · {i.title}</span>}
+          <span className="text-[11.5px] text-ink-secondary"> · {i.by ?? t("settlementLinks.history.auto")}</span>
+        </span>
+        <span className={"shrink-0 whitespace-nowrap tabular-nums " + (i.kind === "voided" ? "text-red-700 line-through" : i.kind === "payout" || i.kind === "paidBack" ? "text-ink" : "text-pine")}>
+          {i.kind === "payout" || i.kind === "paidBack" ? "− " : i.kind === "voided" ? "" : "+ "}
+          {formatCzk(i.amountCzk)}
+        </span>
+      </div>
+      {i.note && <p className="text-[12px] text-red-700">{t("settlementLinks.history.reason", { note: i.note })}</p>}
+      {/* What exactly was paid: the receipt lines / pieces. */}
+      {i.quantity != null && i.unitPrice != null && <p className="pl-3 text-[12px] text-ink-secondary">{i.quantity} × {formatCzk(i.unitPrice)}</p>}
+      {i.lines && i.lines.length > 0 && (
+        <ul className="pl-3 text-[12px] text-ink-secondary">
+          {i.lines.map((l, j) => (
+            <li key={j} className="flex justify-between gap-3">
+              <span className="min-w-0 [overflow-wrap:anywhere]">
+                {l.description || "—"}
+                {l.people > 1 && ` (${formatCzk(l.total)} / ${l.people})`}
+              </span>
+              <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(l.share)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </li>
   );
   const groups = new Map<string, HistoryItem[]>();

@@ -186,3 +186,46 @@ export async function openShares(eventId: string) {
     billDate: r.personalBill.billDate,
   }));
 }
+
+/**
+ * "Zrušit platbu" (2026-11-03): a person's paid parts of a personal bill become open again (a mistaken or test
+ * payment, a payment confirmed by mistake), merged with their open part; the cancellation is kept with its
+ * mandatory reason (PaymentCorrection, Historie plateb). The bank movement stays "used", so it never settles again.
+ */
+export async function cancelPaidParts(eventId: string, billId: string, authorId: string, userId: string, note: string) {
+  return prisma.$transaction(async (tx) => {
+    const bill = await tx.personalBill.findFirst({ where: { id: billId, eventId }, select: { id: true, merchantName: true, unitLabel: true } });
+    if (!bill) return { error: "not_found" as const };
+    const paid = await tx.personalBillShare.findMany({ where: { personalBillId: billId, authorId, settledAt: { not: null } } });
+    if (!paid.length) return { error: "nothing_paid" as const };
+    await tx.personalBillShare.updateMany({ where: { id: { in: paid.map((p) => p.id) } }, data: { settledAt: null, settledByUserId: null } });
+    // One open part again (only parts not paid back to the author: those stay as they are).
+    const open = await tx.personalBillShare.findMany({ where: { personalBillId: billId, authorId, settledAt: null, creditorPaidAt: null }, orderBy: { id: "asc" } });
+    if (open.length > 1) {
+      const [keep, ...rest] = open;
+      await tx.personalBillShare.update({
+        where: { id: keep.id },
+        data: {
+          amountCzk: rest.reduce((s, r) => s.plus(r.amountCzk), keep.amountCzk),
+          ...(keep.quantity && { quantity: rest.reduce((s, r) => s.plus(r.quantity ?? 0), keep.quantity) }),
+        },
+      });
+      await tx.personalBillShare.deleteMany({ where: { id: { in: rest.map((r) => r.id) } } });
+    }
+    const amount = paid.reduce((s, p) => s + Number(p.amountCzk), 0);
+    const qty = paid.reduce((s, p) => s + Number(p.quantity ?? 0), 0);
+    await tx.paymentCorrection.create({
+      data: {
+        eventId,
+        authorId,
+        personalBillId: billId,
+        title: [bill.unitLabel ?? bill.merchantName, qty ? `${qty}×` : null].filter(Boolean).join(" ") || "Osobní účtenka",
+        amountCzk: amount,
+        paidAt: paid.map((p) => p.settledAt!).sort((a, b) => a.getTime() - b.getTime())[0],
+        note,
+        userId,
+      },
+    });
+    return { ok: true as const, amountCzk: amount };
+  });
+}

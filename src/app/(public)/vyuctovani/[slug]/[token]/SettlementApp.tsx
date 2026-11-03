@@ -46,6 +46,13 @@ export default function SettlementApp({ token, strings }: { token: string; strin
   if (error && !s) return <p className="p-8 text-center text-[15px]">{error}</p>;
   if (!s) return <p className="p-8 text-center text-[15px] text-ink-secondary">…</p>;
   const r = s.result;
+  // Open items above; what is paid / paid out / settled in "Již zaplaceno".
+  const officialOpen = s.official.filter((b) => b.state !== "paid");
+  const officialPaid = s.official.filter((b) => b.state === "paid");
+  const ownOpen = s.own.filter((o) => !o.settled);
+  const ownPaid = s.own.filter((o) => o.settled);
+  const othersOpen = s.paidForOthers.filter((o) => !o.paidOut);
+  const othersPaid = s.paidForOthers.filter((o) => o.paidOut);
   const owes = r.net < -0.004;
   const getsPaid = r.net > 0.004;
   // Only person-to-person payments: no "nothing to pay" box above them.
@@ -160,13 +167,13 @@ export default function SettlementApp({ token, strings }: { token: string; strin
         </section>
       ))}
 
-      {s.official.length > 0 && (
+      {officialOpen.length > 0 && (
         <section>
           <h2 className="mb-1 text-[16px] font-semibold">{t("officialTitle")}</h2>
           <p className="mb-2 text-[12.5px] text-ink-secondary">{t("officialHint")}</p>
           <table className="w-full text-[14px]">
             <tbody>
-              {s.official.map((b, i) => (
+              {officialOpen.map((b, i) => (
                 <tr key={i} className="border-b border-mist/60">
                   <td className="hidden whitespace-nowrap py-1.5 pr-3 align-top text-ink-secondary sm:table-cell">{date(b.date)}</td>
                   <td className="py-1.5 align-top [overflow-wrap:anywhere]">
@@ -185,11 +192,11 @@ export default function SettlementApp({ token, strings }: { token: string; strin
         </section>
       )}
 
-      {s.own.length > 0 && (
+      {ownOpen.length > 0 && (
         <section>
           <h2 className="mb-1 text-[16px] font-semibold">{t("ownTitle")}</h2>
           <div className="flex flex-col gap-2">
-            {s.own.map((o, i) => (
+            {ownOpen.map((o, i) => (
               <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
                 <div className="flex items-start justify-between gap-3">
                   <span className="min-w-0 [overflow-wrap:anywhere]">
@@ -225,11 +232,11 @@ export default function SettlementApp({ token, strings }: { token: string; strin
         </section>
       )}
 
-      {s.paidForOthers.length > 0 && (
+      {othersOpen.length > 0 && (
         <section>
           <h2 className="mb-1 text-[16px] font-semibold">{t("othersTitle")}</h2>
           <div className="flex flex-col gap-2">
-            {s.paidForOthers.map((o, i) => (
+            {othersOpen.map((o, i) => (
               <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
                 <div className="flex items-start justify-between gap-3">
                   <span className="min-w-0 [overflow-wrap:anywhere]">
@@ -260,6 +267,114 @@ export default function SettlementApp({ token, strings }: { token: string; strin
               </div>
             ))}
           </div>
+        </section>
+      )}
+      {/* What is already paid / settled: apart, with the same detail -- a longer event may be settled twice. */}
+      {(officialPaid.length > 0 || ownPaid.length > 0 || othersPaid.length > 0) && (
+        <section className="flex flex-col gap-4 rounded-xl border border-pine/30 bg-pine/5 p-3">
+          <h2 className="text-[16px] font-semibold text-pine">✓ {t("paidTitle")}</h2>
+      {officialPaid.length > 0 && (
+        <section>
+          <h3 className="mb-1 text-[14px] font-semibold text-ink-secondary">{t("officialTitle")}</h3>
+          <p className="mb-2 text-[12.5px] text-ink-secondary">{t("officialHint")}</p>
+          <table className="w-full text-[14px]">
+            <tbody>
+              {officialPaid.map((b, i) => (
+                <tr key={i} className="border-b border-mist/60">
+                  <td className="hidden whitespace-nowrap py-1.5 pr-3 align-top text-ink-secondary sm:table-cell">{date(b.date)}</td>
+                  <td className="py-1.5 align-top [overflow-wrap:anywhere]">
+                    {b.merchant || "—"}
+                    {b.hasFile && fileLink("official", b.billId)}
+                    <span className="block text-[12px] text-ink-secondary sm:hidden">
+                      {date(b.date)} · {t(`state.${b.state}`)}
+                    </span>
+                  </td>
+                  <td className="hidden whitespace-nowrap py-1.5 pr-3 align-top text-[12px] text-ink-secondary sm:table-cell">{t(`state.${b.state}`)}</td>
+                  <td className="whitespace-nowrap py-1.5 pl-3 text-right align-top tabular-nums">{czk(b.amountCzk)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {ownPaid.length > 0 && (
+        <section>
+          <h3 className="mb-1 text-[14px] font-semibold text-ink-secondary">{t("ownTitle")}</h3>
+          <div className="flex flex-col gap-2">
+            {ownPaid.map((o, i) => (
+              <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
+                    {o.hasFile && fileLink("personal", o.billId)}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
+                </div>
+                <div className="text-[12.5px] text-ink-secondary">
+                  {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)} · `}
+                  {o.of && o.billTotal != null && `${t("evenPart", { n: String(o.of), total: czk(o.billTotal) })} · `}
+                  {o.mine ? t("ownPartMine") : o.paidBy ? t("paidBy", { name: o.paidBy }) : t("paidByEvent")}
+                  {" · "}
+                  {o.via === "event" ? t("viaEvent") : t("direct")}
+                  {o.settled && ` · ✓ ${t("partSettled")}`}
+                </div>
+                {o.lines.length > 0 && (
+                  <ul className="mt-1 text-[12.5px] text-ink-secondary">
+                    {o.lines.map((l, k) => (
+                      <li key={k} className="flex justify-between gap-3">
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {l.description || "—"}
+                          {l.people > 1 && ` (${czk(l.total)} / ${l.people})`}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{czk(l.share)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {othersPaid.length > 0 && (
+        <section>
+          <h3 className="mb-1 text-[14px] font-semibold text-ink-secondary">{t("othersTitle")}</h3>
+          <div className="flex flex-col gap-2">
+            {othersPaid.map((o, i) => (
+              <div key={i} className="rounded-lg border border-mist/60 p-2 text-[14px]">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 [overflow-wrap:anywhere]">
+                    <b>{o.debtor}</b>: {o.title || "—"} <span className="text-[12px] text-ink-secondary">· {date(o.date)}</span>
+                    {o.hasFile && fileLink("personal", o.billId)}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
+                </div>
+                {(o.quantity != null && o.unitPrice != null) || o.paidOut ? (
+                  <div className="text-[12.5px] text-ink-secondary">
+                    {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)}`}
+                    {o.paidOut && `${o.quantity != null ? " · " : ""}✓ ${t("partSettled")}`}
+                  </div>
+                ) : null}
+                {o.lines.length > 0 && (
+                  <ul className="mt-1 text-[12.5px] text-ink-secondary">
+                    {o.lines.map((l, k) => (
+                      <li key={k} className="flex justify-between gap-3">
+                        <span className="min-w-0 [overflow-wrap:anywhere]">
+                          {l.description || "—"}
+                          {l.people > 1 && ` (${czk(l.total)} / ${l.people})`}
+                        </span>
+                        <span className="shrink-0 whitespace-nowrap tabular-nums">{czk(l.share)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
         </section>
       )}
       {error && <p className="text-[14px] text-red-600">{error}</p>}

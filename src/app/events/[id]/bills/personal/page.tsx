@@ -68,6 +68,8 @@ const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-w
 const today = () => new Date().toISOString().slice(0, 10);
 const dec = (v: string) => Number(String(v).replace(",", "."));
 const QUICK = [1, 2, 3, 5, 10];
+// The tally rows' buttons (one line: −1 and the usual adds).
+const ROW_STEPS = [-1, 1, 2, 3, 5, 10];
 
 /** "Podle položek": each line split evenly between its people, summed per person (to the haléř). */
 function itemAmounts(lines: LineItem[]) {
@@ -150,11 +152,12 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
       kind,
       billDate: b.billDate,
       merchantName: b.merchantName ?? "",
-      totalAmount: String(b.totalAmount),
+      totalAmount: String(b.totalAmount || b.lineItems.reduce((s, l) => s + (l.total ?? 0), 0) || ""),
       currency: b.currency,
       author: b.author ? keyOfAuthor(b.author.id) : "event",
       viaEvent: b.viaEvent,
-      splitMode: b.lineItems.some((l) => l.assign?.length) ? "items" : b.splitMode,
+      // A bill with receipt lines opens "podle položek" (even when none is assigned yet).
+      splitMode: b.lineItems.length ? "items" : b.splitMode,
       picked: kind === "tally" || b.splitMode === "custom" ? { ...Object.fromEntries(data.people.map((p) => [p.key, kind === "tally" ? "" : "0"])), ...has } : has,
       unitLabel: b.unitLabel ?? "",
       unitPrice: b.unitPrice == null ? "" : String(b.unitPrice),
@@ -348,8 +351,32 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
   const set = (patch: Partial<Draft>) => setDraft({ ...d, ...patch });
   const tally = d.kind === "tally";
   const anyPaid = Object.keys(d.paid).length > 0;
+  // "Zrušit platbu" (a test / mistaken payment): asks for the reason, then once more; kept in Historie plateb.
+  const [cancelFor, setCancelFor] = useState<string | null>(null);
+  const [cancelNote, setCancelNote] = useState("");
+  const confirmCancel = useConfirm();
+  async function cancelPayment() {
+    if (!cancelFor || !d.id || cancelNote.trim().length < 3) return;
+    const name = people.find((p) => p.key === cancelFor)?.name ?? "";
+    if (!(await confirmCancel({ message: t("personalBills.cancelPaymentConfirm", { name, amount: formatCzk(d.paid[cancelFor]?.amount ?? 0) }), danger: true }))) return;
+    const res = await fetch(`${base}/${d.id}/cancel-payment`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ authorId: cancelFor.replace(/^a:/, ""), note: cancelNote }) }).catch(() => null);
+    if (!res?.ok) return setError(t(`personalBills.error.${(await res?.json().catch(() => null))?.error ?? "failed"}`));
+    setCancelFor(null);
+    setCancelNote("");
+    onSaved();
+  }
   const paidNote = (key: string) =>
-    d.paid[key] ? <span className="ml-1.5 text-[11.5px] text-pine">✓ {t("personalBills.paidPart", { amount: formatCzk(d.paid[key].amount) })}{tally && d.paid[key].qty ? ` (${d.paid[key].qty}×)` : ""}</span> : null;
+    d.paid[key] ? (
+      <span className="ml-1.5 whitespace-nowrap text-[11.5px] text-pine">
+        ✓ {t("personalBills.paidPart", { amount: formatCzk(d.paid[key].amount) })}
+        {tally && d.paid[key].qty ? ` (${d.paid[key].qty}×)` : ""}
+        {d.id && key.startsWith("a:") && (
+          <button type="button" onClick={(e) => { e.preventDefault(); setCancelFor(key); setCancelNote(""); }} className="ml-1.5 text-red-600 underline">
+            {t("personalBills.cancelPayment")}
+          </button>
+        )}
+      </span>
+    ) : null;
   const price = dec(d.unitPrice) || 0;
   const byItems = itemAmounts(d.lineItems);
   const keys = d.splitMode === "items" ? [...byItems.keys()] : Object.keys(d.picked);
@@ -398,6 +425,20 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
     });
   }
 
+  // "Nahradit soubor" on a saved bill: the new photo / PDF replaces the old one (the bill's data stay; "Načíst
+  // znovu AI" reads it if wanted).
+  async function replaceFile(file: File) {
+    if (!d.id) return;
+    setScanning(true);
+    setError(null);
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${base}/${d.id}/replace-file`, { method: "POST", body: form }).catch(() => null);
+    setScanning(false);
+    if (!res?.ok) return setError(t(`personalBills.error.${(await res?.json().catch(() => null))?.error ?? "failed"}`));
+    set({ previewUrl: `${base}/${d.id}/file?v=${Date.now()}`, previewIsPdf: /\.pdf$/i.test(file.name) });
+  }
+
   async function scan(file: File) {
     setScanning(true);
     const form = new FormData();
@@ -416,6 +457,11 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
       previewUrl: `${base}/scan?path=${encodeURIComponent(r.gcsObjectPath)}`,
       previewIsPdf: /\.pdf$/i.test(file.name),
       lineItems: Array.isArray(r.lineItems) ? r.lineItems : [],
+      // Lines read: split by them; no total read: their sum.
+      ...(Array.isArray(r.lineItems) && r.lineItems.length ? { splitMode: "items" as const } : {}),
+      ...(!d.totalAmount && r.totalAmount == null && Array.isArray(r.lineItems) && r.lineItems.length
+        ? { totalAmount: String(Math.round(r.lineItems.reduce((s: number, l: LineItem) => s + (l.total ?? 0), 0) * 100) / 100) }
+        : {}),
     });
   }
   async function save() {
@@ -468,6 +514,12 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
           <button type="button" onClick={rescan} disabled={scanning} className={btn}>
             {scanning ? t("personalBills.reading") : t("personalBills.rescan")}
           </button>
+        )}
+        {d.id && !tally && (
+          <label className={btn + " cursor-pointer"}>
+            {scanning ? t("personalBills.reading") : d.previewUrl ? t("personalBills.replaceFile") : t("personalBills.scan")}
+            <input type="file" accept="image/*,.pdf" disabled={scanning} className="hidden" onChange={(e) => e.target.files?.[0] && replaceFile(e.target.files[0])} />
+          </label>
         )}
         {!tally && <span className="text-[12px] text-ink-secondary">{t("personalBills.scanHint")}</span>}
       </div>
@@ -549,6 +601,23 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
         )}
       </div>
       {anyPaid && <p className="rounded-md bg-pine/10 px-2 py-1 text-[12.5px] text-pine">{t("personalBills.paidEditHint")}</p>}
+      {cancelFor && (
+        <div className="flex flex-col gap-2 rounded-md border border-red-300 bg-red-50/50 p-2 text-[13px]">
+          <span className="font-medium text-red-800">
+            {t("personalBills.cancelPaymentTitle", { name: people.find((p) => p.key === cancelFor)?.name ?? "", amount: formatCzk(d.paid[cancelFor]?.amount ?? 0) })}
+          </span>
+          <input value={cancelNote} onChange={(e) => setCancelNote(e.target.value)} placeholder={t("personalBills.cancelPaymentNote")} className={inputSm} autoFocus />
+          <div className="flex gap-3">
+            <button type="button" disabled={cancelNote.trim().length < 3} onClick={cancelPayment} className="rounded-lg bg-red-600 px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-50">
+              {t("personalBills.cancelPayment")}
+            </button>
+            <button type="button" onClick={() => setCancelFor(null)} className="text-[13px] text-ink-secondary hover:underline">
+              {t("common.cancel")}
+            </button>
+          </div>
+          <p className="text-[12px] text-ink-secondary">{t("personalBills.cancelPaymentHint")}</p>
+        </div>
+      )}
       <p className="-mt-2 text-[12px] text-ink-secondary">
         {d.author === "event" ? t("personalBills.authorEventHint") : d.viaEvent ? t("personalBills.viaEventHint") : t("personalBills.directHint")}
       </p>
@@ -573,20 +642,20 @@ function BillForm({ base, people, items, draft: d, setDraft, onSaved }: { base: 
               onGo={(i) => setWizard(i >= people.length ? null : Math.max(0, i))}
             />
           ) : (
-            <div className="grid gap-1 md:grid-cols-2">
+            <div className="grid gap-1 xl:grid-cols-2">
               {people.map((p) => (
-                <div key={p.key} className="flex items-center gap-1.5 text-[13.5px] text-ink">
+                <div key={p.key} className="flex flex-nowrap items-center gap-1 text-[13.5px] text-ink">
                   <span className="min-w-0 flex-1 truncate">
                     {p.name}
                     {paidNote(p.key)}
                   </span>
                   <input value={d.picked[p.key] ?? ""} onChange={(e) => set({ picked: { ...d.picked, [p.key]: e.target.value } })} inputMode="decimal" placeholder="0" className={inputSm + " w-14 text-right"} />
-                  {QUICK.slice(0, 3).map((n) => (
-                    <button key={n} type="button" onClick={() => addPieces(p.key, n)} className="rounded border border-mist px-1.5 text-[12px] hover:bg-paper-2">
-                      +{n}
+                  {ROW_STEPS.map((n) => (
+                    <button key={n} type="button" onClick={() => addPieces(p.key, n)} disabled={n < 0 && !(dec(d.picked[p.key] ?? "") > 0)} className="shrink-0 rounded border border-mist px-1.5 text-[12px] tabular-nums hover:bg-paper-2 disabled:opacity-30">
+                      {n > 0 ? `+${n}` : "−1"}
                     </button>
                   ))}
-                  <span className="w-20 text-right text-[12px] tabular-nums text-ink-secondary">{dec(d.picked[p.key] ?? "") > 0 ? formatCzk(tallyAmount(dec(d.picked[p.key]), price)) : ""}</span>
+                  <span className="w-20 shrink-0 text-right text-[12px] tabular-nums text-ink-secondary">{dec(d.picked[p.key] ?? "") > 0 ? formatCzk(tallyAmount(dec(d.picked[p.key]), price)) : ""}</span>
                 </div>
               ))}
             </div>
