@@ -17,6 +17,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const a = await requireBillAccess((await params).id);
   if ("error" in a) return a.error;
   const bill = a.bill;
+  // A travel order's PDF is generated from the order (prompt 7).
+  if (bill.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
   if (bill.status === "approved") return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   if (bill.status === "queued" || bill.status === "processing") return NextResponse.json({ error: "bill_processing_locked" }, { status: 409 });
   if ((await prisma.event.findUnique({ where: { id: bill.eventId }, select: { status: true } }))?.status === "closed") return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });

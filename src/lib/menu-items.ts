@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion, UserRoundCheck, Stethoscope, ShoppingBag, UtensilsCrossed, BookOpen, WheatOff, ShoppingCart, ChefHat } from "lucide-react";
+import { FileText, BarChart3, QrCode, Users, HeartPulse, Pill, Mail, CalendarClock, Library, Upload, FolderCheck, Settings, Landmark, Send, LayoutDashboard, ArrowLeftRight, Link2, Wallet, FolderSearch, Ticket, ScanLine, MessageCircleQuestion, UserRoundCheck, Stethoscope, ShoppingBag, UtensilsCrossed, BookOpen, WheatOff, ShoppingCart, ChefHat, Car } from "lucide-react";
 import { NAV_SECTIONS } from "@/lib/nav-sections";
 
 // Every sidebar destination in one list -- the sidebar builds its sections from
@@ -43,6 +43,8 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "budget", section: "bills", labelKey: "nav.budget", icon: BarChart3, href: ev("/budget") },
   { id: "payments", section: "bills", labelKey: "nav.payments", icon: QrCode, href: ev("/payments") },
   { id: "personal-bills", section: "bills", labelKey: "personalBills.title", icon: ShoppingBag, href: ev("/bills/personal") },
+  // Cestovní příkazy (2026-11-03): travel orders in own cars -> a bill each.
+  { id: "travel-orders", section: "bills", labelKey: "nav.travelOrders", icon: Car, href: ev("/travel-orders") },
   { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
   { id: "drive-cleanup", section: "bills", labelKey: "nav.driveCleanup", icon: FolderSearch, href: ev("/bills/drive-cleanup") },
   ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),

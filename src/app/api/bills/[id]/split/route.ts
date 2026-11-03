@@ -23,6 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!bill) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
+  if (bill.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
   const blocked = pagesEditBlock(bill, { eventClosed: bill.event.status === "closed", bankPaired: bill.bankMatches.length > 0 });
   if (blocked) return NextResponse.json({ error: blocked }, { status: 409 });
 

@@ -38,6 +38,7 @@ type BillItem = {
   // Banka on: how it was paid (null = Banka off for this event).
   payment: { state: PaymentState; conflict: boolean } | null;
   documentMissing: boolean;
+  travelOrder?: { id: string } | null;
   documentFromStatement: boolean;
   possibleDuplicate: boolean;
 };
@@ -420,6 +421,7 @@ export default function EventBillsPage({
           <td key={col} className="p-2 text-[14px] [overflow-wrap:anywhere]">
             {link(b.originalFilename)}
             {b.documentMissing && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("missingDoc.badge")}</span>}
+            {b.travelOrder && <span className="ml-1 rounded bg-pine-bg px-1 text-[11px] text-pine">{t("travelOrders.badge")}</span>}
             {b.documentFromStatement && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px] text-ink-secondary">{t("missingDoc.badgeStatement")}</span>}
             {b.possibleDuplicate && <a href={`/events/${id}/bills/duplicates?ids=${b.id}`} className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800 hover:underline">{t("billDup.badge")}</a>}
           </td>
@@ -542,6 +544,8 @@ export default function EventBillsPage({
   ).length;
 
   function billHref(billId: string) {
+    const order = bills.find((b) => b.id === billId)?.travelOrder;
+    if (order) return `/events/${id}/travel-orders/${order.id}`;
     return `/events/${id}/bills/${billId}${statusFilter ? `?status=${statusFilter}` : ""}`;
   }
 

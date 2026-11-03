@@ -33,6 +33,8 @@ export async function GET(
       payerAuthor: { select: { canonicalName: true, isOfficialAccount: true, payoutNeeded: true } },
       categories: { include: { eventCategory: { select: { name: true } } }, orderBy: { eventCategory: { name: "asc" } } },
       createdBy: { select: { displayName: true } },
+      // Cestovní příkaz: the list opens the order instead of the scan editor.
+      travelOrder: { select: { id: true } },
     },
   });
 

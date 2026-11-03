@@ -34,6 +34,8 @@ export async function processBillWithAi(billId: string, by: { userId?: string | 
   });
 
   if (!bill) return { ok: false, error: "not_found" };
+  // Cestovní příkaz: the amount is computed, the PDF generated -- never read by the AI (prompt 7 rule 9).
+  if (bill.ingestChannel === "travel_order") return { ok: false, error: "travel_order_no_ai" };
   if (bill.status === "approved") return { ok: false, error: "bill_approved_locked" };
   if (bill.event.status === "closed") return { ok: false, error: "event_closed_locked" };
 

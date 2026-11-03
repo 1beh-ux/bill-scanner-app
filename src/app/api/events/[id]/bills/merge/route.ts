@@ -38,6 +38,7 @@ export async function POST(
   for (const b of ordered) {
     const blocked = pagesEditBlock(b, { eventClosed: b.event.status === "closed", bankPaired: b.bankMatches.length > 0 });
     if (blocked) return NextResponse.json({ error: blocked, filename: b.originalFilename }, { status: 409 });
+    if (b.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked", filename: b.originalFilename }, { status: 409 });
   }
 
   const merged = await PDFDocument.create();

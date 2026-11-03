@@ -57,6 +57,9 @@ enum IngestChannel {
   bank
   // Typed in by hand (2026-11-01): an estimate or a bill whose document isn't here yet (documentMissing).
   manual
+  // Cestovní příkazy (2026-11-03): created by submitting a travel order; the document is its generated PDF.
+  // Never goes through the AI pipeline.
+  travel_order
 }
 
 enum BillStatus {
@@ -544,6 +547,8 @@ model Event {
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
+  travelOrders TravelOrder[]
+
   @@map("events")
 }
 
@@ -740,6 +745,7 @@ model Bill {
   dupDismissA BillDuplicateDismissal[] @relation("DupDismissA")
   dupDismissB BillDuplicateDismissal[] @relation("DupDismissB")
   auditLog    BillAuditLog[]
+  travelOrder TravelOrder?
 
   @@unique([eventId, contentHash], name: "bills_event_content_hash_unique")
   @@map("bills")
@@ -1845,6 +1851,8 @@ model Organization {
   users                     User[]
   travelRateSets            TravelRateSet[]
   vehicles                  Vehicle[]
+  travelOrders              TravelOrder[]
+  knownDistances            KnownDistance[]
   events                    Event[]
   authors                   Author[]
   children                  Child[]
@@ -2747,7 +2755,121 @@ model Vehicle {
   organization Organization @relation(fields: [organizationId], references: [id])
   ownerChild   Child?       @relation(fields: [ownerChildId], references: [id], onDelete: SetNull)
   ownerAuthor  Author?      @relation(fields: [ownerAuthorId], references: [id], onDelete: SetNull)
+  travelOrders TravelOrder[]
 
   @@index([organizationId])
   @@map("vehicles")
+}
+
+enum TravelOrderStatus {
+  draft
+  submitted
+}
+
+// Cestovní příkaz (B1): one trip of one worker in their own car. A draft is edited freely; Odeslat freezes it:
+// every snapshot below is written, the amounts computed (src/lib/travel-order-calc.ts) and a Bill created.
+// Later edits of rates, people or cars never change a submitted order; Znovu otevřít recalculates with the
+// same frozen rate values (rateValues).
+model TravelOrder {
+  id                  String            @id @default(uuid())
+  organizationId      String            @map("organization_id")
+  eventId             String            @map("event_id")
+  billId              String?           @unique @map("bill_id")
+  status              TravelOrderStatus @default(draft)
+  workerChildId       String?           @map("worker_child_id")
+  workerAuthorId      String?           @map("worker_author_id")
+  vehicleId           String?           @map("vehicle_id")
+  // Worker / vehicle as set on this order (filled from Lidé / Plátci / Vozidla, editable here).
+  workerName          String?           @map("worker_name")
+  workerAddress       String?           @map("worker_address")
+  workerPhone         String?           @map("worker_phone")
+  vehicleLabel        String?           @map("vehicle_label")
+  vehiclePlate        String?           @map("vehicle_plate")
+  cylinderCc          Int?              @map("cylinder_cc")
+  gearbox             VehicleGearbox?
+  fuel                VehicleFuel?
+  tpValues            Json?             @map("tp_values")
+  // Payout (Vyplatit): bank | cash, to whom and where. A payee change touches only these and the bill's payer.
+  payoutMethod        String            @default("bank") @map("payout_method")
+  payoutName          String?           @map("payout_name")
+  payoutAccountNumber String?           @map("payout_account_number")
+  payoutBankCode      String?           @map("payout_bank_code")
+  // Computed / frozen on submit.
+  consumptionUsed     Decimal?          @map("consumption_used") @db.Decimal(6, 2)
+  consumptionSource   String?           @map("consumption_source")
+  fuelPriceUsed       Decimal?          @map("fuel_price_used") @db.Decimal(8, 2)
+  priceFromReceipt    Boolean           @default(false) @map("price_from_receipt")
+  // The receipt price per unit typed in (Použít cenu z účtenky).
+  receiptPrice        Decimal?          @map("receipt_price") @db.Decimal(8, 2)
+  rateSetId           String?           @map("rate_set_id")
+  rateValues          Json?             @map("rate_values")
+  purpose             String?
+  originPlace         String?           @map("origin_place")
+  destinationPlace    String?           @map("destination_place")
+  roundTrip           Boolean           @default(true) @map("round_trip")
+  startAt             DateTime?         @map("start_at")
+  endAt               DateTime?         @map("end_at")
+  approvalDate        DateTime?         @map("approval_date") @db.Date
+  approverName        String?           @map("approver_name")
+  coTravellers        String?           @map("co_travellers")
+  // { ubytovani, snidane, obed, vecere }: printed only, changes no amount.
+  freeMeals           Json?             @map("free_meals")
+  receiptBillId       String?           @map("receipt_bill_id")
+  totalKm             Decimal?          @map("total_km") @db.Decimal(9, 1)
+  totalAmount         Decimal?          @map("total_amount") @db.Decimal(12, 2)
+  pdfPath             String?           @map("pdf_path")
+  submittedAt         DateTime?         @map("submitted_at")
+  createdByUserId     String?           @map("created_by_user_id")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  event        Event        @relation(fields: [eventId], references: [id])
+  bill         Bill?        @relation(fields: [billId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?     @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  legs         TravelLeg[]
+
+  @@index([organizationId])
+  @@index([eventId])
+  @@map("travel_orders")
+}
+
+model TravelLeg {
+  id         String    @id @default(uuid())
+  orderId    String    @map("order_id")
+  sortOrder  Int       @map("sort_order")
+  date       DateTime? @db.Date
+  fromPlace  String?   @map("from_place")
+  toPlace    String?   @map("to_place")
+  // "HH:MM"
+  departTime String?   @map("depart_time")
+  arriveTime String?   @map("arrive_time")
+  trailer    Boolean   @default(false)
+  km         Decimal?  @db.Decimal(8, 1)
+  stravne    Decimal?  @db.Decimal(10, 2)
+  nocleh     Decimal?  @db.Decimal(10, 2)
+  vedlejsi   Decimal?  @db.Decimal(10, 2)
+  // Computed, stored on submit (jízdné, celkem).
+  kmAmount   Decimal?  @map("km_amount") @db.Decimal(12, 2)
+  amount     Decimal?  @db.Decimal(12, 2)
+
+  order TravelOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("travel_legs")
+}
+
+// Distances from submitted orders (from -> to, as typed): a suggestion in the legs table, never applied silently.
+model KnownDistance {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  fromPlace      String   @map("from_place")
+  toPlace        String   @map("to_place")
+  km             Decimal  @db.Decimal(8, 1)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, fromPlace, toPlace])
+  @@map("known_distances")
 }

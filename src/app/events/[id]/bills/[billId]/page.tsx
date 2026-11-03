@@ -40,6 +40,7 @@ type BillDetail = {
   originalGcsObjectPath: string | null;
   gcsObjectPath: string | null;
   documentMissing: boolean;
+  travelOrder?: { id: string } | null;
   documentFromStatement: boolean;
   ingestChannel: "drive" | "upload" | "camera" | "bank" | "manual";
   driveSourceFileId: string | null;
@@ -585,6 +586,11 @@ const statusLabel = t(
             </a>
             <div className="hidden h-4 w-px bg-mist sm:block" />
             <h1 className="truncate text-[15px] font-medium text-ink">{bill.originalFilename}</h1>
+            {bill.travelOrder && (
+              <a href={`/events/${eventId}/travel-orders/${bill.travelOrder.id}`} className="shrink-0 rounded bg-pine-bg px-2 py-0.5 text-[12px] text-pine hover:underline">
+                {t("travelOrders.badge")} →
+              </a>
+            )}
             <span
               className={
                 "shrink-0 rounded-full px-2.5 py-0.5 text-[12px] " +

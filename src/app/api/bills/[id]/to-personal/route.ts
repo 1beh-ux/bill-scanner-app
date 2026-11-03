@@ -14,6 +14,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (!bill) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
+  if (bill.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
   if (bill.status === "approved") return NextResponse.json({ error: "bill_approved_locked" }, { status: 409 });
   if (bill.status === "queued" || bill.status === "processing") return NextResponse.json({ error: "bill_processing_locked" }, { status: 409 });
   if (bill.event.status === "closed") return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });

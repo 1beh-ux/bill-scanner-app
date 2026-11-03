@@ -13,12 +13,14 @@ export async function POST(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const bill = await prisma.bill.findUnique({ where: { id }, select: { eventId: true } });
+  const bill = await prisma.bill.findUnique({ where: { id }, select: { eventId: true, ingestChannel: true } });
   if (!bill) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const denied = await requireModuleAccess(user, bill.eventId, "bills");
   if (denied) return denied;
+  // A travel order belongs to its event (prompt 7).
+  if (bill.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
 
   const body = await req.json().catch(() => ({}));
   const targetEventId: string | undefined = body.targetEventId;

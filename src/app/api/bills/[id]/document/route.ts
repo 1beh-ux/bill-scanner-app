@@ -9,6 +9,7 @@ export const maxDuration = 120;
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const a = await requireBillAccess((await params).id);
   if ("error" in a) return a.error;
+  if (a.bill.ingestChannel === "travel_order") return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
   const file = (await req.formData()).get("file");
   if (!(file instanceof File) || file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "no_file" }, { status: 400 });
   const r = await attachDocument({ billId: a.bill.id, buffer: Buffer.from(await file.arrayBuffer()), filename: file.name || "doklad.pdf", contentType: file.type, userId: a.user.id });

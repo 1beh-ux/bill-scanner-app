@@ -127,6 +127,8 @@ export async function deleteBill(
   }
 
   await prisma.$transaction(async (tx) => {
+    // A travel order whose bill is deleted is a draft again (it can be submitted anew).
+    await tx.travelOrder.updateMany({ where: { billId }, data: { status: "draft", submittedAt: null, billId: null } });
     await tx.billCategory.deleteMany({ where: { billId } });
     await tx.billAuditLog.deleteMany({ where: { billId } });
     await tx.bill.delete({ where: { id: billId } });

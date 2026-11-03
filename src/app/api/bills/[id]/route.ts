@@ -1,3 +1,4 @@
+import { applyTravelPayee } from "@/lib/travel-orders-server";
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import type { Currency } from "@/generated/prisma";
@@ -51,8 +52,10 @@ export async function GET(
       // Same order as the manifest export (src/lib/manifest.ts) so the split list on this
       // page and the "Kategorie n" columns in the sheet always agree.
       categories: { include: { eventCategory: true }, orderBy: { eventCategory: { name: "asc" } } },
-      payerAuthor: true,
+      // Never the payer's (encrypted) Fio token.
+      payerAuthor: { omit: { fioTokenEncrypted: true } },
       event: { select: { id: true, name: true, status: true } },
+      travelOrder: { select: { id: true } },
       // Bill detail -> Zdroj (who brought the file in).
       createdBy: { select: { displayName: true } },
     },
@@ -95,6 +98,11 @@ export async function PATCH(
   }
   if (existing.event.status === "closed") {
     return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
+  }
+  // The amount, date and currency of a travel order come from the order (edit the order, not the bill).
+  if (existing.ingestChannel === "travel_order") {
+    const b = await req.clone().json().catch(() => ({}));
+    if (["totalAmount", "currency", "billDate"].some((k) => b[k] !== undefined)) return NextResponse.json({ error: "travel_order_locked" }, { status: 409 });
   }
 
   const body = await req.json();
@@ -241,6 +249,8 @@ if (data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAut
   });
 
   await applyPendingCategoryIfNeeded(id, updated.totalAmount, updated.amountCzk);
+  // Cestovní příkaz: a new payee -> the order's payout block, QR and PDF follow (worker / vehicle untouched).
+  if (existing.ingestChannel === "travel_order" && data.payerAuthorId !== undefined && data.payerAuthorId !== existing.payerAuthorId) await applyTravelPayee(id, user.id);
 
   return NextResponse.json({ ...updated, conversionWarning });
 }
@@ -268,6 +278,8 @@ export async function DELETE(
   if ((await prisma.event.findUnique({ where: { id: bill.eventId }, select: { status: true } }))?.status === "closed") return NextResponse.json({ error: "event_closed_locked" }, { status: 409 });
 
   await prisma.$transaction(async (tx) => {
+    // A travel order whose bill is deleted is a draft again (it can be submitted anew).
+    await tx.travelOrder.updateMany({ where: { billId: id }, data: { status: "draft", submittedAt: null, billId: null } });
     await tx.billCategory.deleteMany({ where: { billId: id } });
     await tx.billAuditLog.deleteMany({ where: { billId: id } });
     await tx.bill.delete({ where: { id } });
