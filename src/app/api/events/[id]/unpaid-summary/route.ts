@@ -126,10 +126,12 @@ export async function GET(
   }
   const netOf = new Map(net.rows.map((r) => [r.authorId, r]));
   const through = shares.filter((s) => (s.viaEvent || !s.creditorId) && s.debtorId !== s.creditorId);
+  // What exactly each part is: the person's receipt lines, else the even split (tallies already say "n× …").
+  const detailOf = (s: (typeof shares)[number]) => ({ lines: s.lines, evenOf: s.lines.length ? null : s.evenOf, billTotal: s.billTotal });
   // What they owe the event (their parts) and what the event owes them (others' parts of bills they paid).
   const personalOutItems = (authorId: string) =>
-    through.filter((s) => s.debtorId === authorId && s.debtorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk, paidBy: s.creditorId ? people.get(s.creditorId)?.canonicalName ?? null : null }));
-  const personalInItems = (authorId: string) => through.filter((s) => s.creditorId === authorId && s.creditorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk, debtorName: s.debtorName }));
+    through.filter((s) => s.debtorId === authorId && s.debtorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk, paidBy: s.creditorId ? people.get(s.creditorId)?.canonicalName ?? null : null, detail: detailOf(s) }));
+  const personalInItems = (authorId: string) => through.filter((s) => s.creditorId === authorId && s.creditorOpen).map((s) => ({ merchantName: s.merchantName, amountCzk: s.amountCzk, debtorName: s.debtorName, detail: detailOf(s) }));
   // Where people pay the event: its bank account (Banka), else the treasurer's.
   const treasurer = event.treasurerAuthorId ? people.get(event.treasurerAuthorId) ?? null : null;
   const receiver = event.bankAccount

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { convertToCzk } from "@/lib/exchange-rates";
-import { evenSplit, fromHal, tallyAmount, toHal } from "@/lib/personal-bills";
+import { evenSplit, fromHal, tallyAmount, toHal, linesFor } from "@/lib/personal-bills";
 
 type GuardEvent = { id: string; name: string; organizationId: string; status: string; treasurerAuthorId: string | null };
 /** The Účtenky grant on the event (404 outside the acting organization). */
@@ -169,12 +169,25 @@ export async function savePersonalBill(event: GuardEvent, userId: string, billId
 }
 
 /** Shares of the event still open on either side (for Platby). */
+/** Assignment keys per payer: "a:<id>" plus the ids of payers merged into them (receipt lines keep old ids). */
+export async function assignKeys(authorIds: string[]): Promise<(id: string) => string[]> {
+  const merged = await prisma.author.findMany({ where: { mergedIntoAuthorId: { in: authorIds } }, select: { id: true, mergedIntoAuthorId: true } });
+  return (id) => [`a:${id}`, ...merged.filter((m) => m.mergedIntoAuthorId === id).map((m) => `a:${m.id}`)];
+}
+
 export async function openShares(eventId: string) {
   const rows = await prisma.personalBillShare.findMany({
     where: { personalBill: { eventId }, OR: [{ settledAt: null }, { creditorPaidAt: null }] },
-    select: { authorId: true, amountCzk: true, quantity: true, settledAt: true, creditorPaidAt: true, author: { select: { canonicalName: true } }, personalBill: { select: { authorId: true, viaEvent: true, merchantName: true, unitLabel: true, billDate: true } } },
+    select: { authorId: true, amountCzk: true, quantity: true, settledAt: true, creditorPaidAt: true, author: { select: { canonicalName: true } }, personalBill: { select: { authorId: true, viaEvent: true, merchantName: true, unitLabel: true, unitPrice: true, billDate: true, lineItems: true, splitMode: true, amountCzk: true, _count: { select: { shares: true } } } } },
   });
+  const keysOf = await assignKeys([...new Set(rows.map((r) => r.authorId))]);
   return rows.map((r) => ({
+    // What exactly (Platby): the person's receipt lines, else "n × unit price", else the even split.
+    lines: linesFor(r.personalBill.lineItems, keysOf(r.authorId)),
+    quantity: r.quantity == null ? null : Number(r.quantity),
+    unitPrice: r.personalBill.unitPrice == null ? null : Number(r.personalBill.unitPrice),
+    evenOf: r.personalBill.splitMode === "even" ? r.personalBill._count.shares : null,
+    billTotal: r.personalBill.amountCzk == null ? null : Number(r.personalBill.amountCzk),
     debtorId: r.authorId,
     debtorName: r.author.canonicalName,
     creditorId: r.personalBill.authorId,

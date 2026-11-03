@@ -245,10 +245,11 @@ export default function SettlementApp({ token, strings }: { token: string; strin
                   </span>
                   <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
                 </div>
-                {(o.quantity != null && o.unitPrice != null) || o.paidOut ? (
+                {(o.quantity != null && o.unitPrice != null) || o.of || o.paidOut ? (
                   <div className="text-[12.5px] text-ink-secondary">
                     {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)}`}
-                    {o.paidOut && `${o.quantity != null ? " · " : ""}✓ ${t("partSettled")}`}
+                    {o.of && o.billTotal != null && t("evenPart", { n: String(o.of), total: czk(o.billTotal) })}
+                    {o.paidOut && `${o.quantity != null || o.of ? " · " : ""}✓ ${t("partSettled")}`}
                   </div>
                 ) : null}
                 {o.lines.length > 0 && (
@@ -351,10 +352,11 @@ export default function SettlementApp({ token, strings }: { token: string; strin
                   </span>
                   <span className="shrink-0 whitespace-nowrap font-medium tabular-nums">{czk(o.amountCzk)}</span>
                 </div>
-                {(o.quantity != null && o.unitPrice != null) || o.paidOut ? (
+                {(o.quantity != null && o.unitPrice != null) || o.of || o.paidOut ? (
                   <div className="text-[12.5px] text-ink-secondary">
                     {o.quantity != null && o.unitPrice != null && `${o.quantity} × ${czk(o.unitPrice)}`}
-                    {o.paidOut && `${o.quantity != null ? " · " : ""}✓ ${t("partSettled")}`}
+                    {o.of && o.billTotal != null && t("evenPart", { n: String(o.of), total: czk(o.billTotal) })}
+                    {o.paidOut && `${o.quantity != null || o.of ? " · " : ""}✓ ${t("partSettled")}`}
                   </div>
                 ) : null}
                 {o.lines.length > 0 && (

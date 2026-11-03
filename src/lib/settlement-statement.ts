@@ -4,17 +4,16 @@
 import { prisma } from "@/lib/prisma";
 import { effectiveAmountCzk } from "@/lib/bill-amount";
 import { PAYOUT_PAYER_WHERE } from "@/lib/payout";
-import { evenSplit } from "@/lib/personal-bills";
+import { linesFor } from "@/lib/personal-bills";
+import { assignKeys } from "@/lib/personal-bills-server";
 import { eventNetting, pairSource, receiverOf } from "@/lib/settlement-links";
 
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
-type LineItem = { description?: string | null; total?: number | null; assign?: string[] };
 
 export async function buildStatement(link: { id: string; eventId: string; authorId: string; variableSymbol: string; claimedAt: Date | null; receivedAt: Date | null; acceptedAt: Date | null; acceptedAmount: { toString(): string } | null; pairClaims: unknown }) {
   const event = await prisma.event.findUniqueOrThrow({ where: { id: link.eventId }, select: { id: true, name: true, startDate: true, endDate: true, status: true, treasurerAuthorId: true, settlementReceiver: true, bankAccountId: true, organization: { select: { name: true } } } });
   const person = await prisma.author.findUniqueOrThrow({ where: { id: link.authorId }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true, payoutNeeded: true, isOfficialAccount: true } });
-  const key = `a:${person.id}`;
-
+  
   const [bills, myShares, othersShares, netting, receiver] = await Promise.all([
     prisma.bill.findMany({
       where: { eventId: event.id, payerAuthorId: person.id, payerAuthor: PAYOUT_PAYER_WHERE, status: { not: "failed" } },
@@ -27,12 +26,13 @@ export async function buildStatement(link: { id: string; eventId: string; author
     }),
     prisma.personalBillShare.findMany({
       where: { authorId: { not: person.id }, personalBill: { eventId: event.id, authorId: person.id, viaEvent: true } },
-      include: { author: { select: { id: true, canonicalName: true } }, personalBill: { select: { id: true, gcsObjectPath: true, merchantName: true, unitLabel: true, unitPrice: true, billDate: true, lineItems: true } } },
+      include: { author: { select: { id: true, canonicalName: true } }, personalBill: { select: { id: true, gcsObjectPath: true, merchantName: true, unitLabel: true, unitPrice: true, billDate: true, lineItems: true, splitMode: true, amountCzk: true, _count: { select: { shares: true } } } } },
     }),
     eventNetting(event.id),
     receiverOf(event),
   ]);
 
+  const keysOf = await assignKeys([person.id, ...othersShares.map((s) => s.author.id)]);
   const row = netting.net.rows.find((r) => r.authorId === person.id);
   const names = new Map((await prisma.author.findMany({ where: { id: { in: netting.net.debts.flatMap((d) => [d.debtorId, d.creditorId]) } }, select: { id: true, canonicalName: true, bankAccountNumber: true, bankCode: true, fioTokenEncrypted: true } })).map((a) => [a.id, a]));
   const claims = (link.pairClaims && typeof link.pairClaims === "object" ? link.pairClaims : {}) as Record<string, string>;
@@ -48,9 +48,7 @@ export async function buildStatement(link: { id: string; eventId: string; author
     official: bills.map((b) => ({ billId: b.id, hasFile: !!b.gcsObjectPath, date: iso(b.billDate), merchant: b.merchantName, amountCzk: Number(effectiveAmountCzk(b) ?? 0), state: b.paidToAuthor ? "paid" : b.status === "approved" ? "approved" : "waiting" })),
     own: myShares.map((s) => {
       const b = s.personalBill;
-      const lines = (Array.isArray(b.lineItems) ? (b.lineItems as LineItem[]) : [])
-        .filter((l) => l.assign?.includes(key) && l.total && l.total > 0)
-        .map((l) => ({ description: l.description ?? "", total: l.total!, share: evenSplit(l.total!, l.assign!.length)[l.assign!.indexOf(key)] ?? 0, people: l.assign!.length }));
+      const lines = linesFor(b.lineItems, keysOf(person.id));
       return {
         billId: b.id,
         hasFile: !!b.gcsObjectPath,
@@ -71,16 +69,15 @@ export async function buildStatement(link: { id: string; eventId: string; author
     // With the same detail as their own parts: the debtor's receipt lines / tally pieces.
     paidForOthers: othersShares.map((s) => {
       const b = s.personalBill;
-      const dk = `a:${s.author.id}`;
-      const lines = (Array.isArray(b.lineItems) ? (b.lineItems as LineItem[]) : [])
-        .filter((l) => l.assign?.includes(dk) && l.total && l.total > 0)
-        .map((l) => ({ description: l.description ?? "", total: l.total!, share: evenSplit(l.total!, l.assign!.length)[l.assign!.indexOf(dk)] ?? 0, people: l.assign!.length }));
+      const lines = linesFor(b.lineItems, keysOf(s.author.id));
       return {
         billId: b.id,
         hasFile: !!b.gcsObjectPath,
         date: iso(b.billDate),
         title: b.unitLabel ?? b.merchantName ?? "",
         debtor: s.author.canonicalName,
+        of: b.splitMode === "even" && !lines.length ? b._count.shares : null,
+        billTotal: b.amountCzk == null ? null : Number(b.amountCzk),
         amountCzk: Number(s.amountCzk),
         quantity: s.quantity == null ? null : Number(s.quantity),
         unitPrice: b.unitPrice == null ? null : Number(b.unitPrice),

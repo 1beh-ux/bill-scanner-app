@@ -11,6 +11,9 @@ import { useConfirm } from "@/components/ConfirmDialog";
 import SettlementLinks, { LinkCell, PaymentHistory } from "@/components/bills/SettlementLinks";
 import { DEFAULT_MESSAGES, fillMessage, messageCase, type Messages } from "@/lib/settlement-message";
 
+// What exactly a personal part is (Platby summary): the person's receipt lines, or the even split.
+type ItemDetail = { lines: { description: string; total: number; share: number; people: number }[]; evenOf: number | null; billTotal: number | null };
+
 type EventBasic = { id: string; name: string; status: "active" | "closed" };
 
 type UnpaidRow = {
@@ -30,8 +33,8 @@ type UnpaidRow = {
   // bills they paid (added); net < 0 = they pay the event.
   personalOutCzk: number;
   personalInCzk: number;
-  personalOutItems: { merchantName: string | null; amountCzk: number; paidBy: string | null }[];
-  personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string }[];
+  personalOutItems: { merchantName: string | null; amountCzk: number; paidBy: string | null; detail?: ItemDetail }[];
+  personalInItems: { merchantName: string | null; amountCzk: number; debtorName: string; detail?: ItemDetail }[];
   netCzk: number;
   // Vyúčtování (2026-11-01): the person's link and what they marked there.
   link: { path: string; claimedAt: string | null; receivedAt: string | null; acceptedAt: string | null; acceptedAmount: number | null } | null;
@@ -292,11 +295,14 @@ export default function EventPaymentsPage({
                   {row.personalInCzk > 0 && (
                     <SummaryLine label={t("personalBills.paidForOthers")} value={`+ ${formatCzk(row.personalInCzk)}`} open={isOpen(row.authorId, "in")} onToggle={() => toggleOpen(row.authorId, "in")}>
                       {row.personalInItems.map((it, i) => (
-                        <li key={i} className="flex justify-between gap-3">
-                          <span className="min-w-0 [overflow-wrap:anywhere]">
-                            {it.debtorName}: {it.merchantName || "—"}
-                          </span>
-                          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                        <li key={i}>
+                          <div className="flex justify-between gap-3">
+                            <span className="min-w-0 [overflow-wrap:anywhere]">
+                              {it.debtorName}: {it.merchantName || "—"}
+                            </span>
+                            <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                          </div>
+                          <ItemLines detail={it.detail} />
                         </li>
                       ))}
                     </SummaryLine>
@@ -304,12 +310,15 @@ export default function EventPaymentsPage({
                   {row.personalOutCzk > 0 && (
                     <SummaryLine label={t("personalBills.ownSpending")} value={`− ${formatCzk(row.personalOutCzk)}`} open={isOpen(row.authorId, "out")} onToggle={() => toggleOpen(row.authorId, "out")}>
                       {row.personalOutItems.map((it, i) => (
-                        <li key={i} className="flex justify-between gap-3">
-                          <span className="min-w-0 [overflow-wrap:anywhere]">
-                            {it.merchantName || "—"}
-                            {it.paidBy && <span className="text-ink-secondary/80"> · {t("personalBills.paidBy", { name: it.paidBy })}</span>}
-                          </span>
-                          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                        <li key={i}>
+                          <div className="flex justify-between gap-3">
+                            <span className="min-w-0 [overflow-wrap:anywhere]">
+                              {it.merchantName || "—"}
+                              {it.paidBy && <span className="text-ink-secondary/80"> · {t("personalBills.paidBy", { name: it.paidBy })}</span>}
+                            </span>
+                            <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(it.amountCzk)}</span>
+                          </div>
+                          <ItemLines detail={it.detail} />
                         </li>
                       ))}
                     </SummaryLine>
@@ -459,6 +468,27 @@ export default function EventPaymentsPage({
 }
 
 /** One summary line on a person's card: label + amount; a click shows its items. */
+/** The receipt lines of one personal part (indented, smaller), or "rovným dílem z X (n lidí)". */
+function ItemLines({ detail }: { detail?: ItemDetail }) {
+  const { t } = useTranslations();
+  if (!detail) return null;
+  if (!detail.lines.length)
+    return detail.evenOf && detail.billTotal != null ? <div className="pl-3 text-[12px] text-ink-secondary/80">{t("settlementPage.evenPart", { n: String(detail.evenOf), total: formatCzk(detail.billTotal) })}</div> : null;
+  return (
+    <ul className="pl-3 text-[12px] text-ink-secondary/80">
+      {detail.lines.map((l, k) => (
+        <li key={k} className="flex justify-between gap-3">
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {l.description || "—"}
+            {l.people > 1 && ` (${formatCzk(l.total)} / ${l.people})`}
+          </span>
+          <span className="shrink-0 whitespace-nowrap tabular-nums">{formatCzk(l.share)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function SummaryLine({ label, value, open, onToggle, children }: { label: string; value: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <div>

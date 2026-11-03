@@ -11,6 +11,22 @@ export function evenSplit(totalCzk: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => fromHal(base + (i < total - base * n ? 1 : 0)));
 }
 
+export type ReceiptLine = { description?: string | null; total?: number | null; assign?: string[] };
+export type ShareLine = { description: string; total: number; share: number; people: number };
+
+/**
+ * A person's lines of a receipt (each line split evenly among the people assigned to it). `keys` = the person's
+ * assignment keys: "a:<payer id>" plus those of payers merged into them (lines keep the old id after a merge).
+ */
+export function linesFor(lineItems: unknown, keys: string[]): ShareLine[] {
+  const lines = Array.isArray(lineItems) ? (lineItems as ReceiptLine[]) : [];
+  return lines.flatMap((l) => {
+    const at = l.assign?.findIndex((k) => keys.includes(k)) ?? -1;
+    if (at < 0 || !l.total || l.total <= 0) return [];
+    return [{ description: l.description ?? "", total: l.total, share: evenSplit(l.total, l.assign!.length)[at] ?? 0, people: l.assign!.length }];
+  });
+}
+
 /** How much of the bill the shares cover; complete only when they add up to the haléř. */
 export function splitStatus(totalCzk: number, shares: number[]) {
   const assigned = shares.reduce((s, x) => s + toHal(x), 0);
