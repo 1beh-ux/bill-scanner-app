@@ -23,6 +23,8 @@ const rows: Row[] = [
   r("personalBills.error.no_file", "Vyberte soubor (do 15 MB).", "Choose a file (up to 15 MB)."),
   r("settlementLinks.history.voided", "platba zrušena (zaplaceno {date})", "payment cancelled (paid on {date})"),
   r("settlementLinks.history.reason", "Důvod: {note}", "Reason: {note}"),
+  r("settlementPage.selfTitle", "Zaplatil(a) jste sami za sebe", "You paid for yourself"),
+  r("settlementPage.selfHint", "Vaše vlastní část účtenek, které jste platili – jen pro přehled, co jste kupovali sobě. Do vyúčtování nahoře se nepočítá.", "Your own part of bills you paid – just to see what you bought for yourself. Not counted in the settlement above."),
   r("settlementPage.paidTitle", "Již zaplaceno a vyrovnáno", "Already paid and settled"),
 ];
 
