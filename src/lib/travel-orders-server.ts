@@ -64,7 +64,7 @@ export const rateValuesOf = (s: TravelRateSet) => ({
   note: s.note,
 });
 export type StoredRates = ReturnType<typeof rateValuesOf>;
-export type RateChoice = { id: string | null; values: StoredRates; frozen: boolean; provisional: boolean } | null;
+export type RateChoice = { id: string | null; values: StoredRates; frozen: boolean; provisional: boolean; chosen?: boolean } | null;
 
 /**
  * The rate set for an order: its frozen values once submitted (also after Znovu otevřít), else the set valid on
@@ -73,6 +73,9 @@ export type RateChoice = { id: string | null; values: StoredRates; frozen: boole
 export async function rateFor(order: Pick<TravelOrder, "organizationId" | "rateSetId" | "rateValues" | "startAt">, eventStart: Date): Promise<RateChoice> {
   if (order.rateValues) return { id: order.rateSetId, values: order.rateValues as StoredRates, frozen: true, provisional: false };
   const sets = await prisma.travelRateSet.findMany({ where: { organizationId: order.organizationId }, orderBy: { validFrom: "desc" } });
+  // Picked by hand in the order (Sazby: …): that set, whatever its date.
+  const chosen = order.rateSetId ? sets.find((s) => s.id === order.rateSetId) : null;
+  if (chosen) return { id: chosen.id, values: rateValuesOf(chosen), frozen: false, provisional: false, chosen: true };
   const picked = pickRateSet(sets, order.startAt ?? eventStart);
   if (picked) return { id: picked.id, values: rateValuesOf(picked), frozen: false, provisional: false };
   return sets[0] ? { id: sets[0].id, values: rateValuesOf(sets[0]), frozen: false, provisional: true } : null;
@@ -161,6 +164,18 @@ export function parseDraft(b: Record<string, unknown>) {
   };
 }
 
+/**
+ * The rate-set selector of a draft: { rateSetId: "" } = by the start date, an id = that set. Choosing anything other
+ * than the current set drops frozen values (after Znovu otevřít); sending the current one keeps them.
+ */
+export async function rateChoiceOf(b: Record<string, unknown>, order: Pick<TravelOrder, "rateSetId" | "rateValues" | "organizationId">): Promise<{ rateSetId: string | null; rateValues: TravelOrder["rateValues"] } | "not_found" | null> {
+  if (typeof b.rateSetId !== "string") return null;
+  const id = b.rateSetId || null;
+  if (id === order.rateSetId) return { rateSetId: order.rateSetId, rateValues: order.rateValues };
+  if (id && !(await prisma.travelRateSet.count({ where: { id, organizationId: order.organizationId } }))) return "not_found";
+  return { rateSetId: id, rateValues: null };
+}
+
 /** The ids in a draft must be this event's / organization's; anything else is dropped (null). */
 export async function checkDraftIds(d: ReturnType<typeof parseDraft>["data"], eventId: string, organizationId: string) {
   const [child, author, vehicle, receipt] = await Promise.all([
@@ -190,14 +205,20 @@ export type SubmitError = { error: string; date?: string; legs?: number[] };
 
 const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 
-/** The event's "Doprava" category (created like a category added by hand, from the template when there is one). */
+/**
+ * The bill's category: the event's "Autoprovoz" when there is one (or the organization has it as a template), else
+ * "Doprava" (created like a category added by hand, from the template when there is one).
+ */
 async function transportCategory(tx: Prisma.TransactionClient, eventId: string, organizationId: string): Promise<string> {
   const cats = await tx.eventCategory.findMany({ where: { eventId }, select: { id: true, name: true } });
-  const found = cats.find((c) => normName(c.name) === "doprava");
-  if (found) return found.id;
-  const tpl = await tx.categoryTemplate.findFirst({ where: { organizationId, name: { equals: "Doprava", mode: "insensitive" } }, select: { id: true, description: true } });
-  const c = await tx.eventCategory.create({ data: { eventId, name: "Doprava", description: tpl?.description ?? null, budgetAmount: 0, isFromTemplate: !!tpl, categoryTemplateId: tpl?.id ?? null } });
-  return c.id;
+  for (const name of ["Autoprovoz", "Doprava"]) {
+    const found = cats.find((c) => normName(c.name) === normName(name));
+    if (found) return found.id;
+    const tpl = await tx.categoryTemplate.findFirst({ where: { organizationId, name: { equals: name, mode: "insensitive" } }, select: { name: true, description: true, id: true } });
+    if (tpl || name === "Doprava")
+      return (await tx.eventCategory.create({ data: { eventId, name: tpl?.name ?? name, description: tpl?.description ?? null, budgetAmount: 0, isFromTemplate: !!tpl, categoryTemplateId: tpl?.id ?? null } })).id;
+  }
+  throw new Error("unreachable");
 }
 
 /** Freeze, compute, create (or after Znovu otevřít update) the Bill. Nothing is written when anything blocks. */

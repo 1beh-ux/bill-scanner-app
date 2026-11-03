@@ -9,6 +9,7 @@ import HelpLink from "@/components/HelpLink";
 import VehicleForm, { vehicleOwnerName, type Owner, type VehicleRow } from "@/components/travel/VehicleForm";
 import { normName, orderWarnings, type LegForm, type WorkerEntry } from "@/lib/travel-orders";
 import type { CalcError, CalcResult } from "@/lib/travel-order-calc";
+import { DateField, DateTimeField, TimeField } from "@/components/DateTimeFields";
 
 // Cestovní příkaz: the form of a draft (live calculation, warnings that don't block) and, once submitted, the
 // read-only summary with the PDF, the payee change and Znovu otevřít.
@@ -43,15 +44,17 @@ type Form = {
   coTravellers: string;
   freeMeals: Record<string, boolean>;
   legs: LegForm[];
+  rateSetId: string;
 };
-type Rate = { id: string | null; validFrom: string; note: string | null; provisional: boolean; frozen: boolean } | null;
+type Rate = { id: string | null; validFrom: string; note: string | null; provisional: boolean; frozen: boolean; chosen?: boolean } | null;
 type View = {
-  order: Form & { id: string; status: "draft" | "submitted"; billId: string | null; totalAmount: string | null; submittedAt: string | null; pdfPath: string | null };
+  order: Omit<Form, "rateSetId"> & { id: string; status: "draft" | "submitted"; billId: string | null; totalAmount: string | null; submittedAt: string | null; pdfPath: string | null; rateSetId: string | null };
   event: { id: string; name: string; status: string };
   rate: Rate;
   calc: CalcResult | CalcError;
   bill: { id: string; status: string; paidToAuthor: boolean; payerAuthorId: string | null; payerAuthor: { canonicalName: string } | null } | null;
 };
+type Template = { id: string; name: string; createdByUserId: string | null; data: { purpose: string | null; originPlace: string | null; destinationPlace: string | null; roundTrip: boolean; legs: (Omit<LegForm, "date"> & { dayOffset: number })[] } };
 type Options = {
   event: { name: string };
   workers: WorkerEntry[];
@@ -59,6 +62,8 @@ type Options = {
   distances: { fromPlace: string; toPlace: string; km: string }[];
   bills: { id: string; merchantName: string | null; billDate: string | null; totalAmount: string | null; originalFilename: string }[];
   payers: { id: string; canonicalName: string }[];
+  places: { id: string; name: string }[];
+  rateSets: { id: string; validFrom: string; note: string | null }[];
   admin: boolean;
 };
 
@@ -106,6 +111,7 @@ function toForm(o: View["order"]): Form {
     coTravellers: s(o.coTravellers),
     freeMeals: (o.freeMeals ?? {}) as Record<string, boolean>,
     legs: o.legs.length ? o.legs.map((l) => ({ ...emptyLeg(), ...l, trailer: !!l.trailer })) : [emptyLeg()],
+    rateSetId: o.rateSetId ?? "",
   };
 }
 
@@ -122,8 +128,15 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ kind: "error" | "ok"; text: string } | null>(null);
   const [addingVehicle, setAddingVehicle] = useState(false);
-  const [suggested, setSuggested] = useState<Set<number>>(new Set());
+  // Legs whose km was filled in automatically: "known" (earlier orders), "map" (estimate), "form" (same route above).
+  const [suggested, setSuggested] = useState<Record<number, string>>({});
+  const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [newPlace, setNewPlace] = useState("");
+  const [placeFor, setPlaceFor] = useState<{ leg: number; field: "fromPlace" | "toPlace" } | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [tplId, setTplId] = useState("");
+  const [tplName, setTplName] = useState<string | null>(null);
 
   const loadOpts = useCallback(async () => {
     const res = await fetch(`/api/events/${eventId}/travel-orders/options`).catch(() => null);
@@ -138,11 +151,16 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
     setLive({ rate: v.rate, calc: v.calc });
     setDirty(false);
   }, [orderId]);
+  const loadTemplates = useCallback(async () => {
+    const res = await fetch("/api/travel-templates").catch(() => null);
+    if (res?.ok) setTemplates(await res.json());
+  }, []);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial load
     load();
     loadOpts();
-  }, [load, loadOpts]);
+    loadTemplates();
+  }, [load, loadOpts, loadTemplates]);
 
   // Live calculation of the form as typed (debounced, nothing saved).
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -166,20 +184,114 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
     setDirty(true);
   };
   const setLeg = (i: number, patch: Partial<LegForm>) => {
-    const legs = form.legs.map((l, j) => (j === i ? { ...l, ...patch } : l));
-    setForm({ ...form, legs });
+    setForm((f) => (f ? { ...f, legs: f.legs.map((l, j) => (j === i ? { ...l, ...patch } : l)) } : f));
     setDirty(true);
   };
-  // Known distance: from + to typed and km empty -> filled in (marked; the user keeps it or changes it).
-  const suggest = (i: number) => {
-    const l = form.legs[i];
-    if (!opts || l.km || !l.fromPlace || !l.toPlace) return;
-    const d = opts.distances.find((x) => normName(x.fromPlace) === normName(l.fromPlace) && normName(x.toPlace) === normName(l.toPlace));
-    if (d) {
-      setLeg(i, { km: String(d.km) });
-      setSuggested(new Set([...suggested, i]));
+  const samePair = (a: LegForm, from: string, to: string) =>
+    (normName(a.fromPlace) === normName(from) && normName(a.toPlace) === normName(to)) || (normName(a.fromPlace) === normName(to) && normName(a.toPlace) === normName(from));
+  // A route between two places: the same route elsewhere in this order, else earlier orders / the map (server).
+  // Fills km when it's empty or was filled automatically; marked, so the user sees it and can change it.
+  const lookupKm = async (i: number, from: string, to: string, legs: LegForm[]) => {
+    if (!from || !to || normName(from) === normName(to)) return;
+    if (legs[i]?.km && !suggested[i]) return;
+    const inForm = legs.find((l, j) => j !== i && l.km && samePair(l, from, to));
+    if (inForm) {
+      setLeg(i, { km: inForm.km });
+      setSuggested((s) => ({ ...s, [i]: "form" }));
+      return;
     }
+    setSuggested((s) => ({ ...s, [i]: "searching" }));
+    const res = await fetch(`/api/events/${eventId}/travel-orders/distance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).catch(() => null);
+    const j = res?.ok ? await res.json() : null;
+    setForm((f) => {
+      const l = f?.legs[i];
+      if (!f || !l || normName(l.fromPlace) !== normName(from) || normName(l.toPlace) !== normName(to)) return f;
+      return j?.km ? { ...f, legs: f.legs.map((x, k) => (k === i ? { ...x, km: String(j.km) } : x)) } : f;
+    });
+    setSuggested((s) => {
+      const n = { ...s };
+      if (j?.km) n[i] = j.source === "known" ? "known" : `map:${j.routes}:${j.fromLabel} → ${j.toLabel}`;
+      else delete n[i];
+      return n;
+    });
   };
+  const setPlace = (i: number, field: "fromPlace" | "toPlace", v: string) => {
+    const legs = form.legs.map((l, j) => (j === i ? { ...l, [field]: v } : l));
+    setLeg(i, { [field]: v });
+    lookupKm(i, legs[i].fromPlace, legs[i].toPlace, legs);
+  };
+  async function addPlace(name: string) {
+    const n = name.trim();
+    if (!n) return null;
+    const res = await fetch(`/api/events/${eventId}/travel-places`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: n }) }).catch(() => null);
+    if (res?.ok) {
+      const places = await res.json();
+      setOpts((o) => (o ? { ...o, places } : o));
+    }
+    return n.replace(/\s+/g, " ");
+  }
+  async function removePlace(name: string) {
+    const res = await fetch(`/api/events/${eventId}/travel-places`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }).catch(() => null);
+    if (res?.ok) {
+      const places = await res.json();
+      setOpts((o) => (o ? { ...o, places } : o));
+    }
+  }
+  // Šablony cest: the trip and its legs (dates from this order's start + each leg's day offset); places join the
+  // event's list. Worker, car and payout stay as they are.
+  async function applyTemplate() {
+    const tpl = templates.find((x) => x.id === tplId);
+    if (!tpl || !form) return;
+    if (form.legs.some((l) => l.km || l.fromPlace) && !(await confirm({ message: t("travelOrders.tplReplace", { name: tpl.name }) }))) return;
+    const start = (form.startAt || new Date().toISOString()).slice(0, 10);
+    const day = (off: number) => new Date(Date.parse(`${start}T00:00:00Z`) + off * 86400000).toISOString().slice(0, 10);
+    const d = tpl.data;
+    setForm({
+      ...form,
+      purpose: d.purpose || form.purpose,
+      originPlace: d.originPlace ?? form.originPlace,
+      destinationPlace: d.destinationPlace ?? form.destinationPlace,
+      roundTrip: d.roundTrip,
+      legs: d.legs.length ? d.legs.map(({ dayOffset, ...l }) => ({ ...emptyLeg(), ...l, date: day(dayOffset) })) : form.legs,
+    });
+    setDirty(true);
+    setSuggested({});
+    setPicked(new Set());
+    const known = new Set((opts?.places ?? []).map((p) => normName(p.name)));
+    for (const n of new Set(d.legs.flatMap((l) => [l.fromPlace, l.toPlace]).filter(Boolean))) if (!known.has(normName(n))) await addPlace(n);
+  }
+  async function saveTemplate() {
+    const name = (tplName ?? "").trim();
+    if (!name || !form) return;
+    if (templates.some((x) => x.name === name) && !(await confirm({ message: t("travelOrders.tplOverwrite", { name }) }))) return;
+    const res = await fetch("/api/travel-templates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, eventId, name }) }).catch(() => null);
+    setMessage(res?.ok ? { kind: "ok", text: t("travelOrders.tplSaved", { name }) } : { kind: "error", text: t("travelOrders.error.save") });
+    setTplName(null);
+    loadTemplates();
+  }
+  async function deleteTemplate() {
+    const tpl = templates.find((x) => x.id === tplId);
+    if (!tpl || !(await confirm({ message: t("travelOrders.tplDeleteConfirm", { name: tpl.name }), danger: true }))) return;
+    const res = await fetch(`/api/travel-templates/${tpl.id}`, { method: "DELETE" }).catch(() => null);
+    if (!res?.ok) setMessage({ kind: "error", text: t("travelOrders.tplDeleteForbidden") });
+    setTplId("");
+    loadTemplates();
+  }
+  async function copyForAnother() {
+    const res = await fetch(`/api/travel-orders/${orderId}/copy`, { method: "POST" }).catch(() => null);
+    if (res?.ok) router.push(`/events/${eventId}/travel-orders/${(await res.json()).id}`);
+  }
+
+  // Duplicate the ticked legs after the last one; their dates move past the block (a route every day).
+  function duplicatePicked() {
+    if (!form) return;
+    const rows = [...picked].sort((a, b) => a - b).map((i) => form.legs[i]);
+    const dates = rows.map((r) => r.date).filter(Boolean).sort();
+    const shift = dates.length ? Math.round((Date.parse(dates[dates.length - 1]) - Date.parse(dates[0])) / 86400000) + 1 : 0;
+    const move = (d: string) => (d && shift ? new Date(Date.parse(`${d}T00:00:00Z`) + shift * 86400000).toISOString().slice(0, 10) : d);
+    set("legs", [...form.legs, ...rows.map((r) => ({ ...r, date: move(r.date) }))]);
+    setPicked(new Set());
+  }
 
   function pickWorker(key: string) {
     const w = opts?.workers.find((x) => x.key === key);
@@ -292,7 +404,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
   const disabled = !draft;
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-8">
+    <div className="mx-auto max-w-[110rem] p-4 md:p-8">
       <a href={`/events/${eventId}/travel-orders`} className="text-[13px] text-ink-secondary hover:text-ink">
         ← {t("travelOrders.title")}
       </a>
@@ -305,6 +417,48 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
         <HelpLink slug="cestovni-prikazy" />
       </div>
       <p className="mb-4 text-[12px] text-ink-secondary">{t("travelOrders.privacy")}</p>
+      <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-mist bg-paper p-3 text-[13px]">
+        <span className="font-medium text-ink">{t("travelOrders.templates")}</span>
+        {draft && (
+          <>
+            <select className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px]" value={tplId} onChange={(e) => setTplId(e.target.value)} aria-label={t("travelOrders.templates")}>
+              <option value="">{templates.length ? t("travelOrders.tplPick") : t("travelOrders.tplNone")}</option>
+              {templates.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.name} ({x.data.legs.length})
+                </option>
+              ))}
+            </select>
+            <button type="button" className={btn} disabled={!tplId} onClick={applyTemplate}>
+              {t("travelOrders.tplApply")}
+            </button>
+            {tplId && (
+              <button type="button" className="text-[12px] text-red-700 hover:underline" onClick={deleteTemplate}>
+                {t("travelOrders.tplDelete")}
+              </button>
+            )}
+          </>
+        )}
+        <span className="flex-1" />
+        {tplName === null ? (
+          <button type="button" className={btn} onClick={() => setTplName(form.purpose || "")}>
+            {t("travelOrders.tplSave")}
+          </button>
+        ) : (
+          <span className="flex items-center gap-1">
+            <input autoFocus className="rounded-lg border border-mist bg-paper-2 px-2 py-1 text-[13px]" value={tplName} onChange={(e) => setTplName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && saveTemplate()} placeholder={t("travelOrders.tplName")} aria-label={t("travelOrders.tplName")} />
+            <button type="button" className={btn} disabled={!tplName.trim()} onClick={saveTemplate}>
+              {t("common.save")}
+            </button>
+            <button type="button" className="text-[12px] text-ink-secondary hover:underline" onClick={() => setTplName(null)}>
+              {t("common.cancel")}
+            </button>
+          </span>
+        )}
+        <button type="button" className={btn} onClick={copyForAnother}>
+          {t("travelOrders.copyForAnother")}
+        </button>
+      </div>
       {message && <div className={"mb-3 rounded-lg px-3 py-2 text-[13px] " + (message.kind === "error" ? "border border-red-300 bg-red-50 text-red-800" : "border border-pine/40 bg-pine-bg text-pine")}>{message.text}</div>}
 
       {!draft && view.bill && (
@@ -473,11 +627,11 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
               </label>
               <label className={label}>
                 {t("travelOrders.startAt")}
-                <input type="datetime-local" className={input} disabled={disabled} value={form.startAt} onChange={(e) => set("startAt", e.target.value)} />
+                <DateTimeField className={input} disabled={disabled} value={form.startAt} onChange={(v) => set("startAt", v)} ariaLabel={t("travelOrders.startAt")} />
               </label>
               <label className={label}>
                 {t("travelOrders.endAt")}
-                <input type="datetime-local" className={input} disabled={disabled} value={form.endAt} onChange={(e) => set("endAt", e.target.value)} />
+                <DateTimeField className={input} disabled={disabled} value={form.endAt} onChange={(v) => set("endAt", v)} ariaLabel={t("travelOrders.endAt")} />
               </label>
               <label className="flex items-end gap-2 pb-1.5 text-[13px] text-ink">
                 <input type="checkbox" disabled={disabled} checked={form.roundTrip} onChange={(e) => set("roundTrip", e.target.checked)} />
@@ -486,7 +640,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
               <span />
               <label className={label}>
                 {t("travelOrders.approvalDate")}
-                <input type="date" className={input} disabled={disabled} value={form.approvalDate} onChange={(e) => set("approvalDate", e.target.value)} />
+                <DateField className={input} disabled={disabled} value={form.approvalDate} onChange={(v) => set("approvalDate", v)} ariaLabel={t("travelOrders.approvalDate")} />
               </label>
               <label className={label}>
                 {t("travelOrders.approverName")}
@@ -509,109 +663,6 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
                 <span className="text-[11px] text-ink-secondary">{t("travelOrders.freeMealsHint")}</span>
               </div>
             </div>
-          </section>
-
-          {/* Úseky */}
-          <section className="rounded-lg border border-mist bg-paper p-4">
-            <h2 className="mb-2 text-[15px] font-semibold text-ink">
-              {t("travelOrders.legsTitle")} <span className="text-[12px] font-normal text-ink-secondary">({t(`travelOrders.legCount.${pluralForm(form.legs.filter((l) => l.km).length, lang)}`, { count: String(form.legs.filter((l) => l.km).length) })})</span>
-            </h2>
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[56rem] text-[12px]">
-                <thead className="text-left text-ink-secondary">
-                  <tr>
-                    <th className="p-1">#</th>
-                    <th className="p-1">{t("travelOrders.leg.date")}</th>
-                    <th className="p-1">{t("travelOrders.leg.from")}</th>
-                    <th className="p-1">{t("travelOrders.leg.to")}</th>
-                    <th className="p-1">{t("travelOrders.leg.depart")}</th>
-                    <th className="p-1">{t("travelOrders.leg.arrive")}</th>
-                    <th className="p-1">{t("travelOrders.leg.trailer")}</th>
-                    <th className="p-1">km</th>
-                    <th className="p-1">{t("travelOrders.leg.stravne")}</th>
-                    <th className="p-1">{t("travelOrders.leg.nocleh")}</th>
-                    <th className="p-1">{t("travelOrders.leg.vedlejsi")}</th>
-                    <th className="p-1 text-right">{t("travelOrders.leg.amount")}</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {form.legs.map((l, i) => {
-                    const c = calc?.ok ? calc.legs.find((x) => x.index === i) : null;
-                    const w = warnings.filter((x) => x.leg === i);
-                    return (
-                      <tr key={i} className={"border-t border-mist align-top " + (w.length ? "bg-amber-50/60" : "")}>
-                        <td className="p-1 pt-2 text-ink-secondary">{i + 1}</td>
-                        <td className="p-1">
-                          <input type="date" aria-label={`${t("travelOrders.leg.date")} ${i + 1}`} className={cell} disabled={disabled} value={l.date} onChange={(e) => setLeg(i, { date: e.target.value })} />
-                        </td>
-                        <td className="p-1">
-                          <input aria-label={`${t("travelOrders.leg.from")} ${i + 1}`} className={cell} disabled={disabled} value={l.fromPlace} onChange={(e) => setLeg(i, { fromPlace: e.target.value })} onBlur={() => suggest(i)} />
-                        </td>
-                        <td className="p-1">
-                          <input aria-label={`${t("travelOrders.leg.to")} ${i + 1}`} className={cell} disabled={disabled} value={l.toPlace} onChange={(e) => setLeg(i, { toPlace: e.target.value })} onBlur={() => suggest(i)} />
-                        </td>
-                        <td className="p-1">
-                          <input type="time" aria-label={`${t("travelOrders.leg.depart")} ${i + 1}`} className={cell} disabled={disabled} value={l.departTime} onChange={(e) => setLeg(i, { departTime: e.target.value })} />
-                        </td>
-                        <td className="p-1">
-                          <input type="time" aria-label={`${t("travelOrders.leg.arrive")} ${i + 1}`} className={cell} disabled={disabled} value={l.arriveTime} onChange={(e) => setLeg(i, { arriveTime: e.target.value })} />
-                        </td>
-                        <td className="p-1 pt-2 text-center">
-                          <input type="checkbox" aria-label={`${t("travelOrders.leg.trailer")} ${i + 1}`} disabled={disabled} checked={l.trailer} onChange={(e) => setLeg(i, { trailer: e.target.checked })} />
-                        </td>
-                        <td className="w-20 p-1">
-                          <input
-                            inputMode="decimal"
-                            aria-label={`km ${i + 1}`}
-                            className={cell + (suggested.has(i) ? " ring-1 ring-pine" : "")}
-                            disabled={disabled}
-                            value={l.km}
-                            onChange={(e) => {
-                              setLeg(i, { km: e.target.value });
-                              setSuggested(new Set([...suggested].filter((x) => x !== i)));
-                            }}
-                          />
-                          {suggested.has(i) && <div className="text-[10px] text-pine">{t("travelOrders.kmSuggested")}</div>}
-                        </td>
-                        {(["stravne", "nocleh", "vedlejsi"] as const).map((k) => (
-                          <td key={k} className="w-20 p-1">
-                            <input inputMode="decimal" aria-label={`${t(`travelOrders.leg.${k}`)} ${i + 1}`} className={cell} disabled={disabled} value={l[k]} onChange={(e) => setLeg(i, { [k]: e.target.value })} />
-                          </td>
-                        ))}
-                        <td className="whitespace-nowrap p-1 pt-2 text-right tabular-nums">{c ? czMoney(c.total) : ""}</td>
-                        <td className="p-1 pt-1.5">
-                          {draft && form.legs.length > 1 && (
-                            <button type="button" className="text-ink-secondary hover:text-red-700" aria-label={t("travelOrders.leg.remove")} onClick={() => set("legs", form.legs.filter((_, j) => j !== i))}>
-                              ×
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {draft && (
-              <button
-                type="button"
-                className={btn + " mt-2"}
-                onClick={() => {
-                  const last = form.legs[form.legs.length - 1];
-                  set("legs", [...form.legs, { ...emptyLeg(), date: last?.date ?? "", fromPlace: last?.toPlace ?? "" }]);
-                }}
-              >
-                + {t("travelOrders.leg.add")}
-              </button>
-            )}
-            {warnings.length > 0 && (
-              <ul className="mt-2 list-disc pl-5 text-[12px] text-amber-800">
-                {warnings.map((w, j) => (
-                  <li key={j}>{t(`travelOrders.warning.${w.code}`, { n: String(w.leg + 1) })}</li>
-                ))}
-              </ul>
-            )}
           </section>
 
           {/* Palivo a výplata */}
@@ -671,11 +722,25 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
         {/* Live calculation */}
         <aside className="h-fit rounded-lg border border-mist bg-paper p-4 lg:sticky lg:top-4">
           <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("travelOrders.calcTitle")}</h2>
+          {draft && (
+            <label className={label + " mb-2 block"}>
+              {t("travelOrders.rateSet")}
+              <select className={input} value={form.rateSetId} onChange={(e) => set("rateSetId", e.target.value)}>
+                <option value="">{t("travelOrders.rateAuto")}</option>
+                {(opts?.rateSets ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {t("travelOrders.rateFrom", { date: czDay(r.validFrom) })}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {rate ? (
             <p className="text-[12px] text-ink-secondary">
               {t("travelOrders.rateFrom", { date: czDay(rate.validFrom) })}
               {rate.provisional && <span className="ml-1 rounded bg-amber-100 px-1 text-[11px] text-amber-800">{t("travelOrders.provisional")}</span>}
               {rate.frozen && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px]">{t("travelOrders.frozen")}</span>}
+              {rate.chosen && <span className="ml-1 rounded bg-paper-2 px-1 text-[11px]">{t("travelOrders.rateChosen")}</span>}
             </p>
           ) : (
             <p className="text-[12px] text-red-700">{t("travelOrders.noRates")}</p>
@@ -721,6 +786,224 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
           )}
         </aside>
       </div>
+      {/* Úseky: the full width (the table needs it) */}
+      <section className="mt-4 rounded-lg border border-mist bg-paper p-4">
+        <h2 className="mb-2 text-[15px] font-semibold text-ink">
+          {t("travelOrders.legsTitle")} <span className="text-[12px] font-normal text-ink-secondary">({t(`travelOrders.legCount.${pluralForm(form.legs.filter((l) => l.km).length, lang)}`, { count: String(form.legs.filter((l) => l.km).length) })})</span>
+        </h2>
+        {/* Místa akce: one list for every order of the event, offered in Odkud / Kam */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[12px]">
+          <span className="text-ink-secondary">{t("travelOrders.places")}:</span>
+          {(opts?.places ?? []).map((pl) => (
+            <span key={pl.id} className="flex items-center gap-1 rounded-full bg-paper-2 px-2 py-0.5 text-ink">
+              {pl.name}
+              {draft && (
+                <button type="button" className="text-ink-secondary hover:text-red-700" aria-label={t("travelOrders.placeRemove", { name: pl.name })} onClick={() => removePlace(pl.name)}>
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {draft && (
+            <form
+              className="flex items-center gap-1"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await addPlace(newPlace);
+                setNewPlace("");
+              }}
+            >
+              <input className="rounded border border-mist bg-paper-2 px-2 py-0.5 text-[12px]" value={newPlace} onChange={(e) => setNewPlace(e.target.value)} placeholder={t("travelOrders.placeAdd")} aria-label={t("travelOrders.placeAdd")} />
+              <button type="submit" className="rounded border border-mist px-2 py-0.5 hover:bg-paper-2" disabled={!newPlace.trim()}>
+                +
+              </button>
+            </form>
+          )}
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[72rem] text-[12px]">
+            <thead className="text-left text-ink-secondary">
+              <tr>
+                <th className="w-6 p-1">
+                  {draft && (
+                    <input
+                      type="checkbox"
+                      aria-label={t("travelOrders.leg.pickAll")}
+                      checked={picked.size > 0 && picked.size === form.legs.length}
+                      onChange={(e) => setPicked(e.target.checked ? new Set(form.legs.map((_, i) => i)) : new Set())}
+                    />
+                  )}
+                </th>
+                <th className="w-6 p-1">#</th>
+                <th className="w-32 p-1">{t("travelOrders.leg.date")}</th>
+                <th className="p-1">{t("travelOrders.leg.from")}</th>
+                <th className="p-1">{t("travelOrders.leg.to")}</th>
+                <th className="w-20 p-1">{t("travelOrders.leg.depart")}</th>
+                <th className="w-20 p-1">{t("travelOrders.leg.arrive")}</th>
+                <th className="w-12 p-1">{t("travelOrders.leg.trailer")}</th>
+                <th className="w-24 p-1">km</th>
+                <th className="w-20 p-1">{t("travelOrders.leg.stravne")}</th>
+                <th className="w-20 p-1">{t("travelOrders.leg.nocleh")}</th>
+                <th className="w-20 p-1">{t("travelOrders.leg.vedlejsi")}</th>
+                <th className="w-24 p-1 text-right">{t("travelOrders.leg.amount")}</th>
+                <th className="w-6" />
+              </tr>
+            </thead>
+            <tbody>
+              {form.legs.map((l, i) => {
+                const c = calc?.ok ? calc.legs.find((x) => x.index === i) : null;
+                const w = warnings.filter((x) => x.leg === i);
+                const sug = suggested[i];
+                const placeCell = (field: "fromPlace" | "toPlace") => {
+                  const names = [...new Set([...(opts?.places ?? []).map((p) => p.name), ...(l[field] ? [l[field]] : [])])].sort((a, b) => a.localeCompare(b, "cs"));
+                  if (placeFor?.leg === i && placeFor.field === field)
+                    return (
+                      <input
+                        autoFocus
+                        className={cell}
+                        placeholder={t("travelOrders.placeNew")}
+                        aria-label={t("travelOrders.placeNew")}
+                        onBlur={() => setPlaceFor(null)}
+                        onKeyDown={async (e) => {
+                          if (e.key === "Escape") setPlaceFor(null);
+                          if (e.key === "Enter") {
+                            const name = await addPlace((e.target as HTMLInputElement).value);
+                            setPlaceFor(null);
+                            if (name) setPlace(i, field, name);
+                          }
+                        }}
+                      />
+                    );
+                  return (
+                    <select
+                      aria-label={`${t(field === "fromPlace" ? "travelOrders.leg.from" : "travelOrders.leg.to")} ${i + 1}`}
+                      className={cell}
+                      disabled={disabled}
+                      value={l[field]}
+                      onChange={(e) => (e.target.value === "__new" ? setPlaceFor({ leg: i, field }) : setPlace(i, field, e.target.value))}
+                    >
+                      <option value="">—</option>
+                      {names.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                      <option value="__new">＋ {t("travelOrders.placeNew")}</option>
+                    </select>
+                  );
+                };
+                return (
+                  <tr key={i} className={"border-t border-mist align-top " + (w.length ? "bg-amber-50/60" : picked.has(i) ? "bg-paper-2" : "")}>
+                    <td className="p-1 pt-2">
+                      {draft && (
+                        <input
+                          type="checkbox"
+                          aria-label={`${t("travelOrders.leg.pick")} ${i + 1}`}
+                          checked={picked.has(i)}
+                          onChange={(e) => {
+                            const n = new Set(picked);
+                            if (e.target.checked) n.add(i);
+                            else n.delete(i);
+                            setPicked(n);
+                          }}
+                        />
+                      )}
+                    </td>
+                    <td className="p-1 pt-2 text-ink-secondary">{i + 1}</td>
+                    <td className="p-1">
+                      <DateField ariaLabel={`${t("travelOrders.leg.date")} ${i + 1}`} className={cell} disabled={disabled} value={l.date} onChange={(v) => setLeg(i, { date: v })} />
+                    </td>
+                    <td className="min-w-[12rem] p-1">{placeCell("fromPlace")}</td>
+                    <td className="min-w-[12rem] p-1">{placeCell("toPlace")}</td>
+                    <td className="p-1">
+                      <TimeField ariaLabel={`${t("travelOrders.leg.depart")} ${i + 1}`} className={cell} disabled={disabled} value={l.departTime} onChange={(v) => setLeg(i, { departTime: v })} />
+                    </td>
+                    <td className="p-1">
+                      <TimeField ariaLabel={`${t("travelOrders.leg.arrive")} ${i + 1}`} className={cell} disabled={disabled} value={l.arriveTime} onChange={(v) => setLeg(i, { arriveTime: v })} />
+                    </td>
+                    <td className="p-1 pt-2 text-center">
+                      <input type="checkbox" aria-label={`${t("travelOrders.leg.trailer")} ${i + 1}`} disabled={disabled} checked={l.trailer} onChange={(e) => setLeg(i, { trailer: e.target.checked })} />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        inputMode="decimal"
+                        aria-label={`km ${i + 1}`}
+                        className={cell + (sug && sug !== "searching" ? " ring-1 ring-pine" : "")}
+                        disabled={disabled}
+                        value={l.km}
+                        onChange={(e) => {
+                          setLeg(i, { km: e.target.value });
+                          setSuggested((s) => {
+                            const n = { ...s };
+                            delete n[i];
+                            return n;
+                          });
+                        }}
+                      />
+                      {sug && (
+                        <div className="text-[10px] text-pine">
+                          {sug === "searching" ? t("travelOrders.kmSearching") : sug === "known" ? t("travelOrders.kmSuggested") : sug === "form" ? t("travelOrders.kmSameRoute") : t("travelOrders.kmMap", { routes: sug.split(":")[1] ?? "1" })}
+                          {sug.startsWith("map:") && <div className="max-w-[14rem] text-[10px] leading-tight text-ink-secondary">{sug.split(":").slice(2).join(":")}</div>}
+                        </div>
+                      )}
+                    </td>
+                    {(["stravne", "nocleh", "vedlejsi"] as const).map((k) => (
+                      <td key={k} className="p-1">
+                        <input inputMode="decimal" aria-label={`${t(`travelOrders.leg.${k}`)} ${i + 1}`} className={cell} disabled={disabled} value={l[k]} onChange={(e) => setLeg(i, { [k]: e.target.value })} />
+                      </td>
+                    ))}
+                    <td className="whitespace-nowrap p-1 pt-2 text-right tabular-nums">{c ? czMoney(c.total) : ""}</td>
+                    <td className="p-1 pt-1.5">
+                      {draft && form.legs.length > 1 && (
+                        <button
+                          type="button"
+                          className="text-ink-secondary hover:text-red-700"
+                          aria-label={t("travelOrders.leg.remove")}
+                          onClick={() => {
+                            set("legs", form.legs.filter((_, j) => j !== i));
+                            setPicked(new Set());
+                            setSuggested({});
+                          }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {draft && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              className={btn}
+              onClick={() => {
+                // The next leg goes back: from where the last one ended, to where it started.
+                const last = form.legs[form.legs.length - 1];
+                const next = { ...emptyLeg(), date: last?.date ?? "", fromPlace: last?.toPlace ?? "", toPlace: last?.fromPlace ?? "" };
+                const legs = [...form.legs, next];
+                set("legs", legs);
+                lookupKm(legs.length - 1, next.fromPlace, next.toPlace, legs);
+              }}
+            >
+              + {t("travelOrders.leg.add")}
+            </button>
+            <button type="button" className={btn} disabled={!picked.size} onClick={duplicatePicked}>
+              {t("travelOrders.leg.duplicate", { count: String(picked.size) })}
+            </button>
+          </div>
+        )}
+        {warnings.length > 0 && (
+          <ul className="mt-2 list-disc pl-5 text-[12px] text-amber-800">
+            {warnings.map((w, j) => (
+              <li key={j}>{t(`travelOrders.warning.${w.code}`, { n: String(w.leg + 1) })}</li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

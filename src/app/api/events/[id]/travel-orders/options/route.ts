@@ -16,12 +16,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (denied) return denied;
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { name: true, organizationId: true, startDate: true, endDate: true } });
   const people = await eventPeople(eventId);
-  const [workers, vehicles, distances, bills, payers] = await Promise.all([
+  const [workers, vehicles, distances, bills, payers, places, rateSets] = await Promise.all([
     workerList(eventId),
     prisma.vehicle.findMany({ where: { organizationId: event.organizationId, archivedAt: null, OR: [{ ownerChildId: { in: people.childIds } }, { ownerAuthorId: { in: people.authorIds } }] }, select: vehicleSelect, orderBy: { label: "asc" } }),
     prisma.knownDistance.findMany({ where: { organizationId: event.organizationId }, select: { fromPlace: true, toPlace: true, km: true } }),
     prisma.bill.findMany({ where: { eventId, ingestChannel: { not: "travel_order" } }, select: { id: true, merchantName: true, billDate: true, totalAmount: true, originalFilename: true }, orderBy: { billDate: "desc" }, take: 300 }),
     prisma.authorEventAccess.findMany({ where: { eventId, author: { mergedIntoAuthorId: null } }, select: { author: { select: { id: true, canonicalName: true } } }, orderBy: { author: { canonicalName: "asc" } } }),
+    prisma.travelPlace.findMany({ where: { eventId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    prisma.travelRateSet.findMany({ where: { organizationId: event.organizationId }, orderBy: { validFrom: "desc" }, select: { id: true, validFrom: true, note: true } }),
   ]);
-  return NextResponse.json({ event, workers, vehicles, distances, bills, payers: payers.map((p) => p.author), admin: isOrgAdmin(user), userId: user.id });
+  return NextResponse.json({ event, workers, vehicles, distances, bills, payers: payers.map((p) => p.author), places, rateSets, admin: isOrgAdmin(user), userId: user.id });
 }

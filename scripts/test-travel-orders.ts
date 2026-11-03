@@ -195,6 +195,45 @@ async function main() {
     await billRoute.DELETE(req(`/api/bills/${kubaBillId}`, { method: "DELETE" }), params({ id: kubaBillId }));
     const k = await prisma.travelOrder.findUniqueOrThrow({ where: { id: kubaOrder } });
     check("bill deleted -> the order is a draft without a bill", k.status === "draft" && !k.billId, JSON.stringify({ s: k.status, b: k.billId }));
+
+    // ===== 2026-11-03 changes =====
+    // 6. a rate set chosen by hand: the 2026-01 set on an October trip -> 34.70 -> 3 312.50; submit allowed.
+    const set01 = await prisma.travelRateSet.findFirstOrThrow({ where: { organizationId: org.id, validFrom: new Date("2026-01-01") } });
+    const d5 = await newDraft();
+    r = await json(await one.PATCH(req(`/api/travel-orders/${d5}`, { method: "PATCH", body: { ...fill(pavelW, pavelCar, "2026-10-23T08:00", "2026-10-27T20:00", legs([152, 12, 12, 24, 24, 6, 6, 152], "2026-10-23")), rateSetId: set01.id } }), params({ id: d5 })));
+    check("rate chosen by hand: 2026-01 set on an October trip -> 3 312.50", r.body?.calc?.total === "3312.50" && r.body?.rate?.chosen === true, JSON.stringify({ t: r.body?.calc?.total, rate: r.body?.rate }));
+    const pv = await json(await (await import("@/app/api/travel-orders/[id]/calc/route")).POST(req(`/api/travel-orders/${d5}/calc`, { method: "POST", body: { ...fill(pavelW, pavelCar, "2026-10-23T08:00", "2026-10-27T20:00", legs([152, 12, 12, 24, 24, 6, 6, 152], "2026-10-23")), rateSetId: "" } }), params({ id: d5 })));
+    check("live calc back to 'by date' -> 3 522.00", pv.body?.calc?.total === "3522.00" && !pv.body?.rate?.chosen, JSON.stringify(pv.body?.calc?.total));
+    // 8. Autoprovoz when the organization has it.
+    await prisma.categoryTemplate.create({ data: { organizationId: org.id, name: "Autoprovoz" } });
+    r = await json(await submit.POST(req(`/api/travel-orders/${d5}/submit`, { method: "POST" }), params({ id: d5 })));
+    const cat5 = r.body?.billId ? await prisma.billCategory.findFirst({ where: { billId: r.body.billId }, include: { eventCategory: true } }) : null;
+    check("submit with the chosen set; category Autoprovoz (from the template)", r.status === 200 && cat5?.eventCategory.name === "Autoprovoz" && cat5.amount.toString() === "3312.5", JSON.stringify({ r, c: cat5?.eventCategory.name }));
+    // 7. editing a rate set sends its stored ISO date back unchanged.
+    const rateOne = await import("@/app/api/travel-rates/[id]/route");
+    const full = await prisma.travelRateSet.findUniqueOrThrow({ where: { id: set01.id } });
+    r = await json(await rateOne.PATCH(req(`/api/travel-rates/${set01.id}`, { method: "PATCH", body: JSON.parse(JSON.stringify({ ...full, note: "upraveno" })) }), params({ id: set01.id })));
+    check("rate set edit with the ISO validFrom from the list works", r.status === 200 && r.body?.note === "upraveno", JSON.stringify(r).slice(0, 200));
+    // 3. the event's places; a known route either way round.
+    const placesRoute = await import("@/app/api/events/[id]/travel-places/route");
+    await placesRoute.POST(req(`/api/events/${eventId}/travel-places`, { method: "POST", body: { name: "Tábořiště  Lhota" } }), params({ id: eventId }));
+    const pl = await json(await placesRoute.GET(req(`/api/events/${eventId}/travel-places`), params({ id: eventId })));
+    check("places: added once, spaces tidied", JSON.stringify(pl.body?.map((x: { name: string }) => x.name)) === JSON.stringify(["Tábořiště Lhota"]), JSON.stringify(pl.body));
+    const dist = await import("@/app/api/events/[id]/travel-orders/distance/route");
+    r = await json(await dist.GET(req(`/api/events/${eventId}/travel-orders/distance?from=a1&to=A0`), params({ id: eventId })));
+    check("route lookup: a known distance in the other direction", r.body?.km === 152 && r.body?.source === "known", JSON.stringify(r));
+    // 9. templates (organization-wide) and copy for another worker.
+    const tplRoute = await import("@/app/api/travel-templates/route");
+    r = await json(await tplRoute.POST(req("/api/travel-templates", { method: "POST", body: { ...fill(pavelW, pavelCar, "2026-10-23T08:00", "2026-10-27T20:00", [...legs([165], "2026-10-23"), ...legs([165], "2026-10-25")]), eventId, name: "Praha – tábor" } })));
+    const tl = await json(await tplRoute.GET());
+    const tpl = tl.body?.[0];
+    check("template saved: legs with day offsets, no worker / car / account", r.status === 201 && tpl?.data?.legs?.map((l: { dayOffset: number }) => l.dayOffset).join() === "0,2" && !JSON.stringify(tpl.data).includes("Pavel") && !JSON.stringify(tpl.data).includes("2400222222"), JSON.stringify(tpl));
+    asUser(admin2);
+    check("templates: another organization sees none", ((await json(await tplRoute.GET())).body ?? []).length === 0);
+    asUser(admin);
+    const cp = await json(await (await import("@/app/api/travel-orders/[id]/copy/route")).POST(req(`/api/travel-orders/${pavelOrder}/copy`, { method: "POST" }), params({ id: pavelOrder })));
+    const copied = cp.body?.id ? await prisma.travelOrder.findUniqueOrThrow({ where: { id: cp.body.id }, include: { legs: true } }) : null;
+    check("copy for another worker: same legs, no worker / car / bill", !!copied && copied.legs.length === 8 && !copied.workerName && !copied.vehicleId && !copied.billId && copied.status === "draft", JSON.stringify(copied && { l: copied.legs.length, w: copied.workerName }));
   } finally {
     asUser(null);
     const errors: string[] = [];
@@ -218,6 +257,8 @@ async function main() {
     for (const oid of [org.id, org2.id]) {
       const ov = { organizationId: oid };
       await step("knownDistance", () => prisma.knownDistance.deleteMany({ where: ov }));
+      await step("travelTemplate", () => prisma.travelTemplate.deleteMany({ where: ov }));
+      await step("categoryTemplate", () => prisma.categoryTemplate.deleteMany({ where: ov }));
       await step("vehicle", () => prisma.vehicle.deleteMany({ where: ov }));
       await step("travelRateSet", () => prisma.travelRateSet.deleteMany({ where: ov }));
       await step("author", () => prisma.author.deleteMany({ where: ov }));

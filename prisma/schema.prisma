@@ -548,6 +548,7 @@ model Event {
 
   @@index([organizationId])
   travelOrders TravelOrder[]
+  travelPlaces TravelPlace[]
 
   @@map("events")
 }
@@ -1853,6 +1854,7 @@ model Organization {
   vehicles                  Vehicle[]
   travelOrders              TravelOrder[]
   knownDistances            KnownDistance[]
+  travelTemplates           TravelTemplate[]
   events                    Event[]
   authors                   Author[]
   children                  Child[]
@@ -2872,4 +2874,35 @@ model KnownDistance {
 
   @@unique([organizationId, fromPlace, toPlace])
   @@map("known_distances")
+}
+
+// Místa of an event's travel orders (2026-11-03): one shared list, offered in every leg's Odkud / Kam.
+model TravelPlace {
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, name])
+  @@map("travel_places")
+}
+
+// Šablony cest (2026-11-03): a trip that repeats (same route, other people / cars), organization-wide. data =
+// { purpose, originPlace, destinationPlace, roundTrip, legs: [{ dayOffset, fromPlace, toPlace, departTime,
+// arriveTime, trailer, km, stravne, nocleh, vedlejsi }] } -- never a worker, car or account.
+model TravelTemplate {
+  id              String   @id @default(uuid())
+  organizationId  String   @map("organization_id")
+  name            String
+  data            Json
+  createdByUserId String?  @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, name])
+  @@map("travel_templates")
 }

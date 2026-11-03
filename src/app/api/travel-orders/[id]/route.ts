@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { calcOf, checkDraftIds, orderForm, parseDraft, rateFor, requireOrderAccess, type OrderWithLegs } from "@/lib/travel-orders-server";
+import { calcOf, checkDraftIds, orderForm, parseDraft, rateChoiceOf, rateFor, requireOrderAccess, type OrderWithLegs } from "@/lib/travel-orders-server";
 
 // One travel order. GET: the form, its rate set and the live calculation. PATCH: save a draft. DELETE: a draft.
 async function view(order: OrderWithLegs) {
@@ -13,7 +13,7 @@ async function view(order: OrderWithLegs) {
   return {
     order: orderForm(order),
     event,
-    rate: rate && { id: rate.id, validFrom: rate.values.validFrom, note: rate.values.note, provisional: rate.provisional, frozen: rate.frozen },
+    rate: rate && { id: rate.id, validFrom: rate.values.validFrom, note: rate.values.note, provisional: rate.provisional, frozen: rate.frozen, chosen: !!rate.chosen },
     calc: calcOf(order, rate?.values ?? null),
     bill,
   };
@@ -29,11 +29,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const a = await requireOrderAccess((await params).id);
   if ("error" in a) return a.error;
   if (a.order.status !== "draft") return NextResponse.json({ error: "submitted_locked" }, { status: 409 });
-  const { data, legs } = parseDraft((await req.json().catch(() => ({}))) as Record<string, unknown>);
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const { data, legs } = parseDraft(body);
   if (await checkDraftIds(data, a.order.eventId, a.order.organizationId)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const choice = await rateChoiceOf(body, a.order);
+  if (choice === "not_found") return NextResponse.json({ error: "not_found" }, { status: 404 });
   await prisma.$transaction([
     prisma.travelLeg.deleteMany({ where: { orderId: a.order.id } }),
-    prisma.travelOrder.update({ where: { id: a.order.id }, data: { ...data, tpValues: data.tpValues as Prisma.InputJsonValue, legs: { create: legs } } }),
+    prisma.travelOrder.update({ where: { id: a.order.id }, data: { ...data, tpValues: data.tpValues as Prisma.InputJsonValue, ...(choice && { rateSetId: choice.rateSetId, rateValues: choice.rateValues ?? Prisma.DbNull }), legs: { create: legs } } }),
   ]);
   const order = await prisma.travelOrder.findUniqueOrThrow({ where: { id: a.order.id }, include: { legs: { orderBy: { sortOrder: "asc" } } } });
   return NextResponse.json(await view(order));

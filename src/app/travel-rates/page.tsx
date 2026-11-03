@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
+import { DateField } from "@/components/DateTimeFields";
 
 // Organizace -> Sazby cestovních náhrad (organization admins): rate sets by valid-from date, the organization's
 // details printed on orders, and the events no set covers.
@@ -151,6 +152,14 @@ export default function TravelRatesPage() {
         <button type="button" className={btn} disabled={!sets?.length} onClick={copyLatest}>
           {t("travelRates.copyLatest")}
         </button>
+        <a
+          className={btn + " inline-flex items-center"}
+          target="_blank"
+          rel="noreferrer"
+          href={`https://www.google.com/search?q=${encodeURIComponent(`vyhláška sazba základní náhrady za používání silničních motorových vozidel průměrná cena pohonných hmot ${new Date().getFullYear()}`)}`}
+        >
+          {t("travelRates.searchRates")} ↗
+        </a>
       </div>
 
       {draft && (
@@ -158,7 +167,7 @@ export default function TravelRatesPage() {
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="text-[12px] text-ink-secondary">
               {t("travelRates.field.validFrom")}
-              <input type="date" className={input} value={day(draft.validFrom)} onChange={(e) => set("validFrom", e.target.value)} />
+              <DateField className={input} value={day(draft.validFrom)} onChange={(v) => set("validFrom", v)} ariaLabel={t("travelRates.field.validFrom")} />
             </label>
             {PRICES.map((f) => (
               <label key={f} className="text-[12px] text-ink-secondary">

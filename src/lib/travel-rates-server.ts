@@ -15,7 +15,9 @@ const num = (v: unknown): Prisma.Decimal | null => {
 /** The body of a rate-set create / edit, or the list of bad fields. */
 export function parseRateSet(b: Record<string, unknown>): { data: Omit<Prisma.TravelRateSetUncheckedCreateInput, "organizationId"> } | { bad: string[] } {
   const bad: string[] = [];
-  const validFrom = typeof b.validFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.validFrom) ? new Date(`${b.validFrom}T00:00:00Z`) : null;
+  // "YYYY-MM-DD", or the stored ISO date sent back unchanged when only something else was edited.
+  const vf = typeof b.validFrom === "string" ? b.validFrom.slice(0, 10) : "";
+  const validFrom = /^\d{4}-\d{2}-\d{2}$/.test(vf) ? new Date(`${vf}T00:00:00Z`) : null;
   if (!validFrom || isNaN(validFrom.getTime())) bad.push("validFrom");
   const prices = Object.fromEntries(PRICE_FIELDS.map((f) => [f, num(b[f])]));
   for (const f of PRICE_FIELDS) if (!prices[f]) bad.push(f);
