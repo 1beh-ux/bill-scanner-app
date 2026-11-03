@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette, BarChart3 } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette, BarChart3, Fuel, Car } from "lucide-react";
 
 // superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
 export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
@@ -29,6 +29,9 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
       // as a user, so a global/all-events list belongs with the other org-wide admin pages, not Bills.
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
+      // Cestovní příkazy (2026-11-03): the decree's rates by valid-from date, and the cars used on orders.
+      { path: "/travel-rates", labelKey: "nav.travelRates", icon: Fuel, adminOnly: true },
+      { path: "/vehicles", labelKey: "nav.vehicles", icon: Car, adminOnly: true },
       // Public hostnames for the registration page / parent portal (docs/custom-domain.md).
       { path: "/connections", labelKey: "nav.connections", icon: Plug, adminOnly: true },
       // Font / sizes of the public pages (docs/custom-domain.md "Appearance").

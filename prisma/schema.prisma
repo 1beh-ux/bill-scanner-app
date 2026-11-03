@@ -607,6 +607,10 @@ model Author {
   fioLastCheckedAt   DateTime? @map("fio_last_checked_at")
   fioLastSuccessAt   DateTime? @map("fio_last_success_at")
   fioLastError       String?   @map("fio_last_error")
+  // Cestovní příkazy (2026-11-03): a payer's own contact when they are not linked to an adult in Lidé
+  // (an adult's comes from Lidé: address fields, first guardian's phone). Phone stored as "+420 xxx xxx xxx".
+  phone              String?
+  address            String?
 
   mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
   child       Child?              @relation(fields: [childId], references: [id], onDelete: SetNull)
@@ -618,6 +622,7 @@ model Author {
   eventAccess AuthorEventAccess[]
   bills       Bill[]
   bankAudits  AuthorBankAudit[]
+  vehicles    Vehicle[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -915,6 +920,7 @@ model Child {
   documents    PersonDocument[]
   eventPersons EventPerson[]
   authors      Author[]
+  vehicles     Vehicle[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -1830,9 +1836,15 @@ model Organization {
   // Own wording of the public registration form and parent portal texts ({ "public.doneTitle": "…" }),
   // over the translations (src/lib/public-texts.ts); an event's own (Event.publicTexts) wins on its page.
   publicTexts             Json?    @map("public_texts")
+  // Cestovní příkazy (2026-11-03): printed on the order ("IČ: …", "V <city> dne").
+  address                 String?
+  ico                     String?
+  city                    String?
   createdAt               DateTime @default(now()) @map("created_at")
 
   users                     User[]
+  travelRateSets            TravelRateSet[]
+  vehicles                  Vehicle[]
   events                    Event[]
   authors                   Author[]
   children                  Child[]
@@ -2669,4 +2681,73 @@ model PaymentCorrection {
 
   @@index([eventId])
   @@map("payment_corrections")
+}
+
+// Cestovní příkazy (docs/claude-code-prompt-7-travel-orders.md A2): the decree's rates, per organization,
+// versioned by the day they apply from (prices changed twice in 2026, so never by year). A trip uses the set
+// with the greatest validFrom not later than its start (src/lib/travel-order-calc.ts pickRateSet).
+model TravelRateSet {
+  id                  String   @id @default(uuid())
+  organizationId      String   @map("organization_id")
+  validFrom           DateTime @map("valid_from") @db.Date
+  basePerKm           Decimal  @map("base_per_km") @db.Decimal(8, 2)
+  trailerSurchargePct Decimal  @map("trailer_surcharge_pct") @db.Decimal(5, 2)
+  dieselPrice         Decimal  @map("diesel_price") @db.Decimal(8, 2)
+  petrol95Price       Decimal  @map("petrol95_price") @db.Decimal(8, 2)
+  petrol98Price       Decimal  @map("petrol98_price") @db.Decimal(8, 2)
+  electricityPrice    Decimal  @map("electricity_price") @db.Decimal(8, 2)
+  // { petrol: {manual, auto}, diesel: {manual, auto}, electric: {manual, auto} } l (kWh) / 100 km.
+  consumptionDefaults Json     @map("consumption_defaults")
+  // The source (decree number).
+  note                String?
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, validFrom])
+  @@map("travel_rate_sets")
+}
+
+enum VehicleGearbox {
+  manual
+  automatic
+}
+
+enum VehicleFuel {
+  diesel
+  petrol95
+  petrol98
+  electric
+}
+
+// Vozidla (A3): own cars used on travel orders. The owner is an adult in Lidé and/or a payer, else a plain name.
+model Vehicle {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  label          String
+  cylinderCc     Int?           @map("cylinder_cc")
+  plate          String?
+  gearbox        VehicleGearbox
+  fuel           VehicleFuel
+  // Consumption from the technical licence (TP), up to 4 values; the set ones > 0 are averaged.
+  tpConsumption1 Decimal?       @map("tp_consumption_1") @db.Decimal(5, 2)
+  tpConsumption2 Decimal?       @map("tp_consumption_2") @db.Decimal(5, 2)
+  tpConsumption3 Decimal?       @map("tp_consumption_3") @db.Decimal(5, 2)
+  tpConsumption4 Decimal?       @map("tp_consumption_4") @db.Decimal(5, 2)
+  ownerChildId   String?        @map("owner_child_id")
+  ownerAuthorId  String?        @map("owner_author_id")
+  ownerName      String?        @map("owner_name")
+  // Who added it (a non-admin edits only their own).
+  createdByUserId String?       @map("created_by_user_id")
+  archivedAt     DateTime?      @map("archived_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  ownerChild   Child?       @relation(fields: [ownerChildId], references: [id], onDelete: SetNull)
+  ownerAuthor  Author?      @relation(fields: [ownerAuthorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@map("vehicles")
 }

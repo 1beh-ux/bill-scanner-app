@@ -1,3 +1,4 @@
+import { ensureDefaultTravelRates } from "@/lib/travel-rates-defaults";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -59,6 +60,8 @@ export async function POST(req: NextRequest) {
     await tx.user.create({ data: { email: adminEmail, displayName: adminName, role: "admin", organizationId: created.id } });
     // It starts with copies of every active app template (Aplikace -> Šablony aplikace).
     await copyAppTemplatesToOrganization(tx, created.id);
+    // And the default travel-order rate sets (Organizace -> Sazby cestovních náhrad).
+    await ensureDefaultTravelRates(tx, created.id);
     return created;
   }, { timeout: 60_000 });
   return NextResponse.json(org, { status: 201 });

@@ -3,7 +3,8 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { cleanBank, validateBank, setAuthorBank } from "@/lib/payers";
-import { authorInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
+import { authorInOrg, childInOrg, isOrgAdmin, notFound } from "@/lib/org-scope";
+import { normalizePhone } from "@/lib/travel-order-calc";
 
 export async function GET(
   req: NextRequest,
@@ -20,7 +21,7 @@ export async function GET(
   const { id } = await params;
   // Another organization's payer doesn't exist here.
   if (!(await authorInOrg(user, id))) return notFound();
-  const author = await prisma.author.findUnique({ where: { id } });
+  const author = await prisma.author.findUnique({ where: { id }, omit: { fioTokenEncrypted: true }, include: { child: { select: { id: true, name: true } } } });
 
   if (!author) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -59,6 +60,12 @@ export async function PATCH(
     const bankError = validateBank(bank);
     if (bankError) return NextResponse.json({ error: bankError }, { status: 400 });
   }
+  // Propojit s dospělým (travel orders A3): a soft link to an adult in Lidé of this organization; null unlinks.
+  if (body.childId !== undefined && body.childId !== null) {
+    if (typeof body.childId !== "string" || !(await childInOrg(user, body.childId))) return notFound();
+    if (!(await prisma.child.count({ where: { id: body.childId, isAdult: true } }))) return NextResponse.json({ error: "not_adult" }, { status: 400 });
+  }
+  const text = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) || null : v === null ? null : undefined);
   if (canonicalName !== undefined && !String(canonicalName).trim()) {
     return NextResponse.json({ error: "name_required" }, { status: 400 });
   }
@@ -71,10 +78,13 @@ export async function PATCH(
         ...(active !== undefined && { active }),
         ...(official !== undefined && { isOfficialAccount: official }),
         ...(payoutNeeded !== undefined && { payoutNeeded }),
+        ...(body.childId !== undefined && { childId: body.childId }),
+        ...(body.phone !== undefined && { phone: normalizePhone(body.phone) }),
+        ...(text(body.address, 300) !== undefined && { address: text(body.address, 300) }),
       },
     });
     if (bank) await setAuthorBank(tx, { authorId: id, bank, userId: user.id, eventId: null, source: "admin_edit" });
-    return tx.author.findUniqueOrThrow({ where: { id } });
+    return tx.author.findUniqueOrThrow({ where: { id }, omit: { fioTokenEncrypted: true }, include: { child: { select: { id: true, name: true } } } });
   });
 
   return NextResponse.json(author);

@@ -15,7 +15,9 @@ export async function GET() {
   const authors = await prisma.author.findMany({
     where: await orgWhere(user),
     orderBy: { canonicalName: "asc" },
+    omit: { fioTokenEncrypted: true },
     include: {
+      child: { select: { id: true, name: true } },
       mergedInto: { select: { canonicalName: true } },
       eventAccess: { include: { event: { select: { id: true, name: true } } } },
     },

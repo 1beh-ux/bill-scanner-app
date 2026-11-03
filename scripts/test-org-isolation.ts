@@ -366,6 +366,76 @@ async function main() {
       await prisma.author.delete({ where: { id: foreign.id } });
     }
 
+    // ===== Cestovní příkazy A (2026-11-03): rate sets and vehicles are the organization's =====
+    asUser(admin);
+    {
+      const ratesRoute = await import("@/app/api/travel-rates/route");
+      const rateRoute = await import("@/app/api/travel-rates/[id]/route");
+      const vehRoute = await import("@/app/api/vehicles/route");
+      const vehOne = await import("@/app/api/vehicles/[id]/route");
+      check("new organization gets the default travel rate sets", (await prisma.travelRateSet.count({ where: { organizationId: org2Id! } })) === 3, String(await prisma.travelRateSet.count({ where: { organizationId: org2Id! } })));
+      const otherSet = await prisma.travelRateSet.findFirstOrThrow({ where: { organizationId: org2Id! } });
+      const list = await json(await ratesRoute.GET());
+      check("rate sets list: none of another organization's", Array.isArray(list.body?.sets) && !list.body.sets.some((x: { id: string }) => x.id === otherSet.id), JSON.stringify(list.body?.sets?.length));
+      const body = { validFrom: "2026-01-01", basePerKm: "1", trailerSurchargePct: "1", dieselPrice: "1", petrol95Price: "1", petrol98Price: "1", electricityPrice: "1", consumptionDefaults: { petrol: { manual: 1, auto: 1 }, diesel: { manual: 1, auto: 1 }, electric: { manual: 0, auto: 0 } } };
+      let r: Response = await rateRoute.PATCH(req(`/api/travel-rates/${otherSet.id}`, { method: "PATCH", body }), params({ id: otherSet.id }));
+      check("another organization's rate set: edit -> 404", r.status === 404 && (await prisma.travelRateSet.findUniqueOrThrow({ where: { id: otherSet.id } })).basePerKm.toString() !== "1", `HTTP ${r.status}`);
+      r = await rateRoute.DELETE(req(`/api/travel-rates/${otherSet.id}`, { method: "DELETE" }), params({ id: otherSet.id }));
+      check("another organization's rate set: delete -> 404", r.status === 404 && !!(await prisma.travelRateSet.findUnique({ where: { id: otherSet.id } })), `HTTP ${r.status}`);
+      // Seeding twice adds nothing (the test org already has the defaults from the seed? -- add them now, then again).
+      const { ensureDefaultTravelRates } = await import("@/lib/travel-rates-defaults");
+      const first = await ensureDefaultTravelRates(prisma, org.id);
+      const second = await ensureDefaultTravelRates(prisma, org.id);
+      check("rate-set seed is idempotent", second === 0 && (await prisma.travelRateSet.count({ where: { organizationId: org.id } })) === 3, `first ${first}, second ${second}`);
+
+      const otherAdult = await prisma.child.create({ data: { name: `Iso cizí dospělý ${stamp}`, isAdult: true, organizationId: org2Id! } });
+      const otherCar = await prisma.vehicle.create({ data: { organizationId: org2Id!, label: "Iso cizí auto", gearbox: "manual", fuel: "diesel", ownerChildId: otherAdult.id } });
+      const vl = await json(await vehRoute.GET(req("/api/vehicles?archived=1")));
+      check("vehicles list: none of another organization's", Array.isArray(vl.body?.vehicles) && !vl.body.vehicles.some((x: { id: string }) => x.id === otherCar.id), JSON.stringify(vl.body)?.slice(0, 200));
+      r = await vehOne.PATCH(req(`/api/vehicles/${otherCar.id}`, { method: "PATCH", body: { archived: true } }), params({ id: otherCar.id }));
+      check("another organization's vehicle: archive -> 404", r.status === 404 && !(await prisma.vehicle.findUniqueOrThrow({ where: { id: otherCar.id } })).archivedAt, `HTTP ${r.status}`);
+      r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { label: "x", gearbox: "manual", fuel: "diesel", ownerChildId: otherAdult.id } }));
+      check("vehicle for another organization's adult -> 404", r.status === 404, `HTTP ${r.status}`);
+      if (z.event) {
+        r = await vehRoute.GET(req(`/api/vehicles?eventId=${z.event.id}`));
+        check("Záře event vehicles -> 404", r.status === 404, `HTTP ${r.status}`);
+      }
+      // Another organization's adult can't be linked to a payer here.
+      const ownPayer = await prisma.author.create({ data: { canonicalName: `Iso plátce ${stamp}`, organizationId: org.id } });
+      r = await (await import("@/app/api/authors/[id]/route")).PATCH(req(`/api/authors/${ownPayer.id}`, { method: "PATCH", body: { childId: otherAdult.id } }), params({ id: ownPayer.id }));
+      check("Propojit s dospělým: another organization's adult -> 404", r.status === 404 && !(await prisma.author.findUniqueOrThrow({ where: { id: ownPayer.id } })).childId, `HTTP ${r.status}`);
+
+      // Permissions: a user with Bills access on the event.
+      const plain = await prisma.user.create({ data: { email: `org-isolation-user-${stamp}@test.invalid`, displayName: "Iso user", role: "user", organizationId: org.id } });
+      await prisma.userEventModuleAccess.create({ data: { userId: plain.id, eventId: eventId!, moduleKey: "bills" } });
+      const adult = await prisma.child.create({ data: { name: `Iso dospělý ${stamp}`, isAdult: true, organizationId: org.id } });
+      await prisma.eventPerson.create({ data: { eventId: eventId!, childId: adult.id } });
+      const adminCar = await prisma.vehicle.create({ data: { organizationId: org.id, label: "Iso admin auto", gearbox: "manual", fuel: "diesel", ownerChildId: adult.id, createdByUserId: admin.id } });
+      asUser(plain);
+      r = await ratesRoute.GET();
+      check("non-admin: rate-set page -> 403", r.status === 403, `HTTP ${r.status}`);
+      r = await rateRoute.PATCH(req(`/api/travel-rates/${otherSet.id}`, { method: "PATCH", body }), params({ id: otherSet.id }));
+      check("non-admin: rate-set edit -> 403", r.status === 403, `HTTP ${r.status}`);
+      r = await vehRoute.GET(req("/api/vehicles"));
+      check("non-admin: all vehicles without an event -> 403", r.status === 403, `HTTP ${r.status}`);
+      const mine = await json(await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "Iso moje", gearbox: "automatic", fuel: "petrol95", ownerChildId: adult.id } })));
+      check("Bills user: creates a vehicle for an adult of the event", mine.status === 201, JSON.stringify(mine));
+      r = await vehOne.PATCH(req(`/api/vehicles/${adminCar.id}`, { method: "PATCH", body: { eventId, label: "přepsáno", gearbox: "manual", fuel: "diesel", ownerChildId: adult.id } }), params({ id: adminCar.id }));
+      check("Bills user: editing another's vehicle -> 403", r.status === 403 && (await prisma.vehicle.findUniqueOrThrow({ where: { id: adminCar.id } })).label === "Iso admin auto", `HTTP ${r.status}`);
+      if (mine.body?.id) {
+        r = await vehOne.PATCH(req(`/api/vehicles/${mine.body.id}`, { method: "PATCH", body: { eventId, archived: true } }), params({ id: mine.body.id }));
+        check("Bills user: archives their own vehicle", r.status === 200, `HTTP ${r.status}`);
+      }
+      const evList = await json(await vehRoute.GET(req(`/api/vehicles?eventId=${eventId}`)));
+      check("Bills user: the event's people's vehicles only", JSON.stringify(evList.body?.vehicles?.map((x: { id: string }) => x.id)) === JSON.stringify([adminCar.id]), JSON.stringify(evList.body)?.slice(0, 300));
+      r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "x", gearbox: "manual", fuel: "diesel", ownerName: "Někdo" } }));
+      check("Bills user: a free-text owner -> refused", r.status === 400, `HTTP ${r.status}`);
+      asUser(admin);
+      await prisma.vehicle.deleteMany({ where: { organizationId: { in: [org.id, org2Id!] } } });
+      await prisma.userEventModuleAccess.deleteMany({ where: { userId: plain.id } });
+      await prisma.user.delete({ where: { id: plain.id } });
+    }
+
     // ===== Vyúčtování links (2026-11-01): only the event's own people; the public page shows one person =====
     asUser(admin);
     {
@@ -623,6 +693,8 @@ async function main() {
       const ov = { organizationId: oid };
       await step("meal", () => prisma.meal.deleteMany({ where: ov }));
       await step("ingredient", () => prisma.ingredient.deleteMany({ where: ov }));
+      await step("vehicle", () => prisma.vehicle.deleteMany({ where: ov }));
+      await step("travelRateSet", () => prisma.travelRateSet.deleteMany({ where: ov }));
       await step("childGuardian", () => prisma.childGuardian.deleteMany({ where: { child: ov } }));
       await step("child", () => prisma.child.deleteMany({ where: ov }));
       await step("family", () => prisma.family.deleteMany({ where: ov }));

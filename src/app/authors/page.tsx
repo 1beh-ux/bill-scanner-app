@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import AuthorPersonLink from "@/components/payers/AuthorPersonLink";
 
 type Author = {
   id: string;
@@ -14,6 +15,10 @@ type Author = {
   payoutNeeded: boolean;
   mergedInto?: { canonicalName: string } | null;
   eventAccess?: { event: { id: string; name: string } }[];
+  childId: string | null;
+  phone: string | null;
+  address: string | null;
+  child?: { id: string; name: string } | null;
 };
 
 type AuditRow = {
@@ -52,6 +57,7 @@ export default function AuthorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [authorEvents, setAuthorEvents] = useState<EventItem[]>([]);
+  const [personId, setPersonId] = useState<string | null>(null);
 
   const [editingAuthorId, setEditingAuthorId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -446,6 +452,10 @@ export default function AuthorsPage() {
                         <button onClick={() => toggleExpand(a.id)} className={linkBtn + " mr-3"}>
                           {expandedId === a.id ? t("authors.eventAccessHide") : t("authors.eventAccessShow")}
                         </button>
+                        <button onClick={() => setPersonId(personId === a.id ? null : a.id)} className={linkBtn + " mr-3"}>
+                          {t("payerLink.button")}
+                          {a.child && " ✓"}
+                        </button>
                         <button onClick={() => toggleHistory(a.id)} className={linkBtn + " mr-3"}>
                           {t("authors.bankHistory")}
                         </button>
@@ -455,6 +465,13 @@ export default function AuthorsPage() {
                         >
                           {t("common.delete")}
                         </button>
+                      </td>
+                    </tr>
+                  )}
+                  {personId === a.id && (
+                    <tr>
+                      <td colSpan={5} className="bg-paper-2 p-3">
+                        <AuthorPersonLink author={a} onChanged={load} />
                       </td>
                     </tr>
                   )}

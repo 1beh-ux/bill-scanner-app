@@ -33,6 +33,8 @@ type Detail = {
   leftVia: "portal" | "admin" | null;
   leftNote: string | null;
   family: { id: string; name: string } | null;
+  authors?: { id: string; canonicalName: string }[];
+  vehicles?: { id: string; label: string }[];
   values: Record<string, string>;
   fields: Field[];
   guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
@@ -177,6 +179,15 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
       <p className="mb-2 text-[13px] text-ink-secondary">
         {t("children.colBirth")}: {date(data.dateOfBirth)}
       </p>
+      {data.isAdult && (
+        <p className="mb-2 text-[13px] text-ink-secondary">
+          {data.authors?.length ? t("payerLink.adultLinked", { names: data.authors.map((a) => a.canonicalName).join(", ") }) : t("payerLink.adultNotLinked")}{" "}
+          <a href="/authors" className="text-ember hover:underline">
+            {t("nav.authors")}
+          </a>
+          {!!data.vehicles?.length && <> · {t("payerLink.adultVehicles", { names: data.vehicles.map((v) => v.label).join(", ") })}</>}
+        </p>
+      )}
       <label className="mb-5 flex items-center gap-2 text-[13px] text-ink">
         <input type="checkbox" checked={data.isAdult} disabled={saving} onChange={(e) => setAdult(e.target.checked)} />
         {t("people.isAdult")}

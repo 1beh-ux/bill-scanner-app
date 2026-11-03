@@ -44,6 +44,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       changes: { where: { status: "pending" }, orderBy: { createdAt: "asc" } },
       emailLogs: { orderBy: { sentAt: "desc" }, take: 20, select: { id: true, email: true, status: true, errorMessage: true, sentAt: true, subject: true } },
+      // Payers linked to this adult (Plátci -> Dospělý a kontakt), and their cars (Vozidla).
+      authors: { select: { id: true, canonicalName: true } },
+      vehicles: { where: { archivedAt: null }, select: { id: true, label: true } },
     },
   });
   if (!child) return NextResponse.json({ error: "not_found" }, { status: 404 });
