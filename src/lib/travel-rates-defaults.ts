@@ -16,8 +16,12 @@ export const DEFAULT_RATE_SETS_2026 = [
   { validFrom: "2026-10-01", basePerKm: "5.90", trailerSurchargePct: "15", dieselPrice: "44.50", petrol95Price: "41.80", petrol98Price: "39.00", electricityPrice: "7.20", note: `Vyhláška č. 175/2026 Sb., změna od 1. 10. 2026 (ověřit). ${TABLE_NOTE}` },
 ];
 
-/** Adds the default sets an organization doesn't have yet (by validFrom); never changes existing ones. */
+/**
+ * The default sets for an organization that has none yet (a new one, or the first seed). Once it has any, its
+ * admins own the list: a set they deleted is never brought back by a later deploy's seed.
+ */
 export async function ensureDefaultTravelRates(db: Db, organizationId: string): Promise<number> {
+  if (await db.travelRateSet.count({ where: { organizationId } })) return 0;
   const res = await db.travelRateSet.createMany({
     data: DEFAULT_RATE_SETS_2026.map((s) => ({ ...s, organizationId, validFrom: new Date(`${s.validFrom}T00:00:00Z`), consumptionDefaults: DEFAULT_CONSUMPTION })),
     skipDuplicates: true,
