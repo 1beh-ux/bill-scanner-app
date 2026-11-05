@@ -74,6 +74,9 @@ const rows: Row[] = [
   r("settingsPage.sectionEmails", "E-maily", "E-mails"),
   r("settingsPage.landingSavedBelow", "Uloží se tlačítkem Uložit dole.", "Saved with the Save button below."),
   r("billDriveSync.askAdmin", "Požádejte správce organizace o připojení Disku.", "Ask an organization admin to connect Drive."),
+  // Edited in older seeds that deploy.sh doesn't run (U2, Lidé naming): repeated here so they reach production.
+  r("mailTab.questionnaireHint", "Odkaz je dostupný jako {questionnaire_url} v e-mailech i dokumentech. Vyplnění dotazníku značte ručně jako typ dokumentu (Šablony → Pošta).", "The link is available as {questionnaire_url} in both emails and documents. Track completion manually as a document type (Templates → Mail)."),
+  r("children.intro", "Lidé napříč všemi akcemi a roky — děti, dospělí i dospělí mimo organizaci. Účastníci se k osobě propojují podle jména a data narození. Používá se jen u akcí, které mají zapnuté „Připojeno k registraci“ — ostatní akce fungují beze změny.", "People across all events and years — children, adults and adults from outside the organization. Participants are linked by name and birth date. Only used by events with “Connected to registration” on — other events work unchanged."),
 ];
 
 async function main() {
