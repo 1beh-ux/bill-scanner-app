@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashText, kitchenContext, kitchenGuard } from "@/lib/kitchen/server";
-import { ALLERGEN_CODES, cleanCodes } from "@/lib/kitchen/allergens";
+import { ALLERGEN_CODES, cleanCodes, mapAllergyText, reviewMissing } from "@/lib/kitchen/allergens";
 
 // Strava účastníků: GET each participant's allergy text with the proposed mapping and their review status,
 // the adults' data (read-only here, edited in Lidé); POST { participantId, allergens, dietFlags, note? } confirms
@@ -13,7 +13,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const ctx = await kitchenContext(g.event);
   const [fields, reviews, adults] = await Promise.all([
     prisma.eventParticipantField.findMany({ where: { eventId: id, active: true, kind: "custom" }, select: { key: true, label: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.participantDiet.findMany({ where: { participant: { eventId: id } }, select: { participantId: true, allergens: true, dietFlags: true, note: true, confirmedAt: true } }),
+    prisma.participantDiet.findMany({ where: { participant: { eventId: id } }, select: { participantId: true, allergens: true, dietFlags: true, note: true, confirmedAt: true, unmapped: true, unmappedReviewed: true } }),
     prisma.eventPerson.findMany({ where: { eventId: id }, select: { id: true, eats: true, child: { select: { id: true, name: true, allergens: true, dietFlags: true, dietNote: true } } } }),
   ]);
   const review = new Map(reviews.map((r) => [r.participantId, r]));
@@ -37,10 +37,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!p) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const ctx = await kitchenContext(g.event);
   const raw = ctx.allergyFieldKey ? String(((p.customFieldValues as Record<string, unknown> | null) ?? {})[ctx.allergyFieldKey] ?? "").trim() : "";
+  const note = typeof b.note === "string" ? b.note.trim().slice(0, 1000) || null : null;
+  // Words nothing matched ("anafylaxe"): a person has to look at them -- a note, or the explicit tick (audit 2026-11-05).
+  const unmapped = mapAllergyText(raw, ctx.dietDefs).unmapped;
+  const unmappedReviewed = unmapped.length > 0 && b.unmappedReviewed === true;
+  if (reviewMissing(unmapped, note, unmappedReviewed)) return NextResponse.json({ error: "unmapped_needs_review", unmapped }, { status: 400 });
   const data = {
     allergens: cleanCodes(b.allergens, ALLERGEN_CODES),
     dietFlags: cleanCodes(b.dietFlags, ctx.dietDefs.map((d) => d.code)),
-    note: typeof b.note === "string" ? b.note.trim().slice(0, 1000) || null : null,
+    note,
+    unmapped,
+    unmappedReviewed,
     rawText: raw,
     rawTextHash: hashText(raw),
     confirmedById: g.user.id,

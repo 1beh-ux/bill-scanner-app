@@ -28,6 +28,10 @@ export default function KitchenSettings({ eventId }: { eventId: string }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the first load
     load();
   }, [load]);
+  // Linked from Kuchyně's price box (#kitchen-food-categories): scroll there once the section exists.
+  useEffect(() => {
+    if (s && window.location.hash === "#kitchen-food-categories") document.getElementById("kitchen-food-categories")?.scrollIntoView({ block: "start" });
+  }, [s]);
   if (!s) return null;
   const save = async (patch: Partial<Settings>) => {
     setS({ ...s, ...patch });
@@ -48,7 +52,7 @@ export default function KitchenSettings({ eventId }: { eventId: string }) {
             ))}
           </select>
         </label>
-        <div className="flex flex-col gap-1">
+        <div id="kitchen-food-categories" className="flex scroll-mt-20 flex-col gap-1">
           <span className="text-[13px] text-ink-secondary">{t("kitchen.settings.foodCategories")}</span>
           <div className="flex flex-wrap gap-3">
             {categories.map((c) => (

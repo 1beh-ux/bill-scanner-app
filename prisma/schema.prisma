@@ -2535,6 +2535,10 @@ model ParticipantDiet {
   confirmedById String?   @map("confirmed_by_id")
   confirmedAt   DateTime  @default(now()) @map("confirmed_at")
   note          String?
+  // Audit 2026-11-05: words of the text that map to no allergen / diet ("anafylaxe", "nesmí ořechy"), as they
+  // were when confirmed, and that the confirmer ticked "Nepřiřazené výrazy jsem posoudil/a" (else a note is required).
+  unmapped         String[] @default([])
+  unmappedReviewed Boolean  @default(false) @map("unmapped_reviewed")
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 

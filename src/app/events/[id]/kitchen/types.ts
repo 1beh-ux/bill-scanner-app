@@ -5,7 +5,7 @@ export type Sheet = { mealName: string; steps: string | null; portions: number; 
 export type Check = {
   allergens: string[];
   unconfirmedIngredients: string[];
-  conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null }[];
+  conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null; rawText?: string; unmapped?: string[] }[];
   specialPortions: { variantId: string; variantName: string; applied: boolean; names: string[] }[];
   noVariant: string[];
   uncovered: string[];
@@ -45,6 +45,7 @@ export type PlanData = {
   entries: Entry[];
   adjusts: Adjust[];
   unverifiedDiets: number;
+  dietWarnings?: { name: string; rawText: string; unmapped: string[]; confirmed: boolean }[];
   notes: Note[];
   cost: { foodSet: boolean; spent: number; budget: number; personDays: number; perPersonDay: number | null };
 };

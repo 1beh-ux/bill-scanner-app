@@ -33,6 +33,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     entries: planJson(rows),
     adjusts: ctx.adjusts.map((a) => ({ id: a.id, dateFrom: iso(a.dateFrom), dateTo: iso(a.dateTo), slotItemId: a.slotItemId, count: a.count, factor: Number(a.factor), label: a.label })),
     unverifiedDiets: ctx.diets.filter((d) => d.status === "unverified").length,
+    // Texts with words no allergen / diet matched: shown to the cook with the parent's own text (audit 2026-11-05).
+    dietWarnings: ctx.diets.filter((d) => d.unmapped?.length).map((d) => ({ name: d.name, rawText: d.rawText, unmapped: d.unmapped, confirmed: d.status === "confirmed" })),
     notes: notes.map((n) => ({ id: n.id, mealId: n.mealId, body: n.body, eventId: n.eventId, pinned: n.pinned, createdAt: n.createdAt })),
     categories,
     cost: { foodSet: foodIds.length > 0, spent, budget: Number(budget?._sum.budgetAmount ?? 0), personDays, perPersonDay: personDays ? Math.round(spent / personDays) : null },

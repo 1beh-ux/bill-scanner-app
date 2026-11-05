@@ -12,6 +12,15 @@ const rows: Row[] = [
   // Phase 3: bank import window
   r("bankImport.window", "Období akce {from} – {to}", "Event period {from} – {to}"),
   r("bankImport.outsideHint", "{count} řádků je mimo období akce ({from} – {to}), proto se nenačtou. Patří-li k akci, rozšiřte data u propojení účtu nahoře (Období) a náhled spusťte znovu.", "{count} rows are outside the event period ({from} – {to}), so they won't be imported. If they belong to the event, widen the account link's dates above (Period) and run the preview again."),
+  // Phase 4: kitchen diet safety
+  r("kitchen.dietWarnings.title", "Pozor: v alergiích jsou výrazy, které aplikace nepřiřadila – čtěte text rodičů", "Careful: allergy texts contain words the app couldn't match – read the parents' text"),
+  r("kitchen.dietWarnings.chip", "text obsahuje nepřiřazené výrazy: {words}", "the text has unmatched words: {words}"),
+  r("kitchen.dietWarnings.unconfirmed", "zatím neověřeno", "not confirmed yet"),
+  r("kitchen.dietWarnings.reviewedLabel", "Nepřiřazené výrazy ({words}) jsem posoudil/a", "I've checked the unmatched words ({words})"),
+  r("kitchen.dietWarnings.needsReview", "Text obsahuje nepřiřazené výrazy: napište poznámku, nebo zaškrtněte, že jste je posoudil/a.", "The text has unmatched words: write a note, or tick that you've checked them."),
+  r("kitchen.dietWarnings.saveFailed", "Uložení se nepodařilo.", "Saving failed."),
+  r("kitchen.dietWarnings.reviewedNote", "Nepřiřazené výrazy posouzeny: {note}", "Unmatched words checked: {note}"),
+  r("kitchen.dietWarnings.reviewedTick", "Nepřiřazené výrazy posouzeny (zaškrtnuto při potvrzení).", "Unmatched words checked (ticked at confirmation)."),
 ];
 
 async function main() {

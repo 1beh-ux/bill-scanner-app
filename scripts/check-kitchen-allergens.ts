@@ -1,7 +1,7 @@
 // Self-check for the allergen text mapping and the conflict engine (src/lib/kitchen/allergens.ts).
 // npx tsx scripts/check-kitchen-allergens.ts
 import assert from "node:assert/strict";
-import { entryConflicts, mapAllergyText, type IngredientInfo } from "../src/lib/kitchen/allergens";
+import { entryConflicts, mapAllergyText, reviewMissing, type IngredientInfo } from "../src/lib/kitchen/allergens";
 
 // Czech samples, diacritics-insensitive; nothing is dropped.
 assert.deepEqual(mapAllergyText("ořechy, lepek"), { allergens: ["gluten", "nuts"], dietFlags: [], unmapped: [] });
@@ -55,4 +55,19 @@ assert.equal(porridge.level, "ok");
 const amber = entryConflicts([{ ingredientId: "tomato", qty: 1 }, { ingredientId: "sauce", qty: 1 }], unsure, [], [], [people[3]]);
 assert.equal(amber.level, "amber");
 assert.deepEqual(amber.unconfirmedIngredients, ["sauce"]);
+// Audit 2026-11-05 (K-diet): unmatched words need a note or the explicit tick to confirm; a confirmed person keeps
+// their raw text and unmatched words on the conflict list, so "anafylaxe" never hides behind the chips.
+const anaOnly = mapAllergyText("anafylaxe");
+assert.deepEqual(anaOnly, { allergens: [], dietFlags: [], unmapped: ["anafylaxe"] });
+assert.equal(reviewMissing(anaOnly.unmapped, null, false), true);
+assert.equal(reviewMissing(anaOnly.unmapped, "  ", false), true);
+assert.equal(reviewMissing(anaOnly.unmapped, "volat rodiče, EpiPen v lékárničce", false), false);
+assert.equal(reviewMissing(anaOnly.unmapped, null, true), false);
+assert.equal(reviewMissing([], null, false), false);
+{
+  const ings = new Map<string, IngredientInfo>([["peanut", { id: "peanut", name: "Arašídy", allergens: ["peanuts"], dietFlags: [], allergensConfirmed: true }]]);
+  const r = entryConflicts([{ ingredientId: "peanut", qty: 1, optional: false }], ings, [], [], [{ key: "p:1", name: "Eva", allergens: ["peanuts"], dietFlags: [], status: "confirmed", rawText: "arašídy – anafylaxe", unmapped: ["arašídy – anafylaxe"] }]);
+  assert.equal(r.conflicts[0].rawText, "arašídy – anafylaxe");
+  assert.deepEqual(r.conflicts[0].unmapped, ["arašídy – anafylaxe"]);
+}
 console.log("kitchen allergens ok");

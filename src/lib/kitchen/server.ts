@@ -135,9 +135,9 @@ export async function kitchenContext(event: { id: string; organizationId: string
       const changed = !!p.diet && p.diet.rawTextHash !== hashText(raw);
       const status: PersonDiet["status"] = p.diet && !changed ? "confirmed" : raw && (proposal.allergens.length || proposal.dietFlags.length || proposal.unmapped.length) ? "unverified" : p.diet ? "unverified" : "none";
       const src = p.diet && !changed ? p.diet : proposal;
-      return { key: `p:${p.id}`, name: p.name, allergens: src.allergens, dietFlags: src.dietFlags, status, rawText: raw, changed, proposal };
+      return { key: `p:${p.id}`, name: p.name, allergens: src.allergens, dietFlags: src.dietFlags, status, rawText: raw, unmapped: proposal.unmapped, changed, proposal };
     });
-  const adultDiets: PersonDiet[] = adults.filter((a) => a.eats).map((a) => ({ key: `a:${a.id}`, name: a.child.name, allergens: a.child.allergens, dietFlags: a.child.dietFlags, status: a.child.allergens.length || a.child.dietFlags.length ? "confirmed" : "none" }));
+  const adultDiets: PersonDiet[] = adults.filter((a) => a.eats).map((a) => ({ key: `a:${a.id}`, name: a.child.name, allergens: a.child.allergens, dietFlags: a.child.dietFlags, status: a.child.allergens.length || a.child.dietFlags.length ? "confirmed" : "none", rawText: a.child.dietNote ?? undefined }));
   return {
     dietDefs,
     settings: settings ?? { eventId: event.id, allergyFieldKey: null, foodCategoryIds: [] as string[], countOnlyAccepted: false, feedbackUnlockMinutes: 30 },

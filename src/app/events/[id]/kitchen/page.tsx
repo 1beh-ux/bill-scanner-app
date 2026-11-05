@@ -1,5 +1,6 @@
 "use client";
 
+import DietWarnings, { UnmappedChip } from "@/components/kitchen/DietWarnings";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { DndContext, MouseSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
@@ -91,6 +92,7 @@ export default function KitchenPlanPage({ params }: { params: Promise<{ id: stri
           {t("kitchen.plan.unverifiedDiets", { n: String(data.unverifiedDiets) })}
         </a>
       )}
+      <DietWarnings warnings={data.dietWarnings} eventId={id} />
       <div className="mb-3 flex flex-wrap gap-2 print:hidden">
         {(["library", "adjusts", "copy"] as const).map((k) => (
           <button key={k} type="button" onClick={() => setPanel(panel === k ? null : k)} className={"rounded-full px-3 py-1 text-[13px] " + (panel === k ? "bg-ember text-white" : "bg-paper-2 text-ink hover:bg-mist")}>
@@ -261,7 +263,7 @@ function CostCard({ cost, eventId }: { cost: PlanData["cost"]; eventId: string }
           {cost.budget > 0 && <div className="text-[12px]">{t("kitchen.cost.budget", { budget: Math.round(cost.budget).toLocaleString("cs-CZ"), perDay: cost.personDays ? Math.round(cost.budget / cost.personDays).toLocaleString("cs-CZ") : "—" })}</div>}
         </div>
       ) : (
-        <a href={`/events/${eventId}?tab=kuchyne`} className="text-[12px] text-ember hover:underline">
+        <a href={`/events/${eventId}?tab=kuchyne#kitchen-food-categories`} className="text-[12px] text-ember hover:underline">
           {t("kitchen.cost.setup")}
         </a>
       )}
@@ -520,6 +522,8 @@ function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged
               <p key={x.key} className={!x.variantId || !e.variantIds.includes(x.variantId) ? "text-red-700" : "text-ink"}>
                 {x.name}: <AllergenList codes={x.allergens} />
                 {x.diets.length > 0 && ` ${x.diets.map(dietName).join(", ")}`}
+                {x.rawText && <span className="text-[12px] text-ink-secondary"> („{x.rawText}“)</span>}
+                <UnmappedChip words={x.unmapped} />
                 {" → "}
                 {x.variantId ? e.variants.find((v) => v.id === x.variantId)?.name : t("kitchen.plan.noSafeVariant")}
               </p>

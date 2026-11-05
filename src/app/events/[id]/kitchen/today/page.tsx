@@ -1,5 +1,6 @@
 "use client";
 
+import DietWarnings, { UnmappedChip } from "@/components/kitchen/DietWarnings";
 import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { AllergenList, CheckBadge, NoAccess, Qty, btn, fmtDay, inputSm, send } from "@/components/kitchen/ui";
@@ -88,6 +89,7 @@ export default function KitchenTodayPage({ params }: { params: Promise<{ id: str
         </div>
       </div>
       {offlineAt && <p className="mb-3 rounded-lg bg-amber-500/15 px-3 py-2 text-[13px] text-amber-800">{t("kitchen.today.offline", { time: new Date(offlineAt).toLocaleString("cs-CZ") })}</p>}
+      <DietWarnings warnings={data.dietWarnings} eventId={id} />
       {entries.length === 0 && <p className="text-[14px] text-ink-secondary">{t("kitchen.today.empty")}</p>}
       <div className="flex flex-col gap-4">
         {entries.map((e) => (
@@ -128,6 +130,13 @@ function CookCard({ eventId, e, slot, notes, unlockMinutes, offline, onChanged }
           {c.unconfirmedIngredients.length > 0 && <span className="text-amber-700">{t("kitchen.plan.unconfirmedIngredients", { names: c.unconfirmedIngredients.join(", ") })}</span>}
         </div>
       )}
+      {c?.conflicts.map((x) => (
+        <p key={x.key} className="mb-1 text-[13px] text-ink">
+          <b>{x.name}</b>: <AllergenList codes={x.allergens} />
+          {x.rawText && <span className="text-[12px] text-ink-secondary"> („{x.rawText}“)</span>}
+          <UnmappedChip words={x.unmapped} />
+        </p>
+      ))}
       <p className="mb-2 text-[12.5px] text-ink-secondary">
         {t("kitchen.plan.allergens")}: <AllergenList codes={s.allergens} empty={t("kitchen.plan.noAllergens")} />
       </p>

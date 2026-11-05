@@ -5,6 +5,7 @@ import { useTranslations } from "@/lib/i18n";
 import { AllergenPicker, DietPicker } from "@/components/adults/AdultForm";
 import { AllergenList, NoAccess, btn, btnPrimary, inputSm, send } from "@/components/kitchen/ui";
 import { useDiets } from "@/components/kitchen/useDiets";
+import { UnmappedChip } from "@/components/kitchen/DietWarnings";
 
 // Strava účastníků: each participant's allergy answer with what the app reads in it (a proposal), confirmed
 // by a person. Unconfirmed = "neověřeno" everywhere -- never "no allergy". A text changed after the
@@ -16,7 +17,7 @@ type Row = {
   status: "confirmed" | "unverified" | "none";
   changed: boolean;
   proposal: { allergens: string[]; dietFlags: string[]; unmapped: string[] };
-  review: { allergens: string[]; dietFlags: string[]; note: string | null; confirmedAt: string } | null;
+  review: { allergens: string[]; dietFlags: string[]; note: string | null; confirmedAt: string; unmapped: string[]; unmappedReviewed: boolean } | null;
 };
 type AdultRow = { id: string; childId: string; name: string; eats: boolean; allergens: string[]; dietFlags: string[]; dietNote: string | null };
 type Data = { allergyFieldKey: string | null; fields: { key: string; label: string }[]; participants: Row[]; adults: AdultRow[] };
@@ -97,8 +98,13 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
   const [dietFlags, setDietFlags] = useState(start.dietFlags);
   const [note, setNote] = useState(p.review?.note ?? "");
   const [editing, setEditing] = useState(p.status === "unverified");
+  const [reviewed, setReviewed] = useState(!!p.review?.unmappedReviewed);
+  const [error, setError] = useState<string | null>(null);
+  const needsReview = p.proposal.unmapped.length > 0 && !note.trim() && !reviewed;
   async function confirmIt() {
-    await send(url, "POST", { participantId: p.participantId, allergens, dietFlags, note });
+    setError(null);
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: p.participantId, allergens, dietFlags, note, unmappedReviewed: reviewed }) }).catch(() => null);
+    if (!res?.ok) return setError(t(res?.status === 400 ? "kitchen.dietWarnings.needsReview" : "kitchen.dietWarnings.saveFailed"));
     setEditing(false);
     onChanged();
   }
@@ -110,7 +116,14 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
           <span className="text-[14px] font-semibold text-ink">{p.name}</span>
           <span className={"ml-2 rounded-full px-2 py-0.5 text-[11.5px] " + badge}>{p.changed ? t("kitchen.diets.changed") : t(`kitchen.diets.status.${p.status}`)}</span>
           <p className="whitespace-pre-line text-[13px] text-ink-secondary">{p.rawText || "—"}</p>
-          {p.proposal.unmapped.length > 0 && <p className="text-[12.5px] text-amber-700">{t("kitchen.diets.unmapped", { parts: p.proposal.unmapped.join(", ") })}</p>}
+          {p.proposal.unmapped.length > 0 && (
+            <p className="text-[12.5px] text-amber-700">
+              <UnmappedChip words={p.proposal.unmapped} />
+            </p>
+          )}
+          {p.status === "confirmed" && p.review && p.review.unmapped.length > 0 && (
+            <p className="text-[12px] text-ink-secondary">{p.review.note ? t("kitchen.dietWarnings.reviewedNote", { note: p.review.note }) : t("kitchen.dietWarnings.reviewedTick")}</p>
+          )}
         </div>
         {!editing && (
           <span className="flex items-center gap-3 text-[13px]">
@@ -129,8 +142,16 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
           <AllergenPicker value={allergens} onChange={setAllergens} />
           <DietPicker value={dietFlags} onChange={setDietFlags} />
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("kitchen.diets.note")} className={inputSm} />
+          {p.proposal.unmapped.length > 0 && (
+            <label className="flex items-center gap-2 text-[13px] text-ink">
+              <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />
+              {t("kitchen.dietWarnings.reviewedLabel", { words: p.proposal.unmapped.join(", ") })}
+            </label>
+          )}
+          {needsReview && <p className="text-[12px] text-amber-800">{t("kitchen.dietWarnings.needsReview")}</p>}
+          {error && <p className="text-[12px] text-red-700">{error}</p>}
           <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={confirmIt} className={btnPrimary}>
+            <button type="button" onClick={confirmIt} disabled={needsReview} className={btnPrimary}>
               {t("kitchen.diets.confirm")}
             </button>
             {p.review && (

@@ -96,7 +96,12 @@ export type Swap = { fromIngredientId: string; toIngredientId: string; qtyPerAdu
 export type VariantInfo = { id: string; name: string; clearsAllergens: string[]; swaps: Swap[] };
 // confirmed: the person's restrictions are confirmed (adults always; a participant once Strava účastníků confirms it);
 // unverified = there is allergy text nobody confirmed yet -> unknown, never "no allergy".
-export type PersonDiet = { key: string; name: string; allergens: string[]; dietFlags: string[]; status: "confirmed" | "unverified" | "none" };
+// rawText / unmapped (audit 2026-11-05): the parent's own words and those no allergen / diet matched, shown next to
+// the chips wherever a diet is shown, so "anafylaxe" is never hidden behind "no allergens".
+/** Confirming a diet whose text has unmatched words needs a note or the explicit "posoudil/a" tick. */
+export const reviewMissing = (unmapped: string[], note: string | null | undefined, ticked: boolean) => unmapped.length > 0 && !note?.trim() && !ticked;
+
+export type PersonDiet = { key: string; name: string; allergens: string[]; dietFlags: string[]; status: "confirmed" | "unverified" | "none"; rawText?: string; unmapped?: string[] };
 
 /** The meal's lines with the variants' swaps applied (a swap without its own quantity keeps the line's). */
 export function applyVariants(lines: MealLine[], variants: VariantInfo[]): MealLine[] {
@@ -151,7 +156,7 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
   // The applied variants' swapped-in ingredients count for "neověřeno" too.
   for (const v of variants.filter((x) => appliedVariantIds.includes(x.id)))
     for (const n of mealProfile(applyVariants(lines, [v]), ingredients).unconfirmed) if (!base.unconfirmed.includes(n)) base.unconfirmed.push(n);
-  const conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null }[] = [];
+  const conflicts: { key: string; name: string; allergens: string[]; diets: string[]; variantId: string | null; rawText?: string; unmapped?: string[] }[] = [];
   const special = new Map<string, { variantId: string; variantName: string; applied: boolean; names: string[] }>();
   const noVariant: string[] = [];
   for (const p of people) {
@@ -164,7 +169,7 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
       const left = personConflicts(mealProfile(applyVariants(lines, [v]), ingredients, v.clearsAllergens, dietDefs), p);
       return !left.allergens.length && !left.diets.length;
     });
-    conflicts.push({ key: p.key, name: p.name, ...c, variantId: clearing?.id ?? null });
+    conflicts.push({ key: p.key, name: p.name, ...c, variantId: clearing?.id ?? null, rawText: p.rawText, unmapped: p.unmapped });
     if (!clearing) noVariant.push(p.name);
     else {
       const g = special.get(clearing.id) ?? { variantId: clearing.id, variantName: clearing.name, applied: appliedVariantIds.includes(clearing.id), names: [] };
