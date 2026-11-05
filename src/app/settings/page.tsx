@@ -108,7 +108,9 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-xl p-4 md:p-8">
       <h1 className="mb-6 text-[22px] font-semibold text-ink">{t("nav.personalSettings")}</h1>
 
+      {/* SET1 (audit 2026-11-05): four sections -- Vzhled a jazyk · Menu · Google účet · E-maily. */}
       <div className="mb-6 flex flex-col gap-3 border-b border-mist pb-6">
+        <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("settingsPage.sectionAppearance")}</h2>
         <label className="text-[13px] text-ink-secondary">
           {t("settingsPage.languageLabel")}
           <select
@@ -132,6 +134,27 @@ export default function SettingsPage() {
             <option value="dark">{t("settingsPage.themeDark")}</option>
           </select>
         </label>
+      </div>
+
+      <div className="mb-6 flex flex-col gap-3 border-b border-mist pb-6">
+        <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("settingsPage.sectionMenu")}</h2>
+        <label className="text-[13px] text-ink-secondary">
+          {t("settingsPage.landingPathLabel")}
+          {/* Saved with the form below (E-maily) -- the native form attribute, no second save button. */}
+          <select form="personal-settings" value={landingPath} onChange={(e) => setLandingPath(e.target.value)} className={inputClass + " mt-1"}>
+            <option value="">{t("settingsPage.landingPathDefault")}</option>
+            {visibleNavSections(role, isSuperAdmin).map((section) => (
+              <optgroup key={section.sectionLabelKey} label={t(section.sectionLabelKey)}>
+                {section.items.map((item) => (
+                  <option key={item.path} value={item.path}>
+                    {t(item.labelKey)}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          <span className="mt-1 block text-[11.5px]">{t("settingsPage.landingSavedBelow")}</span>
+        </label>
 
         <div className="text-[13px] text-ink-secondary">
           <p className="mb-1">{t("settingsPage.modulesLabel")}</p>
@@ -148,9 +171,11 @@ export default function SettingsPage() {
           <span className="mt-1 block text-[11.5px]">{t("settingsPage.modulesHint")}</span>
         </div>
 
-        <div className="text-[13px] text-ink-secondary">
-          <p className="mb-1">{t("settingsPage.favoritesLabel")}</p>
-          <div className="flex flex-col gap-1.5">
+        <details className="text-[13px] text-ink-secondary">
+          <summary className="cursor-pointer text-ink">
+            {t("settingsPage.favoritesLabel")} ({prefs.menuFavorites.length})
+          </summary>
+          <div className="mt-2 flex flex-col gap-1.5">
             {MENU_SECTIONS.map((section) => {
               const items = MENU_ITEMS.filter((i) => i.section === section.id && navItemVisible(i, role, isSuperAdmin));
               if (items.length === 0) return null;
@@ -168,7 +193,7 @@ export default function SettingsPage() {
             })}
           </div>
           <span className="mt-1 block text-[11.5px]">{t("settingsPage.favoritesHint")}</span>
-        </div>
+        </details>
 
       </div>
 
@@ -213,27 +238,8 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <form onSubmit={save} className="flex flex-col gap-3">
-        <label className="text-[13px] text-ink-secondary">
-          {t("settingsPage.landingPathLabel")}
-          <select
-            value={landingPath}
-            onChange={(e) => setLandingPath(e.target.value)}
-            className={inputClass + " mt-1"}
-          >
-            <option value="">{t("settingsPage.landingPathDefault")}</option>
-            {visibleNavSections(role, isSuperAdmin).map((section) => (
-              <optgroup key={section.sectionLabelKey} label={t(section.sectionLabelKey)}>
-                {section.items.map((item) => (
-                  <option key={item.path} value={item.path}>
-                    {t(item.labelKey)}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-
+      <form id="personal-settings" onSubmit={save} className="flex flex-col gap-3">
+        <h2 className="mb-1 text-[15px] font-semibold text-ink">{t("settingsPage.sectionEmails")}</h2>
         <label className="text-[13px] text-ink-secondary">
           {t("settingsPage.emailSignatureLabel")}
           <input

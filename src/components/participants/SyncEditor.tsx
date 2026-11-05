@@ -9,8 +9,9 @@ import {
   REGNUM_TARGET,
   SYNC_INTERVALS,
   canCreate,
-  guessTarget,
   isWritableField,
+  guessMapping,
+  GUARDIAN_EMAIL_FIELD,
   type FieldInfo,
   type PlanRow,
   type SyncSettings,
@@ -30,6 +31,58 @@ const STATUS_CLASS: Record<string, string> = {
 };
 const PROBLEMS = new Set(["error", "unmatched", "seen_missing"]);
 const COUNT_ORDER = ["create", "update", "same", "skip", "documentsMarked", "unmatched", "seen_missing", "superseded", "excluded", "error", "failed"];
+
+type ResultRow = { row: number; name: string; status: string; errors: string[] };
+
+/** U7 (audit 2026-11-05): what happened to each row, and the problem rows as a CSV to fix and re-import. */
+function ResultTable({ rows }: { rows: ResultRow[] }) {
+  const { t } = useTranslations();
+  if (!rows.length) return null;
+  const reason = (r: ResultRow) => r.errors.map((e) => t(`participantSync.error.${e}`)).join(", ");
+  const problems = rows.filter((r) => PROBLEMS.has(r.status));
+  function downloadErrors() {
+    const q = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const csv = [[t("participantSync.result.row"), t("participantSync.result.name"), t("participantSync.result.status"), t("participantSync.result.reason")], ...problems.map((r) => [String(r.row), r.name, t(`participantSync.status.${r.status}`), reason(r)])]
+      .map((line) => line.map(q).join(";"))
+      .join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = "import-chyby.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+  return (
+    <div className="flex flex-col gap-2">
+      {problems.length > 0 && (
+        <button type="button" onClick={downloadErrors} className="self-start text-[13px] text-ember hover:underline">
+          {t("participantSync.result.downloadErrors", { count: String(problems.length) })}
+        </button>
+      )}
+      <div className="max-h-[60vh] overflow-auto rounded-lg border border-mist">
+        <table className="w-full text-[13px]">
+          <thead className="sticky top-0 bg-paper-2 text-left text-ink-secondary">
+            <tr>
+              <th className="px-2 py-1">{t("participantSync.result.row")}</th>
+              <th className="px-2 py-1">{t("participantSync.result.name")}</th>
+              <th className="px-2 py-1">{t("participantSync.result.status")}</th>
+              <th className="px-2 py-1">{t("participantSync.result.reason")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.row} className="border-t border-mist/60">
+                <td className="px-2 py-1 text-ink-secondary">{r.row}</td>
+                <td className="px-2 py-1 text-ink">{r.name || "—"}</td>
+                <td className={"px-2 py-1 " + (STATUS_CLASS[r.status] ?? "text-ink")}>{t(`participantSync.status.${r.status}`)}</td>
+                <td className="px-2 py-1 text-ink-secondary">{reason(r)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 export function CountsLine({ counts }: { counts: Record<string, number> }) {
   const { t } = useTranslations();
@@ -89,6 +142,7 @@ export default function SyncEditor({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Record<string, number> | null>(null);
+  const [resultRowsShown, setResultRows] = useState<ResultRow[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [editCell, setEditCell] = useState<{ rowKey: string; col: number; value: string } | null>(null);
   const requestNo = useRef(0);
@@ -132,12 +186,7 @@ export default function SyncEditor({
   function guessMappingIfEmpty(headers: string[]) {
     setSettings((s) => {
       if (Object.keys(s.mapping).length > 0) return s;
-      const mapping: Record<string, string> = {};
-      for (const h of headers) {
-        const g = guessTarget(h, fields);
-        if (g !== IGNORE) mapping[h.trim()] = g;
-      }
-      return { ...s, mapping };
+      return { ...s, mapping: guessMapping(headers, fields) };
     });
   }
 
@@ -218,7 +267,10 @@ export default function SyncEditor({
       const res = await fetch(`/api/events/${eventId}/participants/syncs/${saved.id}`, { method: "POST" });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.error) setError(driveErrorText(t, data.error.code, { identity: data.error.params?.identity || identityEmail }));
-      else if (res.ok && data) setResult(data.counts);
+      else if (res.ok && data) {
+        setResult(data.counts);
+        setResultRows(data.rows ?? []);
+      }
       else setError(t(`participantSync.runError.${data?.error ?? "failed"}`));
     } else if (saved) onClose(true);
     setBusy(false);
@@ -234,8 +286,10 @@ export default function SyncEditor({
     });
     const data = await res.json().catch(() => null);
     setBusy(false);
-    if (res.ok && data) setResult(data.counts);
-    else setError(t("participantSync.runError.failed"));
+    if (res.ok && data) {
+      setResult(data.counts);
+      setResultRows(data.rows ?? []);
+    } else setError(t("participantSync.runError.failed"));
   }
 
   const mappedCols = useMemo(
@@ -264,6 +318,7 @@ export default function SyncEditor({
         <p className="text-[14px] text-ink">
           <CountsLine counts={result} />
         </p>
+        <ResultTable rows={resultRowsShown} />
         <div className="flex gap-4">
           <button onClick={() => onClose(true)} className="text-[14px] text-ember hover:underline">
             ← {t("participantSync.backToList")}
@@ -345,7 +400,8 @@ export default function SyncEditor({
                     <option value={REGNUM_TARGET}>{t("participantSync.regNumberTarget")}</option>
                     {fields.map((f) => (
                       <option key={f.key} value={f.key}>
-                        {isWritableField(f) ? f.label : `${f.label} (${t("participantSync.matchOnly")})`}
+                        {/* The contact e-mail target writes the guardian row (U6): say so; the match list keeps "jen k párování". */}
+                        {f.key === GUARDIAN_EMAIL_FIELD ? t("participantSync.guardianEmailTarget") : isWritableField(f) ? f.label : `${f.label} (${t("participantSync.matchOnly")})`}
                       </option>
                     ))}
                   </select>

@@ -105,12 +105,12 @@ export default function EventParticipantsPage({
   );
   // The actually-displayed columns: the saved order, filtered to fields
   // still eligible (deactivated/removed fields drop out silently), falling
-  // back to "every eligible field, API order" when nothing's configured
-  // yet -- the old always-on behavior.
+  // back to no optional columns when nothing's configured (U9, audit 2026-11-05): the fixed ones -- name, age,
+  // status, documents (incl. the payment document), contact e-mail -- are the sensible default; the rest is opt-in.
   const activeColumns = useMemo(() => {
     const eligibleKeys = new Set(dynamicListFields.map((f) => f.key));
     const saved = (event?.participantsListColumns ?? []).filter((k) => eligibleKeys.has(k));
-    const keys = saved.length > 0 ? saved : dynamicListFields.map((f) => f.key);
+    const keys = saved;
     return keys.map((k) => dynamicListFields.find((f) => f.key === k)!).filter(Boolean);
   }, [dynamicListFields, event]);
 
@@ -323,15 +323,18 @@ export default function EventParticipantsPage({
         {t("participantsPage.statusAccepted")}
       </button>
     ) : (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          openCompose({ mode: "acceptance", participantIds: [p.id] });
-        }}
-        className="rounded-full bg-ember/15 px-2 py-0.5 text-ember hover:bg-ember/25"
-      >
-        {t("participantsPage.statusPendingAction")}
-      </button>
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span className="text-amber-700">{t("participantsPage.statusPending")}</span>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            openCompose({ mode: "acceptance", participantIds: [p.id] });
+          }}
+          className="rounded-md border border-ember px-2 py-0.5 text-ember hover:bg-ember/10"
+        >
+          {t("participantsPage.acceptButton")}
+        </button>
+      </span>
     );
 
   return (

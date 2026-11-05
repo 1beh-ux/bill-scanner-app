@@ -55,6 +55,25 @@ const rows: Row[] = [
   r("eventDetail.checklistDeadlineTask", "Zadat uzávěrku přihlášek", "Enter the registration deadline"),
   r("eventDetail.checklistDone", "hotovo", "done"),
   r("eventDetail.checklistTodo", "zbývá udělat", "still to do"),
+  // Phase 6 U6 / U7: participant import
+  r("participantSync.guardianEmailTarget", "E-mail zákonného zástupce", "Guardian e-mail"),
+  r("participantSync.result.row", "Řádek", "Row"),
+  r("participantSync.result.name", "Jméno", "Name"),
+  r("participantSync.result.status", "Výsledek", "Result"),
+  r("participantSync.result.reason", "Důvod", "Reason"),
+  r("participantSync.result.downloadErrors", "Stáhnout řádky s problémem (CSV, {count})", "Download the problem rows (CSV, {count})"),
+  r("participantSync.error.save_failed", "uložení selhalo", "saving failed"),
+  // Phase 6 U9
+  r("participantsPage.acceptButton", "Přijmout", "Accept"),
+  // Phase 6 PL1
+  r("planBoard.emptyIntro", "Program skládáte po dnech z knihovny aktivit: přidejte den a přetáhněte do něj aktivity.", "You build the programme day by day from the activity library: add a day and drag activities into it."),
+  r("planBoard.copyHint", "Přetažení přesouvá · s Alt/Ctrl kopíruje · přetažení na aktivitu = souběžně · spodní hrana mění délku · na dotyku nebo klávesnici: klepněte na aktivitu → Přesunout nebo kopírovat (i souběžně).", "Dragging moves · with Alt/Ctrl it copies · dropping on an activity = in parallel · the bottom edge changes the length · on touch or keyboard: tap the activity → Move or copy (in parallel too)."),
+  // Phase 6 SET1
+  r("settingsPage.sectionAppearance", "Vzhled a jazyk", "Appearance and language"),
+  r("settingsPage.sectionMenu", "Menu", "Menu"),
+  r("settingsPage.sectionEmails", "E-maily", "E-mails"),
+  r("settingsPage.landingSavedBelow", "Uloží se tlačítkem Uložit dole.", "Saved with the Save button below."),
+  r("billDriveSync.askAdmin", "Požádejte správce organizace o připojení Disku.", "Ask an organization admin to connect Drive."),
 ];
 
 async function main() {

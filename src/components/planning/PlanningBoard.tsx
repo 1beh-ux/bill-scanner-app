@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
+import HelpLink from "@/components/HelpLink";
 import { ChevronRight } from "lucide-react";
 import { useUiPrefs } from "@/lib/use-ui-prefs";
 import type { PlanState } from "@/lib/planning";
@@ -484,7 +485,25 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
               />
             ) : (
               <div className="rounded-lg border border-dashed border-mist p-8 text-center text-[14px] text-ink-secondary">
-                <p>{t("planBoard.noDays")}</p>
+                {/* PL1 (audit 2026-11-05): what this is, and the first step right here. */}
+                <p className="text-ink">{t("planBoard.emptyIntro")}</p>
+                <p className="mt-1">{t("planBoard.noDays")}</p>
+                <div className="mt-3 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
+                    onClick={async () => {
+                      const res = await fetch(`/api/events/${eventId}/planning/days`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source: "empty" }) }).catch(() => null);
+                      if (!res?.ok) return setError(t("planBoard.errorSaveFailed"));
+                      const next = (await res.json()) as PlanPayload;
+                      clearUndo();
+                      commit(next, next.days[0]?.id);
+                    }}
+                  >
+                    + {t("planBoard.addDay")}
+                  </button>
+                  <HelpLink slug="planovani" />
+                </div>
                 {view.dayTemplates.length === 0 && <p className="mt-2 text-[12px]">{t("planBoard.noTemplatesHint")}</p>}
               </div>
             )}

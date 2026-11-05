@@ -157,6 +157,8 @@ export function guessTarget(header: string, fields: FieldInfo[]): string {
   if (!h) return IGNORE;
   if (h.includes("narozen") || h.includes("datum nar") || h.includes("dob") || h.includes("birth")) return DOB_FIELD;
   if (h.includes("telefon") || h.includes("phone")) return GUARDIAN_PHONE_FIELD;
+  // An e-mail header is never a name ("E-mail zákonného zástupce" must not hit the zástupce rule, U5 audit 2026-11-05).
+  if (h.includes("e-mail") || h.includes("email") || h.includes("mail")) return GUARDIAN_EMAIL_FIELD;
   if (h.includes("vztah") || h.includes("relationship")) return GUARDIAN_RELATIONSHIP_FIELD;
   if (h.includes("rodič") || h.includes("rodic") || h.includes("zástupce") || h.includes("zastupce") || h.includes("guardian"))
     return GUARDIAN_NAME_FIELD;
@@ -166,9 +168,19 @@ export function guessTarget(header: string, fields: FieldInfo[]): string {
   if (h.includes("křestní") || h.includes("krestni") || h.includes("first name")) return FIRST_NAME_FIELD;
   if (h.includes("jméno") || h.includes("jmeno") || h.includes("name")) return NAME_FIELD;
   if (h.includes("skupina") || h.includes("oddíl") || h.includes("oddil") || h.includes("group")) return GROUP_FIELD;
-  if (h.includes("e-mail") || h.includes("email") || h.includes("kontakt")) return GUARDIAN_EMAIL_FIELD;
+  if (h.includes("kontakt")) return GUARDIAN_EMAIL_FIELD;
   const byLabel = fields.find((f) => h.includes(f.label.toLowerCase()));
   return byLabel ? byLabel.key : IGNORE;
+}
+
+/**
+ * The whole header row's guess: guessTarget per column, then a plain "Jméno" next to a separate "Příjmení"
+ * column is the first name, not the combined name (U5).
+ */
+export function guessMapping(headers: string[], fields: FieldInfo[]): Record<string, string> {
+  const guesses = headers.map((h) => [h.trim(), guessTarget(h, fields)] as const).filter(([, g]) => g !== IGNORE);
+  const hasLast = guesses.some(([, g]) => g === LAST_NAME_FIELD);
+  return Object.fromEntries(guesses.map(([h, g]) => [h, hasLast && g === NAME_FIELD ? FIRST_NAME_FIELD : g]));
 }
 
 /** Diacritics-, case- and whitespace-insensitive ("Novak" matches "Novák"). */
@@ -442,6 +454,17 @@ export function planSync(input: {
     }
   }
   return plan;
+}
+
+/** U7 (audit 2026-11-05): one line per sheet row for the result page; a row whose save threw is an error. */
+export function resultRows(plan: PlanRow[], failedRows: number[]) {
+  const failed = new Set(failedRows);
+  return plan.map((r) => ({
+    row: r.rowNumber,
+    name: r.participant?.name ?? r.create?.name ?? "",
+    status: failed.has(r.rowNumber) ? ("error" as const) : r.status,
+    errors: failed.has(r.rowNumber) ? ["save_failed"] : r.errors,
+  }));
 }
 
 export function countPlan(plan: PlanRow[]): Record<string, number> {

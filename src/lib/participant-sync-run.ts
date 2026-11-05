@@ -11,7 +11,7 @@ import { readSheetTable } from "@/lib/sheet-import";
 import { fieldTextValues } from "@/lib/document-variables";
 import { linkChildrenIfConnected, withMembers } from "@/lib/children";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
-import {
+import { resultRows,
   MATCH_BY_NAME,
   REGNUM_TARGET,
   countPlan,
@@ -213,7 +213,7 @@ const ISSUE_STATUSES = new Set(["unmatched", "seen_missing", "error"]);
  * seen keys + the run summary. One run per connection at a time (a lock in
  * the connection itself, expiring after 10 min in case a run died).
  */
-export async function runSavedSync(eventId: string, syncId: string, auto: boolean): Promise<SyncRunSummary | { error: "not_found" | "already_running" }> {
+export async function runSavedSync(eventId: string, syncId: string, auto: boolean): Promise<(SyncRunSummary & { rows?: ReturnType<typeof resultRows> }) | { error: "not_found" | "already_running" }> {
   let sync: ParticipantSync | undefined;
   let busy = false;
   await updateSyncs(eventId, (list) =>
@@ -229,6 +229,7 @@ export async function runSavedSync(eventId: string, syncId: string, auto: boolea
 
   const summary: SyncRunSummary = { at: new Date().toISOString(), auto, counts: {}, issues: [] };
   let seen: string[] = [];
+  let rows: ReturnType<typeof resultRows> = [];
   try {
     const sheet = await readSyncSheet(eventId, sync.sheetId, sync.tab);
     if ("error" in sheet) summary.error = sheet.error;
@@ -238,6 +239,7 @@ export async function runSavedSync(eventId: string, syncId: string, auto: boolea
       const applied = await applyPlan(eventId, plan, markDocument);
       summary.counts = applied.counts;
       seen = applied.seen;
+      rows = resultRows(plan, applied.failedRows);
       const failed = new Set(applied.failedRows);
       summary.issues = plan
         .filter((r) => ISSUE_STATUSES.has(r.status) || failed.has(r.rowNumber))
@@ -252,7 +254,8 @@ export async function runSavedSync(eventId: string, syncId: string, auto: boolea
       })
     );
   }
-  return summary;
+  // rows go to the page only, never into the stored summary.
+  return { ...summary, rows };
 }
 
 /** Cron: every due auto-sync connection of every open event. */

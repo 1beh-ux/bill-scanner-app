@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "@/lib/i18n";
 import { useEffect, useState } from "react";
 import { runDriveExport, type ExportSummary } from "@/lib/drive-export-client";
 import { driveErrorText, type DriveErrorInfo } from "@/lib/drive-error-messages";
@@ -19,6 +20,8 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
   // An export started elsewhere (another tab, or this page before a reload) still runs: the button
   // stays off and the page looks every few seconds until it's done (Event.driveExportLockedUntil).
   const [elsewhere, setElsewhere] = useState(() => !!lockedUntil && new Date(lockedUntil) > new Date());
+  // Only admins can connect Drive (audit 2026-11-05): others are told whom to ask.
+  const { role } = useTranslations();
   useEffect(() => {
     if (!elsewhere) return;
     const timer = setInterval(async () => {
@@ -59,7 +62,7 @@ export default function DriveBillsSync({ eventId, bills, exportFolderId, manifes
     return (
       <p className="mb-4 text-[13px] text-ink-secondary">
         {t("billDriveSync.noFolder")}{" "}
-        <a href={`/events/${eventId}?tab=pripojeni`} className="text-ember hover:underline">{t("billDriveSync.setFolder")}</a>
+        {role === "admin" ? (<a href={`/events/${eventId}?tab=pripojeni`} className="text-ember hover:underline">{t("billDriveSync.setFolder")}</a>) : t("billDriveSync.askAdmin")}
       </p>
     );
   }

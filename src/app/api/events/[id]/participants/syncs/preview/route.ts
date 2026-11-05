@@ -4,7 +4,7 @@ import { allowedParticipantFieldKeys, requireAnyModuleAccess } from "@/lib/modul
 import { httpStatusForDriveError } from "@/lib/drive-errors";
 import { extractSpreadsheetId } from "@/lib/sheet-import";
 import { applyPlan, loadImportFields, loadSyncs, planFor, readSyncSheet, type Table } from "@/lib/participant-sync-run";
-import { countPlan, sanitizeSettings } from "@/lib/participant-sync";
+import { resultRows, countPlan, sanitizeSettings } from "@/lib/participant-sync";
 
 const MAX_ROWS = 5000;
 const MAX_COLS = 200;
@@ -58,5 +58,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     plan: plan.map((r) => ({ ...r, create: undefined, patch: undefined })), // the page shows `changes`
     counts: result?.counts ?? countPlan(plan),
     ran: !!result,
+    ...(result && { rows: resultRows(plan, result.failedRows) }),
   });
 }

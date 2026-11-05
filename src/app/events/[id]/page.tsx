@@ -1,5 +1,6 @@
 "use client";
 
+import { serialQueue } from "@/lib/serial-queue";
 import PublicTextsEditor from "@/components/PublicTextsEditor";
 import AppearanceEditor from "@/components/AppearanceEditor";
 import { useEffect, useState, use } from "react";
@@ -1216,18 +1217,28 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
     load();
   }, [eventId]);
 
-  async function toggleModule(moduleKey: ModuleKey, enabled: boolean) {
+  // U4 (audit 2026-11-05): the box flips at once, the PATCHes go one at a time in click order, a failed one
+  // flips back with an error; no reload in between, so rapid clicks are never overwritten.
+  const [enqueue] = useState(serialQueue);
+  const [saved, setSaved] = useState(false);
+  function toggleModule(moduleKey: ModuleKey, enabled: boolean) {
     setError(null);
-    const res = await fetch(`/api/events/${eventId}/modules`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ moduleKey, enabled }),
-    });
-    if (!res.ok) {
-      setError(t("accessTab.errorSaveFailed"));
-      return;
-    }
-    load();
+    setSaved(false);
+    setModules((ms) => ms.map((m) => (m.moduleKey === moduleKey ? { ...m, enabled } : m)));
+    enqueue(async () => {
+      const res = await fetch(`/api/events/${eventId}/modules`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleKey, enabled }),
+      }).catch(() => null);
+      if (!res?.ok) throw new Error("save failed");
+    }).then(
+      () => setSaved(true),
+      () => {
+        setModules((ms) => ms.map((m) => (m.moduleKey === moduleKey ? { ...m, enabled: !enabled } : m)));
+        setError(t("accessTab.errorSaveFailed"));
+      }
+    );
   }
 
   if (loading) return <div className="p-4 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
@@ -1257,6 +1268,7 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
 
       <h2 className="mb-1 text-[16px] font-semibold text-ink">{t("accessTab.modulesTitle")}</h2>
       <p className="mb-3 text-[12px] text-ink-secondary">{t("accessTab.modulesHelp")}</p>
+      {saved && !error && <p className="mb-2 text-[13px] text-pine">{t("eventBasics.saved")}</p>}
       <div className="flex flex-col gap-2">
         {modules.map((m) => (
           <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">

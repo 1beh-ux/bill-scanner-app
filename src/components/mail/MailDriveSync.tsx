@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "@/lib/i18n";
 import { useState } from "react";
 
 // Pošta: "Synchronizovat s Diskem" -- documents per child and the participant status sheet into the
@@ -13,6 +14,8 @@ export default function MailDriveSync({ eventId, className, t }: { eventId: stri
   const [results, setResults] = useState<Result[] | null>(null);
   const [folder, setFolder] = useState<boolean | null>(null);
 
+  // Only admins can connect Drive (audit 2026-11-05): others are told whom to ask.
+  const { role } = useTranslations();
   async function run() {
     setBusy(true);
     setResults(null);
@@ -32,7 +35,7 @@ export default function MailDriveSync({ eventId, className, t }: { eventId: stri
         <span className="absolute right-0 top-full z-20 mt-1 block w-72 rounded-lg border border-mist bg-paper-2 p-2 text-[12.5px] shadow-lg" onClick={() => setResults(null)}>
           {folder === false && (
             <span className="block text-amber-700">
-              {t("mailDriveSync.noFolder")} <a href={`/events/${eventId}?tab=pripojeni`} className="text-ember hover:underline">{t("billDriveSync.setFolder")}</a>
+              {t("mailDriveSync.noFolder")} {role === "admin" ? (<a href={`/events/${eventId}?tab=pripojeni`} className="text-ember hover:underline">{t("billDriveSync.setFolder")}</a>) : t("billDriveSync.askAdmin")}
             </span>
           )}
           {results.length === 0 && folder !== false && <span className="block text-ink-secondary">{t("documentSync.nothingConnected")}</span>}
