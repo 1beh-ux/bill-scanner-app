@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { participantDietState } from "@/lib/kitchen/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -15,7 +16,7 @@ export async function GET(
   const { id } = await params;
   const participant = await prisma.participant.findUnique({
     where: { id },
-    include: { guardians: true },
+    include: { guardians: true, diet: true },
   });
   if (!participant) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -23,7 +24,9 @@ export async function GET(
   const denied = await requireModuleAccess(user, participant.eventId, "health");
   if (denied) return denied;
 
-  return NextResponse.json(participant);
+  // D1 (audit2): the kitchen's view of the diet, next to the parents' allergy text on the Zdraví card.
+  const { diet, ...rest } = participant;
+  return NextResponse.json({ ...rest, dietState: await participantDietState(participant) });
 }
 
 export async function PATCH(

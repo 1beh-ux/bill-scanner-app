@@ -24,6 +24,17 @@ export const ALLERGENS: { code: AllergenCode; no: number; cs: string; en: string
 ];
 export const ALLERGEN_CODES = ALLERGENS.map((a) => a.code) as string[];
 
+// K4 (audit2): short names for the kitchen ("1 – lepek"); the official names stay in tooltips and forms.
+const SHORT: Record<string, [string, string]> = {
+  gluten: ["lepek", "gluten"], crustaceans: ["korýši", "crustaceans"], eggs: ["vejce", "eggs"], fish: ["ryby", "fish"],
+  peanuts: ["arašídy", "peanuts"], soy: ["sója", "soy"], milk: ["mléko", "milk"], nuts: ["ořechy", "nuts"],
+  celery: ["celer", "celery"], mustard: ["hořčice", "mustard"], sesame: ["sezam", "sesame"], sulphites: ["siřičitany", "sulphites"],
+  lupin: ["vlčí bob", "lupin"], molluscs: ["měkkýši", "molluscs"],
+};
+/** "1 – lepek": number + short name, in the official order. */
+export const allergenLabels = (codes: string[], lang = "cs") =>
+  ALLERGENS.filter((a) => codes.includes(a.code)).map((a) => `${a.no} – ${SHORT[a.code]?.[lang === "en" ? 1 : 0] ?? a.cs}`);
+
 /**
  * Diets: what a person may not eat beyond allergens. The organization's own list (Šablony -> Kuchyně, ListTemplate
  * kitchen_diet); these are the defaults it starts with. A diet is broken by an ingredient that contains one of
@@ -100,6 +111,15 @@ export type VariantInfo = { id: string; name: string; clearsAllergens: string[];
 // the chips wherever a diet is shown, so "anafylaxe" is never hidden behind "no allergens".
 /** Confirming a diet whose text has unmatched words needs a note or the explicit "posoudil/a" tick. */
 export const reviewMissing = (unmapped: string[], note: string | null | undefined, ticked: boolean) => unmapped.length > 0 && !note?.trim() && !ticked;
+
+/** K5 (audit2): what the proposal (read from the parent's text) had that the confirmation leaves out. */
+export const droppedItems = (proposal: { allergens: string[]; dietFlags: string[] }, confirmed: { allergens: string[]; dietFlags: string[] }) => [
+  ...proposal.allergens.filter((a) => !confirmed.allergens.includes(a)),
+  ...proposal.dietFlags.filter((d) => !confirmed.dietFlags.includes(d)),
+];
+
+/** Dropping proposed items needs a typed reason or the explicit "nemá tyto alergie" confirmation. */
+export const dropNeedsReason = (dropped: string[], reason: string | null | undefined, confirmedNone: boolean) => dropped.length > 0 && !reason?.trim() && !confirmedNone;
 
 export type PersonDiet = { key: string; name: string; allergens: string[]; dietFlags: string[]; status: "confirmed" | "unverified" | "none"; rawText?: string; unmapped?: string[] };
 
@@ -187,6 +207,8 @@ export function entryConflicts(lines: MealLine[], ingredients: Map<string, Ingre
     noVariant,
     uncovered,
     unverifiedPeople,
+    // K4 (audit2): who they are, so the drawer can name them.
+    unverifiedNames: people.filter((p) => p.status === "unverified").map((p) => p.name),
     level: uncovered.length ? ("red" as const) : unverifiedPeople || base.unconfirmed.length ? ("amber" as const) : ("ok" as const),
   };
 }

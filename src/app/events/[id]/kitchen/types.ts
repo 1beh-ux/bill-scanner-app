@@ -10,6 +10,7 @@ export type Check = {
   noVariant: string[];
   uncovered: string[];
   unverifiedPeople: number;
+  unverifiedNames?: string[];
   level: "red" | "amber" | "ok";
 };
 export type Entry = {

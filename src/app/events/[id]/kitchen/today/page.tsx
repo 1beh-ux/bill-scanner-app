@@ -126,7 +126,7 @@ function CookCard({ eventId, e, slot, notes, unlockMinutes, offline, onChanged }
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
           <CheckBadge level={c.level} />
           {c.uncovered.length > 0 && <span className="text-red-700">{t("kitchen.today.uncovered", { names: c.uncovered.join(", ") })}</span>}
-          {c.unverifiedPeople > 0 && <span className="text-amber-700">{t("kitchen.plan.unverifiedPeople", { n: String(c.unverifiedPeople) })}</span>}
+          {c.unverifiedPeople > 0 && <span className="text-amber-700">{t("kitchen.plan.unverifiedPeople", { n: String(c.unverifiedPeople) })}{!!c.unverifiedNames?.length && `: ${c.unverifiedNames.join(", ")}`}</span>}
           {c.unconfirmedIngredients.length > 0 && <span className="text-amber-700">{t("kitchen.plan.unconfirmedIngredients", { names: c.unconfirmedIngredients.join(", ") })}</span>}
         </div>
       )}

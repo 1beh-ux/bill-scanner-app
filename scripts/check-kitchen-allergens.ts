@@ -1,7 +1,7 @@
 // Self-check for the allergen text mapping and the conflict engine (src/lib/kitchen/allergens.ts).
 // npx tsx scripts/check-kitchen-allergens.ts
 import assert from "node:assert/strict";
-import { entryConflicts, mapAllergyText, reviewMissing, type IngredientInfo } from "../src/lib/kitchen/allergens";
+import { allergenLabels, dropNeedsReason, droppedItems, entryConflicts, mapAllergyText, reviewMissing, type IngredientInfo } from "../src/lib/kitchen/allergens";
 
 // Czech samples, diacritics-insensitive; nothing is dropped.
 assert.deepEqual(mapAllergyText("ořechy, lepek"), { allergens: ["gluten", "nuts"], dietFlags: [], unmapped: [] });
@@ -69,5 +69,19 @@ assert.equal(reviewMissing([], null, false), false);
   const r = entryConflicts([{ ingredientId: "peanut", qty: 1, optional: false }], ings, [], [], [{ key: "p:1", name: "Eva", allergens: ["peanuts"], dietFlags: [], status: "confirmed", rawText: "arašídy – anafylaxe", unmapped: ["arašídy – anafylaxe"] }]);
   assert.equal(r.conflicts[0].rawText, "arašídy – anafylaxe");
   assert.deepEqual(r.conflicts[0].unmapped, ["arašídy – anafylaxe"]);
+}
+// audit2 K5: confirming with fewer than the parents' text says is blocked without a reason or the explicit flag.
+{
+  const proposal = mapAllergyText("lepek, ořechy");
+  assert.deepEqual(proposal.allergens, ["gluten", "nuts"]);
+  const dropped = droppedItems(proposal, { allergens: [], dietFlags: [] });
+  assert.deepEqual(dropped, ["gluten", "nuts"]);
+  assert.equal(dropNeedsReason(dropped, "", false), true, "nothing ticked, no reason, no flag -> rejected");
+  assert.equal(dropNeedsReason(dropped, "rodiče: alergie odezněla", false), false);
+  assert.equal(dropNeedsReason(dropped, null, true), false);
+  assert.deepEqual(droppedItems(proposal, { allergens: ["gluten", "nuts", "milk"], dietFlags: [] }), [], "adding more is fine");
+  assert.equal(dropNeedsReason([], null, false), false);
+  // K4: number + short name.
+  assert.deepEqual(allergenLabels(["milk", "gluten"]), ["1 – lepek", "7 – mléko"]);
 }
 console.log("kitchen allergens ok");

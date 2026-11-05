@@ -5,6 +5,8 @@ import MedPlansEditor from "@/components/health/MedPlansEditor";
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
+import { AllergenList } from "@/components/kitchen/ui";
+import { useDiets } from "@/components/kitchen/useDiets";
 import { type IncidentClientData } from "@/components/health/IncidentFormModal";
 import IncidentDetailModal from "@/components/health/IncidentDetailModal";
 import SendSummaryModal from "@/components/health/SendSummaryModal";
@@ -43,6 +45,7 @@ type Guardian = {
 };
 
 type ParticipantDetail = {
+  dietState?: { status: "confirmed" | "unverified" | "none"; allergens: string[]; dietFlags: string[] } | null;
   id: string;
   eventId: string;
   name: string;
@@ -89,6 +92,7 @@ export default function ParticipantDetailPage({
   const { id: eventId, participantId } = use(params);
   const [driveFolderError, setDriveFolderError] = useState<string | null>(null);
   const { t } = useTranslations();
+  const { name: dietName } = useDiets();
   const confirm = useConfirm();
   const router = useRouter();
   const [deleting, setDeleting] = useState(false);
@@ -649,6 +653,23 @@ export default function ParticipantDetailPage({
             .filter(Boolean)
             .join(" · ")}
         </p>
+        {/* D1 (audit2): the kitchen's confirmed diet next to the parents' text (in the fields below). */}
+        {participant.dietState && participant.dietState.status !== "none" && (
+          <p className={"mt-1 text-[13px] " + (participant.dietState.status === "confirmed" ? "text-ink" : "text-amber-700")}>
+            {t("healthDiet.label")}{" "}
+            {participant.dietState.status === "confirmed" ? (
+              <>
+                {t("healthDiet.confirmed")} <AllergenList codes={participant.dietState.allergens} empty={t("kitchen.diets.nothing")} />
+                {participant.dietState.dietFlags.length > 0 && ` · ${participant.dietState.dietFlags.map(dietName).join(", ")}`}
+              </>
+            ) : (
+              t("healthDiet.unverified")
+            )}{" "}
+            <a href={`/events/${eventId}/kitchen/diets`} className="text-ember hover:underline">
+              {t("kitchen.navDiets")} →
+            </a>
+          </p>
+        )}
         {/* Every action in one row, all the same size (2026-10-27); "+ záznam" first -- the most common one.
             "Upravit" opens the central roster's section editor (core fields + Zdravotní poznámky);
             Smazat stays in the overflow menu, confirmed with the shared dialog. */}

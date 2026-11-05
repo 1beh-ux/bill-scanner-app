@@ -99,6 +99,19 @@ export async function allergyFieldKey(eventId: string, setting: string | null | 
   return (fields.find((f) => f.key === "alergie" || f.key === "allergies") ?? fields.find((f) => /alergi/i.test(f.label)))?.key ?? null;
 }
 
+/**
+ * D1 (audit2): one participant's diet as Kuchyně sees it -- confirmed (and still matching the parents' text),
+ * unverified (text nobody confirmed, or changed since), or none. Null when the event has no allergy field.
+ */
+export async function participantDietState(p: { eventId: string; customFieldValues: unknown; diet: { allergens: string[]; dietFlags: string[]; rawTextHash: string } | null }) {
+  const settings = await prisma.eventKitchenSettings.findUnique({ where: { eventId: p.eventId }, select: { allergyFieldKey: true } });
+  const key = await allergyFieldKey(p.eventId, settings?.allergyFieldKey);
+  if (!key) return null;
+  const raw = String(((p.customFieldValues as Record<string, unknown> | null) ?? {})[key] ?? "").trim();
+  if (p.diet && p.diet.rawTextHash === hashText(raw)) return { status: "confirmed" as const, allergens: p.diet.allergens, dietFlags: p.diet.dietFlags };
+  return { status: raw || p.diet ? ("unverified" as const) : ("none" as const), allergens: [], dietFlags: [] };
+}
+
 /** Everything the plan, cook sheet and shopping list compute from (one event). */
 export async function kitchenContext(event: { id: string; organizationId: string; startDate: Date; endDate: Date }) {
   await ensureKitchenLists(event.id, event.organizationId);

@@ -1,6 +1,7 @@
 "use client";
 
 import DietWarnings, { UnmappedChip } from "@/components/kitchen/DietWarnings";
+import { pluralForm } from "@/lib/plural";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { DndContext, MouseSensor, TouchSensor, KeyboardSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { useTranslations } from "@/lib/i18n";
@@ -470,7 +471,7 @@ function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged
         <section className="mb-3 rounded-lg border border-mist p-2 text-[13px]">
           <div className="font-medium text-ink">{t("kitchen.plan.headcount")}</div>
           <p className="text-ink-secondary">{t("kitchen.plan.headcountDetail", { participants: String(e.headcount.participants), adults: String(e.headcount.adults), extra: String(e.headcount.extra), portions: e.headcount.portions.toLocaleString("cs-CZ") })}</p>
-          {e.headcount.missingDob > 0 && <p className="text-amber-700">{t("kitchen.plan.missingDob", { n: String(e.headcount.missingDob) })}</p>}
+          {e.headcount.missingDob > 0 && <p className="text-amber-700">{t(`kitchen.plan.missingDob.${pluralForm(e.headcount.missingDob, lang)}`, { n: String(e.headcount.missingDob) })}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1">
               <input type="radio" disabled={!draft} checked={e.headcountMode === "auto"} onChange={() => patch({ headcountMode: "auto" })} /> {t("kitchen.plan.modeAuto")}
@@ -516,6 +517,7 @@ function EntryDrawer({ base, eventId, entry: e, slots, notes, onClose, onChanged
             {c.unverifiedPeople > 0 && (
               <a href={`/events/${eventId}/kitchen/diets`} className="block text-amber-700 hover:underline">
                 {t("kitchen.plan.unverifiedPeople", { n: String(c.unverifiedPeople) })}
+                {!!c.unverifiedNames?.length && `: ${c.unverifiedNames.join(", ")}`}
               </a>
             )}
             {c.conflicts.map((x) => (

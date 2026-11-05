@@ -69,7 +69,7 @@ export default function KitchenLibraryPage({ params }: { params: Promise<{ id: s
       </div>
       {tab === "meals" &&
         (openMeal ? (
-          <MealDetail mealId={openMeal} ingredients={ingredients} onClose={() => { setOpenMeal(null); load(); }} onOpen={setOpenMeal} />
+          <MealDetail mealId={openMeal} ingredients={ingredients} onClose={() => { setOpenMeal(null); load(); }} onOpen={setOpenMeal} onSaved={load} />
         ) : (
           <MealList meals={meals} archived={archived} setArchived={setArchived} onOpen={setOpenMeal} />
         ))}
@@ -161,7 +161,7 @@ const toDraft = (m: MealFull, ingredients: Ingredient[]): MealDraft => ({
   })),
 });
 
-function MealDetail({ mealId, ingredients, onClose, onOpen }: { mealId: string; ingredients: Ingredient[]; onClose: () => void; onOpen: (id: string) => void }) {
+function MealDetail({ mealId, ingredients, onClose, onOpen, onSaved }: { mealId: string; ingredients: Ingredient[]; onClose: () => void; onOpen: (id: string) => void; onSaved: () => Promise<void> }) {
   const { t, lang } = useTranslations();
   const confirm = useConfirm();
   const [m, setM] = useState<MealFull | null>(null);
@@ -181,7 +181,11 @@ function MealDetail({ mealId, ingredients, onClose, onOpen }: { mealId: string; 
   async function save(body: Record<string, unknown>) {
     const res = await send(mealId === "new" ? "/api/kitchen/meals" : url, mealId === "new" ? "POST" : "PATCH", body);
     if (!res?.ok) return (await res?.json().catch(() => null))?.error ?? "failed";
-    if (mealId === "new") onOpen((await res.json()).id);
+    // K3 (audit2): new inline ingredients exist only after the save -- reload the page's ingredient list
+    // (Suroviny tab, the editor's allergen line) before the editor redraws, so nothing shows a pre-save state.
+    const created = mealId === "new" ? (await res.json()).id : null;
+    await onSaved();
+    if (created) onOpen(created);
     else {
       await load();
       setVersion((v) => v + 1);

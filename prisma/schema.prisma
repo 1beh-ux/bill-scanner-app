@@ -2545,6 +2545,10 @@ model ParticipantDiet {
   // were when confirmed, and that the confirmer ticked "Nepřiřazené výrazy jsem posoudil/a" (else a note is required).
   unmapped         String[] @default([])
   unmappedReviewed Boolean  @default(false) @map("unmapped_reviewed")
+  // audit2 K5: proposed allergens / diets the confirmer left unticked, and why ("" = ticked "Potvrzuji,
+  // že dítě nemá tyto alergie").
+  dropped          String[] @default([])
+  droppedReason    String?  @map("dropped_reason")
 
   participant Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
 

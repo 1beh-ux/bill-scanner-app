@@ -7,6 +7,7 @@ import { AllergenPicker, DietPicker } from "@/components/adults/AdultForm";
 import { AllergenList, NoAccess, btn, btnPrimary, inputSm, send } from "@/components/kitchen/ui";
 import { useDiets } from "@/components/kitchen/useDiets";
 import { UnmappedChip } from "@/components/kitchen/DietWarnings";
+import { ALLERGEN_CODES, allergenLabels, dropNeedsReason, droppedItems } from "@/lib/kitchen/allergens";
 
 // Strava účastníků: each participant's allergy answer with what the app reads in it (a proposal), confirmed
 // by a person. Unconfirmed = "neověřeno" everywhere -- never "no allergy". A text changed after the
@@ -18,7 +19,7 @@ type Row = {
   status: "confirmed" | "unverified" | "none";
   changed: boolean;
   proposal: { allergens: string[]; dietFlags: string[]; unmapped: string[] };
-  review: { allergens: string[]; dietFlags: string[]; note: string | null; confirmedAt: string; unmapped: string[]; unmappedReviewed: boolean } | null;
+  review: { allergens: string[]; dietFlags: string[]; note: string | null; confirmedAt: string; unmapped: string[]; unmappedReviewed: boolean; dropped: string[]; droppedReason: string | null } | null;
 };
 type AdultRow = { id: string; childId: string; name: string; eats: boolean; allergens: string[]; dietFlags: string[]; dietNote: string | null };
 type Data = { allergyFieldKey: string | null; fields: { key: string; label: string }[]; participants: Row[]; adults: AdultRow[] };
@@ -102,10 +103,18 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
   const [reviewed, setReviewed] = useState(!!p.review?.unmappedReviewed);
   const [error, setError] = useState<string | null>(null);
   const needsReview = p.proposal.unmapped.length > 0 && !note.trim() && !reviewed;
+  // K5 (audit2): what the parent's text says and the ticks leave out -- blocks until explained.
+  const dropped = droppedItems(p.proposal, { allergens, dietFlags });
+  const [droppedReason, setDroppedReason] = useState(p.review?.droppedReason ?? "");
+  const [confirmNoAllergy, setConfirmNoAllergy] = useState(false);
+  const needsDropReason = dropNeedsReason(dropped, droppedReason, confirmNoAllergy);
   async function confirmIt() {
     setError(null);
-    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: p.participantId, allergens, dietFlags, note, unmappedReviewed: reviewed }) }).catch(() => null);
-    if (!res?.ok) return setError(t(res?.status === 400 ? "kitchen.dietWarnings.needsReview" : "kitchen.dietWarnings.saveFailed"));
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: p.participantId, allergens, dietFlags, note, unmappedReviewed: reviewed, droppedReason, confirmNoAllergy }) }).catch(() => null);
+    if (!res?.ok) {
+      const code = ((await res?.json().catch(() => null)) as { error?: string } | null)?.error;
+      return setError(t(code === "dropped_needs_reason" ? "kitchen.dropped.needsReason" : res?.status === 400 ? "kitchen.dietWarnings.needsReview" : "kitchen.dietWarnings.saveFailed"));
+    }
     setEditing(false);
     onChanged();
   }
@@ -150,9 +159,19 @@ function DietRow({ url, p, onChanged }: { url: string; p: Row; onChanged: () => 
             </label>
           )}
           {needsReview && <p className="text-[12px] text-amber-800">{t("kitchen.dietWarnings.needsReview")}</p>}
+          {dropped.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-lg border border-red-300 bg-red-50 p-2 text-[13px] text-red-900">
+              <p className="font-medium">{t("kitchen.dropped.warning", { items: dropped.map((c) => (ALLERGEN_CODES.includes(c) ? allergenLabels([c])[0] : dietName(c))).join(", ") })}</p>
+              <input value={droppedReason} onChange={(e) => setDroppedReason(e.target.value)} placeholder={t("kitchen.dropped.reason")} className={inputSm} />
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={confirmNoAllergy} onChange={(e) => setConfirmNoAllergy(e.target.checked)} />
+                {t("kitchen.dropped.confirmNone")}
+              </label>
+            </div>
+          )}
           {error && <p className="text-[12px] text-red-700">{error}</p>}
           <div className="flex flex-wrap gap-3">
-            <button type="button" onClick={confirmIt} disabled={needsReview} className={btnPrimary}>
+            <button type="button" onClick={confirmIt} disabled={needsReview || needsDropReason} className={btnPrimary}>
               {t("kitchen.diets.confirm")}
             </button>
             {p.review && (

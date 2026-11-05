@@ -77,6 +77,17 @@ const rows: Row[] = [
   // Edited in older seeds that deploy.sh doesn't run (U2, Lidé naming): repeated here so they reach production.
   r("mailTab.questionnaireHint", "Odkaz je dostupný jako {questionnaire_url} v e-mailech i dokumentech. Vyplnění dotazníku značte ručně jako typ dokumentu (Šablony → Pošta).", "The link is available as {questionnaire_url} in both emails and documents. Track completion manually as a document type (Templates → Mail)."),
   r("children.intro", "Lidé napříč všemi akcemi a roky — děti, dospělí i dospělí mimo organizaci. Účastníci se k osobě propojují podle jména a data narození. Používá se jen u akcí, které mají zapnuté „Připojeno k registraci“ — ostatní akce fungují beze změny.", "People across all events and years — children, adults and adults from outside the organization. Participants are linked by name and birth date. Only used by events with “Connected to registration” on — other events work unchanged."),
+  // audit2 Phase A
+  r("kitchen.dropped.warning", "Text rodičů uvádí, co jste nezaškrtli: {items}. Napište důvod, nebo potvrďte, že je dítě nemá.", "The parents' text mentions what you left unticked: {items}. Give a reason, or confirm the child doesn't have them."),
+  r("kitchen.dropped.reason", "Důvod (např. podle rodičů už alergii nemá)", "Reason (e.g. the parents say the allergy is gone)"),
+  r("kitchen.dropped.confirmNone", "Potvrzuji, že dítě nemá tyto alergie / diety", "I confirm the child has none of these allergies / diets"),
+  r("kitchen.dropped.needsReason", "Chybí důvod, proč nezaškrtnuté alergie / diety z textu rodičů neplatí.", "Missing a reason why the unticked allergies / diets from the parents' text don't apply."),
+  r("kitchen.plan.missingDob.one", "{n} člověk nemá datum narození – počítá se jako 1,0 porce.", "{n} person has no birth date – counts as 1.0 portion."),
+  r("kitchen.plan.missingDob.few", "{n} lidé nemají datum narození – počítají se jako 1,0 porce.", "{n} people have no birth date – they count as 1.0 portion."),
+  r("kitchen.plan.missingDob.many", "{n} lidí nemá datum narození – počítají se jako 1,0 porce.", "{n} people have no birth date – they count as 1.0 portion."),
+  r("healthDiet.label", "Strava (Kuchyně):", "Diet (Kitchen):"),
+  r("healthDiet.confirmed", "ověřeno –", "confirmed –"),
+  r("healthDiet.unverified", "neověřeno", "not confirmed"),
 ];
 
 async function main() {

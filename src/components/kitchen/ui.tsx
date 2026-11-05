@@ -1,7 +1,7 @@
 "use client";
 
 import { useTranslations } from "@/lib/i18n";
-import { ALLERGENS } from "@/lib/kitchen/allergens";
+import { allergenLabels, ALLERGENS } from "@/lib/kitchen/allergens";
 import { formatQty } from "@/lib/kitchen/sizing";
 
 // Kuchyně, shared bits of the screens.
@@ -35,16 +35,12 @@ export function Qty({ q, unit, altName, altQty }: { q: number; unit: string; alt
   );
 }
 
-/** The allergen codes as their official numbers with names in the tooltip ("1, 7"). */
+/** The allergens as number + short name ("1 – lepek, 7 – mléko", K4 audit2); official names in the tooltip. */
 export function AllergenList({ codes, empty }: { codes: string[]; empty?: string }) {
   const { lang } = useTranslations();
   if (!codes.length) return empty ? <span className="text-ink-secondary">{empty}</span> : null;
   const list = ALLERGENS.filter((a) => codes.includes(a.code));
-  return (
-    <span title={list.map((a) => `${a.no}. ${lang === "en" ? a.en : a.cs}`).join(", ")} className="tabular-nums">
-      {list.map((a) => a.no).join(", ")}
-    </span>
-  );
+  return <span title={list.map((a) => `${a.no}. ${lang === "en" ? a.en : a.cs}`).join(", ")}>{allergenLabels(codes, lang).join(", ")}</span>;
 }
 
 export const allergenNames = (codes: string[], lang: string) =>
