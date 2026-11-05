@@ -66,3 +66,41 @@ Confirmed by Pavel on 2026-11-05: 1–4 and 7 accepted; 5 stays as it is. Still 
 2. **CSP**: watch `[csp-report]` logs for a week, then promote to enforcing (`docs/csp-report-only.md`).
 3. **Binary in history**: `git filter-repo --path cloud-sql-proxy --invert-paths` (rewrites history; coordinate before pushing).
 4. Out of scope, still to do: audit pass 2 (mail send paths, Fio sync, Drive export, travel-order PDF, ticket scanning, real-token portal flows, XSS / CSRF, brute force).
+
+# Round 2 (prompt 9, 2026-11-05)
+
+| Commit | Phase |
+|---|---|
+| `24ddd0b` | F – found in the simulation |
+| `6b46895` | A – kitchen safety round 2 |
+| `38445df` | B – travel orders, receipt import, defaults |
+| `8f6a8af` | D – access, public pages, tickets |
+| `6719d9c` | E – bank import, budget, phones |
+
+**F.** SEC-SIM1: `portalUrl()` builds links only from configuration (the org's portal host, else `PORTAL_BASE_URL` / `PUBLIC_BASE_URL` / `APP_BASE_URL`); it no longer takes the request, and with nothing configured no link is mailed (`scripts/check-no-header-links.ts` + isolation test). Only `host-rules.ts` (routing, DB-checked) reads the Host headers. HY1: `i18n.tsx` first render is identical on server and client; cached values applied in `useLayoutEffect` (verified in headless Chromium: no React #418 after reloads with cached lang / role / texts). DEP1: `npm run bootstrap` (`scripts/bootstrap.sh`) – migrations, base seed, every translation seed in the order added to git, app templates; `create-app-templates.ts` no longer fails on an empty DB; tested twice on an empty database. TK2: an empty `{event_place}` drops its ", " / " · " in every template (in `substituteVariables`, so the organizations' stored copies are covered). R5-1: recovery counts only sent mails per e-mail; a full quota answers the usual "ok". Tap targets: one rule in `globals.css` (≥ 36 px below md, checkboxes 20 px); measured at 375 px on /login: none under 36 px.
+
+**A.** K5: confirming a diet with fewer allergens / diets than the parents' text needs a typed reason or "Potvrzuji, že dítě nemá tyto alergie" (server-enforced, stored as `dropped` / `dropped_reason`). K3: saving a meal reloads the page's ingredient list before the editor redraws. K4: allergens everywhere as "1 – lepek" (one renderer), unconfirmed people named. K6: Czech plurals via the existing `src/lib/plural.ts`. D1: the Zdraví card shows the kitchen's diet state with a link to Strava účastníků. KL: no seed creates "Česnečka"; it was not touched.
+
+**B.** T1: empty drafts (no worker, vehicle or route) are deleted after a day when the list loads; Odeslat lists every missing item (one shared rule in `src/lib/travel-orders.ts`, the server returns them all) and each item scrolls to its field. R1: the import shows "Nahráno k potvrzení" until Potvrdit. P2: membership shows "Ano" / "Ne" only when known, else "—" (`memberLabel`); prices / VS unchanged.
+
+**D.** N1: non-admins get bank accounts reduced to label, bank code, last 4 digits and "token set", and only the mailboxes they connected themselves. N2/N3: one denial page (`src/components/NoAccess.tsx`) and a server layout guard on every module folder (also for direct URLs, e.g. /mail); create / duplicate / delete event and Šablony hidden for non-admins. N5: Dospělí na akci open to Účastníci, Kuchyně or Účtenky (Kuchyně routes still need Kuchyně). R4-10: paid ticket orders are refused without a payment account and a connected sender; the confirmation mentions the e-mail only when it went out; "Platební údaje vám pošle pořadatel" instead of "Číslo účtu —"; settings warn. R4-9: "+" capped by what's left in total; plural hint. R4-7: ticket events don't show the parents' deadline / Dotazník block or that checklist item; own wording and appearance sample. R4-2: confirmation summary + reference `R-XXXXXXXX` (searchable in Účastníci); no e-mail promise without a sender. R4-3 guardian name required; R4-5 no super-admin strip on public pages; R4-6 `/events/new` → `/events`; R4-12 help intro; R4-13 "neověřeno" badge on rate sets marked "(ověřit)". R5: recovery answers take ≥ 2.5 s either way; a new link's mail says the old one stopped working.
+
+**E.** Import keeps its period line after confirming; Fio accounts say "Fio se ptáme jen do dneška" when the period ends later. Budget: unsorted bank incomes as "Neroztříděno". Planning toolbar wraps on phones (other pages already scroll tables / stack columns).
+
+## Round 2 DEFAULT decisions
+
+1. T1: kept "draft on click" (the form autosaves into it) + clean-up after a day, instead of a client-only form.
+2. T1: worker address and phone now block Odeslat (they were warnings).
+3. N1: non-admins see only their own connected mailboxes.
+4. N5: Dospělí na akci = Účastníci, Kuchyně or Účtenky.
+5. K5: the general note doesn't count as the reason for dropped items; a separate reason or the explicit tick is needed.
+6. R4-2: the reference is the first 8 characters of the registration id (searchable), since the participant number only exists after acceptance.
+7. R5: equal response time instead of "send after responding" (request-based CPU would throttle the send).
+8. BK1: a row dated after today but inside the event period stays **Nové** (prompt 8 requires this for future events); only the Fio request is capped at today, and that is now said on screen.
+9. BK6: kept the native select (type-ahead) – it already lists only active events you have Účtenky for and asks for confirmation naming the target.
+
+## Round 2 skipped
+
+- R4-1 typo "mimo oddíly)": not in the code – it is in a price label saved in an event's data; fix it in that event's price settings.
+- MB1 Playwright screenshots of logged-in pages: no way to sign in headlessly (Google login); checked the markup instead and fixed the planning toolbar.
+- sim-kit checks: no `sim-kit/` in the repository.
