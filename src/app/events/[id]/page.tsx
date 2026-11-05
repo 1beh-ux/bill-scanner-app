@@ -418,6 +418,8 @@ export default function EventDetailPage({
         )}
       </p>
 
+      {/* Closing / reopening the event: organization admins (audit 2026-11-05 P1). */}
+      {isAdmin && (
       <div className="mb-4">
         {event.status === "active" ? (
           <button
@@ -438,6 +440,7 @@ export default function EventDetailPage({
         )}
         {lifecycleError && <p className="mt-1.5 text-[13px] text-red-600">{t(`eventDetail.error.${lifecycleError}`)}</p>}
       </div>
+      )}
 
       <div className="mb-6 rounded-lg border border-mist bg-paper-2 p-3">
         <p className="mb-2 text-[13px] font-medium text-ink">
@@ -505,6 +508,8 @@ export default function EventDetailPage({
               {isAdmin && event.kind === "event" && <MembershipYearCard event={event} onSaved={load} t={t} />}
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
+              {!isAdmin && <p className="rounded-lg bg-paper-2 px-3 py-2 text-[13px] text-ink-secondary">{t("eventSettings.adminManaged")}</p>}
+              {isAdmin && (
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventDetail.registrationInfoTitle")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
@@ -536,6 +541,7 @@ export default function EventDetailPage({
                   </div>
                 </form>
               </div>
+              )}
             </div>
           )}
 
@@ -577,7 +583,7 @@ export default function EventDetailPage({
                   {t("senderEmailField.connectErrorBanner")}
                 </p>
               )}
-              <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} />
+              <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} readOnly={!isAdmin} />
               {/* One control for both modules now (Part 5: "not repeated elsewhere") -- the
                   gmail.modify scope warning only matters when Mail is enabled (it reads/
                   moves inbound mail; Health only ever sends), so purpose follows that. */}

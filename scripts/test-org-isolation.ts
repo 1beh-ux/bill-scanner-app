@@ -430,6 +430,24 @@ async function main() {
       check("Bills user: the event's people's vehicles only", JSON.stringify(evList.body?.vehicles?.map((x: { id: string }) => x.id)) === JSON.stringify([adminCar.id]), JSON.stringify(evList.body)?.slice(0, 300));
       r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "x", gearbox: "manual", fuel: "diesel", ownerName: "Někdo" } }));
       check("Bills user: a free-text owner -> refused", r.status === 400, `HTTP ${r.status}`);
+      // Audit 2026-11-05 P1: a Bills holder works with receipts, doesn't administer the event.
+      const evRoute2 = await import("@/app/api/events/[id]/route");
+      const evBefore = await prisma.event.findUniqueOrThrow({ where: { id: eventId! }, select: { name: true, status: true, driveExportFolderId: true } });
+      r = await evRoute2.PATCH(req(`/api/events/${eventId}`, { method: "PATCH", body: { name: "přejmenováno" } }), params({ id: eventId! }));
+      check("Bills user: rename the event -> 403 admin_only", r.status === 403, `HTTP ${r.status}`);
+      r = await evRoute2.PATCH(req(`/api/events/${eventId}`, { method: "PATCH", body: { billsListColumns: null, driveExportFolderId: "1abcdefghijklmnopqrstuvwxyz012345" } }), params({ id: eventId! }));
+      check("Bills user: a Drive folder (even mixed with a bills key) -> 403", r.status === 403, `HTTP ${r.status}`);
+      r = await evRoute2.PATCH(req(`/api/events/${eventId}`, { method: "PATCH", body: { billsListColumns: null, qrSizeMm: 40 } }), params({ id: eventId! }));
+      check("Bills user: bills list settings -> 200", r.status === 200, `HTTP ${r.status}`);
+      for (const action of ["close", "reopen", "drive-take-over"] as const) {
+        const mod = await import(`@/app/api/events/[id]/${action}/route`);
+        r = await mod.POST(req(`/api/events/${eventId}/${action}`, { method: "POST" }), params({ id: eventId! }));
+        check(`Bills user: ${action} -> 403`, r.status === 403, `HTTP ${r.status}`);
+      }
+      r = await (await import("@/app/api/config/drive-account/route")).GET();
+      check("non-admin: service-account e-mail -> 403", r.status === 403, `HTTP ${r.status}`);
+      const evAfter = await prisma.event.findUniqueOrThrow({ where: { id: eventId! }, select: { name: true, status: true, driveExportFolderId: true } });
+      check("…and the event is unchanged", JSON.stringify(evBefore) === JSON.stringify(evAfter), JSON.stringify({ evBefore, evAfter }));
       asUser(admin);
       await prisma.vehicle.deleteMany({ where: { organizationId: { in: [org.id, org2Id!] } } });
       await prisma.userEventModuleAccess.deleteMany({ where: { userId: plain.id } });

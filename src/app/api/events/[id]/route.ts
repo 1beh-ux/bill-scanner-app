@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess, requireAnyModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
 import { parseFolderId } from "@/lib/drive-errors";
 import { normalizeBillColumns } from "@/lib/bill-columns";
 import { invalidateDriveIdentity } from "@/lib/drive";
@@ -12,7 +12,9 @@ import { readPriceRules } from "@/lib/price-rules";
 import { SLUG_PATTERN } from "@/lib/public-registration";
 import { eventSender } from "@/lib/auto-accept";
 import { embedOriginsOf, publicHostFor, publicUrl } from "@/lib/public-host";
-import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
+import { eventInOrg, isOrgAdmin, notFound, requireEventInOrg } from "@/lib/org-scope";
+import { DRIVE_FOLDER_KEYS, patchRequirements } from "@/lib/event-patch-access";
+import type { ModuleKey } from "@/generated/prisma";
 
 // GET is readable by any module grant -- the row carries no module-specific
 // secrets (senderEmail/drive folder ids/sync settings are shared config,
@@ -52,12 +54,24 @@ export async function PATCH(
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
   const { id } = await params;
-  const body = await req.json();
-  // Veřejná přihláška (the public page) on its own: Účastníci / Vstupenky holders may change it too.
-  const PUBLIC_PAGE_KEYS = ["publicRegistration", "publicSlug", "landingContent", "publicHideHeader", "publicContactEmail", "publicAudience", "detailsAfterAcceptance"];
-  const publicPageOnly = !isOrgAdmin(user) && Object.keys(body ?? {}).length > 0 && Object.keys(body).every((k) => PUBLIC_PAGE_KEYS.includes(k));
-  const denied = publicPageOnly ? await requireAnyModuleAccess(user, id, ["participants", "tickets"]) : await requireModuleAccess(user, id, "bills");
-  if (denied) return denied;
+  const body = (await req.json().catch(() => null)) ?? {};
+  if (typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  // Who may write which key: src/lib/event-patch-access.ts (one table). Admins everything; others only the
+  // operational keys of a module they hold -- never the event's name / dates, Drive, registration or payments.
+  if (isOrgAdmin(user)) {
+    const inOrg = await requireEventInOrg(user, id);
+    if ("error" in inOrg) return inOrg.error;
+  } else {
+    const need = patchRequirements(body);
+    if (need === "admin_only") {
+      if (!(await eventInOrg(user, id))) return notFound();
+      return NextResponse.json({ error: "admin_only" }, { status: 403 });
+    }
+    for (const modules of need.length ? need : [["bills"] as ModuleKey[]]) {
+      const denied = await requireAnyModuleAccess(user, id, modules);
+      if (denied) return denied;
+    }
+  }
 
   const {
     name,
@@ -102,28 +116,7 @@ export async function PATCH(
     manifestCategoryMode,
   } = body;
 
-  // Registration & membership switches: admin only, validated.
-  const touchesRegistration =
-    kind !== undefined ||
-    membershipYear !== undefined ||
-    membershipCheckYear !== undefined ||
-    registrationConnected !== undefined ||
-    peopleLinkMode !== undefined ||
-    portalOpen !== undefined ||
-    eligibility !== undefined ||
-    publicRegistration !== undefined ||
-    publicSlug !== undefined ||
-    landingContent !== undefined ||
-    publicHideHeader !== undefined ||
-    publicContactEmail !== undefined ||
-    publicAudience !== undefined ||
-    detailsAfterAcceptance !== undefined ||
-    autoAccept !== undefined ||
-    location !== undefined ||
-    portalInfo !== undefined ||
-    paymentDocTypeId !== undefined ||
-    bankCheckEnabled !== undefined ||
-    bankAccountId !== undefined;
+  // Registration & membership switches (admin only, src/lib/event-patch-access.ts), validated.
   for (const v of [location, portalInfo]) if (v !== undefined && v !== null && !(typeof v === "string" && v.length <= 2000)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (autoAccept !== undefined && !["manual", "accept", "accept_send"].includes(autoAccept)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
   // Public registration page (slice 3 D): /r/<slug>, lowercase letters, digits, dashes.
@@ -170,10 +163,8 @@ export async function PATCH(
     bankCheckOff = !!error;
   }
   if (portalOpen !== undefined && typeof portalOpen !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  if (touchesRegistration && !isOrgAdmin(user) && !publicPageOnly) return NextResponse.json({ error: "admin_only" }, { status: 403 });
-  // Name and dates (Nastavení akce -> Akce): admins; the end never before the start.
+  // Name and dates (Nastavení akce -> Akce): admins (checked above); the end never before the start.
   if (name !== undefined || startDate !== undefined || endDate !== undefined) {
-    if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
     if (name !== undefined && !(typeof name === "string" && name.trim() && name.length <= 200)) return NextResponse.json({ error: "bad_request" }, { status: 400 });
     const isDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !isNaN(Date.parse(v));
     if ((startDate !== undefined && !isDate(startDate)) || (endDate !== undefined && !isDate(endDate))) return NextResponse.json({ error: "bad_dates" }, { status: 400 });
@@ -192,22 +183,8 @@ export async function PATCH(
 
   // Drive folders: a pasted Drive URL is reduced to its folder id; anything that
   // is not recognisably an id is rejected (and says which field). Empty = unset.
-  const folderIds: Record<
-    | "driveIngestFolderId" | "driveExportFolderId" | "driveParticipantsFolderId" | "driveProcessedFolderId"
-    | "driveManifestFolderId" | "driveHealthFolderId" | "driveParticipantsListFolderId" | "drivePlanningFolderId" | "driveTicketsFolderId",
-    string | null | undefined
-  > = {
-    driveIngestFolderId: undefined,
-    driveExportFolderId: undefined,
-    driveParticipantsFolderId: undefined,
-    driveProcessedFolderId: undefined,
-    // Each export in its own folder (src/lib/drive-folders.ts); unset = the bill export folder.
-    driveManifestFolderId: undefined,
-    driveHealthFolderId: undefined,
-    driveParticipantsListFolderId: undefined,
-    drivePlanningFolderId: undefined,
-    driveTicketsFolderId: undefined,
-  };
+  // Each export in its own folder (src/lib/drive-folders.ts); unset = the bill export folder.
+  const folderIds = Object.fromEntries(DRIVE_FOLDER_KEYS.map((k) => [k, undefined])) as Record<(typeof DRIVE_FOLDER_KEYS)[number], string | null | undefined>;
   for (const field of Object.keys(folderIds) as (keyof typeof folderIds)[]) {
     const raw = body[field];
     if (raw === undefined) continue;

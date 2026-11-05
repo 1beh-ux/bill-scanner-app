@@ -64,11 +64,14 @@ export default function DriveSettingsTab({
   event,
   driveConnect,
   onSaved,
+  readOnly = false,
 }: {
   eventId: string;
   event: EventDrive & { driveExportFolderId: string | null; manifestCategoryMode?: string | null };
   driveConnect: string | null;
   onSaved: () => void;
+  // Not an organization admin: sees what is connected, can test and export, changes nothing (audit 2026-11-05).
+  readOnly?: boolean;
 }) {
   const { t } = useTranslations();
   const [info, setInfo] = useState<IdentityResponse | null>(null);
@@ -129,6 +132,10 @@ export default function DriveSettingsTab({
   }
 
   async function save(e: React.FormEvent) {
+    if (readOnly) {
+      e.preventDefault();
+      return;
+    }
     e.preventDefault();
     setSaving(true);
     setSaveError(null);
@@ -214,6 +221,8 @@ export default function DriveSettingsTab({
           </p>
         )}
 
+        {readOnly && <p className="mb-2 rounded-lg bg-paper-2 px-3 py-2 text-[13px] text-ink-secondary">{t("eventSettings.adminManaged")}</p>}
+        {!readOnly && (
         <div className="flex flex-wrap gap-2">
           <a href={`/api/mail-oauth/authorize?eventId=${eventId}&purpose=drive`} className={btnSecondary}>
             {info?.me.connected ? t("driveSettings.reconnect") : t("driveSettings.connectMine")}
@@ -224,6 +233,7 @@ export default function DriveSettingsTab({
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* --- what access is needed (replaces the old "share with the service account" text) --- */}
@@ -251,6 +261,7 @@ export default function DriveSettingsTab({
               {t(f.labelKey)}
               <input
                 type="text"
+                readOnly={readOnly}
                 value={values[f.label]}
                 onChange={(e) => setValue(f.label, e.target.value)}
                 placeholder={f.fallback ? t("driveSettings.folderFallbackPlaceholder") : t("driveSettings.folderPlaceholder")}
@@ -284,9 +295,11 @@ export default function DriveSettingsTab({
         {saveError && saveError.code !== "not_a_folder_id" && <p className="text-[13px] text-red-600">{t("driveSettings.errorSaveFailed")}</p>}
 
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={saving} className={btnPrimary}>
-            {saving ? t("common.loading") : t("driveSettings.saveFolders")}
-          </button>
+          {!readOnly && (
+            <button type="submit" disabled={saving} className={btnPrimary}>
+              {saving ? t("common.loading") : t("driveSettings.saveFolders")}
+            </button>
+          )}
           <button
             type="button"
             disabled={testing || !anyFolder}

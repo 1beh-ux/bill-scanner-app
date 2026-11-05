@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
+import { isOrgAdmin } from "@/lib/org-scope";
 
 export async function POST(
   req: NextRequest,
@@ -13,8 +14,11 @@ export async function POST(
   }
 
   const { id } = await params;
+  // Organization admins only (audit 2026-11-05 P1): closing / reopening the event and re-pointing its Drive
+  // aren't part of working with receipts.
   const denied = await requireModuleAccess(user, id, "bills");
   if (denied) return denied;
+  if (!isOrgAdmin(user)) return NextResponse.json({ error: "admin_only" }, { status: 403 });
 
   const event = await prisma.event.findUnique({ where: { id } });
   if (!event) {
