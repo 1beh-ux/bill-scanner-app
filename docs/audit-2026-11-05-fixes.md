@@ -33,7 +33,7 @@ Prompt: `docs/bill-scanner-v2-claude-code-prompt-8-audit-fixes-2026-11-05.md`. O
 
 ## DEFAULT decisions
 
-Confirmed by Pavel on 2026-11-05: 1–4 accepted; 5 stays as it is. Still open: 6–9.
+Confirmed by Pavel on 2026-11-05: 1–4 and 7 accepted; 5 stays as it is. Still open: 6, 8, 9.
 
 1. Migrations dated `20261118…`, after the latest applied one, so they sort in order.
 2. Client IP: custom domains take the 2nd-to-last `X-Forwarded-For` entry (load balancer), `*.run.app` the last one. Based on `docs/custom-domain.md`; Google's docs were not fetchable in-session.
