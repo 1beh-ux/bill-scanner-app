@@ -11,7 +11,7 @@ import { pageAppearance } from "@/lib/public-appearance";
 import { readAudience } from "@/lib/public-registration";
 import PublicForm from "./PublicForm";
 import TicketPage from "./TicketPage";
-import { remaining } from "@/lib/tickets";
+import { orderCap, remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 import { withPublicTexts } from "@/lib/public-texts";
 
@@ -68,7 +68,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
           slug={slug}
           event={{ name: event.name, startDate: event.startDate.toISOString(), endDate: event.endDate.toISOString(), location: event.location, landingContent: event.landingContent, hideHeader: event.publicHideHeader, registrationDeadline: event.registrationDeadline?.toISOString() ?? null }}
           types={types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] }))}
-          maxPerOrder={settings.maxPerOrder}
+          maxPerOrder={orderCap(settings.maxPerOrder, left.total)}
           texts={settings.texts}
           showLeft={settings.showLeft}
           org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}

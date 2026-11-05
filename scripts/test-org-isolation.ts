@@ -464,11 +464,12 @@ async function main() {
         const kid = await prisma.child.create({ data: { name: "Iso Rec", organizationId: org.id, portalToken: tok } });
         const rec = await import("@/app/api/public/portal-recovery/route");
         for (let i = 0; i < 4; i++) {
-          const r2 = await rec.POST(new (await import("next/server")).NextRequest("http://localhost/api/public/portal-recovery", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${i + 10}, 34.144.251.105`, host: "tabornik.online" }, body: JSON.stringify({ email: "rodic@test.invalid", birthDate: "2015-01-01", token: tok }) }));
+          const r2 = await rec.POST(new (await import("next/server")).NextRequest("http://localhost/api/public/portal-recovery", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `10.${(Number(stamp) || Date.now()) % 250}.${Math.floor(Math.random() * 250)}.${i + 10}, 34.144.251.105`, host: "tabornik.online" }, body: JSON.stringify({ email: "rodic@test.invalid", birthDate: "2015-01-01", token: tok }) }));
           if (r2.status !== 200) check("recovery attempt answered ok", false, `HTTP ${r2.status}`);
         }
         const used = await prisma.portalRateHit.count({ where: { key: `recover-mail:${org.id}:rodic@test.invalid` } });
         check("recovery: 4 unmatched attempts use none of the e-mail's quota", used === 0, `used ${used}`);
+        await prisma.portalRateHit.deleteMany({ where: { key: { startsWith: "recover-" } } });
         await prisma.child.delete({ where: { id: kid.id } });
       }
       // Audit 2026-11-05 (5.4): a test event's participants are never linked into Lidé nor listed as unlinked.
@@ -499,6 +500,18 @@ async function main() {
         const mod = await import(`@/app/api/events/[id]/${action}/route`);
         r = await mod.POST(req(`/api/events/${eventId}/${action}`, { method: "POST" }), params({ id: eventId! }));
         check(`Bills user: ${action} -> 403`, r.status === 403, `HTTP ${r.status}`);
+      }
+      // audit2 N1: a non-admin gets no full account numbers / token dates, and only their own mailboxes.
+      {
+        const acc = await prisma.bankAccount.create({ data: { organizationId: org.id, label: "Iso Fio", accountNumber: "2900123456", bankCode: "2010", tokenSetAt: new Date() } });
+        const mb = await prisma.mailSenderAccount.create({ data: { organizationId: org.id, email: `iso-${stamp}@test.invalid`, refreshTokenEncrypted: "x", connectedByUserId: admin.id } });
+        const ba = await (await (await import("@/app/api/bank-accounts/route")).GET()).json();
+        const row = ba.accounts.find((x: { id: string }) => x.id === acc.id);
+        check("N1: non-admin bank account list is reduced", !!row && row.last4 === "3456" && !("accountNumber" in row) && !("tokenSetAt" in row) && !("events" in row), JSON.stringify(row));
+        const ma = await (await (await import("@/app/api/mail-accounts/route")).GET()).json();
+        check("N1: non-admin doesn't see an admin's mailbox", !ma.some((x: { email: string }) => x.email === mb.email), JSON.stringify(ma));
+        await prisma.mailSenderAccount.delete({ where: { id: mb.id } });
+        await prisma.bankAccount.delete({ where: { id: acc.id } });
       }
       r = await (await import("@/app/api/config/drive-account/route")).GET();
       check("non-admin: service-account e-mail -> 403", r.status === 403, `HTTP ${r.status}`);

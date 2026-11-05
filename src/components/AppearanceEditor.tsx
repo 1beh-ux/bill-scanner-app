@@ -39,7 +39,8 @@ const inputClass = "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 te
 const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const tabClass = (on: boolean) => "rounded-full px-3 py-1 text-[13px] " + (on ? "bg-ember text-white" : "bg-paper-2 text-ink hover:bg-mist");
 
-export default function AppearanceEditor({ eventId }: { eventId?: string }) {
+// tickets (R4-7, audit2): a ticket-sale event's sample reads like a ticket order, not a camp registration.
+export default function AppearanceEditor({ eventId, tickets = false }: { eventId?: string; tickets?: boolean }) {
   const { t, role, isSuperAdmin, roleLoaded } = useTranslations();
   const [org, setOrg] = useState<OrgView | null>(null);
   const [ev, setEv] = useState<{ inherited: Partial<Appearance>; layer: AppearanceLayer } | null>(null);
@@ -215,21 +216,21 @@ export default function AppearanceEditor({ eventId }: { eventId?: string }) {
             <div className={`pub-preview ${publicFontVariables} flex flex-col gap-4 rounded-lg border border-mist ${shown.publicTransparent ? "" : "bg-paper"} p-4`}>
               <div>
                 <p className="text-[14px] font-semibold text-ink">{t("appearance.sampleOrg")}</p>
-                <h1 className="text-[22px] font-semibold text-ink">{t("appearance.sampleEvent")}</h1>
-                <p className="text-[14px] text-ink-secondary">{t("appearance.sampleText")}</p>
+                <h1 className="text-[22px] font-semibold text-ink">{t(tickets ? "appearance.tickets.sampleEvent" : "appearance.sampleEvent")}</h1>
+                <p className="text-[14px] text-ink-secondary">{t(tickets ? "appearance.tickets.sampleText" : "appearance.sampleText")}</p>
               </div>
               <section className="flex flex-col gap-2 rounded-lg border border-mist bg-paper-2 p-4">
-                <h2 className="text-[16px] font-semibold text-ink">{t("appearance.sampleSection")}</h2>
+                <h2 className="text-[16px] font-semibold text-ink">{t(tickets ? "appearance.tickets.sampleSection" : "appearance.sampleSection")}</h2>
                 <label className="text-[13px] text-ink-secondary">
                   {t("appearance.sampleField")}
                   <input readOnly value="Jana Nováková" className={inputClass + " mt-1"} />
                 </label>
-                <button type="button" className={btnPrimary + " self-start"}>{t("appearance.sampleButton")}</button>
+                <button type="button" className={btnPrimary + " self-start"}>{t(tickets ? "appearance.tickets.sampleButton" : "appearance.sampleButton")}</button>
               </section>
               <section className="flex flex-col gap-1 rounded-lg border border-mist bg-paper-2 p-4">
-                <h3 className="text-[16px] font-semibold text-ink">{t("appearance.sampleCard")}</h3>
+                <h3 className="text-[16px] font-semibold text-ink">{t(tickets ? "appearance.tickets.sampleCard" : "appearance.sampleCard")}</h3>
                 <p className="text-[13px] text-ink-secondary">1. 7. – 14. 7. 2027 · Jedlová</p>
-                <p className="text-[14px] text-ink">{t("appearance.sampleCardText")}</p>
+                <p className="text-[14px] text-ink">{t(tickets ? "appearance.tickets.sampleCardText" : "appearance.sampleCardText")}</p>
               </section>
             </div>
           </div>

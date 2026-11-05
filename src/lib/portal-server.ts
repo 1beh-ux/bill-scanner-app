@@ -32,7 +32,7 @@ import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { memberFormFields, readAudience, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, optionsFor, askedNow, askedLater, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
-import { remaining } from "@/lib/tickets";
+import { orderCap, remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
 const loadChild = (token: string) => prisma.child.findUnique({ where: { portalToken: token }, include: { guardians: true } });
@@ -671,7 +671,7 @@ async function portalTicketEvents(scope: PortalScope) {
         endDate: e.endDate,
         location: e.location,
         info: e.portalInfo,
-        maxPerOrder: settings.maxPerOrder,
+        maxPerOrder: orderCap(settings.maxPerOrder, left.total),
         texts: settings.texts,
         showLeft: settings.showLeft,
         types: types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] })),

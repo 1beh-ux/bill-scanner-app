@@ -11,7 +11,8 @@ import type { Band, HcAdjust, HcAdult, HcParticipant } from "./headcount";
 import { createHash } from "node:crypto";
 
 /** Event kitchen routes: the Kuchyně grant on the event (404 outside the acting organization). */
-export const kitchenGuard = adultsGuard;
+// Kuchyně routes: the Kuchyně module only (adultsGuard alone also lets Účastníci / Účtenky in).
+export const kitchenGuard = (eventId: string) => adultsGuard(eventId, ["kitchen"]);
 
 /** Library routes (org-owned meals, ingredients): an org admin, or a Kuchyně grant on any event of the acting org. */
 export async function libraryGuard(): Promise<{ error: NextResponse } | { user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; organizationId: string }> {

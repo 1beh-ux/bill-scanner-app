@@ -45,7 +45,7 @@ export default function PaymentSettings({ eventId, event, isAdmin, onSaved, t }:
   const [bankAccountId, setBankAccountId] = useState(event.bankAccountId ?? "");
   const [docTypes, setDocTypes] = useState<{ id: string; name: string }[]>([]);
   const [booleanFields, setBooleanFields] = useState<{ key: string; label: string }[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber: string; bankCode: string; tokenSetAt: string | null }[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber?: string; last4?: string; bankCode: string; tokenSetAt?: string | null; tokenSet?: boolean }[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
@@ -65,7 +65,7 @@ export default function PaymentSettings({ eventId, event, isAdmin, onSaved, t }:
   }, [eventId]);
 
   // Only the organization's connected Fio accounts equal to the account typed above qualify.
-  const matchingAccounts = bankAccounts.filter((a) => a.tokenSetAt && a.accountNumber === norm(account) && a.bankCode === norm(bankCode));
+  const matchingAccounts = bankAccounts.filter((a) => (a.tokenSetAt || a.tokenSet) && (a.accountNumber ? a.accountNumber === norm(account) : a.last4 === norm(account).slice(-4)) && a.bankCode === norm(bankCode));
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -192,7 +192,7 @@ export default function PaymentSettings({ eventId, event, isAdmin, onSaved, t }:
                   <select value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} className={inputClass}>
                     <option value="">{t("bankCheck.pickAccount")}</option>
                     {matchingAccounts.map((a) => (
-                      <option key={a.id} value={a.id}>{a.label} ({a.accountNumber}/{a.bankCode})</option>
+                      <option key={a.id} value={a.id}>{a.label} ({a.accountNumber ?? `…${a.last4}`}/{a.bankCode})</option>
                     ))}
                   </select>
                 ) : (

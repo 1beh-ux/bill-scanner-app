@@ -2,6 +2,7 @@
 import QRCode from "qrcode";
 import type { Event, TicketOrder } from "@/generated/prisma";
 import { paymentInfo } from "@/lib/tickets-server";
+import { prisma } from "@/lib/prisma";
 
 export async function orderConfirmation(event: Event, order: TicketOrder) {
   const pay = paymentInfo(event, order);
@@ -14,5 +15,7 @@ export async function orderConfirmation(event: Event, order: TicketOrder) {
     // "Zkontrolovat platbu" (POST /api/public/tickets/<token>); only when the bank check can answer.
     statusToken: event.bankCheckEnabled && event.bankAccountId ? order.publicToken : null,
     paid: order.status === "paid",
+    // R4-10 (audit2): only say "we sent it to …" when the order e-mail really went out (a failed send is kept in sendError).
+    mailSent: !(await prisma.ticketOrder.findUnique({ where: { id: order.id }, select: { sendError: true } }))?.sendError,
   };
 }

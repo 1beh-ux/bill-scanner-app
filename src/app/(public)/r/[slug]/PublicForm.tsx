@@ -98,6 +98,7 @@ export default function PublicForm({
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[] | null>(null);
   const [done, setDone] = useState(false);
+  const [receipt, setReceipt] = useState<{ reference: string | null; mailPossible: boolean }>({ reference: null, mailPossible: true });
   // Embedded (?embed=1): bring the frame into view after a submit or an error.
   useEffect(() => {
     if (done || errors) postScrollTop();
@@ -160,7 +161,9 @@ export default function PublicForm({
     const res = await fetch(`/api/public/r/${slug}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
     if (res?.ok) {
-      setPortalLink((await res.json().catch(() => ({}))).portalLink ?? null);
+      const d = await res.json().catch(() => ({}));
+      setPortalLink(d.portalLink ?? null);
+      setReceipt({ reference: d.reference ?? null, mailPossible: d.mailPossible !== false });
       return setDone(true);
     }
     const d = res ? await res.json().catch(() => ({})) : {};
@@ -188,9 +191,28 @@ export default function PublicForm({
         )}
         <div className={card + " flex flex-col gap-2"}>
           <p className="text-[16px] font-semibold text-ink">{t("public.doneTitle")}</p>
+          {/* R4-2 (audit2): what was sent, read-only, with a reference to quote. */}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[14px]">
+            <dt className="text-ink-secondary">{t("public.summaryEvent")}</dt>
+            <dd className="text-ink">{title}</dd>
+            <dt className="text-ink-secondary">{t("public.summaryPersons")}</dt>
+            <dd className="text-ink">{persons.map((p) => [p.firstName, p.lastName].filter(Boolean).join(" ")).filter(Boolean).join(", ")}</dd>
+            {guardians.some((g) => g.email) && (
+              <>
+                <dt className="text-ink-secondary">{t("public.summaryEmail")}</dt>
+                <dd className="text-ink [overflow-wrap:anywhere]">{guardians.map((g) => g.email).filter(Boolean).join(", ")}</dd>
+              </>
+            )}
+            {receipt.reference && (
+              <>
+                <dt className="text-ink-secondary">{t("public.summaryReference")}</dt>
+                <dd className="font-medium text-ink">{receipt.reference}</dd>
+              </>
+            )}
+          </dl>
           {portalLink ? (
             <>
-              <p className="text-[14px] text-ink">{t("public.doneLinkHint")}</p>
+              <p className="text-[14px] text-ink">{t(receipt.mailPossible ? "public.doneLinkHint" : "public.doneLinkHintNoMail")}</p>
               <div className="flex flex-wrap items-center gap-2">
                 <code className="min-w-0 flex-1 rounded bg-paper-2 px-2 py-1.5 text-[13px] text-ink [overflow-wrap:anywhere]">{portalLink}</code>
                 <button
@@ -209,7 +231,7 @@ export default function PublicForm({
               <p className="text-[13px] text-ink-secondary">{t("public.doneLinkGate")}</p>
             </>
           ) : (
-            <p className="text-[14px] text-ink-secondary">{t("public.doneHint")}</p>
+            <p className="text-[14px] text-ink-secondary">{t(receipt.mailPossible ? "public.doneHint" : "public.doneHintNoMail")}</p>
           )}
         </div>
         <OrgFooter org={org} label={t("portal.contact")} />
@@ -356,7 +378,7 @@ export default function PublicForm({
               const set = (patch: Partial<Guardian>) => setGuardians((x) => x.map((y, j) => (j === i ? { ...y, ...patch } : y)));
               return (
                 <div key={i} className="grid gap-2 rounded-lg border border-mist p-3 sm:grid-cols-2">
-                  <input placeholder={t("portal.guardianName")} value={g.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
+                  <input required aria-required="true" placeholder={`${t("portal.guardianName")} *`} value={g.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
                   <input type="email" required placeholder={t("portal.guardianEmail") + " *"} value={g.email} onChange={(e) => set({ email: e.target.value })} className={inputClass} />
                   <input placeholder={t("portal.guardianRelationship")} value={g.relationship} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />
                   <input type="tel" placeholder={t("portal.guardianPhone")} value={g.phone} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />

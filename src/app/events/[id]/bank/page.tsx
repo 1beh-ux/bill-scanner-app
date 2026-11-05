@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import { use, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import BankHeader from "@/components/bank/BankHeader";
@@ -30,7 +31,7 @@ export default function BankOverviewPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     fetch(`/api/events/${id}/bank/overview`).then(async (r) => (r.status === 403 ? setDenied(true) : r.ok && setD(await r.json()))).catch(() => {});
   }, [id]);
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("bank.noAccess")}</div>;
+  if (denied) return <NoAccess />;
   if (!d) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
 
   const tx = (q: string) => `/events/${id}/bank/transactions?${q}`;

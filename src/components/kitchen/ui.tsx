@@ -56,7 +56,5 @@ export function CheckBadge({ level }: { level: "red" | "amber" | "ok" | null | u
   return <span className={"rounded-full px-2 py-0.5 text-[11.5px] font-medium " + cls}>{t(`kitchen.check.${level}`)}</span>;
 }
 
-export function NoAccess() {
-  const { t } = useTranslations();
-  return <div className="p-8 text-[14px] text-ink-secondary">{t("kitchen.noAccess")}</div>;
-}
+// The shared denial (N2, audit2).
+export { default as NoAccess } from "@/components/NoAccess";

@@ -1,6 +1,6 @@
 // Self-check for the ticket helpers: `npx tsx src/lib/tickets.check.ts`
 import assert from "node:assert/strict";
-import { normalizeTicketCode, orderVs, readTicketSettings, remaining, ticketTypes, scanTime, validateOrder, withTicketTexts } from "@/lib/tickets";
+import { orderCap, normalizeTicketCode, orderVs, readTicketSettings, remaining, ticketTypes, scanTime, validateOrder, withTicketTexts } from "@/lib/tickets";
 import { readPriceRules } from "@/lib/price-rules";
 
 const start = new Date("2027-02-13");
@@ -46,4 +46,9 @@ assert.deepEqual(bad({ buyerName: "A", email: "a@b.cz", counts: { std: 1, stu: 1
 assert.deepEqual(bad({ buyerName: "A", email: "a@b.cz", counts: { std: 2.5 } }), ["count"]);
 
 assert.equal(normalizeTicketCode(" abcd-efgh 2345 "), "ABCDEFGH2345");
+// R4-9 (audit2): "+" stops at the per-order maximum or what's left in total, whichever is smaller.
+assert.equal(orderCap(10, 3), 3);
+assert.equal(orderCap(4, 20), 4);
+assert.equal(orderCap(4, null), 4);
+assert.equal(orderCap(4, 0), 0);
 console.log("tickets ok");

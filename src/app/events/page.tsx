@@ -20,7 +20,9 @@ const inputClass =
   "rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 export default function EventsPage() {
-  const { t } = useTranslations();
+  const { t, role, isSuperAdmin } = useTranslations();
+  // N2 (audit2): creating, duplicating and deleting events is for organization admins; others see the list only.
+  const isAdmin = role === "admin" || isSuperAdmin;
   const confirm = useConfirm();
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +98,7 @@ export default function EventsPage() {
     <div className="mx-auto max-w-5xl p-4 md:p-8">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-[22px] font-semibold text-ink">{t("events.title")}</h1>
-        {events.length > 0 && !duplicating && (
+        {isAdmin && events.length > 0 && !duplicating && (
           <button type="button" onClick={() => setDuplicating(true)} className="rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px] text-ink hover:bg-paper-2">
             {t("duplicate.open")}
           </button>
@@ -104,6 +106,7 @@ export default function EventsPage() {
       </div>
       {duplicating && <DuplicateEventWizard events={events} t={t} onClose={() => setDuplicating(false)} />}
 
+      {isAdmin && (
       <form onSubmit={handleCreate} className="mb-8 flex flex-wrap gap-2">
         <input
           type="text"
@@ -140,6 +143,7 @@ export default function EventsPage() {
           {t("events.submit")}
         </button>
       </form>
+      )}
 
       {error && <p className="mb-4 text-[14px] text-red-600">{error}</p>}
 
@@ -193,12 +197,12 @@ export default function EventsPage() {
                     </span>
                   </td>
                   <td className="p-2 text-right">
-                    <button
+                    {isAdmin && <button
                       onClick={() => handleDelete(ev.id, ev.name)}
                       className="text-[13px] text-red-600 hover:underline"
                     >
                       {t("common.delete")}
-                    </button>
+                    </button>}
                   </td>
                 </tr>
               ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -214,7 +215,7 @@ function BankTransactions({ id }: { id: string }) {
     tableRef.current?.querySelector(`[data-row="${focus}"]`)?.scrollIntoView({ block: "nearest" });
   }, [focus]);
 
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("bank.noAccess")}</div>;
+  if (denied) return <NoAccess />;
 
   const show = (c: string) => columns.includes(c);
   const setFilter = (k: string, v: string) => setF((x) => ({ ...x, [k]: v }));

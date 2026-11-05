@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eventSender } from "@/lib/auto-accept";
 import { createPublicRegistration, linkOfferedRegistration, publicEvent, publicFormContext } from "@/lib/public-registration-server";
 import { isSpam, SUBMIT_LIMIT_PER_HOUR, validateSubmission, readAudience } from "@/lib/public-registration";
 import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
@@ -31,5 +32,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
   await autoAcceptRegistrations(event.id, ids, "public");
   // accept_send events show the family's portal link on the confirmation screen (slice 4 #10).
-  return NextResponse.json({ ok: true, portalLink: portalToken ? await portalUrl(portalToken) : null }, { status: 201 });
+  // R4-2 (audit2): a reference to quote (searchable in Účastníci), and whether any e-mail can go out at all.
+  return NextResponse.json(
+    { ok: true, portalLink: portalToken ? await portalUrl(portalToken) : null, reference: ids[0] ? `R-${ids[0].slice(0, 8).toUpperCase()}` : null, mailPossible: !!(await eventSender(event)) },
+    { status: 201 }
+  );
 }

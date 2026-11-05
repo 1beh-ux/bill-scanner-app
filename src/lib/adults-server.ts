@@ -3,7 +3,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { requireModuleAccess } from "@/lib/module-access";
+import { requireAnyModuleAccess } from "@/lib/module-access";
+import type { ModuleKey } from "@/generated/prisma";
 import { fullNameFrom } from "@/lib/participant-name";
 import { ADDRESS_KEYS } from "@/lib/adults";
 import { ALLERGEN_CODES, cleanCodes } from "@/lib/kitchen/allergens";
@@ -11,10 +12,16 @@ import { dietCodesOf } from "@/lib/kitchen/server";
 
 /** Dospělí na akci routes: the Kuchyně grant on the event (organization admins pass, as for other modules). */
 type GuardEvent = { id: string; name: string; organizationId: string; startDate: Date; endDate: Date };
-export async function adultsGuard(eventId: string): Promise<{ error: NextResponse } | { user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; event: GuardEvent }> {
+/**
+ * Dospělí na akci (N5, audit2): whoever works with the event's people -- Účastníci, Kuchyně (portions) or Účtenky
+ * (travel orders pick the event's adults). Kuchyně's own routes keep requiring Kuchyně (kitchenGuard).
+ */
+export const ADULTS_MODULES: ModuleKey[] = ["participants", "kitchen", "bills"];
+
+export async function adultsGuard(eventId: string, modules: ModuleKey[] = ADULTS_MODULES): Promise<{ error: NextResponse } | { user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>; event: GuardEvent }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
-  const denied = await requireModuleAccess(user, eventId, "kitchen");
+  const denied = await requireAnyModuleAccess(user, eventId, modules);
   if (denied) return { error: denied };
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { id: true, name: true, organizationId: true, startDate: true, endDate: true } });
   return { user, event };

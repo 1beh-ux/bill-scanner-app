@@ -1,5 +1,6 @@
 "use client";
 
+import { pluralForm } from "@/lib/plural";
 import { useEffect, useState } from "react";
 import { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import { postScrollTop } from "@/components/embed/embed-client";
@@ -11,7 +12,7 @@ import { withTicketTexts } from "@/lib/tickets";
 // The server validates everything again (src/lib/tickets.ts validateOrder).
 type T = (key: string, vars?: Record<string, string>) => string;
 export type SaleType = { key: string; label: string; priceCzk: number; left: number | null };
-type Confirmation = { number: number; totalCzk: number; variableSymbol: string; account: string | null; qr: string | null; statusToken: string | null; paid: boolean };
+type Confirmation = { number: number; totalCzk: number; variableSymbol: string; account: string | null; qr: string | null; statusToken: string | null; paid: boolean; mailSent?: boolean };
 
 const btnPrimary = "rounded-lg bg-ember px-4 py-2.5 text-[15px] font-medium text-white hover:bg-ember-hover disabled:opacity-50";
 const btn = "rounded-lg border border-mist px-3 py-2 text-[14px] text-ink hover:bg-paper-2 disabled:opacity-50";
@@ -120,8 +121,14 @@ export default function TicketForm({
             <p className="text-[14px] text-ink">{t("ticketForm.payHint")}</p>
             <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
               <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[15px]">
-                <dt className="text-ink-secondary">{t("ticketForm.account")}</dt>
-                <dd className="font-medium text-ink">{done.account ?? "—"}</dd>
+                {done.account ? (
+                  <>
+                    <dt className="text-ink-secondary">{t("ticketForm.account")}</dt>
+                    <dd className="font-medium text-ink">{done.account}</dd>
+                  </>
+                ) : (
+                  <dd className="col-span-2 text-ink">{t("ticketForm.organizerSends")}</dd>
+                )}
                 <dt className="text-ink-secondary">{t("ticketForm.vs")}</dt>
                 <dd className="font-medium text-ink">{done.variableSymbol}</dd>
                 <dt className="text-ink-secondary">{t("ticketForm.amount")}</dt>
@@ -130,7 +137,7 @@ export default function TicketForm({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {done.qr && <img src={done.qr} alt={t("ticketForm.qrAlt")} className="h-40 w-40 rounded bg-white p-1" />}
             </div>
-            <p className="text-[13px] text-ink-secondary">{t("ticketForm.emailHint", { email: buyer.email })}</p>
+            {done.mailSent && <p className="text-[13px] text-ink-secondary">{t("ticketForm.emailHint", { email: buyer.email })}</p>}
             {done.statusToken && (
               <button type="button" onClick={() => setPolling(true)} disabled={polling} className={btn + " self-start"}>
                 {polling ? t("ticketForm.checking") : t("ticketForm.checkPayment")}
@@ -178,7 +185,7 @@ export default function TicketForm({
           );
         })}
         <p className="text-[15px] font-semibold text-ink">{t("ticketForm.total", { total: String(total) })}</p>
-        <p className="text-[12px] text-ink-secondary">{t("ticketForm.maxHint", { max: String(maxPerOrder) })}</p>
+        <p className="text-[12px] text-ink-secondary">{t(`ticketForm.maxHint.${pluralForm(maxPerOrder, "cs")}`, { max: String(maxPerOrder) })}</p>
       </section>
 
       <section className={card + " grid gap-3 sm:grid-cols-2"}>

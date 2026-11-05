@@ -139,7 +139,8 @@ export default function EventParticipantsPage({
 
   const searchedParticipants = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    return participants.filter((p) => (!query || p.name.toLowerCase().includes(query)) && (!stateFilter || p.state === stateFilter));
+    // A public registration's reference code (R4-2: the first 8 characters of its id) finds it too.
+    return participants.filter((p) => (!query || p.name.toLowerCase().includes(query) || p.id.toLowerCase().startsWith(query.replace(/^r-/, ""))) && (!stateFilter || p.state === stateFilter));
   }, [participants, searchQuery, stateFilter]);
   // Excel-like sorting / filtering of the columns (2026-10-29).
   const filterCols: FilterCol<Participant>[] = [

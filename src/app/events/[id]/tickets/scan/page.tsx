@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import { use, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import TicketScanner from "@/components/tickets/TicketScanner";
@@ -16,7 +17,7 @@ export default function TicketScanPage({ params }: { params: Promise<{ id: strin
       .then(setCounts)
       .catch(() => setDenied(true));
   }, [id]);
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("tickets.noAccess")}</div>;
+  if (denied) return <NoAccess />;
   if (!counts) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   return (
     <div className="mx-auto max-w-lg p-4 md:p-8">

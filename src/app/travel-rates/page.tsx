@@ -228,6 +228,13 @@ export default function TravelRatesPage() {
                 <tr key={s.id} className="border-t border-mist align-top">
                   <td className="whitespace-nowrap p-2 font-medium text-ink">
                     {czDate(s.validFrom)}
+                    {/* R4-13 (audit2): seeded values marked "(ověřit)" / "zdroj neznámý" stay visibly unconfirmed until an
+                        admin checks them and removes the marker from Zdroj. */}
+                    {s.note && /\(ověřit\)|zdroj neznámý/i.test(s.note) && (
+                      <span className="ml-1 rounded bg-amber-100 px-1.5 text-[11px] font-medium text-amber-800" title={t("travelRates.unverifiedHint")}>
+                        {t("travelRates.unverified")}
+                      </span>
+                    )}
                     {s.note && <div className="max-w-[16rem] text-[11px] font-normal text-ink-secondary">{s.note}</div>}
                   </td>
                   {PRICES.map((f) => (

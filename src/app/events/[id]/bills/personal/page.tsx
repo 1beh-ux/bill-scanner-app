@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -106,7 +107,7 @@ export default function PersonalBillsPage({ params }: { params: Promise<{ id: st
     load();
   }, [load]);
 
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("personalBills.noAccess")}</div>;
+  if (denied) return <NoAccess />;
   if (!data) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   const closed = data.eventStatus === "closed";
   const keyOfAuthor = (authorId: string) => data.people.find((p) => p.authorId === authorId)?.key ?? `a:${authorId}`;

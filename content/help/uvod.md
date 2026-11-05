@@ -9,6 +9,6 @@ Vlevo nahoře je přepínač aktuální akce — vše, co v menu vidíte, se tý
 
 ![Přehled akcí](/napoveda/images/uvod-1.jpg)
 
-Pod Nastavení akce najdete stav přípravy nové akce: "Akce je připravená: 4/5" ukazuje, co ještě chybí (např. termín odpovědi rodičů), a přepínače Moduly — čím vypnete modul (Zdraví, Pošta…), zmizí z menu, ale data zůstanou zachována.
+Pod Nastavení akce najdete stav přípravy akce: „Akce je připravená: N/M“ vypíše, co ještě zbývá (✓ hotové, ○ úkol, např. „Připojit schránku“); kliknutím na úkol se otevře správná záložka. Počet úkolů záleží na tom, co akce používá (u prodeje vstupenek jiné než u tábora). Na záložce Akce jsou i přepínače **Moduly akce** – Účtenky, Účastníci, Zdraví, Pošta, Plánování, Kuchyně, Banka a u veřejné akce Vstupenky. Vypnutý modul zmizí z menu, data zůstanou zachována. Moduly zapíná správce organizace, kdo je smí používat, určuje v Nastavení akce → Přístup.
 
 ![Nastavení akce — moduly a stav přípravy](/napoveda/images/uvod-2.jpg)

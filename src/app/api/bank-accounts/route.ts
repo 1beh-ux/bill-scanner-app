@@ -5,7 +5,9 @@ import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 import { ACCOUNT_NUMBER, BANK_ACCOUNT_SELECT, FIO_BANK_CODE, accountKindOf } from "@/lib/bank/accounts";
 
 // Organizace -> Připojení -> Banka (organization admin): the acting organization's Fio accounts.
-// GET also serves the event settings' account select (any signed-in user; no token, ever).
+// GET also serves the event settings' account select. No token, ever; non-admins (N1, audit2) get only what
+// the select needs -- label, bank code, the last 4 digits, whether a token is set -- not the account number,
+// token dates or the events using it. Saving a choice checks the exact account on the server.
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -14,7 +16,11 @@ export async function GET() {
     select: BANK_ACCOUNT_SELECT,
     orderBy: { createdAt: "asc" },
   });
-  return NextResponse.json({ accounts, canEdit: isOrgAdmin(user) });
+  if (!isOrgAdmin(user)) {
+    const reduced = accounts.filter((a) => a.active).map((a) => ({ id: a.id, label: a.label, bankCode: a.bankCode, last4: a.accountNumber.slice(-4), tokenSet: !!a.tokenSetAt }));
+    return NextResponse.json({ accounts: reduced, canEdit: false });
+  }
+  return NextResponse.json({ accounts, canEdit: true });
 }
 
 export async function POST(req: NextRequest) {

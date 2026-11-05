@@ -378,7 +378,8 @@ export default function EventDetailPage({
           { labelKey: "eventDetail.checklistPaymentDoc", done: !!event.paymentDocTypeId, section: "platba" as Tab, help: "prijeti-registrace" },
         ]
       : []),
-    { labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce", help: "prijeti-registrace" },
+    // Camp-only (R4-7, audit2): a ticket sale has no parents' reply deadline.
+    ...(!isPublicEvent ? [{ labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce" as Tab, help: "prijeti-registrace" }] : []),
   ];
   const checklistDone = checklist.filter((c) => c.done).length;
 
@@ -512,7 +513,8 @@ export default function EventDetailPage({
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
               {!isAdmin && <p className="rounded-lg bg-paper-2 px-3 py-2 text-[13px] text-ink-secondary">{t("eventSettings.adminManaged")}</p>}
-              {isAdmin && (
+              {/* Parents' reply deadline + Dotazník: camp-only (R4-7); a ticket sale sets its deadline in Vstupenky. */}
+              {isAdmin && !isPublicEvent && (
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventDetail.registrationInfoTitle")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
@@ -565,7 +567,7 @@ export default function EventDetailPage({
                 (isAdmin || moduleAccess.participants) && <p className="text-[13px] text-ink-secondary">{t("publicTab.notConnected")}</p>
               )}
               {/* This event's own look of its page, over the organization's (Organizace -> Vzhled). */}
-              {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && <AppearanceEditor eventId={id} />}
+              {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && <AppearanceEditor eventId={id} tickets={isPublicEvent} />}
               {(isAdmin || moduleAccess.participants || moduleAccess.tickets) && event.kind !== "public_event" && <PublicTextsEditor eventId={id} />}
             </div>
           )}

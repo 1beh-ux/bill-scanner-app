@@ -48,10 +48,13 @@ export function eventSaleSetup(event: Pick<Event, "priceRules" | "ticketSettings
  */
 export async function createTicketOrder(event: Event, body: unknown, source: "public" | "portal"): Promise<{ ok: true; order: OrderWithTickets } | { ok: false; errors: string[] }> {
   const { types, settings } = eventSaleSetup(event);
+  // R4-10 (audit2): a paid order needs somewhere to pay to and a mailbox to send the details from.
+  const ready = await saleReadiness(event);
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM events WHERE id = ${event.id} FOR UPDATE`;
     const checked = validateOrder(body, { types, settings, sold: await soldCounts(event.id, tx) });
     if (!checked.ok) return checked;
+    if (checked.data.totalCzk > 0 && !(ready.account && ready.sender)) return { ok: false as const, errors: ["payment_not_ready"] };
     const last = await tx.ticketOrder.aggregate({ where: { eventId: event.id }, _max: { number: true } });
     const number = (last._max.number ?? 0) + 1;
     const { items, ...buyer } = checked.data;
@@ -80,6 +83,11 @@ export async function createTicketOrder(event: Event, body: unknown, source: "pu
   if (result.order.totalCzk === 0) await markTicketOrderPaid(result.order.id, { via: "manual", userId: null });
   else await sendOrderMail(result.order.id, TICKET_ORDER_PURPOSE_KEY);
   return result;
+}
+
+/** R4-10 (audit2): can this event take paid orders -- a payment account and a connected sender mailbox. */
+export async function saleReadiness(event: Pick<Event, "registrationBankAccountNumber" | "registrationBankCode" | "senderEmail">) {
+  return { account: !!(event.registrationBankAccountNumber && event.registrationBankCode), sender: !!(await eventSender(event)) };
 }
 
 /** "123456789/2010" + the SPAYD QR payload of the order (null = the event's account isn't usable). */

@@ -87,6 +87,9 @@ export function remaining(types: TicketType[], settings: TicketSettings, sold: R
   return { perType, total };
 }
 
+/** R4-9 (audit2): how many one order may still take -- the per-order maximum, never more than what's left in total. */
+export const orderCap = (maxPerOrder: number, totalLeft: number | null) => (totalLeft === null ? maxPerOrder : Math.min(maxPerOrder, totalLeft));
+
 const str = (v: unknown, max = 200) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 export const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 200;
 

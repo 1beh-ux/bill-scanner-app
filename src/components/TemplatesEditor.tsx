@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import HelpLink from "@/components/HelpLink";
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
@@ -25,7 +26,7 @@ const btnPrimary =
 // Organizace -> Šablony and (inside TemplateLevelProvider value="app") Aplikace -> Šablony
 // aplikace: the same sections, on the organization's or the app's templates (organizations step 4).
 export default function TemplatesEditor({ titleKey, introKey }: { titleKey: string; introKey?: string }) {
-  const { t } = useTranslations();
+  const { t, role, roleLoaded, isSuperAdmin } = useTranslations();
   const level = useTemplateLevel();
   const [tab, setTab] = useState<"health" | "emails" | "mail" | "bills" | "participants" | "planning" | "kitchen">("health");
   const sections: { key: typeof tab; labelKey: string }[] = [
@@ -44,6 +45,10 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
     if (wanted && sections.some((x) => x.key === wanted)) setTab(wanted as typeof tab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // N2 (audit2): Šablony are organization admins' (the APIs refuse others anyway): no editing controls for anyone else.
+  if (!roleLoaded) return null;
+  if (role !== "admin" && !isSuperAdmin) return <NoAccess />;
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8">

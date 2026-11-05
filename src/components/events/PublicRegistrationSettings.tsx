@@ -54,12 +54,13 @@ export default function PublicRegistrationSettings({
 
   return (
     <div className="flex max-w-xl flex-col gap-3">
-      <h4 className="text-[14px] font-semibold text-ink">{t("publicSettings.title")}</h4>
+      {/* R4-7 (audit2): a ticket sale is not a family registration -- its own wording. */}
+      <h4 className="text-[14px] font-semibold text-ink">{t(event.kind === "public_event" ? "publicSettings.titleTickets" : "publicSettings.title")}</h4>
       <label className="flex items-center gap-2 text-[14px] text-ink">
         <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} className="h-4 w-4 accent-ember" />
         {t("publicSettings.on")}
       </label>
-      <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("publicSettings.onHint")}</span>
+      <span className="-mt-2 text-[11.5px] text-ink-secondary">{t(event.kind === "public_event" ? "publicSettings.onHintTickets" : "publicSettings.onHint")}</span>
       <label className="text-[13px] text-ink-secondary">
         {t("publicSettings.slug")}
         <input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase())} placeholder="clenstvi-2026" className={inputClass + " mt-1"} />

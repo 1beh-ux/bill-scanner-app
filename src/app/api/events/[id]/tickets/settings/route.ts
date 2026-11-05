@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { saleReadiness } from "@/lib/tickets-server";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
@@ -31,6 +32,8 @@ async function view(eventId: string) {
     portalOpen: e.portalOpen,
     senderEmail: e.senderEmail,
     scanLink: scanUrl(e.ticketScanToken),
+    // R4-10 (audit2): what paid orders need -- the order route refuses them without it.
+    ready: await saleReadiness(e),
   };
 }
 

@@ -23,6 +23,7 @@ type View = {
   bankAccountId: string | null;
   portalOpen: boolean;
   senderEmail: string | null;
+  ready?: { account: boolean; sender: boolean };
   scanLink: string | null;
 };
 type Row = { key: string; label: string; priceCzk: string; capacity: string };
@@ -39,7 +40,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
   const [view, setView] = useState<View | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [form, setForm] = useState({ maxPerOrder: "10", totalCapacity: "", vsPrefix: "", registrationDeadline: "", location: "", portalInfo: "", accountNumber: "", bankCode: "", bankCheckEnabled: false, bankAccountId: "", portalOpen: false, bankCheckIntervalMin: 30 });
-  const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber: string; bankCode: string; tokenSetAt: string | null }[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<{ id: string; label: string; accountNumber?: string; last4?: string; bankCode: string; tokenSetAt?: string | null; tokenSet?: boolean }[]>([]);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -82,7 +83,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
   }, [eventId]);
 
   // Only the organization's connected Fio accounts equal to the payment account qualify.
-  const matching = bankAccounts.filter((a) => a.tokenSetAt && a.accountNumber === norm(form.accountNumber) && a.bankCode === norm(form.bankCode));
+  const matching = bankAccounts.filter((a) => (a.tokenSetAt || a.tokenSet) && (a.accountNumber ? a.accountNumber === norm(form.accountNumber) : a.last4 === norm(form.accountNumber).slice(-4)) && a.bankCode === norm(form.bankCode));
   const set = (patch: Partial<typeof form>) => setForm((f) => ({ ...f, ...patch }));
 
   async function patch(body: object) {
@@ -125,7 +126,8 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
 
   return (
     <div className="flex max-w-3xl flex-col gap-8">
-      {!view.senderEmail && <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">{t("ticketSettings.noSender")}</p>}
+      {!(view.ready?.sender ?? !!view.senderEmail) && <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">{t("ticketSettings.noSender")}</p>}
+      {view.ready && !view.ready.account && <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[13px] text-amber-800">{t("ticketSettings.noAccount")}</p>}
 
       <form onSubmit={save} className="flex flex-col gap-6">
         <section>
@@ -205,7 +207,7 @@ export default function TicketSettings({ eventId, isAdmin, t }: { eventId: strin
                 <option value="">{t("bankCheck.pickAccount")}</option>
                 {matching.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.label} ({a.accountNumber}/{a.bankCode})
+                    {a.label} ({a.accountNumber ?? `…${a.last4}`}/{a.bankCode})
                   </option>
                 ))}
               </select>

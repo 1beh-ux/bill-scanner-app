@@ -124,8 +124,10 @@ export function validateSubmission(
     const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const g = { name: str(r.name) || null, email: str(r.email), phone: str(r.phone, 50) || null, relationship: str(r.relationship, 100) || null };
     if (!g.email && !g.name && !g.phone) return; // an empty row the parent didn't fill
+    // R4-3 (audit2): a guardian needs a name, not only an e-mail.
+    if (!g.name) errors.push(`g${i}.name`);
     if (!isEmail(g.email)) errors.push(`g${i}.email`);
-    else extra.push(g);
+    else if (g.name) extra.push(g);
   });
   const childGuardians: GuardianIn[] = [];
   for (const g of [...adultGuardians, ...extra]) if (!childGuardians.some((x) => x.email.toLowerCase() === g.email.toLowerCase())) childGuardians.push(g);

@@ -39,7 +39,9 @@ export async function recoverPortalLink(o: { organizationId: string; email: stri
     const subject = substituteVariables(template.subject, vars);
     const log = { email, purposeKey: PORTAL_LINK_PURPOSE_KEY, sentByUserId: null, subject };
     try {
-      await sendEmailWithOptionalAttachment({ to: email, fromName: org.name, senderEmail: org.portalRecoverySenderEmail, subject, body: substituteVariables(template.body, vars), attachments: await templateFiles(o.organizationId, null, PORTAL_LINK_PURPOSE_KEY) });
+      // R5 (audit2): a new link replaced the old one -- say so, or the parent keeps the dead link.
+      const body = (org.portalRecoveryNewLink ? "Pozor: posíláme nový odkaz do portálu, dosavadní odkaz už nefunguje.\n\n" : "") + substituteVariables(template.body, vars);
+      await sendEmailWithOptionalAttachment({ to: email, fromName: org.name, senderEmail: org.portalRecoverySenderEmail, subject, body, attachments: await templateFiles(o.organizationId, null, PORTAL_LINK_PURPOSE_KEY) });
       await prisma.childEmailLog.createMany({ data: target.logChildIds(email).map((childId) => ({ ...log, childId, status: "sent" as const })) });
       sent++;
     } catch (err) {

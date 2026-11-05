@@ -1,5 +1,6 @@
 "use client";
 
+import { isPublicPath } from "@/lib/public-paths";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -75,7 +76,7 @@ export default function AppSidebar() {
   }, [eventId]);
 
   // The parent portal (/p/<token>) is public and has no app navigation.
-  if (pathname.startsWith("/login") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/u/") || pathname.startsWith("/vstup/") || pathname.startsWith("/vyuctovani/")) return null;
+  if (isPublicPath(pathname)) return null;
 
   function onEventChange(id: string) {
     setCurrentEventId(id);
@@ -94,7 +95,7 @@ export default function AppSidebar() {
   const showMail = moduleAccess.mail && !hiddenModules.includes("mail");
   const showPlanning = moduleAccess.planning && !hiddenModules.includes("planning");
   const showParticipants = (moduleAccess.participants && !hiddenModules.includes("participants")) || showHealth || showMail;
-  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank, tickets: !!moduleAccess.tickets, adults: !!moduleAccess.kitchen || role === "admin", kitchen: !!moduleAccess.kitchen && !hiddenModules.includes("kitchen") };
+  const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank, tickets: !!moduleAccess.tickets, adults: !!moduleAccess.kitchen || !!moduleAccess.participants || !!moduleAccess.bills || role === "admin", kitchen: !!moduleAccess.kitchen && !hiddenModules.includes("kitchen") };
 
   const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin) && (!i.module || moduleShown[i.module])).map((i) => ({
     ...i,

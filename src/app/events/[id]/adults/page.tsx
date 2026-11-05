@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import HelpLink from "@/components/HelpLink";
 import { Fragment, use, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
@@ -55,7 +56,7 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
     load();
   }
 
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("adults.noAccess")}</div>;
+  if (denied) return <NoAccess />;
   if (!data) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
   const { startDate, endDate } = data.event;
   const count = data.adults.length;

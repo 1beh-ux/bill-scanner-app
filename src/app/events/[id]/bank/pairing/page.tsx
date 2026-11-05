@@ -1,5 +1,6 @@
 "use client";
 
+import NoAccess from "@/components/NoAccess";
 import { Suspense, use, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -140,7 +141,7 @@ function Pairing({ id }: { id: string }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  if (denied) return <div className="p-8 text-[14px] text-ink-secondary">{t("bank.noAccess")}</div>;
+  if (denied) return <NoAccess />;
 
   const billRow = (b: Bill, extra?: React.ReactNode) => (
     <label key={b.id} className="flex cursor-pointer items-start gap-2 border-b border-mist/60 py-1.5 text-[13px]">
