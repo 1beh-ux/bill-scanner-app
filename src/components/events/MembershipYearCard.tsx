@@ -8,7 +8,7 @@ type T = (key: string, vars?: Record<string, string>) => string;
 type Ev = { id: string; name: string; kind: string; membershipYear: number | null };
 const inputClass = "w-full rounded-lg border border-mist bg-paper-2 px-3 py-2 text-[14px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
-export default function MembershipYearCard({ event, onSaved, t }: { event: { id: string; startDate: string; membershipCheckYear: number | null; registrationConnected: boolean }; onSaved: () => void; t: T }) {
+export default function MembershipYearCard({ event, onSaved, t }: { event: { id: string; startDate: string; membershipCheckYear: number | null; registrationConnected: boolean; publicRegistration?: boolean; portalOpen?: boolean; registrationBankAccountNumber?: string | null; bankCheckEnabled?: boolean }; onSaved: () => void; t: T }) {
   const [years, setYears] = useState<Ev[]>([]);
   const [value, setValue] = useState(event.membershipCheckYear == null ? "" : String(event.membershipCheckYear));
   const [state, setState] = useState<"idle" | "saved" | "failed">("idle");
@@ -50,7 +50,8 @@ export default function MembershipYearCard({ event, onSaved, t }: { event: { id:
       <p className="mt-1 max-w-md text-[12px] text-ink-secondary">
         {source.length ? t("membershipYear.source", { year: String(used), events: source.map((e) => e.name).join(", ") }) : t("membershipYear.noSource", { year: String(used) })}
       </p>
-      {!event.registrationConnected && <p className="mt-1 max-w-md text-[12px] text-amber-700">{t("membershipYear.notConnected")}</p>}
+      {/* U3 (audit 2026-11-05): only when the event uses something registration-related. */}
+      {!event.registrationConnected && (event.publicRegistration || event.portalOpen || !!event.registrationBankAccountNumber || event.bankCheckEnabled) && <p className="mt-1 max-w-md text-[12px] text-amber-700">{t("membershipYear.notConnected")}</p>}
       {state === "saved" && <p className="mt-1 text-[12.5px] text-pine">{t("appearance.saved")}</p>}
       {state === "failed" && <p className="mt-1 text-[12.5px] text-red-600">{t("registrationSettings.saveFailed")}</p>}
     </div>

@@ -85,8 +85,8 @@ async function main() {
     { key: "mailTab.questionnaireTitle", cs: "Dotazník", en: "Questionnaire" },
     {
       key: "mailTab.questionnaireHint",
-      cs: "Odkaz je dostupný jako {questionnaire_url} v e-mailech i dokumentech. Vyplnění dotazníku značte ručně jako typ dokumentu (Šablony → Pošta) -- napojení na Google Sheet přidáme později.",
-      en: "The link is available as {questionnaire_url} in both emails and documents. Track completion manually as a document type (Templates → Mail) -- a Google Sheet connection comes later.",
+      cs: "Odkaz je dostupný jako {questionnaire_url} v e-mailech i dokumentech. Vyplnění dotazníku značte ručně jako typ dokumentu (Šablony → Pošta).",
+      en: "The link is available as {questionnaire_url} in both emails and documents. Track completion manually as a document type (Templates → Mail).",
     },
     { key: "mailTab.questionnaireUrlLabel", cs: "Odkaz na dotazník", en: "Questionnaire link" },
   ];

@@ -37,6 +37,24 @@ const rows: Row[] = [
   r("testEvent.checkbox", "Testovací akce", "Test event"),
   r("testEvent.hint", "Na zkoušení: její účastníci se nepropojí do Lidí, nenabídne se v portálu ani ve výběrech jiných akcí a nepočítá se do Využití.", "For trying things out: its participants aren't linked into People, it isn't offered in the portal or other events' pickers and doesn't count in Usage."),
   r("testEvent.badge", "TEST", "TEST"),
+  // Phase 6 U1: the readiness checklist names what is still to do as a task.
+  r("eventDetail.checklistDriveTask", "Připojit složku pro export účtenek na Disku", "Connect the bills export folder in Drive"),
+  r("eventDetail.checklistProcessedFolderTask", "Nastavit složku Zpracované soubory", "Set the Processed files folder"),
+  r("eventDetail.checklistMailboxTask", "Připojit schránku", "Connect the mailbox"),
+  r("eventDetail.checklistCategoriesTask", "Přidat kategorie účtenek", "Add bill categories"),
+  r("eventDetail.checklistBudgetsTask", "Vyplnit rozpočty kategorií", "Fill in the category budgets"),
+  r("eventDetail.checklistParticipantsFolderTask", "Připojit složku pro Účastníky a Poštu", "Connect the Participants & mail folder"),
+  r("eventDetail.checklistDocumentTypesTask", "Přidat typy dokumentů", "Add document types"),
+  r("eventDetail.checklistTicketTypesTask", "Nastavit druhy vstupenek a ceny", "Set the ticket types and prices"),
+  r("eventDetail.checklistRegistrationAccountTask", "Zadat účet pro platby přihlášek", "Enter the account for registration payments"),
+  r("eventDetail.checklistPriceTask", "Zadat cenu akce", "Enter the event price"),
+  r("eventDetail.checklistLocationTask", "Zadat místo konání", "Enter the location"),
+  r("eventDetail.checklistPublicSlugTask", "Zvolit adresu veřejné přihlášky", "Choose the public registration address"),
+  r("eventDetail.checklistBankAccountTask", "Vybrat bankovní účet pro kontrolu plateb", "Pick the bank account for the payment check"),
+  r("eventDetail.checklistPaymentDocTask", "Vybrat dokument, který se zaškrtne po zaplacení", "Pick the document ticked when paid"),
+  r("eventDetail.checklistDeadlineTask", "Zadat uzávěrku přihlášek", "Enter the registration deadline"),
+  r("eventDetail.checklistDone", "hotovo", "done"),
+  r("eventDetail.checklistTodo", "zbývá udělat", "still to do"),
 ];
 
 async function main() {

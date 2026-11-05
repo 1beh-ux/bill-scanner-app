@@ -450,23 +450,21 @@ export default function EventDetailPage({
         <p className="mb-2 text-[13px] font-medium text-ink">
           {t("eventDetail.checklistTitle", { done: String(checklistDone), total: String(checklist.length) })}
         </p>
-        <div className="flex flex-wrap gap-2">
+        {/* U1 (audit 2026-11-05): done = ticked and quiet; to do = an empty circle and the task, a link to its tab. */}
+        <ul className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
           {checklist.map((item) => (
-            <span
-              key={item.labelKey}
-              className={
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] " +
-                (item.done ? "bg-pine/15 text-pine" : "bg-amber-100 text-amber-800 hover:bg-amber-200")
-              }
-            >
-              <button onClick={() => setTab(item.section)}>
-                {item.done ? "✓ " : ""}
-                {t(item.labelKey)}
+            <li key={item.labelKey} className="flex items-center gap-1.5 text-[13px]">
+              <span aria-hidden="true" className={item.done ? "text-pine" : "text-ink-secondary"}>
+                {item.done ? "✓" : "○"}
+              </span>
+              <button type="button" onClick={() => setTab(item.section)} className={item.done ? "text-left text-ink-secondary hover:underline" : "text-left text-ink hover:text-ember hover:underline"}>
+                {item.done ? t(item.labelKey) : t(`${item.labelKey}Task`)}
+                <span className="sr-only"> – {t(item.done ? "eventDetail.checklistDone" : "eventDetail.checklistTodo")}</span>
               </button>
               {!item.done && <HelpLink slug={item.help} />}
-            </span>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
 
       <div className="flex flex-col gap-6 md:flex-row">
