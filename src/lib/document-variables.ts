@@ -125,16 +125,29 @@ export function confirmedMembershipKey(p: { childId?: string | null }, e: { vsMe
   return p.childId && e.memberChildIds?.has(p.childId) ? (e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY) : null;
 }
 
-/** The membership field as lists show it: in a connected event Ano / Ne for everyone (the stored value stays); else null. */
+/** The membership field as lists show it in a connected event: Ano / Ne / "" when unknown (the stored value stays); else null. */
 export function membershipDisplay(p: ParticipantForMerge, e: EventForMerge): { key: string; value: string } | null {
   if (e.memberChildIds === undefined) return null;
-  return { key: e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY, value: isMember(p, e) ? "Ano" : "Ne" };
+  return { key: e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY, value: memberLabel(p, e) };
 }
 
 // Stored "true" (a field's Ano/Ne values are normalised on save/import) or a
 // default Ano value is a member; vsMemberValues is the older per-event list.
 // In a registration-connected event, an accepted membership for the year also
 // counts -- on top of the manual field, never instead of it.
+/**
+ * P2 (audit2): membership as shown -- "Ano" when a member, "Ne" only when known not to be (the field says no, or
+ * a connected event's person is linked and isn't among the members), else "" (unknown: lists show "—", never "Ne").
+ * Prices and VS keep isMember (they need a yes / no).
+ */
+export function memberLabel(p: ParticipantForMerge, e: EventForMerge): "Ano" | "Ne" | "" {
+  if (isMember(p, e)) return "Ano";
+  const raw = p.customFieldValues?.[e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY] ?? "";
+  if (toBoolean(raw) === "false") return "Ne";
+  if (e.memberChildIds !== undefined && p.childId) return "Ne";
+  return "";
+}
+
 export function isMember(p: ParticipantForMerge, e: EventForMerge): boolean {
   if (confirmedMembershipKey(p, e)) return true;
   const key = e.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY;
@@ -403,7 +416,7 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
       values[f.key] = "Ano";
     } else if (f.kind === "custom" && event.memberChildIds !== undefined && f.key === (event.vsMembershipFieldKey ?? DEFAULT_MEMBERSHIP_FIELD_KEY)) {
       // A connected event knows who's a member: the membership field reads Ano / Ne, never empty.
-      values[f.key] = isMember(participant, event) ? "Ano" : "Ne";
+      values[f.key] = memberLabel(participant, event);
     } else if (f.kind === "builtin") {
       const fn = fixedDef?.builtinProp ? BUILTIN_RESOLVERS[fixedDef.builtinProp] : undefined;
       if (fn) values[f.key] = fn(participant);
@@ -424,7 +437,7 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
       } else if (f.computedType === "contact_email") {
         values[f.key] = resolveContactEmail(participant);
       } else if (f.computedType === "membership_status") {
-        values[f.key] = isMember(participant, event) ? "Ano" : "Ne";
+        values[f.key] = memberLabel(participant, event);
       } else if (f.computedType === "price_category") {
         const rules = readPriceRules(event.priceRules);
         values[f.key] = rules ? (categoryFor(rules, participant.priceCategory, adultOf(participant, event))?.label ?? "") : "";

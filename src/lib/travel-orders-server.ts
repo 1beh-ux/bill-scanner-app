@@ -11,7 +11,7 @@ import { billsBucket } from "@/lib/gcs";
 import { ADDRESS_KEYS } from "@/lib/adults";
 import { cleanBank, setAuthorBank, validateBank } from "@/lib/payers";
 import { calcTravelOrder, FUELS, GEARBOXES, normalizePhone, pickRateSet, type CalcError, type CalcResult, type RateValues } from "@/lib/travel-order-calc";
-import { dateToWall, mergeWorkers, normName, wallToDate, type WorkerEntry } from "@/lib/travel-orders";
+import { dateToWall, mergeWorkers, normName, submitProblems, wallToDate, type SubmitProblem, type WorkerEntry } from "@/lib/travel-orders";
 import { renderTravelOrderPdf } from "@/lib/travel-order-pdf";
 
 export type OrderWithLegs = TravelOrder & { legs: TravelLeg[] };
@@ -201,7 +201,7 @@ export function orderForm(o: OrderWithLegs) {
 }
 
 // --- Odeslat
-export type SubmitError = { error: string; date?: string; legs?: number[] };
+export type SubmitError = { error: string; date?: string; legs?: number[]; problems?: SubmitProblem[] };
 
 const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 
@@ -226,15 +226,16 @@ export async function submitOrder(order: OrderWithLegs, user: User): Promise<Sub
   const event = await prisma.event.findUniqueOrThrow({ where: { id: order.eventId }, select: { name: true, startDate: true, status: true } });
   if (event.status === "closed") return { error: "event_closed_locked" };
   if (order.status !== "draft") return { error: "not_draft" };
-  if (!order.startAt || !order.endAt) return { error: "no_dates" };
-  if (!order.workerName) return { error: "no_worker" };
-  if (!order.vehicleLabel || !order.fuel || !order.gearbox) return { error: "no_vehicle" };
-  const rates = await rateFor(order, event.startDate);
-  if (!rates || rates.provisional) return { error: "no_rate_set", date: order.startAt.toISOString().slice(0, 10) };
-  const calc = calcOf(order, rates.values);
-  if (!calc.ok) return { error: calc.errors.includes("no_legs") ? "no_legs" : calc.errors[0].startsWith("leg_") ? "bad_legs" : calc.errors[0], legs: calc.errors.filter((e) => e.startsWith("leg_")).map((e) => Number(e.split(":")[1])) };
+  // T1 (audit2): every blocking problem at once (src/lib/travel-orders.ts submitProblems), not just the first.
+  const rates = order.startAt ? await rateFor(order, event.startDate) : null;
+  const rateOk = !!rates && !rates.provisional;
+  const calc = rateOk ? calcOf(order, rates!.values) : null;
   const bank = cleanBank(order.payoutAccountNumber, order.payoutBankCode);
-  if (order.payoutMethod === "bank" && (!bank.account || !bank.code || validateBank(bank))) return { error: "payout_missing" };
+  const problems = submitProblems(order, calc, rateOk, !!bank.account && !!bank.code && !validateBank(bank));
+  if (problems.length || !calc || !calc.ok || !rates || !order.startAt || !order.workerName) {
+    const first = problems[0] ?? { code: "generic" };
+    return { error: first.code, date: order.startAt?.toISOString().slice(0, 10), legs: first.legs, problems };
+  }
 
   // The payee: the worker's payer, else a new payer made from the worker (attached to the event).
   let payerId = order.workerAuthorId;

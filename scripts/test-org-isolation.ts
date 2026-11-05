@@ -430,6 +430,21 @@ async function main() {
       check("Bills user: the event's people's vehicles only", JSON.stringify(evList.body?.vehicles?.map((x: { id: string }) => x.id)) === JSON.stringify([adminCar.id]), JSON.stringify(evList.body)?.slice(0, 300));
       r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "x", gearbox: "manual", fuel: "diesel", ownerName: "Někdo" } }));
       check("Bills user: a free-text owner -> refused", r.status === 400, `HTTP ${r.status}`);
+      // audit2 T1: only old, never-filled drafts are cleaned up.
+      {
+        asUser(admin);
+        const old = new Date(Date.now() - 3 * 24 * 3600 * 1000);
+        const base = { organizationId: org.id, eventId: eventId!, status: "draft" as const };
+        const emptyOld = await prisma.travelOrder.create({ data: { ...base, createdAt: old, legs: { create: [{ sortOrder: 0 }] } } });
+        const namedOld = await prisma.travelOrder.create({ data: { ...base, createdAt: old, workerName: "Jan" } });
+        const legOld = await prisma.travelOrder.create({ data: { ...base, createdAt: old, legs: { create: [{ sortOrder: 0, fromPlace: "Brno" }] } } });
+        const emptyNew = await prisma.travelOrder.create({ data: { ...base } });
+        const r3 = await (await import("@/app/api/events/[id]/travel-orders/route")).GET(req(`/api/events/${eventId}/travel-orders`), params({ id: eventId! }));
+        const left = new Set((await prisma.travelOrder.findMany({ where: { id: { in: [emptyOld.id, namedOld.id, legOld.id, emptyNew.id] } }, select: { id: true } })).map((x) => x.id));
+        check("T1: old empty draft deleted; named / with a route / fresh kept", r3.status === 200 && !left.has(emptyOld.id) && left.has(namedOld.id) && left.has(legOld.id) && left.has(emptyNew.id), JSON.stringify([...left]));
+        await prisma.travelOrder.deleteMany({ where: { id: { in: [namedOld.id, legOld.id, emptyNew.id] } } });
+        asUser(plain);
+      }
       // audit2 SEC-SIM1: a portal link comes from configuration, whatever the request said.
       {
         const prev = process.env.APP_BASE_URL;

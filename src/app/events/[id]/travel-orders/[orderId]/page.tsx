@@ -7,7 +7,7 @@ import { pluralForm } from "@/lib/plural";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
 import VehicleForm, { vehicleOwnerName, type Owner, type VehicleRow } from "@/components/travel/VehicleForm";
-import { normName, orderWarnings, type LegForm, type WorkerEntry } from "@/lib/travel-orders";
+import { normName, orderWarnings, submitProblems, type LegForm, type WorkerEntry } from "@/lib/travel-orders";
 import type { CalcError, CalcResult } from "@/lib/travel-order-calc";
 import { DateField, DateTimeField, TimeField } from "@/components/DateTimeFields";
 
@@ -398,6 +398,8 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
 
   const calc = live?.calc;
   const rate = live?.rate;
+  // T1 (audit2): everything blocking Odeslat, live (the server checks the same list, src/lib/travel-orders.ts).
+  const problems = form ? submitProblems(form, calc ?? null, !!rate && !rate.provisional, !!form.payoutAccountNumber.trim() && !!form.payoutBankCode.trim()) : [];
   const calcErrorText = (c: CalcError) =>
     c.errors.map((e) => (e.startsWith("leg_km:") ? t("travelOrders.calcError.leg_km", { n: String(Number(e.split(":")[1]) + 1) }) : e.startsWith("leg_amount:") ? t("travelOrders.calcError.leg_amount", { n: String(Number(e.split(":")[1]) + 1) }) : t(`travelOrders.calcError.${e}`))).join(" ");
   const missing = (v: string) => draft && !v.trim() && <span className="ml-1 text-[11px] text-amber-800">{t("travelOrders.missing")}</span>;
@@ -493,7 +495,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div className="flex min-w-0 flex-col gap-4">
           {/* Pracovník */}
-          <section className="rounded-lg border border-mist bg-paper p-4">
+          <section id="to-worker" className="scroll-mt-20 rounded-lg border border-mist bg-paper p-4">
             <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("travelOrders.workerTitle")}</h2>
             {draft && (
               <label className={label}>
@@ -528,18 +530,18 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
               <label className={label + " sm:col-span-2"}>
                 {t("travelOrders.workerAddress")}
                 {missing(form.workerAddress)}
-                <input className={input} disabled={disabled} value={form.workerAddress} onChange={(e) => set("workerAddress", e.target.value)} />
+                <input id="to-workerAddress" className={input} disabled={disabled} value={form.workerAddress} onChange={(e) => set("workerAddress", e.target.value)} />
               </label>
               <label className={label}>
                 {t("travelOrders.workerPhone")}
                 {missing(form.workerPhone)}
-                <input className={input} disabled={disabled} value={form.workerPhone} onChange={(e) => set("workerPhone", e.target.value)} />
+                <input id="to-workerPhone" className={input} disabled={disabled} value={form.workerPhone} onChange={(e) => set("workerPhone", e.target.value)} />
               </label>
             </div>
           </section>
 
           {/* Vozidlo */}
-          <section className="rounded-lg border border-mist bg-paper p-4">
+          <section id="to-vehicle" className="scroll-mt-20 rounded-lg border border-mist bg-paper p-4">
             <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("travelOrders.vehicleTitle")}</h2>
             {draft && (
               <div className="flex flex-wrap items-end gap-2">
@@ -610,7 +612,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
           </section>
 
           {/* Cesta */}
-          <section className="rounded-lg border border-mist bg-paper p-4">
+          <section id="to-dates" className="scroll-mt-20 rounded-lg border border-mist bg-paper p-4">
             <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("travelOrders.tripTitle")}</h2>
             <div className="grid gap-3 sm:grid-cols-4">
               <label className={label + " sm:col-span-4"}>
@@ -691,7 +693,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
                 </label>
               </div>
             )}
-            <h3 className="mb-1 mt-4 text-[13px] font-semibold text-ink">{t("travelOrders.payoutTitle")}</h3>
+            <h3 id="to-payout" className="mb-1 mt-4 scroll-mt-20 text-[13px] font-semibold text-ink">{t("travelOrders.payoutTitle")}</h3>
             <div className="grid gap-3 sm:grid-cols-4">
               <label className={label}>
                 {t("travelOrders.payoutMethod")}
@@ -723,7 +725,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
         <aside className="h-fit rounded-lg border border-mist bg-paper p-4 lg:sticky lg:top-4">
           <h2 className="mb-2 text-[15px] font-semibold text-ink">{t("travelOrders.calcTitle")}</h2>
           {draft && (
-            <label className={label + " mb-2 block"}>
+            <label id="to-rate" className={label + " mb-2 block scroll-mt-20"}>
               {t("travelOrders.rateSet")}
               <select className={input} value={form.rateSetId} onChange={(e) => set("rateSetId", e.target.value)}>
                 <option value="">{t("travelOrders.rateAuto")}</option>
@@ -774,9 +776,23 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
               <button type="button" className={btn} disabled={busy || !dirty} onClick={save}>
                 {dirty ? t("travelOrders.saveDraft") : t("travelOrders.saved")}
               </button>
-              <button type="button" className={btnPrimary} disabled={busy || view.event.status === "closed"} onClick={submit}>
+              <button type="button" className={btnPrimary} disabled={busy || view.event.status === "closed" || problems.length > 0} onClick={submit}>
                 {t("travelOrders.submit")}
               </button>
+              {problems.length > 0 && (
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[12.5px] text-amber-900">
+                  <p className="mb-1 font-medium">{t("travelOrders.missingTitle")}</p>
+                  <ul className="flex flex-col gap-0.5">
+                    {problems.map((pr) => (
+                      <li key={pr.code}>
+                        <button type="button" className="text-left hover:underline" onClick={() => document.getElementById(`to-${pr.field}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                          ○ {t(`travelOrders.submitError.${pr.code}`, { date: form.startAt ? czDay(form.startAt.slice(0, 10)) : "", legs: (pr.legs ?? []).map((n) => n + 1).join(", ") })}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {!view.order.billId && (
                 <button type="button" className="text-[12px] text-red-700 hover:underline" onClick={remove}>
                   {t("travelOrders.deleteDraft")}
@@ -787,7 +803,7 @@ export default function TravelOrderPage({ params }: { params: Promise<{ id: stri
         </aside>
       </div>
       {/* Úseky: the full width (the table needs it) */}
-      <section className="mt-4 rounded-lg border border-mist bg-paper p-4">
+      <section id="to-legs" className="mt-4 scroll-mt-20 rounded-lg border border-mist bg-paper p-4">
         <h2 className="mb-2 text-[15px] font-semibold text-ink">
           {t("travelOrders.legsTitle")} <span className="text-[12px] font-normal text-ink-secondary">({t(`travelOrders.legCount.${pluralForm(form.legs.filter((l) => l.km).length, lang)}`, { count: String(form.legs.filter((l) => l.km).length) })})</span>
         </h2>

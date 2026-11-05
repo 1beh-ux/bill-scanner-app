@@ -67,3 +67,35 @@ export function orderWarnings(startAt: string, endAt: string, legs: LegForm[]): 
 /** "YYYY-MM-DDTHH:MM" wall clock <-> the stored Date (same digits, UTC). */
 export const wallToDate = (s: unknown): Date | null => (typeof s === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) ? new Date(`${s}:00Z`) : null);
 export const dateToWall = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString().slice(0, 16) : "");
+
+/** T1 (audit2): one thing still missing before Odeslat, and the form field it belongs to (for scrolling). */
+export type SubmitProblem = { code: string; field: string; legs?: number[] };
+
+/**
+ * Everything that blocks Odeslat, all at once (the server used to stop at the first). Pure: the order page lists
+ * the same items live and the submit route returns them. `calc` = the live calculation (null without a rate set);
+ * `bankValid` = the server's full account check, the page passes "both filled in".
+ */
+export function submitProblems(
+  o: { startAt: unknown; endAt: unknown; workerName: unknown; workerAddress: unknown; workerPhone: unknown; vehicleLabel: unknown; fuel: unknown; gearbox: unknown; payoutMethod: unknown },
+  calc: { ok: true } | { ok: false; errors: string[] } | null,
+  rateOk: boolean,
+  bankValid: boolean
+): SubmitProblem[] {
+  const out: SubmitProblem[] = [];
+  const has = (v: unknown) => (typeof v === "string" ? v.trim() !== "" : v != null);
+  if (!has(o.startAt) || !has(o.endAt)) out.push({ code: "no_dates", field: "dates" });
+  if (!has(o.workerName)) out.push({ code: "no_worker", field: "worker" });
+  if (!has(o.workerAddress)) out.push({ code: "no_address", field: "workerAddress" });
+  if (!has(o.workerPhone)) out.push({ code: "no_phone", field: "workerPhone" });
+  if (!has(o.vehicleLabel) || !has(o.fuel) || !has(o.gearbox)) out.push({ code: "no_vehicle", field: "vehicle" });
+  if (!rateOk) out.push({ code: "no_rate_set", field: "rate" });
+  else if (calc && calc.ok === false) {
+    const legs = calc.errors.filter((e) => e.startsWith("leg_")).map((e) => Number(e.split(":")[1]));
+    if (calc.errors.includes("no_legs")) out.push({ code: "no_legs", field: "legs" });
+    else if (legs.length) out.push({ code: "bad_legs", field: "legs", legs: [...new Set(legs)] });
+    for (const e of calc.errors) if (e !== "no_legs" && !e.startsWith("leg_")) out.push({ code: e, field: "rate" });
+  }
+  if (o.payoutMethod === "bank" && !bankValid) out.push({ code: "payout_missing", field: "payout" });
+  return out;
+}

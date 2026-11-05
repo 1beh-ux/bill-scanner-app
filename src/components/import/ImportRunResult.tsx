@@ -27,7 +27,8 @@ const CHIP: Record<RunRow["kind"], string> = {
 // The outcome of ONE import run (upload, camera or Drive): a summary line and a
 // row per file with what happened and why. Replaced on every run -- never
 // accumulated across runs (the review table below is what carries the bills).
-export default function ImportRunResult({ result }: { result: RunResult }) {
+// staged (R1, audit2): before Potvrdit the files are only uploaded -- "Nahráno k potvrzení", not "Importováno".
+export default function ImportRunResult({ result, staged = false }: { result: RunResult; staged?: boolean }) {
   const { t } = useTranslations();
   const count = (k: RunRow["kind"]) => result.rows.filter((r) => r.kind === k).length;
   const problems = result.rows.filter((r) => r.kind !== "imported");
@@ -38,7 +39,7 @@ export default function ImportRunResult({ result }: { result: RunResult }) {
       <p className="mb-2 text-[13px] text-ink-secondary">
         {result.rows.length === 0
           ? t("importPage.result.nothing")
-          : t("importPage.result.summary", {
+          : t(staged ? "importPage.result.summaryStaged" : "importPage.result.summary", {
               imported: String(count("imported")),
               duplicates: String(count("duplicate")),
               skipped: String(count("skipped")),
@@ -63,7 +64,7 @@ export default function ImportRunResult({ result }: { result: RunResult }) {
         <ul className="flex flex-col gap-1">
           {problems.map((r, i) => (
             <li key={`${r.name}-${i}`} className="flex flex-wrap items-baseline gap-2 text-[13px]">
-              <span className={"rounded-full px-2 py-0.5 text-[11px] font-medium " + CHIP[r.kind]}>{t(`importPage.result.kind.${r.kind}`)}</span>
+              <span className={"rounded-full px-2 py-0.5 text-[11px] font-medium " + CHIP[r.kind]}>{t(staged && r.kind === "imported" ? "importPage.result.kind.staged" : `importPage.result.kind.${r.kind}`)}</span>
               <span className="break-all text-ink">{r.name}</span>
               {r.reason && <span className="text-ink-secondary">— {r.reason}</span>}
             </li>

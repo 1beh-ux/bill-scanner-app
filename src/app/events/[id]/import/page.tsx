@@ -457,7 +457,7 @@ export default function EventImportPage({
         {error && <p className="mt-2 text-[14px] text-red-600">{error}</p>}
       </div>
 
-      {lastRun && <ImportRunResult result={lastRun} />}
+      {lastRun && <ImportRunResult result={lastRun} staged />}
 
       {createdBills.length > 0 && (
         <>

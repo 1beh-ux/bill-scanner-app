@@ -88,6 +88,13 @@ const rows: Row[] = [
   r("healthDiet.label", "Strava (Kuchyně):", "Diet (Kitchen):"),
   r("healthDiet.confirmed", "ověřeno –", "confirmed –"),
   r("healthDiet.unverified", "neověřeno", "not confirmed"),
+  // audit2 Phase B
+  r("travelOrders.missingTitle", "Před odesláním doplňte:", "Fill in before sending:"),
+  r("travelOrders.submitError.no_address", "Chybí adresa pracovníka.", "The worker's address is missing."),
+  r("travelOrders.submitError.no_phone", "Chybí telefon pracovníka.", "The worker's phone is missing."),
+  r("importPage.result.summaryStaged", "Nahráno k potvrzení: {imported}, duplicity: {duplicates}, přeskočeno: {skipped}, chyb: {failed}", "Uploaded, to confirm: {imported}, duplicates: {duplicates}, skipped: {skipped}, errors: {failed}"),
+  r("importPage.result.kind.staged", "K potvrzení", "To confirm"),
+  r("importPage.doneMessage", "Hotovo – importováno účtenek: {count}.", "Done – bills imported: {count}."),
 ];
 
 async function main() {
