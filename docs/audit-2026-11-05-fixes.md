@@ -31,13 +31,15 @@ Prompt: `docs/bill-scanner-v2-claude-code-prompt-8-audit-fixes-2026-11-05.md`. O
 
 **7 Help.** Pack copied in; every claim checked against code (corrections below). Images added to `dospeli.md` and `kuchyne.md`. Six new topics: sazby, vozidla, využití, překlady, kurzy, veřejné adresy. Sidebar "?" now also for Plánování, Kuchyně, Banka; "?" on Plánování, Dospělí na akci, Strava účastníků, Šablony, both Připojení sections (Banka pages had one). `scripts/check-help-links.ts`.
 
-## DEFAULT decisions – please confirm
+## DEFAULT decisions
+
+Confirmed by Pavel on 2026-11-05: 1–4 accepted; 5 stays as it is. Still open: 6–9.
 
 1. Migrations dated `20261118…`, after the latest applied one, so they sort in order.
 2. Client IP: custom domains take the 2nd-to-last `X-Forwarded-For` entry (load balancer), `*.run.app` the last one. Based on `docs/custom-domain.md`; Google's docs were not fetchable in-session.
 3. CSP report-only allows `'unsafe-inline'` scripts (Next without nonces).
 4. Banka users no longer set Fio tokens and can't create a Fio account from Banka (only Sheet / file sources); admins do it in Připojení.
-5. Still Účtenky-only (not made admin-only, recommend making them admin-only): payer bank details, the event's receiving account, category budgets, Drive cleanup.
+5. Stay open to anyone with the Účtenky module (Pavel's decision): payer bank details, the event's receiving account, category budgets, Drive cleanup. Finer access levels may come later.
 6. U6: the column-mapping dropdown calls the field "E-mail zákonného zástupce" (it writes the guardian row); the match-by list keeps "Kontaktní e-mail (jen k párování)".
 7. U9: no optional columns by default, which also applies to existing events that never saved a column choice.
 8. PL1: copy / parallel on touch use the existing block dialog ("Přesunout nebo kopírovat", targets include "souběžně s …"); no second mechanism, only the hint.
