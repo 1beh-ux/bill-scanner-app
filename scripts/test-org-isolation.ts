@@ -430,6 +430,32 @@ async function main() {
       check("Bills user: the event's people's vehicles only", JSON.stringify(evList.body?.vehicles?.map((x: { id: string }) => x.id)) === JSON.stringify([adminCar.id]), JSON.stringify(evList.body)?.slice(0, 300));
       r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "x", gearbox: "manual", fuel: "diesel", ownerName: "Někdo" } }));
       check("Bills user: a free-text owner -> refused", r.status === 400, `HTTP ${r.status}`);
+      // audit2 SEC-SIM1: a portal link comes from configuration, whatever the request said.
+      {
+        const prev = process.env.APP_BASE_URL;
+        process.env.APP_BASE_URL = "https://tabornik.online";
+        const tok = `iso-tok-${stamp}`;
+        const kid = await prisma.child.create({ data: { name: "Iso Link", organizationId: org.id, portalToken: tok } });
+        const link = await (await import("@/lib/portal-gate")).portalUrl(tok);
+        check("portal link uses the configured host", !!link && new URL(link).host === "tabornik.online" && !link.includes("evil"), String(link));
+        delete process.env.APP_BASE_URL;
+        check("no configured host -> no link", (await (await import("@/lib/portal-gate")).portalUrl(tok)) === null);
+        if (prev !== undefined) process.env.APP_BASE_URL = prev;
+        await prisma.child.delete({ where: { id: kid.id } });
+      }
+      // audit2 R5-1: wrong recovery attempts don't use the parent's per-e-mail quota (no sender set -> nothing is sent).
+      {
+        const tok = `iso-rec-${stamp}`;
+        const kid = await prisma.child.create({ data: { name: "Iso Rec", organizationId: org.id, portalToken: tok } });
+        const rec = await import("@/app/api/public/portal-recovery/route");
+        for (let i = 0; i < 4; i++) {
+          const r2 = await rec.POST(new (await import("next/server")).NextRequest("http://localhost/api/public/portal-recovery", { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `198.51.100.${i + 10}, 34.144.251.105`, host: "tabornik.online" }, body: JSON.stringify({ email: "rodic@test.invalid", birthDate: "2015-01-01", token: tok }) }));
+          if (r2.status !== 200) check("recovery attempt answered ok", false, `HTTP ${r2.status}`);
+        }
+        const used = await prisma.portalRateHit.count({ where: { key: `recover-mail:${org.id}:rodic@test.invalid` } });
+        check("recovery: 4 unmatched attempts use none of the e-mail's quota", used === 0, `used ${used}`);
+        await prisma.child.delete({ where: { id: kid.id } });
+      }
       // Audit 2026-11-05 (5.4): a test event's participants are never linked into Lidé nor listed as unlinked.
       {
         asUser(admin);

@@ -100,3 +100,19 @@ body {
   & img { @apply my-1 h-auto max-w-full rounded-lg border border-mist; }
   & a { @apply text-ember underline; }
 }
+
+/* Tap targets on phones (audit2): buttons, selects, text inputs and accordion headers at least 36 px high below
+   md; checkboxes / radios 20 px. Zero specificity (:where) in the base layer, so any component that sets its own
+   height still wins; absolutely positioned icon buttons (e.g. the × on a plan block) keep their size.
+   ponytail: links styled as buttons are not covered -- add them here if a page measures short again. */
+@layer base {
+  @media (max-width: 767px) {
+    :where(button:not(.absolute), select, summary, input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="range"], [type="color"], [type="file"])) {
+      min-height: 2.25rem;
+    }
+    :where(input[type="checkbox"], input[type="radio"]) {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+  }
+}

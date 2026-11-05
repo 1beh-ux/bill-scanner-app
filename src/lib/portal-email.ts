@@ -107,7 +107,7 @@ export async function previewPortalEmail(opts: { childId: string; subject: strin
   const target = await loadTarget(opts.childId);
   if (!target) return null;
   const senderEmail = await orgSenderEmail(opts.user);
-  const link = target.token ? await portalUrl(target.token, opts.req) : opts.noLinkYet;
+  const link = (target.token ? await portalUrl(target.token) : null) ?? opts.noLinkYet;
   const v = vars(target, link, opts.user, senderEmail);
   return {
     subject: substituteVariables(opts.subject, v),
@@ -132,7 +132,14 @@ export async function sendPortalLinks(opts: { childIds: string[]; subject: strin
       noRecipients++;
       continue;
     }
-    const v = vars(target, await portalUrl(await ensureToken(target), opts.req), opts.user, senderEmail);
+    const link = await portalUrl(await ensureToken(target));
+    if (!link) {
+      // No portal address configured (SEC-SIM1): never mail a link built from the request.
+      console.warn("[portal-email] no portal base configured; link not sent");
+      failed++;
+      continue;
+    }
+    const v = vars(target, link, opts.user, senderEmail);
     const subject = substituteVariables(opts.subject, v);
     const body = substituteVariables(opts.body, v);
     for (const email of target.emails) {

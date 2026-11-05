@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
 
 type Lang = "cs" | "en";
 type Theme = "light" | "dark";
@@ -68,7 +68,10 @@ function readCachedRole(): Role | null {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(readCachedLang);
+  // HY1 (audit2): the first render is the same on server and client ("cs", no texts, no role) -- reading
+  // storage in the initial state made React throw #418 (hydration mismatch). The cached values are applied
+  // in the layout effect below, before the first paint, so there is still no flash of raw keys.
+  const [lang, setLangState] = useState<Lang>("cs");
   const [currentEventId, setCurrentEventIdState] = useState<string | null>(null);
 
   // The switcher's event is remembered across reloads (and kept on organisation pages).
@@ -91,8 +94,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }
   // Seeded from sessionStorage so a hard navigation shows real text instead of
   // raw i18n keys while the fresh fetch below is still in flight.
-  const [translations, setTranslations] = useState<TranslationsMap>(readCachedTranslations);
-  const [role, setRole] = useState<Role | null>(readCachedRole);
+  const [translations, setTranslations] = useState<TranslationsMap>({});
+  const [role, setRole] = useState<Role | null>(null);
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- applying the storage cache once, before paint */
+    setLangState(readCachedLang());
+    setTranslations((cur) => (Object.keys(cur).length ? cur : readCachedTranslations()));
+    setRole((cur) => cur ?? readCachedRole());
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, []);
   const [roleLoaded, setRoleLoaded] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [organization, setOrganization] = useState<OrgRef | null>(null);

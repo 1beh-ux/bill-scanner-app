@@ -12,14 +12,23 @@ import { clientIp } from "@/lib/request-security";
  * days are pruned on the way.
  */
 export async function takeRateSlot(key: string, limit: number, windowMs: number): Promise<boolean> {
+  if (!(await rateSlotFree(key, limit, windowMs))) return false;
+  await recordRateHit(key);
+  return true;
+}
+
+/** Whether `key` still has a slot, without using one (count only what really happened, audit2 R5-1). */
+export async function rateSlotFree(key: string, limit: number, windowMs: number): Promise<boolean> {
+  return (await prisma.portalRateHit.count({ where: { key, createdAt: { gte: new Date(Date.now() - windowMs) } } })) < limit;
+}
+
+/** Uses one slot of `key`; rows older than two days are pruned on the way. */
+export async function recordRateHit(key: string): Promise<void> {
   const now = Date.now();
-  const used = await prisma.portalRateHit.count({ where: { key, createdAt: { gte: new Date(now - windowMs) } } });
-  if (used >= limit) return false;
   await prisma.$transaction([
     prisma.portalRateHit.create({ data: { key } }),
     prisma.portalRateHit.deleteMany({ where: { createdAt: { lt: new Date(now - 2 * 24 * 3600 * 1000) } } }),
   ]);
-  return true;
 }
 
 /** The caller's IP as Google's front end saw it (src/lib/request-security.ts clientIp), hashed. */

@@ -39,17 +39,19 @@ export function gateCookieValid(value: string | undefined, childId: string, toke
  * of those, the origin the admin is using -- from the forwarded headers, since
  * behind Cloud Run the request URL is the container's internal address.
  */
-export async function portalUrl(token: string, req: Request): Promise<string> {
-  // The portal host of the token owner's organization (a person's or a family's token).
+/**
+ * The parent-portal link of a token, from configuration only: the owner organization's portal host
+ * (src/lib/public-host.ts portalLinkFor -> its env fallbacks), else PORTAL_BASE_URL / PUBLIC_BASE_URL /
+ * APP_BASE_URL. Never from request headers (audit2 SEC-SIM1: a spoofed X-Forwarded-Host must not put an
+ * attacker's domain into a mailed link). Null = nothing configured -- callers don't send a link then.
+ */
+export async function portalUrl(token: string): Promise<string | null> {
   const owner =
     (await prisma.child.findUnique({ where: { portalToken: token }, select: { organizationId: true } })) ??
     (await prisma.family.findUnique({ where: { portalToken: token }, select: { organizationId: true } }));
-  const configured = owner ? await portalLinkFor(owner.organizationId, token) : null;
-  if (configured) return configured;
-  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0] ?? new URL(req.url).protocol.replace(":", "");
-  const origin = host ? `${proto}://${host}` : new URL(req.url).origin;
-  return `${origin}/p/${token}`;
+  if (owner) return portalLinkFor(owner.organizationId, token);
+  const base = (process.env.PORTAL_BASE_URL || process.env.PUBLIC_BASE_URL || process.env.APP_BASE_URL)?.replace(/\/+$/, "");
+  return base ? `${base}/p/${token}` : null;
 }
 
 /** {{portal_link_line}}: the whole sentence, or "" without a link (so the line vanishes). */

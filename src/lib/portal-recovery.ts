@@ -30,7 +30,11 @@ export async function recoverPortalLink(o: { organizationId: string; email: stri
     const target = await loadTarget(id);
     const email = target?.emails.find((e) => same(e, o.email));
     if (!target || !email) continue;
-    const link = await portalUrl(await ensureToken(target, org.portalRecoveryNewLink), o.req);
+    const link = await portalUrl(await ensureToken(target, org.portalRecoveryNewLink));
+    if (!link) {
+      console.warn("[portal-recovery] no portal base configured; nothing sent");
+      continue;
+    }
     const vars = { ...target.values, child_name: target.name, organization_name: org.name, portal_link: link, sender_name: org.name, signature: org.name, sender_email: org.portalRecoverySenderEmail };
     const subject = substituteVariables(template.subject, vars);
     const log = { email, purposeKey: PORTAL_LINK_PURPOSE_KEY, sentByUserId: null, subject };

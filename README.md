@@ -1,5 +1,11 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Database setup
+
+`npm run bootstrap` brings a database (empty or existing) up to date: migrations, the base seed (default
+organization, base texts), every translation seed in the order it was added, and the app templates
+(`scripts/bootstrap.sh`). Safe to run again. `DATABASE_URL` must point at the database.
+
 ## Getting Started
 
 First, run the development server:

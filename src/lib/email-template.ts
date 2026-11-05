@@ -341,7 +341,9 @@ export async function resolveEmailTemplate(
 }
 
 export function substituteVariables(text: string, vars: Record<string, string>): string {
-  let out = text;
+  // TK2 (audit2): an event without a place drops its separator too -- "(15. 3. 2027)", not "(15. 3. 2027, )".
+  // Here, not in the templates, because organizations keep their own stored copies of the old wording.
+  let out = vars.event_place === "" ? text.replace(/(, | · )\{\{event_place\}\}/g, "") : text;
   for (const [key, value] of Object.entries(vars)) {
     out = out.replaceAll(`{{${key}}}`, value);
   }

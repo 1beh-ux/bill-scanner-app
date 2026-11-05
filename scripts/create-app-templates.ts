@@ -16,7 +16,8 @@ async function main() {
   const { TEMPLATE_TABLES, flagOrgSpecific, clearOrgSettings, tableSpec, templateContent, templateDelegate, templateData } = await import("../src/lib/app-templates");
   const name = process.env.SOURCE_ORGANIZATION || "Pionýrská skupina Záře";
   const org = await prisma.organization.findFirst({ where: { name } });
-  if (!org) throw new Error(`organization "${name}" not found`);
+  // An empty DB has nothing to copy yet (audit2 DEP1): not an error, so `npm run bootstrap` stays re-runnable.
+  if (!org) return console.log(`organization "${name}" not found -- nothing to copy`);
 
   const label = (r: Record<string, unknown>) => String(r.name ?? r.label ?? r.purposeKey ?? r.key ?? r.id);
   const flags = (table: string, rows: Record<string, unknown>[], fields: string[]) => {

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { resolvePublicHost } from "@/lib/public-host";
-import { hashedIp, takeRateSlot } from "@/lib/portal-rate";
+import { hashedIp, rateSlotFree, recordRateHit, takeRateSlot } from "@/lib/portal-rate";
 import { recoverPortalLink } from "@/lib/portal-recovery";
 
 // Public "Zapomněl(a) jsem odkaz do portálu" (src/lib/portal-recovery.ts). The organization: the
 // portal link the parent is on (token), else the organization's public address. Always "ok" -- the
-// answer never says whether the e-mail / birth date matched anyone. 5 tries per hour per IP, 3 a day per e-mail.
+// answer never says whether the e-mail / birth date matched anyone. 5 tries per hour per IP; 3 sent mails a
+// day per e-mail -- only mails that went out count (audit2 R5-1), so a stranger's wrong guesses can't lock a
+// parent out of their own recovery.
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
@@ -28,13 +30,15 @@ export async function POST(req: NextRequest) {
   }
   if (!organizationId) return NextResponse.json({ ok: true });
 
-  if (!(await takeRateSlot(`recover-ip:${hashedIp(req)}`, 5, 3600_000)) || !(await takeRateSlot(`recover-mail:${organizationId}:${email}`, 3, 24 * 3600_000))) {
-    return NextResponse.json({ error: "throttled" }, { status: 429 });
-  }
+  const mailKey = `recover-mail:${organizationId}:${email}`;
+  if (!(await takeRateSlot(`recover-ip:${hashedIp(req)}`, 5, 3600_000))) return NextResponse.json({ error: "throttled" }, { status: 429 });
+  // A full e-mail quota means 3 real sends today: answer the usual "ok" (a 429 here would reveal a match).
+  if (!(await rateSlotFree(mailKey, 3, 24 * 3600_000))) return NextResponse.json({ ok: true });
   const sent = await recoverPortalLink({ organizationId, email, birthDate, req }).catch((err) => {
     console.log("[portal-recovery] failed:", err instanceof Error ? err.message.slice(0, 100) : "unknown");
     return 0;
   });
+  if (sent > 0) await recordRateHit(mailKey);
   console.log(`[portal-recovery] org=${organizationId} sent=${sent}`);
   return NextResponse.json({ ok: true });
 }
