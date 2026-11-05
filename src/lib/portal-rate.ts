@@ -4,6 +4,7 @@
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { portalSecret } from "@/lib/portal-gate";
+import { clientIp } from "@/lib/request-security";
 
 /**
  * Records one attempt under `key` and says whether it is still within
@@ -21,8 +22,8 @@ export async function takeRateSlot(key: string, limit: number, windowMs: number)
   return true;
 }
 
-/** The caller's IP (first X-Forwarded-For hop behind Cloud Run), hashed. */
+/** The caller's IP as Google's front end saw it (src/lib/request-security.ts clientIp), hashed. */
 export function hashedIp(req: Request): string {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown";
+  const ip = clientIp(req.headers);
   return crypto.createHmac("sha256", portalSecret() ?? "portal-rate").update(ip).digest("base64url").slice(0, 32);
 }

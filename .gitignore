@@ -47,3 +47,6 @@ next-env.d.ts
 .claude/
 .windsurf/
 skills-lock.json
+
+# Cloud SQL Auth Proxy binary: download it (docs/cloud-sql-proxy.md), never commit it
+cloud-sql-proxy

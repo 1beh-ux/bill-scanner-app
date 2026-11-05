@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/request-security";
 import { syncRatesForDate, backfillRates } from "@/lib/exchange-rates";
 import { prisma } from "@/lib/prisma";
 import { dailyBankSync } from "@/lib/bank/sync";
 
 export const maxDuration = 300;
 
-function authorized(req: NextRequest): boolean {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  return req.headers.get("x-cron-secret") === expected;
-}
+const authorized = (req: NextRequest) => cronAuthorized(req);
 
 export async function POST(req: NextRequest) {
   if (!authorized(req)) {

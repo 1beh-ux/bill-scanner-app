@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/request-security";
 import { prisma } from "@/lib/prisma";
 import { checkBankAccount } from "@/lib/bank/check";
 import { accountDue } from "@/lib/bank/check-schedule";
@@ -6,11 +7,7 @@ import { checkSettlementPayments } from "@/lib/settlement-links";
 
 export const maxDuration = 300;
 
-function authorized(req: NextRequest): boolean {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  return req.headers.get("x-cron-secret") === expected;
-}
+const authorized = (req: NextRequest) => cronAuthorized(req);
 
 // Every minute (Cloud Scheduler job bank-check): each active account with a token and an active event
 // using it, when due by its events' own interval (src/lib/bank/check-schedule.ts). checkBankAccount

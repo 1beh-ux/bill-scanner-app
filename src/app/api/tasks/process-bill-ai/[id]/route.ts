@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { processBillWithAi } from "@/lib/process-bill-ai";
+import { secretMatches } from "@/lib/request-security";
 
 // Called only by the Cloud Tasks queue (src/lib/cloud-tasks.ts) — one
 // request per bill. There's no signed-in user behind a queued task, so
@@ -7,21 +8,9 @@ import { processBillWithAi } from "@/lib/process-bill-ai";
 // session cookie the rest of the API uses — same pattern already used for
 // the exchange-rate cron endpoint (src/app/api/cron/exchange-rates).
 function authorized(req: NextRequest): boolean {
-  const expected = process.env.TASKS_SECRET;
-  const provided = req.headers.get("x-tasks-secret");
-  const ok = !!expected && provided === expected;
-  if (!ok) {
-    // Deliberately no secret values here, just enough to tell apart "env
-    // var missing/empty in this container" from "header missing/wrong
-    // length" from "both present but not equal" without ever logging
-    // either raw value.
-    console.log("[process-bill-ai] auth failed", {
-      hasExpected: !!expected,
-      expectedLength: expected?.length ?? 0,
-      hasProvided: !!provided,
-      providedLength: provided?.length ?? 0,
-    });
-  }
+  // Constant-time; nothing about the secrets (not even their lengths) is logged.
+  const ok = secretMatches(req.headers.get("x-tasks-secret"), process.env.TASKS_SECRET);
+  if (!ok) console.log("[process-bill-ai] auth failed", { configured: !!process.env.TASKS_SECRET });
   return ok;
 }
 

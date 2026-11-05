@@ -1,12 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cronAuthorized } from "@/lib/request-security";
 import { requeueStuckBills } from "@/lib/requeue-stuck-bills";
 
 // Hourly safety-net sweep via Cloud Scheduler (see src/lib/requeue-stuck-bills.ts).
-function authorized(req: NextRequest): boolean {
-  const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
-  return req.headers.get("x-cron-secret") === expected;
-}
+const authorized = (req: NextRequest) => cronAuthorized(req);
 
 export async function POST(req: NextRequest) {
   if (!authorized(req)) {

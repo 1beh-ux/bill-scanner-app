@@ -59,6 +59,8 @@ function route(req: NextRequest): NextResponse {
   const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/") || pathname.startsWith("/u/") || pathname.startsWith("/vyuctovani/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
+    // CSP report-only violations (next.config.ts): browsers post them without a session.
+    pathname === "/api/csp-report" ||
     pathname.startsWith("/api/portal/") ||
     pathname.startsWith("/api/public/") ||
     pathname.startsWith("/api/cron") ||
