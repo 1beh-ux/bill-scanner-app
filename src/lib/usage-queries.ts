@@ -86,12 +86,12 @@ export async function activityOfUser(userId: string, f: UsageFilter) {
 // Every stored GCS object once (the same PDF / photo can sit on several rows), with its event,
 // organization, kind and uploader. Person documents belong to the organization, not an event.
 const STORAGE_CTE = Prisma.sql`f AS (
-    SELECT b.gcs_object_path AS path, b.size_bytes AS size, e.id AS event_id, e.organization_id AS org_id, 'bills' AS kind, b.created_by_user_id AS uploader FROM bills b JOIN events e ON e.id = b.event_id
-    UNION ALL SELECT i.photo_gcs_path, i.size_bytes, e.id, e.organization_id, 'incident_photos', i.created_by_user_id FROM incidents i JOIN participants pa ON pa.id = i.participant_id JOIN events e ON e.id = pa.event_id WHERE i.photo_gcs_path IS NOT NULL
-    UNION ALL SELECT iu.photo_gcs_path, iu.size_bytes, e.id, e.organization_id, 'incident_photos', iu.updated_by_user_id FROM incident_updates iu JOIN incidents i ON i.id = iu.incident_id JOIN participants pa ON pa.id = i.participant_id JOIN events e ON e.id = pa.event_id WHERE iu.photo_gcs_path IS NOT NULL
-    UNION ALL SELECT l.pdf_gcs_path, l.size_bytes, e.id, e.organization_id, 'parent_summaries', l.sent_by_user_id FROM parent_email_log l JOIN participants pa ON pa.id = l.participant_id JOIN events e ON e.id = pa.event_id WHERE l.pdf_gcs_path IS NOT NULL
-    UNION ALL SELECT d.gcs_path, d.size_bytes, e.id, e.organization_id, 'participant_documents', d.received_by_user_id FROM participant_documents d JOIN participants pa ON pa.id = d.participant_id JOIN events e ON e.id = pa.event_id WHERE d.gcs_path IS NOT NULL
-    UNION ALL SELECT pd.gcs_path, pd.size_bytes, NULL, c.organization_id, 'person_documents', pd.created_by_user_id FROM person_documents pd JOIN children c ON c.id = pd.child_id
+    SELECT b.gcs_object_path AS path, b.size_bytes AS size, e.id AS event_id, e.organization_id AS org_id, 'bills' AS kind, b.created_by_user_id AS uploader, e.is_test AS is_test FROM bills b JOIN events e ON e.id = b.event_id
+    UNION ALL SELECT i.photo_gcs_path, i.size_bytes, e.id, e.organization_id, 'incident_photos', i.created_by_user_id, e.is_test FROM incidents i JOIN participants pa ON pa.id = i.participant_id JOIN events e ON e.id = pa.event_id WHERE i.photo_gcs_path IS NOT NULL
+    UNION ALL SELECT iu.photo_gcs_path, iu.size_bytes, e.id, e.organization_id, 'incident_photos', iu.updated_by_user_id, e.is_test FROM incident_updates iu JOIN incidents i ON i.id = iu.incident_id JOIN participants pa ON pa.id = i.participant_id JOIN events e ON e.id = pa.event_id WHERE iu.photo_gcs_path IS NOT NULL
+    UNION ALL SELECT l.pdf_gcs_path, l.size_bytes, e.id, e.organization_id, 'parent_summaries', l.sent_by_user_id, e.is_test FROM parent_email_log l JOIN participants pa ON pa.id = l.participant_id JOIN events e ON e.id = pa.event_id WHERE l.pdf_gcs_path IS NOT NULL
+    UNION ALL SELECT d.gcs_path, d.size_bytes, e.id, e.organization_id, 'participant_documents', d.received_by_user_id, e.is_test FROM participant_documents d JOIN participants pa ON pa.id = d.participant_id JOIN events e ON e.id = pa.event_id WHERE d.gcs_path IS NOT NULL
+    UNION ALL SELECT pd.gcs_path, pd.size_bytes, NULL, c.organization_id, 'person_documents', pd.created_by_user_id, false FROM person_documents pd JOIN children c ON c.id = pd.child_id
   ), s AS (SELECT DISTINCT ON (path) * FROM f ORDER BY path, size DESC NULLS LAST)`;
 
 type StorageRow = { key: string | null; bytes: number; files: number; unmeasured: number };
@@ -110,9 +110,10 @@ export async function costOrgs(since: Date) {
   const [ai, storage] = await Promise.all([
     prisma.$queryRaw<AiRow[]>`
       SELECT o.id, o.name, COUNT(DISTINCT e.id)::int AS events, ${AI_COLS}
-      FROM organizations o LEFT JOIN events e ON e.organization_id = o.id LEFT JOIN ai_usage x ON x.event_id = e.id AND x.created_at >= ${since}
+      FROM organizations o LEFT JOIN events e ON e.organization_id = o.id AND NOT e.is_test LEFT JOIN ai_usage x ON x.event_id = e.id AND x.created_at >= ${since}
       GROUP BY o.id, o.name ORDER BY o.name`,
-    storageBy("org_id"),
+    // Organization totals leave test events out (audit 2026-11-05); the event breakdown labels them.
+    storageBy("org_id", Prisma.sql`AND NOT is_test`),
   ]);
   return { ai, storage };
 }
@@ -121,9 +122,9 @@ export async function costOrg(orgId: string, since: Date) {
   const [org, ai, storage, monthly] = await Promise.all([
     prisma.organization.findUnique({ where: { id: orgId }, select: { id: true, name: true } }),
     prisma.$queryRaw<AiRow[]>`
-      SELECT e.id, e.name, ${AI_COLS}
+      SELECT e.id, CASE WHEN e.is_test THEN e.name || ' · TEST' ELSE e.name END AS name, ${AI_COLS}
       FROM events e LEFT JOIN ai_usage x ON x.event_id = e.id AND x.created_at >= ${since}
-      WHERE e.organization_id = ${orgId} GROUP BY e.id, e.name ORDER BY "aiCost" DESC, e.name`,
+      WHERE e.organization_id = ${orgId} GROUP BY e.id, e.name, e.is_test ORDER BY "aiCost" DESC, e.name`,
     storageBy("event_id", Prisma.sql`AND org_id = ${orgId}`),
     monthlyAi(Prisma.sql`e.organization_id = ${orgId}`),
   ]);

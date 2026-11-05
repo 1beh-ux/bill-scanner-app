@@ -430,6 +430,21 @@ async function main() {
       check("Bills user: the event's people's vehicles only", JSON.stringify(evList.body?.vehicles?.map((x: { id: string }) => x.id)) === JSON.stringify([adminCar.id]), JSON.stringify(evList.body)?.slice(0, 300));
       r = await vehRoute.POST(req("/api/vehicles", { method: "POST", body: { eventId, label: "x", gearbox: "manual", fuel: "diesel", ownerName: "Někdo" } }));
       check("Bills user: a free-text owner -> refused", r.status === 400, `HTTP ${r.status}`);
+      // Audit 2026-11-05 (5.4): a test event's participants are never linked into Lidé nor listed as unlinked.
+      {
+        asUser(admin);
+        const testEv = await prisma.event.create({ data: { name: `Iso TEST ${stamp}`, startDate: new Date("2027-07-01"), endDate: new Date("2027-07-02"), organizationId: org.id, isTest: true, registrationConnected: true, peopleLinkMode: "all" } });
+        const tp = await prisma.participant.create({ data: { eventId: testEv.id, name: "Testovací Dítě", firstName: "Testovací", lastName: "Dítě", dateOfBirth: new Date("2016-01-01") } });
+        const { linkChildren } = await import("@/lib/children");
+        const lr = await linkChildren({ eventId: testEv.id }, { createMissing: true });
+        const after = await prisma.participant.findUniqueOrThrow({ where: { id: tp.id }, select: { childId: true } });
+        check("test event: linkChildren links / creates nobody", lr.linked === 0 && lr.created === 0 && !after.childId, JSON.stringify(lr));
+        const ch2 = await (await (await import("@/app/api/children/route")).GET(req("/api/children"))).json();
+        check("test event: not in Lidé's unlinked list", !ch2.unlinked.some((u: { id: string }) => u.id === tp.id), JSON.stringify(ch2.unlinked?.length));
+        await prisma.participant.delete({ where: { id: tp.id } });
+        await prisma.event.delete({ where: { id: testEv.id } });
+        asUser(plain);
+      }
       // Audit 2026-11-05 P1: a Bills holder works with receipts, doesn't administer the event.
       const evRoute2 = await import("@/app/api/events/[id]/route");
       const evBefore = await prisma.event.findUniqueOrThrow({ where: { id: eventId! }, select: { name: true, status: true, driveExportFolderId: true } });

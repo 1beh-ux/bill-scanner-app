@@ -7,8 +7,8 @@ type Row = { key: string; cs: string; en: string };
 const r = (key: string, cs: string, en: string): Row => ({ key, cs, en });
 
 const rows: Row[] = [
-  r("nav.children", "Členové", "Members"),
-  r("children.title", "Členové", "Members"),
+  r("nav.children", "Lidé", "People"),
+  r("children.title", "Lidé", "People"),
   r("participantFieldAdmin.adultOptionsLabel", "Možnosti pro dospělé (nepovinné)", "Options for adults (optional)"),
   r("participantFieldAdmin.adultOptionsPlaceholder", "např. Žena, Muž – prázdné = stejné jako výše", "e.g. Woman, Man – empty = the same as above"),
   r("publicTexts.title", "Texty veřejných stránek", "Public page texts"),

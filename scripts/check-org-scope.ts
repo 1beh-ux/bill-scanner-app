@@ -36,6 +36,7 @@ const ALLOW: Record<string, string> = {
   "src/app/(public)/vstup/[token]/page.tsx": "door link of a public event: the event is the one its secret ticketScanToken names, nothing else",
   "src/app/api/public/vyuctovani/[token]/file/route.ts": "a receipt on a person's settlement link: the token names one person on one event; only bills they paid or have a part of",
   "src/app/api/public/vyuctovani/[token]/route.ts": "a person's settlement link: the link's secret token names one person on one event; only that person's lines and debts (src/lib/settlement-statement.ts)",
+  "src/app/api/events/[id]/bank/accounts/[accountId]/token/route.ts": "retired (audit 2026-11-05): always 409 use_connections, reads and writes nothing; tokens are set in /api/bank-accounts/[id]/token",
   "src/app/api/public/scan/[token]/route.ts": "door link API: the event its secret ticketScanToken names; scans only that event's tickets",
 };
 

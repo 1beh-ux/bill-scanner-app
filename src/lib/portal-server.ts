@@ -166,6 +166,8 @@ export async function availableEvents(organizationId: string, memberIds: string[
         organizationId,
         portalOpen: true,
         status: "active",
+        // Never a test event in a family's portal.
+        isTest: false,
         OR: [{ registrationConnected: true }, { kind: "membership" }],
         AND: [{ OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] }],
       },

@@ -5,7 +5,7 @@ import type { Prisma } from "@/generated/prisma";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
 import { optionsFor } from "@/lib/registration-fields";
 
-export async function createEventWithDefaults(o: { name: string; startDate: string; endDate: string; organizationId: string; isPublic: boolean }) {
+export async function createEventWithDefaults(o: { name: string; startDate: string; endDate: string; organizationId: string; isPublic: boolean; isTest?: boolean }) {
   const { name, startDate, endDate, isPublic } = o;
   const event = await prisma.$transaction(async (tx) => {
     const created = await tx.event.create({
@@ -15,6 +15,7 @@ export async function createEventWithDefaults(o: { name: string; startDate: stri
         endDate: new Date(endDate),
         organizationId: o.organizationId,
         ...(isPublic && { kind: "public_event" as const }),
+        ...(o.isTest && { isTest: true }),
       },
     });
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
-import { ACCOUNT_NUMBER, BANK_ACCOUNT_SELECT, FIO_BANK_CODE } from "@/lib/bank/accounts";
+import { ACCOUNT_NUMBER, BANK_ACCOUNT_SELECT, FIO_BANK_CODE, accountKindOf } from "@/lib/bank/accounts";
 
 // Organizace -> Připojení -> Banka (organization admin): the acting organization's Fio accounts.
 // GET also serves the event settings' account select (any signed-in user; no token, ever).
@@ -27,6 +27,6 @@ export async function POST(req: NextRequest) {
   if (!label || !ACCOUNT_NUMBER.test(accountNumber)) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const organizationId = await getActingOrgId(user);
   if (await prisma.bankAccount.count({ where: { organizationId, accountNumber, bankCode: FIO_BANK_CODE } })) return NextResponse.json({ error: "exists" }, { status: 409 });
-  const account = await prisma.bankAccount.create({ data: { organizationId, label, accountNumber, bankCode: FIO_BANK_CODE }, select: { id: true } });
+  const account = await prisma.bankAccount.create({ data: { organizationId, label, accountNumber, bankCode: FIO_BANK_CODE, kind: accountKindOf(body.kind) ?? "organization" }, select: { id: true } });
   return NextResponse.json(account);
 }

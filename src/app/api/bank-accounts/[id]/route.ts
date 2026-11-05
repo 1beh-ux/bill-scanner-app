@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireOrgBankAccount } from "@/lib/org-scope";
-import { BANK_ACCOUNT_SELECT } from "@/lib/bank/accounts";
+import { BANK_ACCOUNT_SELECT, accountKindOf } from "@/lib/bank/accounts";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -9,8 +9,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const scope = await requireOrgBankAccount((await params).id);
   if ("error" in scope) return scope.error;
   const body = await req.json().catch(() => ({}));
-  const data: { label?: string; active?: boolean } = {};
+  const data: { label?: string; active?: boolean; kind?: string } = {};
   if (typeof body.label === "string" && body.label.trim()) data.label = body.label.trim();
+  if (accountKindOf(body.kind)) data.kind = accountKindOf(body.kind);
   if (typeof body.active === "boolean") data.active = body.active;
   const account = await prisma.bankAccount.update({ where: { id: scope.accountId }, data, select: BANK_ACCOUNT_SELECT });
   return NextResponse.json(account);

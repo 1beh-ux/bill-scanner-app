@@ -32,6 +32,7 @@ import { modulesOfKind } from "@/lib/module-kinds";
 type EventDetail = {
   id: string;
   name: string;
+  isTest?: boolean;
   startDate: string;
   endDate: string;
   status: "active" | "closed";
@@ -408,7 +409,10 @@ export default function EventDetailPage({
         ← {t("eventDetail.back")}
       </a>
 
-      <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">{event.name}</h1>
+      <h1 className="mb-1 mt-2 text-[22px] font-semibold text-ink">
+        {event.name}
+        {event.isTest && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 align-middle text-[12px] font-semibold text-amber-800">{t("testEvent.badge")}</span>}
+      </h1>
       <p className="mb-3 text-[14px] text-ink-secondary">
         {new Date(event.startDate).toLocaleDateString("cs-CZ")} –{" "}
         {new Date(event.endDate).toLocaleDateString("cs-CZ")} ·{" "}
@@ -1131,7 +1135,7 @@ function PeopleUnlink({ eventId, unlinked, onDone, t }: { eventId: string; unlin
 }
 
 // Name and dates, changeable after creating the event (e.g. a test date put in by mistake).
-function EventBasicsForm({ event, onSaved, t }: { event: { id: string; name: string; startDate: string; endDate: string }; onSaved: () => void; t: (key: string, vars?: Record<string, string>) => string }) {
+function EventBasicsForm({ event, onSaved, t }: { event: { id: string; name: string; startDate: string; endDate: string; isTest?: boolean }; onSaved: () => void; t: (key: string, vars?: Record<string, string>) => string }) {
   const day = (iso: string) => iso.slice(0, 10);
   const [name, setName] = useState(event.name);
   const [start, setStart] = useState(day(event.startDate));
@@ -1171,6 +1175,23 @@ function EventBasicsForm({ event, onSaved, t }: { event: { id: string; name: str
           </label>
         </div>
         <p className="text-[12px] text-ink-secondary">{t("eventBasics.hint")}</p>
+        {/* Test event (audit 2026-11-05): saved right away, on its own. */}
+        <label className="mt-1 flex items-start gap-2 text-[13px] text-ink">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            defaultChecked={!!event.isTest}
+            onChange={async (e) => {
+              const res = await fetch(`/api/events/${event.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ isTest: e.target.checked }) }).catch(() => null);
+              setMsg(res?.ok ? { ok: true, text: t("eventBasics.saved") } : { ok: false, text: t("feeSettings.errorSaveFailed") });
+              if (res?.ok) onSaved();
+            }}
+          />
+          <span>
+            {t("testEvent.checkbox")}
+            <span className="block text-[12px] text-ink-secondary">{t("testEvent.hint")}</span>
+          </span>
+        </label>
         {msg && <p className={`text-[13px] ${msg.ok ? "text-pine" : "text-red-600"}`}>{msg.text}</p>}
         <button type="submit" disabled={saving || !changed || !name.trim()} className="self-start rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover disabled:opacity-50">
           {t("common.save")}

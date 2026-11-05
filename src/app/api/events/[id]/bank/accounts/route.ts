@@ -5,8 +5,8 @@ import { ymd } from "@/lib/bank/import";
 
 type Ctx = { params: Promise<{ id: string }> };
 // Never the token: only whether one is saved.
-const publicAccount = (a: { id: string; label: string; accountNumber: string; bankCode: string; iban: string | null; currency: string; sourceType: string; tokenEncrypted: string | null; tokenSetAt: Date | null; sheetId: string | null; sheetRange: string | null; columnMapping: unknown; lastSyncAt: Date | null; lastSyncResult: unknown; lastError: string | null }) => ({
-  id: a.id, label: a.label, accountNumber: a.accountNumber, bankCode: a.bankCode, iban: a.iban, currency: a.currency, sourceType: a.sourceType,
+const publicAccount = (a: { id: string; label: string; accountNumber: string; bankCode: string; iban: string | null; currency: string; sourceType: string; tokenEncrypted: string | null; tokenSetAt: Date | null; sheetId: string | null; sheetRange: string | null; columnMapping: unknown; lastSyncAt: Date | null; lastSyncResult: unknown; lastError: string | null; kind?: string | null }) => ({
+  id: a.id, label: a.label, accountNumber: a.accountNumber, bankCode: a.bankCode, iban: a.iban, currency: a.currency, sourceType: a.sourceType, kind: a.kind ?? "organization",
   tokenSaved: !!a.tokenEncrypted, tokenSetAt: a.tokenSetAt, sheetId: a.sheetId, sheetRange: a.sheetRange, columnMapping: a.columnMapping,
   lastSyncAt: a.lastSyncAt, lastSyncResult: a.lastSyncResult, lastError: a.lastError,
 });
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     // The account's currency (a Polish account: PLN); its movements are in it.
     const currency = typeof body.currency === "string" && /^[A-Z]{3}$/.test(body.currency) ? body.currency : "CZK";
     if (!label || !/^(\d{1,6}-)?\d{2,10}$/.test(accountNumber) || !/^\d{4}$/.test(bankCode) || !sourceType) return NextResponse.json({ error: "invalid" }, { status: 400 });
-    if (sourceType === "fio_api" && bankCode !== "2010") return NextResponse.json({ error: "fio_bank_code" }, { status: 400 });
+    // Fio accounts and their tokens live in one place: Organizace -> Připojení (audit 2026-11-05). Here: link them.
+    if (sourceType === "fio_api") return NextResponse.json({ error: "fio_in_connections" }, { status: 400 });
     const existing = await prisma.bankAccount.findFirst({ where: { organizationId: ctx.event.organizationId, accountNumber, bankCode }, select: { id: true } });
     if (existing) return NextResponse.json({ error: "exists" }, { status: 409 });
     accountId = (await prisma.bankAccount.create({ data: { organizationId: ctx.event.organizationId, label, accountNumber, bankCode, sourceType, currency, createdById: ctx.user.id } })).id;

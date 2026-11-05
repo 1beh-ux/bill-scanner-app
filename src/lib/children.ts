@@ -3,6 +3,7 @@
 // row to it. Everything here is opt-in: nothing reads childId unless the event
 // has registrationConnected on, so unconnected events behave exactly as before.
 // Profile editing + push to events: src/lib/child-profile.ts.
+import { NOT_TEST_EVENT } from "@/lib/test-events";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
@@ -81,7 +82,8 @@ export const adultAt = (dob: Date | null, at: Date) => {
 
 export async function linkChildren(where: Prisma.ParticipantWhereInput, opts: { createMissing?: boolean } = {}): Promise<{ linked: number; created: number }> {
   const participants = await prisma.participant.findMany({
-    where: { ...where, childId: null, dateOfBirth: { not: null } },
+    // A test event's participants never become people in Lidé (audit 2026-11-05).
+    where: { AND: [where, { childId: null, dateOfBirth: { not: null }, event: NOT_TEST_EVENT }] },
     select: { id: true, eventId: true, name: true, firstName: true, lastName: true, dateOfBirth: true, event: { select: { peopleUnlinked: true, peopleLinkMode: true, organizationId: true, startDate: true } } },
   });
   if (participants.length === 0) return { linked: 0, created: 0 };
@@ -137,7 +139,7 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
   const [child, latest, templates] = await Promise.all([
     prisma.child.findUnique({ where: { id: childId }, select: { fieldValues: true, _count: { select: { guardians: true } } } }),
     prisma.participant.findFirst({
-      where: { childId },
+      where: { childId, event: NOT_TEST_EVENT },
       orderBy: [{ event: { startDate: "desc" } }, { createdAt: "desc" }],
       include: { guardians: true },
     }),

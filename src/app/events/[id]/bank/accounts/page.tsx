@@ -14,6 +14,7 @@ type Account = {
   id: string; label: string; accountNumber: string; bankCode: string; currency: string; sourceType: "fio_api" | "sheet" | "file";
   tokenSaved: boolean; sheetId: string | null; sheetRange: string | null; lastSyncAt: string | null; lastError: string | null;
   lastSyncResult: { counts?: Record<string, number>; error?: string } | null;
+  kind?: "organization" | "personal";
 };
 type Link = { dateFrom: string; dateTo: string; account: Account };
 type Counts = { new: number; duplicate: number; outside: number; error: number };
@@ -29,15 +30,14 @@ const date = (s: string) => new Date(s).toLocaleDateString("cs-CZ", { timeZone: 
 
 export default function BankAccountsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const { t } = useTranslations();
+  const { t, role } = useTranslations();
   const confirm = useConfirm();
   const [data, setData] = useState<{ links: Link[]; available: { id: string; label: string; accountNumber: string; bankCode: string }[]; eventDates: { from: string; to: string } } | null>(null);
   const [denied, setDenied] = useState(false);
   const [msg, setMsg] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [token, setToken] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ existing: "", label: "", accountNumber: "", bankCode: "2010", sourceType: "fio_api", currency: "CZK" });
+  const [form, setForm] = useState({ existing: "", label: "", accountNumber: "", bankCode: "2010", sourceType: "sheet", currency: "CZK" });
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/events/${id}/bank/accounts`);
@@ -66,12 +66,6 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
   async function test(a: Account) {
     const r = await call(a.id, "/test");
     say(a.id, r.status === "ok" ? t("bankAccountsPage.testOk", { account: r.accountNumber ?? "", count: String(r.count), day: date(r.day) }) : t(syncErrorKey(r.status)));
-  }
-  async function saveToken(a: Account) {
-    const r = await call(a.id, "/token", "PUT", { token: token[a.id] ?? "" });
-    say(a.id, r.status === "saved" ? t("bankAccountsPage.tokenSaved") : t(`bankAccountsPage.token.${r.status}`));
-    setToken((x) => ({ ...x, [a.id]: "" }));
-    load();
   }
   async function unlink(a: Account) {
     if (!(await confirm({ message: t("bankAccountsPage.unlinkConfirm", { name: a.label }), danger: true }))) return;
@@ -116,7 +110,7 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
               <input placeholder={t("bankAccountsPage.number")} value={form.accountNumber} onChange={(e) => setForm({ ...form, accountNumber: e.target.value })} className={inputClass + " w-40"} />
               <input placeholder={t("bankAccountsPage.bankCode")} value={form.bankCode} onChange={(e) => setForm({ ...form, bankCode: e.target.value })} className={inputClass + " w-20"} />
               <select value={form.sourceType} onChange={(e) => setForm({ ...form, sourceType: e.target.value })} className={inputClass}>
-                {["fio_api", "sheet", "file"].map((s) => <option key={s} value={s}>{t(`bankSource.${s}`)}</option>)}
+                {["sheet", "file"].map((s) => <option key={s} value={s}>{t(`bankSource.${s}`)}</option>)}
               </select>
               {/* The account's currency: a Polish account's movements are in PLN. */}
               <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className={inputClass} aria-label={t("bankAccountsPage.currency")}>
@@ -124,6 +118,10 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
               </select>
             </div>
           )}
+          <p className="text-[12px] text-ink-secondary">
+            {t("bankAccounts.fioInConnections")}{" "}
+            {role === "admin" && <a href="/connections" className="text-ember hover:underline">{t("bankAccounts.manageLink")}</a>}
+          </p>
           <p className="text-[12px] text-ink-secondary">{t("bankAccountsPage.windowHint", { from: date(data.eventDates.from), to: date(data.eventDates.to) })}</p>
           <div className="flex gap-2">
             <button type="button" className={btnPrimary} onClick={add}>{t("bankAccountsPage.addConfirm")}</button>
@@ -140,7 +138,9 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <div>
                 <span className="text-[15px] font-semibold text-ink">{a.label}</span>{" "}
+                {a.kind === "personal" && <span className="rounded bg-amber-100 px-1.5 text-[11.5px] text-amber-800">{t("bankAccounts.kind.personal")}</span>}{" "}
                 <span className="text-ink-secondary">{a.accountNumber}/{a.bankCode} · {a.currency} · {t(`bankSource.${a.sourceType}`)}</span>
+                {a.kind === "personal" && <span className="block text-[12px] text-amber-800">{t("bankAccounts.personalLinkedWarning")}</span>}
               </div>
               <button type="button" className="text-ink-secondary hover:text-red-600" onClick={() => unlink(a)}>{t("bankAccountsPage.unlink")}</button>
             </div>
@@ -158,9 +158,13 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
             {a.sourceType === "fio_api" && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-ink-secondary">{t("bankAccountsPage.token")}</span>
-                {a.tokenSaved && !token[a.id] && <span className="text-pine">{t("bankAccountsPage.tokenOk")}</span>}
-                <input type="password" autoComplete="off" placeholder={a.tokenSaved ? t("bankAccountsPage.tokenChange") : t("bankAccountsPage.tokenPlaceholder")} value={token[a.id] ?? ""} onChange={(e) => setToken({ ...token, [a.id]: e.target.value })} className={inputClass + " w-64 py-1"} />
-                {!!token[a.id] && <button type="button" className={btn} onClick={() => saveToken(a)}>{t("common.save")}</button>}
+                {/* The token is set in one place only: Organizace -> Připojení (audit 2026-11-05). */}
+                {a.tokenSaved ? <span className="text-pine">{t("bankAccountsPage.tokenOk")}</span> : <span className="text-amber-700">{t("bankAccounts.noToken")}</span>}
+                {role === "admin" ? (
+                  <a href="/connections" className="text-ember hover:underline">{t("bankAccounts.manageLink")}</a>
+                ) : (
+                  <span className="text-[12px] text-ink-secondary">{t("bankAccounts.manageByAdmin")}</span>
+                )}
                 <button type="button" className={btn} disabled={!a.tokenSaved || !!busy} onClick={() => test(a)}>{t("bankAccountsPage.test")}</button>
                 <button type="button" className={btnPrimary} disabled={!a.tokenSaved || !!busy} onClick={() => sync(a)}>{busy === a.id + "/sync" ? t("bankImport.syncing") : t("bankImport.sync")}</button>
               </div>

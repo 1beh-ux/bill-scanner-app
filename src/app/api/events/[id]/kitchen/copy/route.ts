@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const g = await kitchenGuard(id);
   if ("error" in g) return g.error;
   const events = await prisma.event.findMany({
-    where: { organizationId: g.event.organizationId, id: { not: id }, planEntries: { some: {} } },
+    where: { organizationId: g.event.organizationId, id: { not: id }, planEntries: { some: {} }, isTest: false },
     select: { id: true, name: true, startDate: true, _count: { select: { planEntries: true } } },
     orderBy: { startDate: "desc" },
   });

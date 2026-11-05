@@ -114,6 +114,7 @@ export async function PATCH(
     bankCheckEnabled,
     bankAccountId,
     manifestCategoryMode,
+    isTest,
   } = body;
 
   // Registration & membership switches (admin only, src/lib/event-patch-access.ts), validated.
@@ -171,6 +172,7 @@ export async function PATCH(
     const cur = await prisma.event.findUniqueOrThrow({ where: { id }, select: { startDate: true, endDate: true } });
     if (new Date(endDate ?? cur.endDate) < new Date(startDate ?? cur.startDate)) return NextResponse.json({ error: "bad_dates" }, { status: 400 });
   }
+  if (isTest !== undefined && typeof isTest !== "boolean") return NextResponse.json({ error: "bad_request" }, { status: 400 });
   if (kind !== undefined && kind !== "event" && kind !== "membership") return NextResponse.json({ error: "bad_kind" }, { status: 400 });
   if (membershipYear !== undefined && membershipYear !== null && !(Number.isInteger(membershipYear) && membershipYear >= 2000 && membershipYear <= 2100)) {
     return NextResponse.json({ error: "bad_membership_year" }, { status: 400 });
@@ -232,6 +234,7 @@ export async function PATCH(
       ...(exportFolderChanged && { driveManifestSpreadsheetId: null }),
       ...(savesDrive && { driveConfiguredByUserId: user.id }),
       ...(name !== undefined && { name: name.trim() }),
+      ...(isTest !== undefined && { isTest }),
       ...(startDate !== undefined && { startDate: new Date(startDate) }),
       ...(endDate !== undefined && { endDate: new Date(endDate) }),
       ...(driveIngestFolderId !== undefined && { driveIngestFolderId }),

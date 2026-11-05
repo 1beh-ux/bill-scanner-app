@@ -314,6 +314,9 @@ model UserEventModuleAccess {
 model Event {
   id                            String         @id @default(uuid())
   name                          String
+  // Audit 2026-11-05: a test event -- "TEST" badge; its participants are never linked into Lidé, and it stays
+  // out of Lidé's unlinked list, cross-event pickers, the portal's offer and Využití totals (src/lib/test-events.ts).
+  isTest                        Boolean        @default(false) @map("is_test")
   startDate                     DateTime       @map("start_date") @db.Date
   endDate                       DateTime       @map("end_date") @db.Date
   status                        EventStatus    @default(active)
@@ -1897,6 +1900,9 @@ model BankAccount {
   // Banka (docs/bank-reconciliation.md). The registration payment check uses the same account and
   // token (one Fio token, one 30 s throttle: lastCheckedAt).
   sourceType       BankSourceType @default(fio_api) @map("source_type")
+  // Audit 2026-11-05: "organization" (null = the same) or "personal" -- a person's own account; linking a
+  // personal account to events is allowed but warned about (Připojení, Banka -> Účty a import).
+  kind             String?
   iban             String?
   currency         String         @default("CZK")
   sheetId          String?        @map("sheet_id")

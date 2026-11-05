@@ -19,7 +19,7 @@ async function view(organizationId: string) {
   const [settings, mailboxes, events] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: SELECT }),
     prisma.mailSenderAccount.findMany({ where: { organizationId }, select: { email: true }, orderBy: { email: "asc" } }),
-    prisma.event.findMany({ where: { organizationId, publicRegistration: true, publicSlug: { not: null }, status: "active" }, select: { id: true, name: true }, orderBy: { startDate: "desc" } }),
+    prisma.event.findMany({ where: { organizationId, publicRegistration: true, publicSlug: { not: null }, status: "active", isTest: false }, select: { id: true, name: true }, orderBy: { startDate: "desc" } }),
   ]);
   return { settings, mailboxes: mailboxes.map((m) => m.email), events };
 }

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { organizationId } = access.event;
   const [groups, events, children] = await Promise.all([
     prisma.participant.findMany({ where: { groupName: { not: null }, event: { organizationId } }, distinct: ["groupName"], select: { groupName: true }, orderBy: { groupName: "asc" } }),
-    prisma.event.findMany({ where: { id: { not: id }, organizationId }, select: { id: true, name: true, startDate: true, kind: true, membershipYear: true }, orderBy: { startDate: "desc" } }),
+    prisma.event.findMany({ where: { id: { not: id }, organizationId, isTest: false }, select: { id: true, name: true, startDate: true, kind: true, membershipYear: true }, orderBy: { startDate: "desc" } }),
     prisma.child.findMany({ where: { organizationId }, select: { id: true, name: true, dateOfBirth: true }, orderBy: [{ lastName: "asc" }, { name: "asc" }] }),
   ]);
   return NextResponse.json({ groups: groups.map((g) => g.groupName!).filter((g) => g.trim()), events, children });

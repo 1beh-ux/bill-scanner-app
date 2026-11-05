@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const event = await createEventWithDefaults({ name, startDate, endDate, organizationId: await orgIdOfUser(user), isPublic });
+  const event = await createEventWithDefaults({ name, startDate, endDate, organizationId: await orgIdOfUser(user), isPublic, isTest: body.isTest === true });
 
   return NextResponse.json(event, { status: 201 });
 }

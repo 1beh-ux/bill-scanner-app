@@ -12,7 +12,7 @@ export const DRIVE_FOLDER_KEYS = [
 /** "admin" = organization admins only; a module list = a holder of any of those modules (admins always). */
 export const EVENT_PATCH_ACCESS: Record<string, "admin" | ModuleKey[]> = {
   // The event itself: name, dates, kind, place.
-  name: "admin", startDate: "admin", endDate: "admin", kind: "admin", location: "admin",
+  name: "admin", startDate: "admin", endDate: "admin", kind: "admin", location: "admin", isTest: "admin",
   // Drive: where files go and whose Google account does the work (saving folders makes you that account).
   ...Object.fromEntries(DRIVE_FOLDER_KEYS.map((k) => [k, "admin" as const])),
   // Registration, portal, membership, payments.

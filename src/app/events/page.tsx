@@ -13,6 +13,7 @@ type EventItem = {
   status: "active" | "closed";
   kind: "event" | "membership" | "public_event";
   membershipYear: number | null;
+  isTest?: boolean;
 };
 
 const inputClass =
@@ -27,6 +28,7 @@ export default function EventsPage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [kind, setKind] = useState<"event" | "public_event">("event");
+  const [isTest, setIsTest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -55,7 +57,7 @@ export default function EventsPage() {
     const res = await fetch("/api/events", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, startDate, endDate, kind }),
+      body: JSON.stringify({ name, startDate, endDate, kind, isTest }),
     });
 
     if (!res.ok) {
@@ -66,6 +68,7 @@ export default function EventsPage() {
 
     setName("");
     setKind("event");
+    setIsTest(false);
     setStartDate("");
     setEndDate("");
     loadEvents();
@@ -126,6 +129,10 @@ export default function EventsPage() {
           <option value="event">{t("events.kindEvent")}</option>
           <option value="public_event">{t("events.kindPublic")}</option>
         </select>
+        <label className="flex items-center gap-1.5 text-[13px] text-ink" title={t("testEvent.hint")}>
+          <input type="checkbox" checked={isTest} onChange={(e) => setIsTest(e.target.checked)} />
+          {t("testEvent.checkbox")}
+        </label>
         <button
           type="submit"
           className="rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-white hover:bg-ember-hover"
@@ -159,6 +166,7 @@ export default function EventsPage() {
                     <a href={`/events/${ev.id}`} className="text-ink underline hover:text-ember">
                       {ev.name}
                     </a>
+                    {ev.isTest && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[12px] font-semibold text-amber-800">{t("testEvent.badge")}</span>}
                     {ev.kind === "public_event" && (
                       <span className="ml-2 rounded bg-ember/15 px-1.5 py-0.5 text-[12px] text-ink">{t("events.kindPublicChip")}</span>
                     )}

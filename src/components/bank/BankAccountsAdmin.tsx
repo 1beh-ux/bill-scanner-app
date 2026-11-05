@@ -17,6 +17,8 @@ type Account = {
   lastSuccessAt: string | null;
   lastError: string | null;
   events: { id: string; name: string }[];
+  eventLinks?: { event: { id: string; name: string } }[];
+  kind: string | null;
 };
 
 const DAY = 24 * 3600 * 1000;
@@ -32,7 +34,7 @@ export default function BankAccountsAdmin() {
   const [canEdit, setCanEdit] = useState(false);
   // When the list was loaded -- the token-expiry warning compares against it.
   const [now, setNow] = useState(0);
-  const [form, setForm] = useState<{ label: string; accountNumber: string; token: string } | null>(null);
+  const [form, setForm] = useState<{ label: string; accountNumber: string; token: string; kind: string } | null>(null);
   const [tokenFor, setTokenFor] = useState<{ id: string; token: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -64,7 +66,7 @@ export default function BankAccountsAdmin() {
     if (!form) return;
     setBusy(true);
     setMessage(null);
-    const res = await fetch("/api/bank-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: form.label, accountNumber: form.accountNumber }) }).catch(() => null);
+    const res = await fetch("/api/bank-accounts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label: form.label, accountNumber: form.accountNumber, kind: form.kind }) }).catch(() => null);
     if (!res?.ok) {
       setBusy(false);
       const error = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
@@ -101,6 +103,11 @@ export default function BankAccountsAdmin() {
     load();
   }
 
+  async function setKind(a: Account, kind: string) {
+    await fetch(`/api/bank-accounts/${a.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind }) }).catch(() => null);
+    load();
+  }
+
   async function disconnect(a: Account) {
     let withMovements = false;
     const ok = await confirm({
@@ -121,7 +128,7 @@ export default function BankAccountsAdmin() {
       <div className="mb-1 flex items-center justify-between gap-3">
         <h2 className="text-[17px] font-semibold text-ink">{t("bankAccounts.title")}</h2>
         {!form && (
-          <button type="button" className={linkBtn} onClick={() => { setMessage(null); setForm({ label: "", accountNumber: "", token: "" }); }}>
+          <button type="button" className={linkBtn} onClick={() => { setMessage(null); setForm({ label: "", accountNumber: "", token: "", kind: "organization" }); }}>
             + {t("bankAccounts.connect")}
           </button>
         )}
@@ -141,6 +148,13 @@ export default function BankAccountsAdmin() {
               <input value={form.accountNumber} onChange={(e) => setForm({ ...form, accountNumber: e.target.value })} inputMode="numeric" placeholder="2900123456" className={inputClass} />
               <span className="text-[14px] text-ink">/2010</span>
             </span>
+          </label>
+          <label className="text-[13px] text-ink-secondary">
+            {t("bankAccounts.kind.label")}
+            <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })} className={inputClass + " mt-1"}>
+              <option value="organization">{t("bankAccounts.kind.organization")}</option>
+              <option value="personal">{t("bankAccounts.kind.personal")}</option>
+            </select>
           </label>
           <label className="text-[13px] text-ink-secondary">
             {t("bankAccounts.token")}
@@ -165,9 +179,21 @@ export default function BankAccountsAdmin() {
             return (
               <li key={a.id} className="flex flex-col gap-1 rounded-lg border border-mist bg-paper px-3 py-2 text-[14px]">
                 <span className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="font-medium text-ink">{a.label}</span>
+                  <span className="font-medium text-ink">
+                    {a.label}
+                    <select value={a.kind === "personal" ? "personal" : "organization"} onChange={(e) => setKind(a, e.target.value)} aria-label={t("bankAccounts.kind.label")} className={"ml-2 rounded px-1.5 py-0.5 text-[11.5px] " + (a.kind === "personal" ? "bg-amber-100 text-amber-800" : "bg-paper-2 text-ink-secondary")}>
+                      <option value="organization">{t("bankAccounts.kind.organization")}</option>
+                      <option value="personal">{t("bankAccounts.kind.personal")}</option>
+                    </select>
+                  </span>
                   <span className="text-[13px] text-ink-secondary">{a.accountNumber}/{a.bankCode}</span>
                 </span>
+                {a.kind === "personal" && (a.events.length > 0 || (a.eventLinks?.length ?? 0) > 0) && (
+                  <span className="rounded bg-amber-50 px-2 py-0.5 text-[12.5px] text-amber-800">{t("bankAccounts.personalLinkedWarning")}</span>
+                )}
+                {(a.eventLinks?.length ?? 0) > 0 && (
+                  <span className="text-[12.5px] text-ink-secondary">{t("bankAccounts.linkedInBank", { events: a.eventLinks!.map((l) => l.event.name).join(", ") })}</span>
+                )}
                 <span className="text-[13px]">
                   {!a.tokenSetAt ? (
                     <span className="text-ink-secondary">{t("bankAccounts.noToken")}</span>
