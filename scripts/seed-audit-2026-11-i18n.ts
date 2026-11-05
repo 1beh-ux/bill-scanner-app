@@ -9,6 +9,9 @@ const r = (key: string, cs: string, en: string): Row => ({ key, cs, en });
 const rows: Row[] = [
   // Phase 2: permissions
   r("eventSettings.adminManaged", "Tohle upravuje správce organizace.", "An organization admin manages this."),
+  // Phase 3: bank import window
+  r("bankImport.window", "Období akce {from} – {to}", "Event period {from} – {to}"),
+  r("bankImport.outsideHint", "{count} řádků je mimo období akce ({from} – {to}), proto se nenačtou. Patří-li k akci, rozšiřte data u propojení účtu nahoře (Období) a náhled spusťte znovu.", "{count} rows are outside the event period ({from} – {to}), so they won't be imported. If they belong to the event, widen the account link's dates above (Period) and run the preview again."),
 ];
 
 async function main() {

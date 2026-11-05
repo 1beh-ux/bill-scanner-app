@@ -318,6 +318,7 @@ function ImportPanel({ eventId, links, onDone, t, countsText }: { eventId: strin
           {preview.counts && (
             <>
               <p className="mt-3 text-[13px] text-ink">{countsText(preview.counts)} · {t("bankImport.window", { from: date(preview.window.from), to: date(preview.window.to) })}</p>
+              {preview.counts.outside > 0 && <p className="mt-1 text-[12px] text-amber-800">{t("bankImport.outsideHint", { count: String(preview.counts.outside), from: date(preview.window.from), to: date(preview.window.to) })}</p>}
               <h3 className="mb-1 mt-3 text-[14px] font-semibold text-ink">{t("bankImport.previewRows")}</h3>
               {rowTable(preview.rows)}
               {!!preview.errors?.length && (

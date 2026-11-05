@@ -35,6 +35,15 @@ export async function evaluate(bankAccountId: string, results: RowResult[], wind
   const existing = new Set(
     (await prisma.bankTransaction.findMany({ where: { bankAccountId, externalId: { in: ids } }, select: { externalId: true } })).map((t) => t.externalId)
   );
+  return { ...statusRows(results, window, existing), presentIds: new Set(ids) };
+}
+
+/**
+ * Pure part of evaluate: Chyba / Mimo období (outside the window) / Duplicita (already stored, or the same
+ * transaction id earlier in this source) / Nové. Identical rows in one source have different ids (parse.ts
+ * numbers each occurrence), so two equal card payments on one day stay two rows.
+ */
+export function statusRows(results: RowResult[], window: Window, existing: Set<string>) {
   const counts: Counts = { new: 0, duplicate: 0, outside: 0, error: 0 };
   const fresh: ParsedTx[] = [];
   const rows: ResultRow[] = results.map((r) => {
@@ -53,9 +62,9 @@ export async function evaluate(bankAccountId: string, results: RowResult[], wind
     }
     counts.new++;
     fresh.push(r.tx);
-    return { ...base, status: "new" };
+    return { ...base, status: "new" as const };
   });
-  return { counts, rows, fresh, presentIds: new Set(ids) };
+  return { counts, rows, fresh };
 }
 
 /** Insert the new rows (classified), store the batch, mark Sheet rows that vanished, run suggestions. */

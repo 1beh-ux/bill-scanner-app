@@ -14,14 +14,22 @@ export type SyncResult = Awaited<ReturnType<typeof commitImport>> & { info?: Fio
 
 const pragueToday = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Prague" }).format(new Date());
 
-/** The link's window, never past today (Fio refuses future dates). */
+/**
+ * The account link's real window (the event's dates as linked): what an import (file / paste / Sheet) keeps
+ * and what is "Mimo období". Never capped at today -- a future event's statement rows are inside it.
+ */
 export function windowOf(link: Pick<EventBankAccount, "dateFrom" | "dateTo">): Window {
-  const today = pragueToday();
-  const to = ymd(link.dateTo) > today ? today : ymd(link.dateTo);
-  return { from: ymd(link.dateFrom) > to ? to : ymd(link.dateFrom), to };
+  return { from: ymd(link.dateFrom), to: ymd(link.dateTo) };
 }
 
-export async function syncFio(eventId: string, link: EventBankAccount & { bankAccount: BankAccount }, userId: string | null, window = windowOf(link)): Promise<{ error: SyncError } | SyncResult> {
+/** What the Fio API is asked for: the window, never past today (Fio refuses future dates). Fio sync only. */
+export function fioFetchWindow(link: Pick<EventBankAccount, "dateFrom" | "dateTo">, today = pragueToday()): Window {
+  const w = windowOf(link);
+  const to = w.to > today ? today : w.to;
+  return { from: w.from > to ? to : w.from, to };
+}
+
+export async function syncFio(eventId: string, link: EventBankAccount & { bankAccount: BankAccount }, userId: string | null, window = fioFetchWindow(link)): Promise<{ error: SyncError } | SyncResult> {
   const account = link.bankAccount;
   if (account.sourceType !== "fio_api") return { error: "not_fio" };
   if (!account.tokenEncrypted) return { error: "no_token" };
@@ -79,7 +87,7 @@ export async function dailyBankSync(): Promise<string[]> {
   const log: string[] = [];
   const recent = ymd(new Date(Date.now() - 85 * 864e5));
   for (const link of links) {
-    const w = windowOf(link);
+    const w = fioFetchWindow(link);
     const window = { from: w.from < recent ? recent : w.from, to: w.to };
     if (window.from > window.to) continue;
     let r = await syncFio(link.eventId, link, null, window);
