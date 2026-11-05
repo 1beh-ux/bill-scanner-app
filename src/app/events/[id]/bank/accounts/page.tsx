@@ -177,6 +177,8 @@ export default function BankAccountsPage({ params }: { params: Promise<{ id: str
               </div>
             )}
             {a.sourceType === "fio_api" && <p className="mt-1 text-[12px] text-ink-secondary">{t("bankAccountsPage.fioHint")}</p>}
+            {/* BK1 (audit2): Fio is asked only up to today -- say so instead of silently using a shorter period. */}
+            {a.sourceType === "fio_api" && dateTo > new Date().toISOString().slice(0, 10) && <p className="mt-1 text-[12px] text-amber-800">{t("bankAccountsPage.fioToToday")}</p>}
             {msg[a.id] && <p className="mt-2 text-ink">{msg[a.id]}</p>}
           </div>
         ))}
@@ -194,7 +196,7 @@ function ImportPanel({ eventId, links, onDone, t, countsText }: { eventId: strin
   const [preview, setPreview] = useState<Preview | null>(null);
   const [mapping, setMapping] = useState<string[] | null>(null);
   const [headerRow, setHeaderRow] = useState<number | null>(null);
-  const [result, setResult] = useState<{ counts: Counts; rows: Row[] } | null>(null);
+  const [result, setResult] = useState<{ counts: Counts; rows: Row[]; window?: { from: string; to: string } } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -214,7 +216,8 @@ function ImportPanel({ eventId, links, onDone, t, countsText }: { eventId: strin
     if (!r?.ok) return setError(source === "sheet" && body.error && !["bad_request", "empty", "spreadsheet_id_required", "event_closed_locked"].includes(body.error) ? driveErrorText(t, body.error, body) : t(`bankImport.error.${body.error ?? "failed"}`));
     if (commit) {
       const batch = await fetch(`/api/events/${eventId}/bank/batches/${body.batchId}`).then((x) => x.json());
-      setResult({ counts: batch.counts, rows: batch.rows });
+      // BK2 (audit2): keep the period the import used on screen.
+      setResult({ counts: batch.counts, rows: batch.rows, window: preview?.window });
       setPreview(null);
       onDone();
     } else {
@@ -339,7 +342,10 @@ function ImportPanel({ eventId, links, onDone, t, countsText }: { eventId: strin
       )}
       {result && (
         <div className="mt-4">
-          <p className="mb-2 text-[14px] font-medium text-ink">{t("bankImport.done")} {countsText(result.counts)}</p>
+          <p className="mb-2 text-[14px] font-medium text-ink">
+            {t("bankImport.done")} {countsText(result.counts)}
+            {result.window && <> · {t("bankImport.window", { from: date(result.window.from), to: date(result.window.to) })}</>}
+          </p>
           {rowTable(result.rows)}
         </div>
       )}

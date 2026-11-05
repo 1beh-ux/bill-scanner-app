@@ -368,8 +368,9 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
         <h1 className="text-[22px] font-semibold text-ink">
           {view.event.name} — {t("nav.planning")} <HelpLink slug="planovani" />
         </h1>
-        <div className="flex items-center gap-3">
-          <p className="text-[12px] text-ink-secondary">{t("planBoard.copyHint")}</p>
+        {/* MB1 (audit2): wraps on a phone -- the hint takes its own line, the actions stay visible. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="basis-full text-[12px] text-ink-secondary md:basis-auto">{t("planBoard.copyHint")}</p>
           <button
             onClick={undo}
             disabled={undoCount === 0}

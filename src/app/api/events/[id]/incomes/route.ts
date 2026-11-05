@@ -34,7 +34,9 @@ export async function GET(_req: Request, ctx: Ctx) {
   const rows = await prisma.eventIncome.findMany({ where: { eventId: g.eventId }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] });
   const bank = (await hasBankAccess(g.user, g.eventId))
     ? (await prisma.bankTransaction.groupBy({ by: ["incomeType"], where: { eventId: g.eventId, classification: "income", currency: "CZK", amount: { gt: 0 } }, _sum: { amount: true } }))
-        .map((x) => ({ incomeType: x.incomeType ?? "other", sum: Number(x._sum.amount ?? 0) }))
+        // BK5 (audit2): an income nobody sorted yet is "Neroztříděno", not mixed into "Ostatní"; listed last.
+        .map((x) => ({ incomeType: x.incomeType ?? "unclassified", sum: Number(x._sum.amount ?? 0) }))
+        .sort((a, b) => Number(a.incomeType === "unclassified") - Number(b.incomeType === "unclassified"))
     : null;
   return NextResponse.json({ rows: rows.map(shape), bank });
 }

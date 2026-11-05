@@ -123,6 +123,9 @@ const rows: Row[] = [
   r("public.err.name", "jméno", "name"),
   r("travelRates.unverified", "neověřeno", "unverified"),
   r("travelRates.unverifiedHint", "Hodnoty z výchozí sady. Zkontrolujte je podle vyhlášky a v poli Zdroj smažte „(ověřit)“ a „zdroj neznámý“.", "Default values. Check them against the decree and remove “(ověřit)” and “zdroj neznámý” from Zdroj."),
+  // audit2 Phase E
+  r("bankAccountsPage.fioToToday", "Fio se ptáme jen do dneška – budoucí pohyby se načtou, až proběhnou (synchronizace jde denně sama).", "Fio is asked only up to today – future movements load once they happen (it syncs daily on its own)."),
+  r("bankIncome.unclassified", "Neroztříděno", "Unclassified"),
 ];
 
 async function main() {
