@@ -7,12 +7,14 @@ Vedoucí, pomocníci a kuchaři nejsou účastníci: nemají přihlášku, rodin
 
 ## Kde se dospělí upravují
 
-- **Lidé → Přidat dospělého** (jen správce organizace): jméno, datum narození, adresa (ulice, obec, PSČ — pole organizace „adresa“), alergeny (14 podle EU), dietní omezení a poznámka k dietě.
+- **Organizace → Lidé → Přidat dospělého** (jen správce organizace): jméno, datum narození, adresa (ulice, obec, PSČ — pole organizace „adresa“), alergeny (14 podle EU), dietní omezení a poznámka k dietě.
 - U dospělého v Lidech je sekce **Strava a alergie** — tam se alergeny a dieta mění později. Kuchyně je čte odtud.
 - Nikdo jiný než správce organizace dospělé v Lidech nemění.
 - **Dospělý mimo organizaci** (najatý kuchař, pomocník, který není člen): zaškrtnutí **Mimo organizaci** u dospělého. V Lidech je pod filtrem **Dospělí mimo organizaci** a příště ho najdete v „Přidat z lidí“ – neeviduje se jako člen.
 
 ## Dospělí na akci
+
+![Dospělí na akci](/napoveda/images/dospeli-1.jpg)
 
 Stránka **Účastníci → Dospělí na akci** (s modulem Kuchyně nebo pro správce organizace):
 

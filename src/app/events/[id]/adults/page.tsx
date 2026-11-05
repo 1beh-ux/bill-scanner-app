@@ -1,5 +1,6 @@
 "use client";
 
+import HelpLink from "@/components/HelpLink";
 import { Fragment, use, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -61,7 +62,7 @@ export default function EventAdultsPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8">
-      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("adults.navTitle")}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("adults.navTitle")} <HelpLink slug="dospeli" /></h1>
       <p className="mb-4 max-w-3xl text-[13px] text-ink-secondary">{t("adults.pageHint")}</p>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {(["list", "report"] as const).map((k) => (

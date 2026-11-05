@@ -1,5 +1,6 @@
 "use client";
 
+import HelpLink from "@/components/HelpLink";
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -102,7 +103,7 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
   return (
       <section className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[16px] font-semibold text-ink">{t("connections.hostsTitle")}</h2>
+          <h2 className="text-[16px] font-semibold text-ink">{t("connections.hostsTitle")} <HelpLink slug="verejne-adresy" /></h2>
           {!form && canEdit && (
             <button type="button" onClick={() => { setError(null); setForm(empty()); }} className={linkBtn}>
               + {t("connections.add")}

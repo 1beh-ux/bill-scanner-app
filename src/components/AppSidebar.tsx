@@ -16,7 +16,7 @@ import HelpLink from "@/components/HelpLink";
 type EventOption = { id: string; name: string; status: string };
 
 // Nápověda topic per section header ("?" link).
-const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", tickets: "vstupenky", participants: "ucastnici", health: "zdravi", mail: "posta" };
+const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", tickets: "vstupenky", bank: "banka", participants: "ucastnici", health: "zdravi", mail: "posta", planning: "planovani", kitchen: "kuchyne" };
 
 export default function AppSidebar() {
   const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, isSuperAdmin, hiddenModules } =

@@ -3,13 +3,13 @@ title: Banka
 order: 14
 ---
 
-Modul **Banka** porovná pohyby na bankovním účtu akce s účtenkami: co bylo zaplaceno z účtu, k čemu chybí doklad a kolik se vybralo v hotovosti. Vidí ho jen ten, komu ho správce v **Nastavení akce → Lidé** výslovně přidělí — i správce organizace si ho musí zapnout sám, protože jsou tu i soukromé platby.
+Modul **Banka** porovná pohyby na bankovním účtu akce s účtenkami: co bylo zaplaceno z účtu, k čemu chybí doklad a kolik se vybralo v hotovosti. Vidí ho jen ten, komu ho správce v **Nastavení akce → Přístup** výslovně přidělí — i správce organizace si ho musí zapnout sám, protože jsou tu i soukromé platby.
 
 ## Účty a import
 
-V **Banka → Účty a import** připojíte účet a nastavíte období (výchozí jsou data akce). Pohyby mimo období se nenačtou.
+V **Banka → Účty a import** připojíte účet a nastavíte období (výchozí jsou data akce, i když akce teprve bude). Pohyby mimo období se nenačtou – náhled je označí **Mimo období** a napíše, které období platí; patří-li k akci, rozšiřte období u účtu a náhled spusťte znovu.
 
-- **Fio API** — vložte token (Fio internetové bankovnictví → Nastavení → API, typ „Pouze sledovat účet"). Token se uloží šifrovaně a už se nikdy nezobrazí. **Otestovat připojení** načte jeden den, **Synchronizovat** celé období; aktivní akce se synchronizují i samy jednou denně. Fio dovoluje jeden dotaz za 30 sekund. Data starší 90 dní Fio vydá jen po odemčení historie v internetovém bankovnictví (Nastavení → API → ikona zámku), pak 10 minut.
+- **Fio API** — účet Fio s tokenem zakládá správce organizace v **Organizace → Připojení → Banka** (token: Fio internetové bankovnictví → Nastavení → API, typ „Pouze sledovat účet"); tady ho jen připojíte k akci. Token se uloží šifrovaně a už se nikdy nezobrazí. **Otestovat připojení** načte jeden den, **Synchronizovat** celé období; aktivní akce se synchronizují i samy jednou denně. Fio dovoluje jeden dotaz za 30 sekund. Data starší 90 dní Fio vydá jen po odemčení historie v internetovém bankovnictví (Nastavení → API → ikona zámku), pak 10 minut.
 - **Google Tabulka** — stejně jako u účastníků: tabulku nasdílejte účtu aplikace, vložte odkaz, zkontrolujte sloupce. Mapování se zapamatuje, **Synchronizovat** tabulku načte znovu. Řádek, který z tabulky zmizel, se jen označí ⚠, nikdy se nesmaže.
 - **Soubor** (CSV z banky) a **Vložit** (zkopírovaná tabulka) — aplikace pozná kódování i řádek se záhlavím; když ne, vyberete ho sami.
 

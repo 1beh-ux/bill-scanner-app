@@ -366,7 +366,7 @@ export default function PlanningBoard({ eventId }: { eventId: string }) {
     <div className="p-4 md:p-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-[22px] font-semibold text-ink">
-          {view.event.name} — {t("nav.planning")}
+          {view.event.name} — {t("nav.planning")} <HelpLink slug="planovani" />
         </h1>
         <div className="flex items-center gap-3">
           <p className="text-[12px] text-ink-secondary">{t("planBoard.copyHint")}</p>

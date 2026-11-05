@@ -5,7 +5,7 @@ order: 17
 
 Modul **Kuchyně** pomáhá naplánovat jídelníček, spočítat množství, ohlídat alergie a nakoupit. Kdo má na akci přístup ke Kuchyni (nebo je správce organizace), vidí a upravuje všechno v modulu – včetně jmen s alergiemi a dietami. Žádné další role uvnitř nejsou.
 
-Zapnutí a přístup: **Nastavení akce → Lidé** (moduly akce a kdo má ke Kuchyni přístup).
+Zapnutí a přístup: **Nastavení akce → Akce → Moduly akce** a **Nastavení akce → Přístup** (kdo má ke Kuchyni přístup).
 
 ## Knihovna jídel
 
@@ -28,6 +28,8 @@ Zapnutí a přístup: **Nastavení akce → Lidé** (moduly akce a kdo má ke Ku
 - Při prvním otevření Kuchyně na akci se zkopírují z organizace (když organizace žádné nemá, vytvoří se výchozí).
 
 ## Jídelníček
+
+![Jídelníček](/napoveda/images/kuchyne-jidelnicek-1.jpg)
 
 - Mřížka dny × jídla dne. Jídlo se **přetáhne z knihovny** do políčka, mezi políčky se dá přesouvat.
 - **Strávníci** = aktivní účastníci (volitelně jen přijatí) + dospělí na akci, kteří tu jedí, v jejich termínu, minus nepřítomní, plus **úpravy počtu** (hosté, výlet bez oběda). Porce = součet podle věku k datu jídla; kdo nemá datum narození, počítá se jako 1,0 a jídelníček to řekne.

@@ -1,5 +1,6 @@
 "use client";
 
+import HelpLink from "@/components/HelpLink";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
@@ -126,7 +127,7 @@ export default function BankAccountsAdmin() {
   return (
     <section className="mt-8">
       <div className="mb-1 flex items-center justify-between gap-3">
-        <h2 className="text-[17px] font-semibold text-ink">{t("bankAccounts.title")}</h2>
+        <h2 className="text-[17px] font-semibold text-ink">{t("bankAccounts.title")} <HelpLink slug="banka" /></h2>
         {!form && (
           <button type="button" className={linkBtn} onClick={() => { setMessage(null); setForm({ label: "", accountNumber: "", token: "", kind: "organization" }); }}>
             + {t("bankAccounts.connect")}

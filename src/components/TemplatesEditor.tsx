@@ -1,5 +1,6 @@
 "use client";
 
+import HelpLink from "@/components/HelpLink";
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
@@ -46,7 +47,7 @@ export default function TemplatesEditor({ titleKey, introKey }: { titleKey: stri
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-8">
-      <h1 className={"text-[22px] font-semibold text-ink " + (introKey ? "mb-1" : "mb-4")}>{t(titleKey)}</h1>
+      <h1 className={"text-[22px] font-semibold text-ink " + (introKey ? "mb-1" : "mb-4")}>{t(titleKey)} <HelpLink slug="sablony" /></h1>
       {introKey && <p className="mb-4 text-[14px] text-ink-secondary">{t(introKey)}</p>}
 
       {/* Same layout as event settings: vertical menu, a select on narrow screens. */}

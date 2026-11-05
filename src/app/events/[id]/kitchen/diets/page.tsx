@@ -1,5 +1,6 @@
 "use client";
 
+import HelpLink from "@/components/HelpLink";
 import { use, useCallback, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { AllergenPicker, DietPicker } from "@/components/adults/AdultForm";
@@ -47,7 +48,7 @@ export default function KitchenDietsPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="mx-auto max-w-5xl p-4 md:p-8">
-      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("kitchen.navDiets")}</h1>
+      <h1 className="mb-1 text-[22px] font-semibold text-ink">{t("kitchen.navDiets")} <HelpLink slug="kuchyne" /></h1>
       <p className="mb-2 max-w-3xl text-[13px] text-ink-secondary">{t("kitchen.diets.hint")}</p>
       <p className="mb-4 text-[13px] text-ink-secondary">
         {field ? t("kitchen.diets.field", { field: field.label }) : t("kitchen.diets.noField")}{" "}
