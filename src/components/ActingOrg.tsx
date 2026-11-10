@@ -5,8 +5,8 @@ import { useTranslations } from "@/lib/i18n";
 import { usePathname } from "next/navigation";
 import { isPublicPath } from "@/lib/public-paths";
 
-// Acting organization (organizations step 3): the sidebar switcher and the "Pracujete v
-// organizaci" strip. Super-admin: every active organization; a member of several: theirs.
+// Acting organization (organizations step 3): the sidebar switcher (super-admin: every active
+// organization; a member of several: theirs) and the "Zobrazit jako" strip.
 
 type OrgOption = { id: string; name: string; shortName: string; active: boolean };
 
@@ -63,16 +63,23 @@ export function OrgSwitcher() {
   );
 }
 
+// Only while "Zobrazit jako" is on (2026-11-10): switching between one's own organizations is
+// ordinary work and needs no warning.
 export function ActingOrgStrip() {
-  const { t, organization, homeOrganization } = useTranslations();
-  const switchOrg = useSwitchOrg();
+  const { t, organization, impersonatedBy, setCurrentEventId } = useTranslations();
   const pathname = usePathname();
-  if (isPublicPath(pathname) || !organization || !homeOrganization || organization.id === homeOrganization.id) return null;
+  if (isPublicPath(pathname) || !impersonatedBy) return null;
+  async function stop() {
+    await fetch("/api/impersonate", { method: "DELETE" });
+    setCurrentEventId(null);
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/";
+  }
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 bg-ember px-4 py-2 text-[13px] font-medium text-white print:hidden">
-      <span>{t("orgs.actingStrip", { name: organization.name })}</span>
-      <button type="button" onClick={() => switchOrg(null)} className="rounded-lg bg-white/15 px-3 py-1 hover:bg-white/25">
-        {t("orgs.backHome", { name: homeOrganization.shortName })}
+      <span>{t("impersonate.strip", { who: impersonatedBy.viewing, org: organization?.name ?? "" })}</span>
+      <button type="button" onClick={stop} className="rounded-lg bg-white/15 px-3 py-1 hover:bg-white/25">
+        {t("impersonate.stop", { name: impersonatedBy.displayName })}
       </button>
     </div>
   );

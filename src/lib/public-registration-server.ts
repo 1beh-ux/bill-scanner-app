@@ -26,7 +26,8 @@ export async function publicEvent(slug: string) {
       status: "active",
       // public_event: the ticket form instead of the family form (src/lib/tickets-server.ts).
       OR: [{ registrationConnected: true }, { kind: "membership" }, { kind: "public_event" }],
-      AND: [{ OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] }],
+      // A camp's form only while its Přihláška switch is on (src/lib/module-kinds.ts).
+      AND: [{ OR: [{ registrationDeadline: null }, { registrationDeadline: { gte: startOfToday() } }] }, { OR: [{ kind: "public_event" }, { modules: { some: { moduleKey: "registration", enabled: true } } }] }],
     },
   });
 }

@@ -73,6 +73,11 @@ function route(req: NextRequest): NextResponse {
     // single task dispatch and left bills stuck "queued" forever.
     pathname.startsWith("/api/tasks");
 
+  // "Zobrazit jako" is read-only: no API write while it's on, except ending it (src/app/api/impersonate).
+  if (session && req.cookies.get("impersonate") && pathname.startsWith("/api/") && req.method !== "GET" && req.method !== "HEAD" && pathname !== "/api/impersonate" && pathname !== "/api/session") {
+    return NextResponse.json({ error: "impersonating_read_only" }, { status: 403 });
+  }
+
   if (session || isPublicPage || isPublicApi) {
     return NextResponse.next();
   }

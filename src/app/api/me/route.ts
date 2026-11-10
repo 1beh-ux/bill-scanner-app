@@ -22,12 +22,14 @@ export async function GET() {
     id: user.id,
     organization,
     homeOrganization,
-    organizations: memberOf.length ? [homeOrganization, ...memberOf] : [],
+    organizations: memberOf.length && !user.impersonatedBy ? [homeOrganization, ...memberOf] : [],
     email: user.email,
     displayName: user.displayName,
     // Effective role in the acting organization (a super-admin is admin there); the UI keys off this.
     role: isOrgAdmin(user) ? "admin" : user.role,
     isSuperAdmin: user.isSuperAdmin,
+    // "Zobrazit jako": who is really looking (the strip + its "Ukončit"); null normally.
+    impersonatedBy: user.impersonatedBy && { displayName: user.impersonatedBy.displayName, email: user.impersonatedBy.email, viewing: `${user.displayName} (${user.email})` },
     preferredLang: user.preferredLang,
     preferredTheme: user.preferredTheme,
     landingPath: user.landingPath,

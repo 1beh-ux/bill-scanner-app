@@ -8,8 +8,8 @@ Záložka Přístup určuje, který uživatel vidí které moduly u této konkr�
 ![Nastavení akce — Přístup uživatelů](/napoveda/images/pristup-1.jpg)
 
 - Administrátor má přístup ke všemu vždy (šedý text „administrátor — vždy má přístup").
-- U ostatních uživatelů (např. hlavní vedoucí konkrétního tábora) zatrhněte, které moduly (Účtenky, Účastníci, Zdraví, Pošta, Plánování, Banka) pro tuto akci mají vidět.
-- **Účastníci** je samostatný modul: seznam účastníků, dokumenty, odesílání e-mailů a jejich nastavení. Zapnete ho i bez Zdraví a Pošty (třeba pro akci jen s přihláškami). Kdo má Zdraví nebo Poštu, vidí účastníky dál i bez něj — pracují se stejnými dětmi.
+- U ostatních uživatelů (např. hlavní vedoucí konkrétního tábora) zatrhněte, které moduly (Účtenky, Děti, Zdraví, Pošta, Plánování, Kuchyně, Banka) pro tuto akci mají vidět. Dospělí na akci, Přihláška a Portál se nepřidělují: Přihláška a Portál vidí každý, kdo vidí děti; Dospělé ten, kdo má Účtenky, Děti nebo Kuchyni.
+- **Děti (účastníci)** je samostatný modul: seznam účastníků, dokumenty, odesílání e-mailů a jejich nastavení. Zapnete ho i bez Zdraví a Pošty (třeba pro akci jen s přihláškami). Kdo má Zdraví nebo Poštu, vidí účastníky dál i bez něj — pracují se stejnými dětmi.
 - Nové uživatele (e-mailové účty) přidáváte na úrovni celé organizace pod Organizace → Uživatelé; tady jen určujete jejich přístup k jednotlivým akcím.
 
 ## Kdo co může

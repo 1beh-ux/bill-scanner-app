@@ -16,7 +16,7 @@ export async function GET() {
     include: {
       users: { where: { role: "admin", active: true }, select: { email: true }, orderBy: { email: "asc" } },
       memberships: { where: { role: "admin", user: { active: true } }, select: { user: { select: { email: true } } } },
-      _count: { select: { users: true, events: true, publicHosts: true } },
+      _count: { select: { users: true, memberships: true, events: true, publicHosts: true } },
     },
   });
   return NextResponse.json({
@@ -28,7 +28,7 @@ export async function GET() {
       contactEmail: o.contactEmail,
       active: o.active,
       admins: [...o.users.map((u) => u.email), ...o.memberships.map((m) => m.user.email)],
-      users: o._count.users,
+      users: o._count.users + o._count.memberships,
       events: o._count.events,
       publicHosts: o._count.publicHosts,
     })),
@@ -52,13 +52,14 @@ export async function POST(req: NextRequest) {
   const adminName = text(body.adminName, 120);
   if (!name || !shortName || !adminName) return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   if (!EMAIL.test(adminEmail) || (contactEmail && !EMAIL.test(contactEmail))) return NextResponse.json({ error: "bad_email" }, { status: 400 });
-  // An e-mail is one account in one organization (users.email is unique app-wide).
-  const existing = await prisma.user.findUnique({ where: { email: adminEmail }, select: { organization: { select: { name: true } } } });
-  if (existing) return NextResponse.json({ error: "email_taken", organization: existing.organization.name }, { status: 409 });
+  // An existing account (users.email is unique app-wide) becomes the first admin as a member;
+  // its own organization and name stay as they are.
+  const existing = await prisma.user.findUnique({ where: { email: adminEmail }, select: { id: true } });
 
   const org = await prisma.$transaction(async (tx) => {
     const created = await tx.organization.create({ data: { name, shortName, contactEmail } });
-    await tx.user.create({ data: { email: adminEmail, displayName: adminName, role: "admin", organizationId: created.id } });
+    if (existing) await tx.organizationMembership.create({ data: { userId: existing.id, organizationId: created.id, role: "admin" } });
+    else await tx.user.create({ data: { email: adminEmail, displayName: adminName, role: "admin", organizationId: created.id } });
     // It starts with copies of every active app template (Aplikace -> Šablony aplikace).
     await copyAppTemplatesToOrganization(tx, created.id);
     // And the default travel-order rate sets (Organizace -> Sazby cestovních náhrad).

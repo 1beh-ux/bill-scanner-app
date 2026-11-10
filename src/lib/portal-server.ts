@@ -165,6 +165,8 @@ export async function availableEvents(organizationId: string, memberIds: string[
         // The family's own organization's events only.
         organizationId,
         portalOpen: true,
+        // Only while its Rodičovský portál switch is on (src/lib/module-kinds.ts).
+        modules: { some: { moduleKey: "portal", enabled: true } },
         status: "active",
         // Never a test event in a family's portal.
         isTest: false,

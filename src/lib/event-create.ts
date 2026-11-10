@@ -57,6 +57,8 @@ export async function createEventWithDefaults(o: { name: string; startDate: stri
         { eventId: created.id, moduleKey: "bills", enabled: true },
         { eventId: created.id, moduleKey: "health", enabled: false },
         ...(isPublic ? [{ eventId: created.id, moduleKey: "tickets" as const, enabled: true }] : []),
+        // A membership year is all about registration: Děti + Přihláška + Portál on from the start.
+        ...(created.kind === "membership" ? (["participants", "registration", "portal"] as const).map((moduleKey) => ({ eventId: created.id, moduleKey, enabled: true })) : []),
       ],
     });
 

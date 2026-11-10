@@ -10,7 +10,7 @@ export type MenuSection = "bills" | "tickets" | "bank" | "participants" | "healt
 // bankRecon = the Banka module (bank reconciliation, explicit grant).
 // tickets = Vstupenky of a public event (docs/public-event-tickets-spec.md).
 // adults = Dospělí na akci: the Kuchyně grant, or an organization admin. kitchen = Kuchyně (enabled + grant).
-export type MenuModule = "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets" | "adults" | "kitchen";
+export type MenuModule = "bills" | "health" | "mail" | "planning" | "roster" | "bank" | "bankRecon" | "tickets" | "adults" | "kitchen";
 export type MenuItem = {
   id: string;
   section: MenuSection;
@@ -39,14 +39,14 @@ export const MENU_SECTIONS: { id: MenuSection; labelKey: string | null }[] = [
 ];
 
 export const MENU_ITEMS: MenuItem[] = [
-  { id: "bills", section: "bills", labelKey: "nav.bills", icon: FileText, href: ev("/bills") },
-  { id: "budget", section: "bills", labelKey: "nav.budget", icon: BarChart3, href: ev("/budget") },
-  { id: "payments", section: "bills", labelKey: "nav.payments", icon: QrCode, href: ev("/payments") },
-  { id: "personal-bills", section: "bills", labelKey: "personalBills.title", icon: ShoppingBag, href: ev("/bills/personal") },
+  { id: "bills", section: "bills", labelKey: "nav.bills", icon: FileText, href: ev("/bills"), module: "bills" },
+  { id: "budget", section: "bills", labelKey: "nav.budget", icon: BarChart3, href: ev("/budget"), module: "bills" },
+  { id: "payments", section: "bills", labelKey: "nav.payments", icon: QrCode, href: ev("/payments"), module: "bills" },
+  { id: "personal-bills", section: "bills", labelKey: "personalBills.title", icon: ShoppingBag, href: ev("/bills/personal"), module: "bills" },
   // Cestovní příkazy (2026-11-03): travel orders in own cars -> a bill each.
-  { id: "travel-orders", section: "bills", labelKey: "nav.travelOrders", icon: Car, href: ev("/travel-orders") },
-  { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers") },
-  { id: "drive-cleanup", section: "bills", labelKey: "nav.driveCleanup", icon: FolderSearch, href: ev("/bills/drive-cleanup") },
+  { id: "travel-orders", section: "bills", labelKey: "nav.travelOrders", icon: Car, href: ev("/travel-orders"), module: "bills" },
+  { id: "payers", section: "bills", labelKey: "nav.payers", icon: Users, href: ev("/payers"), module: "bills" },
+  { id: "drive-cleanup", section: "bills", labelKey: "nav.driveCleanup", icon: FolderSearch, href: ev("/bills/drive-cleanup"), module: "bills" },
   ...NAV_SECTIONS.bills.items.map((i) => ({ id: i.path, section: "bills" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
   { id: "ticket-orders", section: "tickets", labelKey: "tickets.navOrders", icon: Ticket, href: ev("/tickets"), module: "tickets" },
   { id: "ticket-scan", section: "tickets", labelKey: "tickets.navScan", icon: ScanLine, href: ev("/tickets/scan"), module: "tickets" },

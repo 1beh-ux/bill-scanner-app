@@ -105,6 +105,12 @@ enum ModuleKey {
   tickets
   // Kuchyně (docs/kitchen-planning-design.md): the camp's adults on the event (Dospělí na akci) and the kitchen.
   kitchen
+  // "Lidé na akci" parts (2026-11-10, src/lib/module-kinds.ts): Dospělí na akci, the public registration +
+  // payment (Přihláška), and the event in the parent portal. Děti = participants above. Switches only --
+  // nobody is granted them; who reaches the roster sees them (src/app/api/events/[id]/modules/mine).
+  adults
+  registration
+  portal
 }
 
 enum IncidentCategory {

@@ -12,6 +12,10 @@ type UserRow = {
   displayName: string;
   role: Role;
   active: boolean;
+  // From another organization (OrganizationMembership): "deactivate" removes them from this one only.
+  member?: boolean;
+  isSuperAdmin?: boolean;
+  self?: boolean;
 };
 
 const ROLE_LABEL_KEYS: Record<Role, string> = {
@@ -26,7 +30,7 @@ const inputClassSm =
   "rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
 
 export default function UsersPage() {
-  const { t, role: currentUserRole, roleLoaded, isSuperAdmin } = useTranslations();
+  const { t, role: currentUserRole, roleLoaded, isSuperAdmin, setCurrentEventId } = useTranslations();
   const router = useRouter();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,8 +132,22 @@ export default function UsersPage() {
     load();
   }
 
+  // "Zobrazit jako": read-only view as this person (src/app/api/impersonate), then a fresh start.
+  async function viewAs(u: UserRow) {
+    setError(null);
+    const res = await fetch("/api/impersonate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: u.id }) });
+    if (!res.ok) {
+      setError(t("impersonate.failed"));
+      return;
+    }
+    setCurrentEventId(null);
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- full reload: every list and /api/me must refetch as the other user
+    window.location.assign("/");
+  }
+
   async function toggleActive(u: UserRow) {
     setError(null);
+    if (u.member && u.active && !window.confirm(t("usersPage.removeMemberConfirm", { name: u.displayName }))) return;
     const res = await fetch(`/api/users/${u.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -215,7 +233,9 @@ export default function UsersPage() {
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
-                        className={inputClassSm + " w-full"}
+                        disabled={u.member}
+                        title={u.member ? t("usersPage.memberHint") : undefined}
+                        className={inputClassSm + " w-full disabled:opacity-60"}
                         autoFocus
                       />
                     </td>
@@ -250,7 +270,14 @@ export default function UsersPage() {
                   </tr>
                 ) : (
                   <tr key={u.id} className="border-b border-mist/60">
-                    <td className="p-2 text-[14px] text-ink">{u.displayName}</td>
+                    <td className="p-2 text-[14px] text-ink">
+                      {u.displayName}
+                      {u.member && (
+                        <span className="ml-2 rounded-full bg-mist px-2 py-0.5 text-[11px] text-ink-secondary" title={t("usersPage.memberHint")}>
+                          {t("usersPage.memberBadge")}
+                        </span>
+                      )}
+                    </td>
                     <td className="p-2 text-[14px] text-ink-secondary">{u.email}</td>
                     <td className="p-2 text-[14px] text-ink">
                       {t(ROLE_LABEL_KEYS[u.role])}
@@ -270,6 +297,11 @@ export default function UsersPage() {
                       <button onClick={() => startEdit(u)} className="text-[13px] text-ember hover:underline">
                         {t("common.edit")}
                       </button>
+                      {!u.self && u.active && !u.isSuperAdmin && (isSuperAdmin || u.role !== "admin") && (
+                        <button onClick={() => viewAs(u)} className="ml-3 text-[13px] text-ember hover:underline" title={t("impersonate.hint")}>
+                          {t("impersonate.button")}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )

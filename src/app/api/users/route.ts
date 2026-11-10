@@ -16,7 +16,7 @@ export async function GET() {
   }
   // The acting organization's users + members from other organizations (role in this one).
   const users = await usersOfOrg(await getActingOrgId(user));
-  return NextResponse.json(users);
+  return NextResponse.json(users.map((u) => ({ ...u, self: u.id === user.id })));
 }
 
 export async function POST(req: NextRequest) {
@@ -44,17 +44,15 @@ export async function POST(req: NextRequest) {
 
   const organizationId = await orgIdOfUser(user);
   const normalized = email.trim().toLowerCase();
-  // Already a user of another organization: a super-admin adds them here as a member (one person,
-  // several organizations); anyone else gets duplicate_email as before.
-  const existing = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true, organizationId: true } });
-  if (existing && existing.organizationId !== organizationId && user.isSuperAdmin) {
-    await prisma.organizationMembership.upsert({
-      where: { userId_organizationId: { userId: existing.id, organizationId } },
-      create: { userId: existing.id, organizationId, role },
-      update: { role },
-    });
+  // Already a user of another organization: added here as a member (one person, several
+  // organizations) by any admin of this one -- their own account, name and home stay as they are.
+  // Already here (own or member): duplicate_email.
+  const existing = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true, organizationId: true, memberships: { where: { organizationId }, select: { role: true } } } });
+  if (existing && existing.organizationId !== organizationId && existing.memberships.length === 0) {
+    await prisma.organizationMembership.create({ data: { userId: existing.id, organizationId, role } });
     return NextResponse.json((await usersOfOrg(organizationId, { id: existing.id }))[0], { status: 201 });
   }
+  if (existing) return NextResponse.json({ error: "duplicate_email" }, { status: 409 });
 
   try {
     const created = await prisma.user.create({

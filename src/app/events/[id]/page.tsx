@@ -3,7 +3,7 @@
 import { serialQueue } from "@/lib/serial-queue";
 import PublicTextsEditor from "@/components/PublicTextsEditor";
 import AppearanceEditor from "@/components/AppearanceEditor";
-import { useEffect, useState, use } from "react";
+import { Fragment, useEffect, useState, use } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import ListTemplateAdmin from "@/components/health/ListTemplateAdmin";
@@ -28,7 +28,7 @@ import Link from "next/link";
 import { useConfirm } from "@/components/ConfirmDialog";
 import HelpLink from "@/components/HelpLink";
 import TicketSettings from "@/components/tickets/TicketSettings";
-import { modulesOfKind } from "@/lib/module-kinds";
+import { grantableModules, moduleChanges, PEOPLE_PARTS, sendsMail } from "@/lib/module-kinds";
 
 type EventDetail = {
   id: string;
@@ -88,7 +88,7 @@ type Category = {
   isFromTemplate: boolean;
 };
 
-type ModuleKey = "bills" | "participants" | "health" | "mail" | "planning" | "kitchen" | "bank" | "tickets";
+type ModuleKey = "bills" | "participants" | "adults" | "registration" | "portal" | "health" | "mail" | "planning" | "kitchen" | "bank" | "tickets";
 
 type ModuleState = { moduleKey: ModuleKey; enabled: boolean };
 
@@ -344,42 +344,52 @@ export default function EventDetailPage({
   const totalBudget = categories.reduce((sum, c) => sum + parseFloat(c.budgetAmount || "0"), 0);
 
   const isPublicEvent = event.kind === "public_event";
+  // Module packages (src/lib/module-kinds.ts): each switch brings its own tabs and checklist items.
+  const on = Object.keys(moduleAccess).filter((k) => moduleAccess[k]);
+  const bills = !!moduleAccess.bills;
+  const registration = !isPublicEvent && !!moduleAccess.registration;
+  const portal = !isPublicEvent && !!moduleAccess.portal;
   // help = Nápověda topic (src/content/help-topics.ts) linked from an unmet item.
   const checklist: { labelKey: string; done: boolean; section: Tab; help: string }[] = [
     // Bills: where approved bills go (Synchronizovat s Diskem), and where imported files are filed.
-    { labelKey: "eventDetail.checklistDrive", done: !!event.driveExportFolderId, section: "pripojeni", help: "pripojeni" },
-    ...(event.driveIngestFolderId ? [{ labelKey: "eventDetail.checklistProcessedFolder", done: !!event.driveProcessedFolderId, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
-    { labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni", help: "pripojeni" },
-    { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
-    { labelKey: "eventDetail.checklistBudgets", done: totalBudget > 0, section: "uctenky", help: "kategorie-a-rozpocty" },
+    ...(bills
+      ? [
+          { labelKey: "eventDetail.checklistDrive", done: !!event.driveExportFolderId, section: "pripojeni" as Tab, help: "pripojeni" },
+          ...(event.driveIngestFolderId ? [{ labelKey: "eventDetail.checklistProcessedFolder", done: !!event.driveProcessedFolderId, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
+          { labelKey: "eventDetail.checklistCategories", done: categories.length > 0, section: "uctenky" as Tab, help: "kategorie-a-rozpocty" },
+          { labelKey: "eventDetail.checklistBudgets", done: totalBudget > 0, section: "uctenky" as Tab, help: "kategorie-a-rozpocty" },
+        ]
+      : []),
+    // A mailbox only when something on the event sends e-mail.
+    ...(sendsMail(on) ? [{ labelKey: "eventDetail.checklistMailbox", done: !!event.senderEmail, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
     ...(roster ? [{ labelKey: "eventDetail.checklistParticipantsFolder", done: !!event.driveParticipantsFolderId, section: "pripojeni" as Tab, help: "pripojeni" }] : []),
     ...(moduleAccess.mail
       ? [{ labelKey: "eventDetail.checklistDocumentTypes", done: (documentTypeCount ?? 0) > 0, section: "dokumenty" as Tab, help: "nastaveni-ucastnici-posta" }]
       : []),
     // Registration: what parents see and pay.
     // Veřejná akce: its own list (prices, account, mailbox, public page) -- see the Vstupenky tab.
-    ...(isPublicEvent
+    ...(isPublicEvent && moduleAccess.tickets
       ? [
           { labelKey: "eventDetail.checklistTicketTypes", done: !!event.priceRules, section: "vstupenky" as Tab, help: "vstupenky" },
           { labelKey: "eventDetail.checklistRegistrationAccount", done: !!event.registrationBankAccountNumber, section: "vstupenky" as Tab, help: "vstupenky" },
         ]
       : []),
-    ...(!isPublicEvent && (event.publicRegistration || event.registrationConnected)
+    ...(registration
       ? [
           { labelKey: "eventDetail.checklistPrice", done: event.memberPriceCzk !== null || event.nonMemberPriceCzk !== null, section: "platba" as Tab, help: "prijeti-registrace" },
           { labelKey: "eventDetail.checklistRegistrationAccount", done: !!event.registrationBankAccountNumber, section: "platba" as Tab, help: "prijeti-registrace" },
           { labelKey: "eventDetail.checklistLocation", done: !!event.location, section: "akce" as Tab, help: "prijeti-registrace" },
         ]
       : []),
-    ...(event.publicRegistration ? [{ labelKey: "eventDetail.checklistPublicSlug", done: !!event.publicSlug, section: "verejna" as Tab, help: "prijeti-registrace" }] : []),
-    ...(event.bankCheckEnabled && !isPublicEvent
+    ...(registration && event.publicRegistration ? [{ labelKey: "eventDetail.checklistPublicSlug", done: !!event.publicSlug, section: "verejna" as Tab, help: "prijeti-registrace" }] : []),
+    ...(registration && event.bankCheckEnabled
       ? [
           { labelKey: "eventDetail.checklistBankAccount", done: !!event.bankAccountId, section: "platba" as Tab, help: "prijeti-registrace" },
           { labelKey: "eventDetail.checklistPaymentDoc", done: !!event.paymentDocTypeId, section: "platba" as Tab, help: "prijeti-registrace" },
         ]
       : []),
     // Camp-only (R4-7, audit2): a ticket sale has no parents' reply deadline.
-    ...(!isPublicEvent ? [{ labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce" as Tab, help: "prijeti-registrace" }] : []),
+    ...(registration || portal ? [{ labelKey: "eventDetail.checklistDeadline", done: !!event.registrationDeadline, section: "akce" as Tab, help: "prijeti-registrace" }] : []),
   ];
   const checklistDone = checklist.filter((c) => c.done).length;
 
@@ -388,12 +398,13 @@ export default function EventDetailPage({
     { key: "akce", labelKey: "eventSettings.tabAkce", help: "uvod" },
     // Veřejná akce: prices, payment, e-mails and the ticket in one tab; no camp registration tabs.
     ...(isPublicEvent && moduleAccess.tickets ? [{ key: "vstupenky" as Tab, labelKey: "eventSettings.tabTickets", help: "vstupenky" }] : []),
-    ...(!isPublicEvent ? [{ key: "platba" as Tab, labelKey: "eventSettings.tabPayment" }] : []),
-    ...(isAdmin && !isPublicEvent ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
-    { key: "verejna", labelKey: "eventSettings.tabPublic" },
+    ...(registration ? [{ key: "platba" as Tab, labelKey: "eventSettings.tabPayment" }] : []),
+    ...(isAdmin && portal ? [{ key: "portal" as Tab, labelKey: "eventSettings.tabPortal" }] : []),
+    // The public page: a camp's registration form, or a public event's ticket page.
+    ...(registration || (isPublicEvent && moduleAccess.tickets) ? [{ key: "verejna" as Tab, labelKey: "eventSettings.tabPublic" }] : []),
     ...(isAdmin ? [{ key: "lide" as Tab, labelKey: "eventSettings.tabAccess", help: "pristup" }] : []),
     { key: "pripojeni", labelKey: "eventSettings.tabPripojeni", help: "pripojeni" },
-    { key: "uctenky", labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" },
+    ...(bills ? [{ key: "uctenky" as Tab, labelKey: "eventSettings.tabUctenky", help: "kategorie-a-rozpocty" }] : []),
     ...(roster ? [{ key: "ucastnici" as Tab, labelKey: "eventSettings.tabParticipants", help: "nastaveni-ucastnici-posta" }] : []),
     ...(moduleAccess.health ? [{ key: "zdravi" as Tab, labelKey: "eventSettings.tabHealth", help: "nastaveni-zdravi" }] : []),
     ...(roster ? [{ key: "posta" as Tab, labelKey: "eventSettings.tabMail", help: "nastaveni-ucastnici-posta" }] : []),
@@ -509,12 +520,12 @@ export default function EventDetailPage({
           {tab === "akce" && (
             <div className="flex flex-col gap-6">
               {isAdmin && <EventBasicsForm event={event} onSaved={load} t={t} />}
-              {isAdmin && event.kind === "event" && <MembershipYearCard event={event} onSaved={load} t={t} />}
+              {isAdmin && event.kind === "event" && (registration || portal) && <MembershipYearCard event={event} onSaved={load} t={t} />}
               {isAdmin && <ModulesTab eventId={id} t={t} />}
               {isSuperAdmin && <EventCostCard eventId={id} t={t} />}
               {!isAdmin && <p className="rounded-lg bg-paper-2 px-3 py-2 text-[13px] text-ink-secondary">{t("eventSettings.adminManaged")}</p>}
               {/* Parents' reply deadline + Dotazník: camp-only (R4-7); a ticket sale sets its deadline in Vstupenky. */}
-              {isAdmin && !isPublicEvent && (
+              {isAdmin && (registration || portal || !!moduleAccess.mail) && (
               <div>
                 <h3 className="mb-3 text-[15px] font-semibold text-ink">{t("eventDetail.registrationInfoTitle")}</h3>
                 {feeError && <p className="mb-3 text-[13px] text-red-600">{feeError}</p>}
@@ -1226,7 +1237,10 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
   function toggleModule(moduleKey: ModuleKey, enabled: boolean) {
     setError(null);
     setSaved(false);
-    setModules((ms) => ms.map((m) => (m.moduleKey === moduleKey ? { ...m, enabled } : m)));
+    // The dependent switches move with it (src/lib/module-kinds.ts moduleChanges); the server does the same.
+    const changes = new Map(moduleChanges(moduleKey, enabled).map((c) => [c.key, c.enabled]));
+    const prev = modules;
+    setModules((ms) => ms.map((m) => (changes.has(m.moduleKey) ? { ...m, enabled: changes.get(m.moduleKey)! } : m)));
     enqueue(async () => {
       const res = await fetch(`/api/events/${eventId}/modules`, {
         method: "PATCH",
@@ -1237,7 +1251,7 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
     }).then(
       () => setSaved(true),
       () => {
-        setModules((ms) => ms.map((m) => (m.moduleKey === moduleKey ? { ...m, enabled: !enabled } : m)));
+        setModules((ms) => ms.map((m) => (changes.has(m.moduleKey) ? { ...m, enabled: prev.find((p) => p.moduleKey === m.moduleKey)?.enabled ?? false } : m)));
         setError(t("accessTab.errorSaveFailed"));
       }
     );
@@ -1261,8 +1275,29 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
                   ? "accessTab.moduleTickets"
                   : key === "kitchen"
                     ? "accessTab.moduleKitchen"
-                    : "accessTab.modulePlanning"
+                    : key === "adults" || key === "registration" || key === "portal"
+                      ? `accessTab.module_${key}`
+                      : "accessTab.modulePlanning"
     );
+
+  const people = PEOPLE_PARTS.map((k) => modules.find((m) => m.moduleKey === k)).filter((m) => m !== undefined);
+  const kitchenOn = !!modules.find((m) => m.moduleKey === "kitchen")?.enabled;
+  const HINTS: Partial<Record<ModuleKey, string>> = { health: "accessTab.needsChildren", mail: "accessTab.needsChildren", registration: "accessTab.needsChildren", portal: "accessTab.needsChildren" };
+  const moduleRow = (m: ModuleState) => {
+    // Kuchyně counts the adults' portions, so Dospělí na akci is on with it.
+    const forced = m.moduleKey === "adults" && kitchenOn;
+    const enabled = m.enabled || forced;
+    return (
+      <label key={m.moduleKey} className="flex flex-wrap items-center gap-x-2 text-[14px] text-ink">
+        <input type="checkbox" checked={enabled} disabled={forced} onChange={(e) => toggleModule(m.moduleKey, e.target.checked)} className="h-4 w-4" />
+        {moduleLabel(m.moduleKey)}
+        <span className="text-[12px] text-ink-secondary">
+          ({enabled ? t("accessTab.moduleOn") : t("accessTab.moduleOff")}
+          {forced ? ` · ${t("accessTab.adultsByKitchen")}` : HINTS[m.moduleKey] ? ` · ${t(HINTS[m.moduleKey]!)}` : ""})
+        </span>
+      </label>
+    );
+  };
 
   return (
     <div>
@@ -1272,19 +1307,18 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
       <p className="mb-3 text-[12px] text-ink-secondary">{t("accessTab.modulesHelp")}</p>
       {saved && !error && <p className="mb-2 text-[13px] text-pine">{t("eventBasics.saved")}</p>}
       <div className="flex flex-col gap-2">
-        {modules.map((m) => (
-          <label key={m.moduleKey} className="flex items-center gap-2 text-[14px] text-ink">
-            <input
-              type="checkbox"
-              checked={m.enabled}
-              onChange={(e) => toggleModule(m.moduleKey, e.target.checked)}
-              className="h-4 w-4"
-            />
-            {moduleLabel(m.moduleKey)}
-            <span className="text-[12px] text-ink-secondary">
-              ({m.enabled ? t("accessTab.moduleOn") : t("accessTab.moduleOff")})
-            </span>
-          </label>
+        {modules.filter((m) => !PEOPLE_PARTS.includes(m.moduleKey)).map((m, i) => (
+          <Fragment key={m.moduleKey}>
+            {/* "Lidé na akci" right after Účtenky: its four parts as one group. */}
+            {i === 1 && people.length > 0 && (
+              <fieldset className="rounded-lg border border-mist px-3 pb-2 pt-1">
+                <legend className="px-1 text-[13px] font-medium text-ink">{t("accessTab.peopleGroup")}</legend>
+                <p className="mb-2 text-[12px] text-ink-secondary">{t("accessTab.peopleGroupHelp")}</p>
+                <div className="flex flex-col gap-2">{people.map(moduleRow)}</div>
+              </fieldset>
+            )}
+            {moduleRow(m)}
+          </Fragment>
         ))}
       </div>
     </div>
@@ -1292,7 +1326,8 @@ function ModulesTab({ eventId, t }: { eventId: string; t: (key: string, vars?: R
 }
 
 function AccessTab({ eventId, kind, t }: { eventId: string; kind: string; t: (key: string, vars?: Record<string, string>) => string }) {
-  const MODULE_KEYS = modulesOfKind(kind);
+  // Only modules people are granted; the "Lidé na akci" switches follow the roster (src/lib/module-kinds.ts).
+  const MODULE_KEYS = grantableModules(kind);
   const [rows, setRows] = useState<AccessRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1346,7 +1381,9 @@ function AccessTab({ eventId, kind, t }: { eventId: string; kind: string; t: (ke
                   ? "accessTab.moduleTickets"
                   : key === "kitchen"
                     ? "accessTab.moduleKitchen"
-                    : "accessTab.modulePlanning"
+                    : key === "adults" || key === "registration" || key === "portal"
+                      ? `accessTab.module_${key}`
+                      : "accessTab.modulePlanning"
     );
 
   return (

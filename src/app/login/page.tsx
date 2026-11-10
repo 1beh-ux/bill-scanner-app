@@ -1,9 +1,9 @@
 "use client";
 import { getRedirectResult, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
 import { auth, googleProvider, prefersRedirectSignIn } from "@/lib/firebase";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Tent, Receipt, HeartPulse, Mail as MailIcon, Users, CalendarDays, CookingPot, Landmark, Ticket, Building2, Globe, Car } from "lucide-react";
+import { X, Tent, Receipt, HeartPulse, Mail as MailIcon, Users, CalendarDays, CookingPot, Landmark, Ticket, Building2, Globe, Car } from "lucide-react";
 
 // Each module: what it does, in the words the app uses. shot = /public/landing/<shot>.jpg
 // (hidden until the file exists, list in docs/landing-screenshots.md).
@@ -81,6 +81,13 @@ const ORG = [
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Screenshot overlay: native <dialog> (Esc closes it), a click outside the picture or on X too.
+  const zoomRef = useRef<HTMLDialogElement>(null);
+  const [zoom, setZoom] = useState<{ src: string; title: string } | null>(null);
+  const openZoom = (src: string, title: string) => {
+    setZoom({ src, title });
+    zoomRef.current?.showModal();
+  };
 
   // Back from a redirect sign-in (Apple browsers / home-screen app): finish it here.
   useEffect(() => {
@@ -150,6 +157,26 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
+      <dialog
+        ref={zoomRef}
+        onClose={() => setZoom(null)}
+        onClick={(e) => e.target === e.currentTarget && zoomRef.current?.close()}
+        aria-label={zoom ? `Ukázka: ${zoom.title}` : undefined}
+        className="m-auto max-h-[92vh] w-[min(1200px,94vw)] rounded-xl bg-paper p-0 text-ink backdrop:bg-black/60"
+      >
+        {zoom && (
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <span className="text-[14px] font-medium">{zoom.title}</span>
+              <button type="button" onClick={() => zoomRef.current?.close()} className="rounded-md p-1.5 text-ink-secondary hover:bg-paper-2 hover:text-ink" aria-label="Zavřít" autoFocus>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={zoom.src} alt={`Ukázka: ${zoom.title}`} className="max-h-[80vh] w-full object-contain" />
+          </div>
+        )}
+      </dialog>
       <div className="mx-auto flex max-w-6xl flex-col gap-20 px-6 py-16 sm:py-24">
         {/* Hero */}
         <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -220,10 +247,10 @@ export default function LoginPage() {
                 <h3 className="mb-1.5 text-[15px] font-medium">{title}</h3>
                 <p className="text-[14px] leading-relaxed text-ink-secondary">{body}</p>
                 {/* ponytail: screenshot hides itself until /public/landing/<shot>.jpg is added */}
-                <a href={`/landing/${shot}.jpg`} target="_blank" rel="noopener" className="mt-auto block pt-4">
+                <button type="button" onClick={() => openZoom(`/landing/${shot}.jpg`, title)} className="mt-auto block cursor-zoom-in pt-4 text-left" aria-label={`Zvětšit ukázku: ${title}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/landing/${shot}.jpg`} alt={`Ukázka: ${title}`} loading="lazy" className="rounded-md border border-mist transition-opacity hover:opacity-90" onError={(e) => (e.currentTarget.hidden = true)} />
-                </a>
+                </button>
               </div>
             ))}
           </div>

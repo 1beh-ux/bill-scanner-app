@@ -276,7 +276,7 @@ async function membershipOfferVars(participant: { id?: string; childId?: string 
   if (!participant.id || participant.childId) return none;
   const org = await prisma.organization.findFirst({ where: { events: { some: { id: event.id } } }, select: { id: true, portalJoinEventId: true } });
   const join = org?.portalJoinEventId
-    ? await prisma.event.findFirst({ where: { id: org.portalJoinEventId, organizationId: org.id, publicRegistration: true, publicSlug: { not: null } }, select: { id: true, publicSlug: true } })
+    ? await prisma.event.findFirst({ where: { id: org.portalJoinEventId, organizationId: org.id, publicRegistration: true, publicSlug: { not: null }, AND: [{ OR: [{ kind: "public_event" }, { modules: { some: { moduleKey: "registration", enabled: true } } }] }] }, select: { id: true, publicSlug: true } })
     : null;
   if (!org || !join) return none;
   const { participantToken } = await import("@/lib/participant-link");

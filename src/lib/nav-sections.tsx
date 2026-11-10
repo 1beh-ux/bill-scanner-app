@@ -45,6 +45,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
     sectionLabelKey: "nav.sectionApp",
     items: [
       { path: "/admin/organizations", labelKey: "nav.organizations", icon: Building2, adminOnly: true, superAdminOnly: true },
+      // Every account across organizations, "Zobrazit jako" (2026-11-10).
+      { path: "/admin/accounts", labelKey: "nav.accounts", icon: UserCog, adminOnly: true, superAdminOnly: true },
       { path: "/admin/public-hosts", labelKey: "nav.publicHosts", icon: Globe, adminOnly: true, superAdminOnly: true },
       { path: "/admin/app-templates", labelKey: "nav.appTemplates", icon: LayoutTemplate, adminOnly: true, superAdminOnly: true },
       { path: "/translations", labelKey: "nav.translations", icon: Languages, adminOnly: true, superAdminOnly: true },

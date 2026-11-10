@@ -6,6 +6,6 @@ import { publicUrl } from "@/lib/public-host";
 export async function portalJoinHref(org: { id: string; portalJoinUrl: string | null; portalJoinEventId: string | null }): Promise<string | null> {
   if (org.portalJoinUrl) return org.portalJoinUrl;
   if (!org.portalJoinEventId) return null;
-  const e = await prisma.event.findFirst({ where: { id: org.portalJoinEventId, organizationId: org.id, publicRegistration: true, publicSlug: { not: null } }, select: { id: true, publicSlug: true } });
+  const e = await prisma.event.findFirst({ where: { id: org.portalJoinEventId, organizationId: org.id, publicRegistration: true, publicSlug: { not: null }, AND: [{ OR: [{ kind: "public_event" }, { modules: { some: { moduleKey: "registration", enabled: true } } }] }] }, select: { id: true, publicSlug: true } });
   return e ? publicUrl("registration", e.id, `/r/${e.publicSlug}`, org.id) : null;
 }

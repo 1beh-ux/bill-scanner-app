@@ -5,7 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { syncParticipantFieldsForEvent } from "@/lib/participant-field-sync";
 import { isOrgAdmin, requireEventInOrg } from "@/lib/org-scope";
-import { modulesOfKind } from "@/lib/module-kinds";
+import { moduleChanges, modulesOfKind } from "@/lib/module-kinds";
 
 
 
@@ -54,22 +54,25 @@ export async function PATCH(
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const before = await prisma.eventModule.findUnique({ where: { eventId_moduleKey: { eventId, moduleKey } } });
-  const wasEnabled = before?.enabled ?? false;
-
-  const updated = await prisma.eventModule.upsert({
-    where: { eventId_moduleKey: { eventId, moduleKey } },
-    create: { eventId, moduleKey, enabled },
-    update: { enabled },
-  });
-
-  // Newly enabled: pull in any org-template participant fields meant for
-  // this module (see src/lib/participant-field-sync.ts) so they show up
-  // with sensible defaults immediately instead of the Účastníci tab
-  // looking empty for a module that was just turned on.
-  if (enabled && !wasEnabled) {
-    await syncParticipantFieldsForEvent(eventId, moduleKey);
+  // Dependencies (src/lib/module-kinds.ts): Zdraví / Pošta / Přihláška / Portál bring Děti along, Děti off
+  // takes them off too. Data always stays; only the switches move.
+  const offered = modulesOfKind(inOrg.event.kind);
+  const changes = moduleChanges(moduleKey, enabled).filter((c) => offered.includes(c.key));
+  const before = new Map((await prisma.eventModule.findMany({ where: { eventId, moduleKey: { in: changes.map((c) => c.key) } } })).map((m) => [m.moduleKey, m.enabled]));
+  let updated = null;
+  for (const c of changes) {
+    if (c.key !== moduleKey && (before.get(c.key) ?? false) === c.enabled) continue;
+    const row = await prisma.eventModule.upsert({
+      where: { eventId_moduleKey: { eventId, moduleKey: c.key } },
+      create: { eventId, moduleKey: c.key, enabled: c.enabled },
+      update: { enabled: c.enabled },
+    });
+    if (c.key === moduleKey) updated = row;
+    // Newly enabled: pull in any org-template participant fields meant for this module (see
+    // src/lib/participant-field-sync.ts) so the Účastníci tab isn't empty for a module just turned on.
+    if (c.enabled && !(before.get(c.key) ?? false)) await syncParticipantFieldsForEvent(eventId, c.key);
   }
 
-  return NextResponse.json(updated);
+  // Every switch that moved (the page shows the dependent ones flip too).
+  return NextResponse.json({ ...updated, changed: changes });
 }
