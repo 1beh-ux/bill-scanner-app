@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const shortName = text(body.shortName, 40);
   const contactEmail = text(body.contactEmail, 200);
   if (name === "" || shortName === "") return NextResponse.json({ error: "missing_fields" }, { status: 400 });
-  if (typeof body.active === "boolean" && !body.active && id === user.organizationId) {
+  if (typeof body.active === "boolean" && !body.active && id === user.homeOrganizationId) {
     return NextResponse.json({ error: "cannot_deactivate_home" }, { status: 400 });
   }
   const org = await prisma.organization.update({

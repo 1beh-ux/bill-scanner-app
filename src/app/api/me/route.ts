@@ -9,17 +9,20 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
-  // The organization this request acts in, and (super-admin) home -- the switcher and the "Pracujete v organizaci" strip.
+  // The organization this request acts in, and home -- the switcher and the "Pracujete v organizaci" strip.
   const actingId = await getActingOrgId(user);
   const orgSelect = { id: true, name: true, shortName: true } as const;
-  const [organization, homeOrganization] = await Promise.all([
+  const [organization, homeOrganization, memberOf] = await Promise.all([
     prisma.organization.findUniqueOrThrow({ where: { id: actingId }, select: orgSelect }),
-    prisma.organization.findUniqueOrThrow({ where: { id: user.organizationId }, select: orgSelect }),
+    prisma.organization.findUniqueOrThrow({ where: { id: user.homeOrganizationId }, select: orgSelect }),
+    // Other organizations this person may switch to (a super-admin's list comes from /api/organizations).
+    prisma.organization.findMany({ where: { active: true, memberships: { some: { userId: user.id } } }, select: orgSelect, orderBy: { name: "asc" } }),
   ]);
   return NextResponse.json({
     id: user.id,
     organization,
     homeOrganization,
+    organizations: memberOf.length ? [homeOrganization, ...memberOf] : [],
     email: user.email,
     displayName: user.displayName,
     // Effective role in the acting organization (a super-admin is admin there); the UI keys off this.

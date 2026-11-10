@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
-import { isOrgAdmin, notFound, orgWhere, requireSuperAdmin } from "@/lib/org-scope";
+import { getActingOrgId, isOrgAdmin, notFound, requireSuperAdmin } from "@/lib/org-scope";
+import { activeAdminCount, usersOfOrg } from "@/lib/org-members";
 
 export async function PATCH(
   req: NextRequest,
@@ -17,7 +18,8 @@ export async function PATCH(
 
   const { id } = await params;
   // Only a user of the acting organization; anyone else doesn't exist here.
-  const target = await prisma.user.findFirst({ where: { id, ...(await orgWhere(user)) }, select: { role: true, active: true, organizationId: true } });
+  const organizationId = await getActingOrgId(user);
+  const [target] = await usersOfOrg(organizationId, { id });
   if (!target) return notFound();
   // Only these three; isSuperAdmin (and the organization) are never editable through the API.
   const body = await req.json();
@@ -39,8 +41,16 @@ export async function PATCH(
   }
   // The organization keeps at least one active admin (deactivating or demoting the last one).
   const losesAdmin = target.role === "admin" && target.active && (active === false || (role !== undefined && role !== "admin"));
-  if (losesAdmin && (await prisma.user.count({ where: { organizationId: target.organizationId, role: "admin", active: true } })) <= 1) {
+  if (losesAdmin && (await activeAdminCount(organizationId)) <= 1) {
     return NextResponse.json({ error: "last_admin" }, { status: 400 });
+  }
+
+  // A member from another organization: role lives on the membership, "deactivate" = remove from this
+  // organization (their own account stays as it is); the name is theirs, not this organization's.
+  if (target.member) {
+    if (active === false) await prisma.organizationMembership.delete({ where: { userId_organizationId: { userId: id, organizationId } } });
+    else if (role !== undefined) await prisma.organizationMembership.update({ where: { userId_organizationId: { userId: id, organizationId } }, data: { role } });
+    return NextResponse.json(active === false ? { ...target, active: false } : { ...target, ...(role !== undefined && { role }) });
   }
 
   const updated = await prisma.user.update({

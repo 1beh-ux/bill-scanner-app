@@ -3,7 +3,8 @@ import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { orgIdOfUser } from "@/lib/org-owner";
-import { isOrgAdmin, orgWhere, requireSuperAdmin } from "@/lib/org-scope";
+import { getActingOrgId, isOrgAdmin, requireSuperAdmin } from "@/lib/org-scope";
+import { usersOfOrg } from "@/lib/org-members";
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -13,8 +14,8 @@ export async function GET() {
   if (!isOrgAdmin(user)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  // The acting organization's users only.
-  const users = await prisma.user.findMany({ where: await orgWhere(user), orderBy: { displayName: "asc" } });
+  // The acting organization's users + members from other organizations (role in this one).
+  const users = await usersOfOrg(await getActingOrgId(user));
   return NextResponse.json(users);
 }
 
@@ -41,9 +42,23 @@ export async function POST(req: NextRequest) {
     if (notSuperAdmin) return notSuperAdmin;
   }
 
+  const organizationId = await orgIdOfUser(user);
+  const normalized = email.trim().toLowerCase();
+  // Already a user of another organization: a super-admin adds them here as a member (one person,
+  // several organizations); anyone else gets duplicate_email as before.
+  const existing = await prisma.user.findUnique({ where: { email: normalized }, select: { id: true, organizationId: true } });
+  if (existing && existing.organizationId !== organizationId && user.isSuperAdmin) {
+    await prisma.organizationMembership.upsert({
+      where: { userId_organizationId: { userId: existing.id, organizationId } },
+      create: { userId: existing.id, organizationId, role },
+      update: { role },
+    });
+    return NextResponse.json((await usersOfOrg(organizationId, { id: existing.id }))[0], { status: 201 });
+  }
+
   try {
     const created = await prisma.user.create({
-      data: { email: email.trim().toLowerCase(), displayName: displayName.trim(), role, organizationId: await orgIdOfUser(user) },
+      data: { email: normalized, displayName: displayName.trim(), role, organizationId },
     });
     return NextResponse.json(created, { status: 201 });
   } catch (err) {

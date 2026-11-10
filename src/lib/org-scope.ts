@@ -1,24 +1,19 @@
 // Organizations step 2 (docs/organizations-change-notes.md): every request acts
-// inside ONE organization. Ordinary users: their own, always. Super-admin: the
-// `acting_org` cookie (switcher in step 3) when it names an active organization,
-// else their own. Something outside the acting organization is "not found"
+// inside ONE organization: the user's own, or the `acting_org` cookie's when they
+// are super-admin or a member there (resolved in getCurrentUser, src/lib/auth.ts). Something outside the acting organization is "not found"
 // (404), never "forbidden" -- its existence isn't revealed.
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { Event, User } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 
-export const ACTING_ORG_COOKIE = "acting_org";
+export { ACTING_ORG_COOKIE } from "@/lib/auth";
 
 type ScopeUser = Pick<User, "organizationId" | "isSuperAdmin">;
 
+/** getCurrentUser() already resolved the acting organization into organizationId (src/lib/auth.ts). */
 export async function getActingOrgId(user: ScopeUser): Promise<string> {
-  if (!user.isSuperAdmin) return user.organizationId;
-  const wanted = (await cookies()).get(ACTING_ORG_COOKIE)?.value;
-  if (!wanted || wanted === user.organizationId) return user.organizationId;
-  const org = await prisma.organization.findFirst({ where: { id: wanted, active: true }, select: { id: true } });
-  return org?.id ?? user.organizationId;
+  return user.organizationId;
 }
 
 export const notFound = () => NextResponse.json({ error: "not_found" }, { status: 404 });

@@ -20,9 +20,11 @@ interface I18nContextValue {
   roleLoaded: boolean;
   // Překlady, Kurzy, editing Veřejné adresy (organizations step 2). UI only; the server checks.
   isSuperAdmin: boolean;
-  // The organization this session acts in, and the user's own (they differ only for a super-admin who switched).
+  // The organization this session acts in, and the user's own (they differ after a switch).
   organization: OrgRef | null;
   homeOrganization: OrgRef | null;
+  // A member of several organizations: their own + the others (empty = only one). Super-admin: /api/organizations.
+  memberOrganizations: OrgRef[];
   hiddenModules: string[];
   setHiddenModules: (m: string[]) => void;
 }
@@ -107,6 +109,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
   const [organization, setOrganization] = useState<OrgRef | null>(null);
   const [homeOrganization, setHomeOrganization] = useState<OrgRef | null>(null);
+  const [memberOrganizations, setMemberOrganizations] = useState<OrgRef[]>([]);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
   // script in layout.tsx already set the real class on <html> before this
@@ -155,11 +158,12 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role; isSuperAdmin?: boolean; organization?: OrgRef; homeOrganization?: OrgRef; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
+      .then((data: { role: Role; isSuperAdmin?: boolean; organization?: OrgRef; homeOrganization?: OrgRef; organizations?: OrgRef[]; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
         setRole(data?.role ?? null);
         setIsSuperAdmin(data?.isSuperAdmin === true);
         setOrganization(data?.organization ?? null);
         setHomeOrganization(data?.homeOrganization ?? null);
+        setMemberOrganizations(data?.organizations ?? []);
         try {
           if (data?.role) localStorage.setItem("role", data.role);
           else localStorage.removeItem("role");
@@ -216,7 +220,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return (
     <I18nContext.Provider
-      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, organization, homeOrganization, hiddenModules, setHiddenModules }}
+      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, organization, homeOrganization, memberOrganizations, hiddenModules, setHiddenModules }}
     >
       {children}
     </I18nContext.Provider>

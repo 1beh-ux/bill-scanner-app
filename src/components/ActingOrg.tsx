@@ -5,8 +5,8 @@ import { useTranslations } from "@/lib/i18n";
 import { usePathname } from "next/navigation";
 import { isPublicPath } from "@/lib/public-paths";
 
-// Super-admin's acting organization (organizations step 3): the sidebar
-// switcher and the "Pracujete v organizaci" strip. Nobody else sees either.
+// Acting organization (organizations step 3): the sidebar switcher and the "Pracujete v
+// organizaci" strip. Super-admin: every active organization; a member of several: theirs.
 
 type OrgOption = { id: string; name: string; shortName: string; active: boolean };
 
@@ -30,9 +30,10 @@ export function useSwitchOrg() {
 }
 
 export function OrgSwitcher() {
-  const { t, isSuperAdmin, organization } = useTranslations();
+  const { t, isSuperAdmin, organization, memberOrganizations } = useTranslations();
   const switchOrg = useSwitchOrg();
-  const [orgs, setOrgs] = useState<OrgOption[]>([]);
+  const [allOrgs, setOrgs] = useState<OrgOption[]>([]);
+  const orgs = isSuperAdmin ? allOrgs : memberOrganizations;
 
   useEffect(() => {
     if (!isSuperAdmin) return;
@@ -42,7 +43,7 @@ export function OrgSwitcher() {
       .catch(() => {});
   }, [isSuperAdmin]);
 
-  if (!isSuperAdmin || !organization || orgs.length === 0) return null;
+  if (!organization || orgs.length < 2) return null;
   return (
     <>
       <div className="px-1 pb-1 text-[11px] uppercase tracking-wide text-night-muted">{t("orgs.switcherLabel")}</div>
@@ -63,10 +64,10 @@ export function OrgSwitcher() {
 }
 
 export function ActingOrgStrip() {
-  const { t, isSuperAdmin, organization, homeOrganization } = useTranslations();
+  const { t, organization, homeOrganization } = useTranslations();
   const switchOrg = useSwitchOrg();
   const pathname = usePathname();
-  if (isPublicPath(pathname) || !isSuperAdmin || !organization || !homeOrganization || organization.id === homeOrganization.id) return null;
+  if (isPublicPath(pathname) || !organization || !homeOrganization || organization.id === homeOrganization.id) return null;
   return (
     <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 bg-ember px-4 py-2 text-[13px] font-medium text-white print:hidden">
       <span>{t("orgs.actingStrip", { name: organization.name })}</span>

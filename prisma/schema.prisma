@@ -249,6 +249,8 @@ model User {
   uiPrefs            Json?       @map("ui_prefs")
 
   moduleAccess           UserEventModuleAccess[]
+  // Other organizations this person works in (their own one is organizationId above).
+  memberships            OrganizationMembership[]
   driveAccount           DriveAccount?           @relation("DriveAccountConnectedBy")
   eventsDriveConfigured  Event[]                 @relation("EventDriveConfiguredBy")
   authorBankAudits       AuthorBankAudit[]       @relation("AuthorBankAuditChangedBy")
@@ -1801,6 +1803,7 @@ model PublicHost {
 // One scout group / organisation. Every org-level table points here
 // (docs/organizations-change-notes.md); existing data belongs to "Pionýrská skupina Záře".
 model Organization {
+  memberships             OrganizationMembership[]
   id                      String   @id @default(uuid())
   ingredients             Ingredient[]
   meals                   Meal[]
@@ -2919,4 +2922,20 @@ model TravelTemplate {
 
   @@unique([organizationId, name])
   @@map("travel_templates")
+}
+
+// One person in several organizations (2026-11-09): extra organizations beyond the user's own
+// (User.organizationId), each with its own role. Switched with the acting_org cookie
+// (src/lib/auth.ts getCurrentUser); user lists include members (src/lib/org-members.ts).
+model OrganizationMembership {
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           UserRole
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@id([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_memberships")
 }

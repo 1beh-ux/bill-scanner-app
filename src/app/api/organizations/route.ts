@@ -15,18 +15,19 @@ export async function GET() {
     orderBy: { name: "asc" },
     include: {
       users: { where: { role: "admin", active: true }, select: { email: true }, orderBy: { email: "asc" } },
+      memberships: { where: { role: "admin", user: { active: true } }, select: { user: { select: { email: true } } } },
       _count: { select: { users: true, events: true, publicHosts: true } },
     },
   });
   return NextResponse.json({
-    homeOrganizationId: user.organizationId,
+    homeOrganizationId: user.homeOrganizationId,
     organizations: orgs.map((o) => ({
       id: o.id,
       name: o.name,
       shortName: o.shortName,
       contactEmail: o.contactEmail,
       active: o.active,
-      admins: o.users.map((u) => u.email),
+      admins: [...o.users.map((u) => u.email), ...o.memberships.map((m) => m.user.email)],
       users: o._count.users,
       events: o._count.events,
       publicHosts: o._count.publicHosts,
