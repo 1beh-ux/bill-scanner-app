@@ -56,7 +56,8 @@ function route(req: NextRequest): NextResponse {
   // D): no login, its API validates + rate-limits every submit itself.
   // /vyuctovani/<event>/<token> is a person's settlement statement (its API checks the token).
   // /vstup/<token> is the door check-in of a public event without a login (its API checks the token).
-  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/") || pathname.startsWith("/u/") || pathname.startsWith("/vyuctovani/");
+  // /landing/* are the login page's screenshots (public/landing, test data only).
+  const isPublicPage = pathname.startsWith("/login") || pathname.startsWith("/landing/") || pathname.startsWith("/__/") || pathname.startsWith("/p/") || pathname.startsWith("/r/") || pathname.startsWith("/vstup/") || pathname.startsWith("/u/") || pathname.startsWith("/vyuctovani/");
   const isPublicApi =
     pathname.startsWith("/api/session") ||
     // CSP report-only violations (next.config.ts): browsers post them without a session.

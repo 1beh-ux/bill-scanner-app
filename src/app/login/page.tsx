@@ -2,25 +2,81 @@
 import { getRedirectResult, signInWithPopup, signInWithRedirect, type User } from "firebase/auth";
 import { auth, googleProvider, prefersRedirectSignIn } from "@/lib/firebase";
 import { useEffect, useState } from "react";
-import { Tent, Receipt, HeartPulse, Mail as MailIcon } from "lucide-react";
+import Link from "next/link";
+import { Tent, Receipt, HeartPulse, Mail as MailIcon, Users, CalendarDays, CookingPot, Landmark, Ticket, Building2, Globe, Car } from "lucide-react";
 
-const FEATURES = [
+// Each module: what it does, in the words the app uses. shot = /public/landing/<shot>.jpg
+// (hidden until the file exists, list in docs/landing-screenshots.md).
+const MODULES = [
   {
     icon: Receipt,
     title: "Účtenky",
-    body: "Foto, nahrání souboru nebo import z Drive. AI přečte obchod a částku, vy jen zařadíte do kategorie a schválíte. Více měn, QR platba pro proplacení, export s manifestem pro účetní.",
+    shot: "uctenky",
+    body: "Foto, soubor, import z Google Disku nebo z tabulky. AI přečte obchod, datum a částku, vy rozdělíte řádky do kategorií a schválíte. Rozpočet po kategoriích, cizí měny podle kurzu ČNB, plátci a proplácení QR platbou, vyúčtování pro každého jedním odkazem, export na Disk s manifestem pro účetní, osobní účtenky mimo vyúčtování akce.",
+  },
+  {
+    icon: Car,
+    title: "Cestovní příkazy",
+    shot: "cestovni-prikazy",
+    body: "Cesta vlastním autem podle sazeb z vyhlášky platných k datu cesty. Úseky, auto z evidence vozidel, výpočet náhrady a PDF příkazu – z odeslaného příkazu vznikne účtenka akce.",
+  },
+  {
+    icon: Landmark,
+    title: "Banka",
+    shot: "banka",
+    body: "Pohyby z účtu akce (Fio API nebo Google Tabulka) porovnané s účtenkami: co je zaplaceno, k čemu chybí doklad, kolik šlo v hotovosti. Přístup jen pro výslovně určené lidi.",
+  },
+  {
+    icon: Users,
+    title: "Účastníci a přihlášky",
+    shot: "ucastnici",
+    body: "Veřejná přihláška akce, seznam účastníků se zákonnými zástupci, import z tabulky, vlastní pole, přijetí registrace e-mailem s dokumenty vygenerovanými ze šablon (přihláška, posudek…) a přehled, co od koho dorazilo.",
   },
   {
     icon: HeartPulse,
-    title: "Zdravotní deník",
-    body: "Účastníci, zákonní zástupci, výdej léků podle rozpisu, záznamy o úrazech a nemocech s fotkou a mapou těla, souhrny pro rodiče e-mailem i jako PDF.",
+    title: "Zdraví",
+    shot: "zdravi",
+    body: "Zdravotní deník: léky a jejich výdej podle časů podání, záznamy o úrazech a nemocech s fotkou a mapou těla, souhrny pro rodiče e-mailem i jako PDF.",
   },
   {
     icon: MailIcon,
     title: "Pošta",
-    body: "Jedna schránka pro celou akci: došlé přílohy se rovnou přiřadí účastníkovi jako přijatý dokument, hromadné rozeslání stavu rodičům, přehled vyřízeného.",
+    shot: "posta",
+    body: "Schránka akce: přílohy z došlých e-mailů se přiřadí účastníkovi jako přijatý dokument, hromadné rozeslání stavu dokumentů rodičům, přehled vyřízeného.",
+  },
+  {
+    icon: CalendarDays,
+    title: "Plánování programu",
+    shot: "planovani",
+    body: "Program akce po dnech: aktivity z knihovny přetáhnete do časové osy a hned vidíte, kolik času je naplánováno a kolik zbývá.",
+  },
+  {
+    icon: CookingPot,
+    title: "Kuchyně",
+    shot: "kuchyne",
+    body: "Jídelníček z knihovny jídel celé organizace, množství surovin podle počtu porcí, nákup, list pro kuchaře a hlídání 14 alergenů a diet dětí i dospělých na akci.",
+  },
+  {
+    icon: Ticket,
+    title: "Vstupenky",
+    shot: "vstupenky",
+    body: "Pro veřejné akce (ples, koncert): druhy vstupenek a limity, objednávky s vlastním variabilním symbolem a QR platbou, automatická kontrola plateb přes Fio, vstupenky s QR kódem e-mailem a odkaz pro kontrolu u vchodu.",
   },
 ];
+
+const ORG = [
+  {
+    icon: Building2,
+    title: "Organizace",
+    body: "Každá organizace má svá data oddělená: akce, uživatele, Lidi (společný seznam dětí a dospělých napříč roky), šablony pro nové akce, sazby a vozidla. Moduly se zapínají po akcích a přístup se přiděluje po modulech – hlavní vedoucí vidí jen to, co potřebuje.",
+  },
+  {
+    icon: Globe,
+    title: "Zveřejnění pro rodiče",
+    body: "Přihlášku a rodičovský portál zveřejníte na vlastní adrese (např. prihlasky.vasetabory.cz) nebo vložíte přímo do svého webu. Vzhled a texty veřejných stránek si organizace upraví sama; rodiče v portálu spravují rodinu a kontaktní údaje, vidí stav přihlášek, plateb a dokumentů.",
+  },
+];
+
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -105,15 +161,17 @@ export default function LoginPage() {
               <span className="text-[15px] font-medium">tabornik.online</span>
             </div>
 
+            <span className="rounded-full border border-ember px-2.5 py-0.5 text-[12px] font-medium text-ember">Testovací provoz · zdarma</span>
+
             <h1 className="text-[34px] font-medium leading-tight sm:text-[44px]">
-              Jedna aplikace pro organizaci táborů — účtenky, zdraví i poštu.
+              Celý tábor v jedné aplikaci — od přihlášky po vyúčtování.
             </h1>
 
             <p className="max-w-lg text-[16px] leading-relaxed text-ink-secondary">
-              Postaveno pro dobrovolnické organizace, co pořádají tábory a pobytové akce.
-              Nahradí tabulky v Sheets jedním místem pro celý tým: hlavní vedoucí akce
-              vidí a spravuje vše potřebné, hlavní účetní na konci jen přebírá hotové
-              podklady.
+              Pro dobrovolnické organizace, které pořádají tábory, pobytové i veřejné akce.
+              Přihlášky a rodičovský portál, účastníci, zdraví, pošta, program, kuchyně,
+              účtenky, banka i vstupenky na jednom místě místo desítek tabulek. Hlavní
+              vedoucí má pod kontrolou svou akci, účetní na konci přebírá hotové podklady.
             </p>
 
             <button
@@ -133,57 +191,77 @@ export default function LoginPage() {
             </h2>
             <ol className="flex flex-col gap-3 text-[14px] leading-relaxed text-ink">
               <li>
-                <span className="font-medium text-ember">1.</span> Vytvoříte akci a
-                zapnete moduly, které pro ni potřebujete.
+                <span className="font-medium text-ember">1.</span> Organizace si nastaví šablony, Lidi a vzhled veřejných stránek.
               </li>
               <li>
-                <span className="font-medium text-ember">2.</span> Administrátor akce
-                průběžně nahrává účtenky, vede zdravotní deník nebo řeší poštu.
+                <span className="font-medium text-ember">2.</span> Založíte akci, zapnete moduly, které potřebuje, a přidělíte lidem přístup.
               </li>
               <li>
-                <span className="font-medium text-ember">3.</span> Na konci akce
-                exportujete přehledné podklady — pro účetní, pro rodiče, pro archiv.
+                <span className="font-medium text-ember">3.</span> Rodiče se přihlásí přes veřejnou přihlášku, dokumenty a zprávy chodí do aplikace.
+              </li>
+              <li>
+                <span className="font-medium text-ember">4.</span> Během akce tým nahrává účtenky, vede zdravotní deník, kuchyni a program.
+              </li>
+              <li>
+                <span className="font-medium text-ember">5.</span> Na konci exportujete podklady pro účetní, rodičům pošlete souhrny a vyúčtování.
               </li>
             </ol>
           </div>
         </div>
 
-        {/* What it does */}
+        {/* Modules */}
         <div>
-          <h2 className="mb-6 text-[13px] font-medium uppercase tracking-wide text-ink-secondary">
-            Co aplikace umí
-          </h2>
-          <div className="grid gap-4 sm:grid-cols-3">
-            {FEATURES.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="flex-1 rounded-lg border border-mist p-5">
+          <h2 className="mb-2 text-[13px] font-medium uppercase tracking-wide text-ink-secondary">Moduly</h2>
+          <p className="mb-6 max-w-2xl text-[14px] text-ink-secondary">Každá akce si zapne jen to, co potřebuje. Vypnutý modul zmizí z menu, data zůstanou.</p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {MODULES.map(({ icon: Icon, title, body, shot }) => (
+              <div key={title} className="flex flex-col rounded-lg border border-mist p-5">
                 <Icon size={18} className="mb-3 text-ember" aria-hidden="true" />
                 <h3 className="mb-1.5 text-[15px] font-medium">{title}</h3>
                 <p className="text-[14px] leading-relaxed text-ink-secondary">{body}</p>
+                {/* ponytail: screenshot hides itself until /public/landing/<shot>.jpg is added */}
+                <a href={`/landing/${shot}.jpg`} target="_blank" rel="noopener" className="mt-auto block pt-4">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/landing/${shot}.jpg`} alt={`Ukázka: ${title}`} loading="lazy" className="rounded-md border border-mist transition-opacity hover:opacity-90" onError={(e) => (e.currentTarget.hidden = true)} />
+                </a>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Personal / access note */}
-        <div className="flex flex-col gap-3 border-t border-mist pt-10">
-          <h2 className="text-[15px] font-medium">Je to volný projekt</h2>
-          <p className="max-w-2xl text-[14px] leading-relaxed text-ink-secondary">
-            Postavil jsem to jako neziskový projekt pro dobrovolnické organizace, co
-            pořádají tábory — sám jsem měl dost tabulek v Google Sheets. Provoz ale něco
-            stojí (server, AI rozpoznávání účtenek), a to zatím platím ze svého, takže
-            přístup teď dávám ručně, jen lidem a organizacím, se kterými se domluvím.
-            Chcete to zkusit i pro svou organizaci? Napište mi.
-          </p>
-          <a
-            href="mailto:pavel.skuhrovec@gmail.com"
-            className="flex w-fit items-center gap-2 text-[14px] text-ember hover:text-ember-hover"
-          >
-            <MailIcon size={15} aria-hidden="true" />
-            pavel.skuhrovec@gmail.com
-          </a>
+        {/* Organizations + publishing */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          {ORG.map(({ icon: Icon, title, body }) => (
+            <div key={title} className="rounded-xl border border-mist bg-paper-2 p-6">
+              <Icon size={18} className="mb-3 text-ember" aria-hidden="true" />
+              <h3 className="mb-1.5 text-[15px] font-medium">{title}</h3>
+              <p className="text-[14px] leading-relaxed text-ink-secondary">{body}</p>
+            </div>
+          ))}
         </div>
 
-        <p className="text-[12px] text-ink-secondary">Osobní projekt, ne firma.</p>
+        {/* Testing / access note */}
+        <div className="flex flex-col gap-3 border-t border-mist pt-10">
+          <h2 className="text-[15px] font-medium">Testovací provoz, zdarma, bez záruky</h2>
+          <p className="max-w-2xl text-[14px] leading-relaxed text-ink-secondary">
+            Táborník je neziskový projekt jednoho člověka, ne firma ani placená služba. Je ve
+            vývoji: funkce se mění, mohou se objevit chyby a provoz může být přerušen. Používáte
+            ho zdarma a na vlastní odpovědnost – důležitá data si průběžně exportujte. Provoz
+            (server, AI rozpoznávání účtenek) zatím platím ze svého, proto přístup dávám ručně
+            organizacím, se kterými se domluvím. Chcete to zkusit? Napište mi.
+          </p>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <a href="mailto:pavel.skuhrovec@gmail.com" className="flex w-fit items-center gap-2 text-[14px] text-ember hover:text-ember-hover">
+              <MailIcon size={15} aria-hidden="true" />
+              pavel.skuhrovec@gmail.com
+            </a>
+            <Link href="/login/podminky" className="text-[14px] text-ember hover:text-ember-hover">
+              Podmínky používání
+            </Link>
+          </div>
+        </div>
+
+        <p className="text-[12px] text-ink-secondary">Osobní neziskový projekt, ne firma. Přihlášením souhlasíte s <Link href="/login/podminky" className="underline">podmínkami používání</Link>.</p>
       </div>
     </div>
   );
