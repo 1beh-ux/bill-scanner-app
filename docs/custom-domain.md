@@ -81,7 +81,7 @@ There is no organization column yet; `organizationId` can be added later.
 
 ## Onboarding a new public domain
 
-1. **Certificate** (Organizace → Připojení → "Příkazy" on the row gives the exact commands with the hostname filled in):
+1. **Certificate** (Aplikace → Veřejné adresy → "Příkazy" on the row opens a full-width panel: the commented commands with the hostname filled in, the two DNS records as a table, and a ready message for the domain's DNS administrator):
    - `gcloud certificate-manager dns-authorizations create <n>-auth --domain=<host>`
    - `... dns-authorizations describe <n>-auth`, then add the `_acme-challenge` CNAME it prints at the domain's DNS
    - `gcloud certificate-manager certificates create <n>-cert --domains=<host> --dns-authorizations=<n>-auth`

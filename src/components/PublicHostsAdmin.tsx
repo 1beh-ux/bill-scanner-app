@@ -1,7 +1,7 @@
 "use client";
 
 import HelpLink from "@/components/HelpLink";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import EmbedSnippetDialog, { portalSnippet } from "@/components/embed/EmbedSnippetDialog";
@@ -22,15 +22,50 @@ const btnPrimary = "rounded-lg bg-ember px-4 py-2 text-[14px] font-medium text-w
 const linkBtn = "text-[13px] text-ember hover:underline disabled:opacity-50";
 const PURPOSE_KEY: Record<Purpose, string> = { registration: "connections.purposeRegistration", portal: "connections.purposePortal", both: "connections.purposeBoth" };
 
-/** The one-time Google Cloud setup for a new hostname (certificate + map entry in tabornik-map). */
+// The DNS target every public host points at (*.tabornik.online -> the load balancer, docs/custom-domain.md).
+const CNAME_TARGET = "public.tabornik.online.";
+
+/** The one-time Google Cloud setup for a new hostname (certificate + map entry in tabornik-map), commented. */
 function gcloudCommands(hostname: string): string {
   const n = hostname.replace(/\./g, "-");
   return [
+    `# 1) Ověření domény pro certifikát`,
     `gcloud certificate-manager dns-authorizations create ${n}-auth --domain=${hostname}`,
-    `gcloud certificate-manager dns-authorizations describe ${n}-auth   # CNAME _acme-challenge... -> add at the domain's DNS`,
+    `# 2) Vypíše záznam pro správce DNS: dnsResourceRecord -> name (_acme-challenge.${hostname}.) a data (…authorize.certificatemanager.goog.)`,
+    `gcloud certificate-manager dns-authorizations describe ${n}-auth`,
+    `# 3) Certifikát (ACTIVE až po přidání obou DNS záznamů, obvykle do hodiny)`,
     `gcloud certificate-manager certificates create ${n}-cert --domains=${hostname} --dns-authorizations=${n}-auth`,
+    `# 4) Připojení k load balanceru`,
     `gcloud certificate-manager maps entries create ${n}-entry --map=tabornik-map --certificates=${n}-cert --hostname=${hostname}`,
+    `# Stav certifikátu (čekejte na state: ACTIVE), pak v aplikaci "Ověřit"`,
+    `gcloud certificate-manager certificates describe ${n}-cert --format="value(managed.state)"`,
   ].join("\n");
+}
+
+/** The domain's DNS zone (last two labels) and the record name relative to it; the apex can't be a CNAME. */
+function dnsNames(hostname: string) {
+  const parts = hostname.split(".");
+  const zone = parts.slice(-2).join(".");
+  const rel = parts.slice(0, -2).join(".");
+  return { zone, rel, apex: rel === "" };
+}
+
+/** What the domain's DNS administrator adds: the certificate check record + the address itself. */
+function dnsRecords(hostname: string, lbIp: string | null) {
+  const { rel, apex } = dnsNames(hostname);
+  const acme = `_acme-challenge${rel ? "." + rel : ""}`;
+  return [
+    { type: "CNAME", name: acme, fqdn: `_acme-challenge.${hostname}.`, value: "<data z kroku 2>" },
+    apex
+      ? { type: "A", name: "@", fqdn: `${hostname}.`, value: lbIp ?? "34.144.251.105" }
+      : { type: "CNAME", name: rel, fqdn: `${hostname}.`, value: CNAME_TARGET },
+  ];
+}
+
+function dnsMessage(hostname: string, lbIp: string | null, t: (key: string, vars?: Record<string, string>) => string): string {
+  const { zone } = dnsNames(hostname);
+  const lines = dnsRecords(hostname, lbIp).map((r) => `${r.type}  ${r.fqdn}  ->  ${r.value}`);
+  return [t("connections.dnsMailIntro", { host: hostname, zone }), "", ...lines, "", t("connections.dnsMailOutro")].join("\n");
 }
 
 export default function PublicHostsAdmin({ app }: { app: boolean }) {
@@ -46,7 +81,7 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
   const [commandsFor, setCommandsFor] = useState<string | null>(null);
   // Only on the app page, and only when the server agrees (super-admin).
   const [canEdit, setCanEdit] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [lbIp, setLbIp] = useState<string | null>(null);
   const [snippetFor, setSnippetFor] = useState<Host | null>(null);
 
   const load = () =>
@@ -58,6 +93,7 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
         setEvents(data.events);
         setOrgs(data.organizations ?? []);
         setCanEdit(app && data.canEdit === true);
+        setLbIp(data.lbIp ?? null);
       })
       .catch(() => {});
 
@@ -193,7 +229,8 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
               {hosts.map((h) => {
                 const v = verify[h.id];
                 return (
-                  <tr key={h.id} className={"border-t border-mist align-top" + (h.active ? "" : " opacity-60")}>
+                  <Fragment key={h.id}>
+                  <tr className={"border-t border-mist align-top" + (h.active ? "" : " opacity-60")}>
                     <td className="px-3 py-2 text-ink">
                       <span className="font-mono [overflow-wrap:anywhere]">{h.hostname}</span>
                       {v && (
@@ -205,14 +242,6 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
                         {t("embed.originsShort")}: {h.embedOrigins.length ? h.embedOrigins.join(", ") : t("embed.nobody")}
                         {h.purpose !== "registration" && h.embedPageUrl && <><br />{t("embed.pageShort")}: {h.embedPageUrl}</>}
                       </div>
-                      {commandsFor === h.id && (
-                        <div className="mt-2">
-                          <pre className="overflow-x-auto rounded bg-paper-2 p-2 text-[11.5px] text-ink">{gcloudCommands(h.hostname)}</pre>
-                          <button type="button" className={linkBtn} onClick={() => { navigator.clipboard?.writeText(gcloudCommands(h.hostname)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }}>
-                            {copied ? t("connections.copied") : t("connections.copy")}
-                          </button>
-                        </div>
-                      )}
                     </td>
                     {app && <td className="px-3 py-2 text-ink">{h.organization?.shortName}</td>}
                     <td className="px-3 py-2 text-ink">{t(PURPOSE_KEY[h.purpose])}</td>
@@ -233,6 +262,15 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
                       </div>
                     </td>
                   </tr>
+                  {commandsFor === h.id && (
+                    <tr className="border-t border-mist/60 bg-paper-2/40">
+                      {/* Full table width, wrapping: the columns never get pushed off-screen. */}
+                      <td colSpan={app ? 7 : 6} className="max-w-0 px-3 py-3">
+                        <SetupPanel hostname={h.hostname} lbIp={lbIp} t={t} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -251,5 +289,67 @@ export default function PublicHostsAdmin({ app }: { app: boolean }) {
         {!form && error && <p className="text-[13px] text-red-600">{error}</p>}
         <p className="text-[13px] text-ink-secondary">{t(app ? "connections.help" : "connections.helpReadOnly")}</p>
       </section>
+  );
+}
+
+function CopyButton({ text, t }: { text: string; t: (key: string, vars?: Record<string, string>) => string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button type="button" className={linkBtn} onClick={() => navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {})}>
+      {copied ? t("connections.copied") : t("connections.copy")}
+    </button>
+  );
+}
+
+const pre = "whitespace-pre-wrap [overflow-wrap:anywhere] rounded bg-paper-2 p-2 font-mono text-[11.5px] text-ink";
+
+/** "Příkazy": who does what, in order -- Google Cloud (super-admin), DNS (the domain's administrator), Ověřit. */
+function SetupPanel({ hostname, lbIp, t }: { hostname: string; lbIp: string | null; t: (key: string, vars?: Record<string, string>) => string }) {
+  const { zone, apex } = dnsNames(hostname);
+  const records = dnsRecords(hostname, lbIp);
+  const commands = gcloudCommands(hostname);
+  const message = dnsMessage(hostname, lbIp, t);
+  return (
+    <div className="flex flex-col gap-4 text-[13px] text-ink">
+      <section className="flex flex-col gap-1.5">
+        <h4 className="font-semibold">{t("connections.setupGcpTitle")}</h4>
+        <p className="text-ink-secondary">{t("connections.setupGcpText")}</p>
+        <pre className={pre}>{commands}</pre>
+        <div><CopyButton text={commands} t={t} /></div>
+      </section>
+      <section className="flex flex-col gap-1.5">
+        <h4 className="font-semibold">{t("connections.setupDnsTitle", { zone })}</h4>
+        <p className="text-ink-secondary">{t("connections.setupDnsText", { zone })}</p>
+        <table className="w-full table-fixed border-collapse text-[12px]">
+          <thead className="text-left text-ink-secondary">
+            <tr>
+              <th className="w-[70px] py-1 pr-2 font-medium">{t("connections.dnsType")}</th>
+              <th className="py-1 pr-2 font-medium">{t("connections.dnsName", { zone })}</th>
+              <th className="py-1 font-medium">{t("connections.dnsValue")}</th>
+            </tr>
+          </thead>
+          <tbody className="font-mono">
+            {records.map((r) => (
+              <tr key={r.fqdn} className="border-t border-mist/60 align-top">
+                <td className="py-1 pr-2">{r.type}</td>
+                <td className="py-1 pr-2 [overflow-wrap:anywhere]">{r.name}<div className="font-sans text-[11px] text-ink-secondary">{r.fqdn}</div></td>
+                <td className="py-1 [overflow-wrap:anywhere]">{r.value}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <ul className="list-disc pl-5 text-[12px] text-ink-secondary">
+          <li>{t("connections.dnsAcmeNote")}</li>
+          <li>{apex ? t("connections.dnsApexNote", { ip: lbIp ?? "34.144.251.105" }) : t("connections.dnsCnameNote")}</li>
+        </ul>
+        <p className="mt-1 text-ink-secondary">{t("connections.dnsMailLabel")}</p>
+        <pre className={pre}>{message}</pre>
+        <div><CopyButton text={message} t={t} /></div>
+      </section>
+      <section className="flex flex-col gap-1">
+        <h4 className="font-semibold">{t("connections.setupVerifyTitle")}</h4>
+        <p className="text-ink-secondary">{t("connections.setupVerifyText")}</p>
+      </section>
+    </div>
   );
 }

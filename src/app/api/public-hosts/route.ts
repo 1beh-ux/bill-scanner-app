@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     prisma.event.findMany({ where: { ...scope, status: "active", isTest: false }, orderBy: { startDate: "desc" }, select: { id: true, name: true, organizationId: true } }),
     all ? prisma.organization.findMany({ where: { active: true }, orderBy: { name: "asc" }, select: { id: true, shortName: true } }) : [],
   ]);
-  return NextResponse.json({ hosts, events, organizations, lbIpSet: !!process.env.LB_IP, canEdit: user.isSuperAdmin });
+  return NextResponse.json({ hosts, events, organizations, lbIpSet: !!process.env.LB_IP, lbIp: user.isSuperAdmin ? (process.env.LB_IP ?? null) : null, canEdit: user.isSuperAdmin });
 }
 
 /** Super-admin: { ...host, organizationId? } -- the organization defaults to the acting one. */
