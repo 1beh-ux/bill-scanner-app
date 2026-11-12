@@ -88,6 +88,8 @@ export async function verifyHost(hostname: string): Promise<{ result: VerifyResu
   if (!ips.includes(lbIp)) return { result: "dns", detail: ips.join(", ") || undefined };
   try {
     const res = await fetch(`https://${hostname}/`, { redirect: "manual", signal: AbortSignal.timeout(10_000), cache: "no-store" });
+    // An address bound to one event redirects "/" to that event's form (public-landing): served by us, fine.
+    if (res.status >= 300 && res.status < 400 && (res.headers.get("location") ?? "").includes("/r/")) return { result: "ok" };
     const html = res.ok ? await res.text() : "";
     return html.includes("data-public-landing") ? { result: "ok" } : { result: "page", detail: `HTTP ${res.status}` };
   } catch (err) {

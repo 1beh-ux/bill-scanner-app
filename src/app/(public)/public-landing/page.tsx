@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { publicOrg, resolvePublicHost } from "@/lib/public-host";
 import { OrgFooter } from "@/components/registration/OrgBrand";
@@ -25,6 +25,14 @@ async function hostOrg() {
   return scope.kind === "public" ? publicOrg(scope.organizationId) : null;
 }
 
+/** The public slug of the event this registration address is bound to, if its form is on. */
+async function hostEventSlug() {
+  const scope = await resolvePublicHost(await headers());
+  if (scope.kind !== "public" || scope.purpose !== "registration" || !scope.eventId) return null;
+  const e = await prisma.event.findFirst({ where: { id: scope.eventId, publicRegistration: true, publicSlug: { not: null } }, select: { publicSlug: true } });
+  return e?.publicSlug ?? null;
+}
+
 // "Zapomněl(a) jsem odkaz" / "Ještě nejsem členem" (only a yes/no and a link reach the page).
 async function hostHelp() {
   const scope = await resolvePublicHost(await headers());
@@ -42,7 +50,14 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function PublicLandingPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> } = {}) {
   const [s, org, help] = await Promise.all([strings(), hostOrg(), hostHelp()]);
   if (!org) notFound();
-  const { embed, theme } = embedParams((await searchParams) ?? {});
+  const params = (await searchParams) ?? {};
+  // An address bound to one event (Veřejné adresy -> Akce) opens that event's form right away (?embed / ?theme kept).
+  const slug = await hostEventSlug();
+  if (slug) {
+    const q = new URLSearchParams(Object.entries(params).flatMap(([k, v]) => (typeof v === "string" ? [[k, v]] : [])));
+    redirect(`/r/${slug}${q.size ? `?${q}` : ""}`);
+  }
+  const { embed, theme } = embedParams(params);
   // Embedded (the portal snippet without a token in the address): say how to get in.
   return (
     <PublicFrame embed={embed} theme={theme} appearance={pageAppearance(org, "portal", embed)}>

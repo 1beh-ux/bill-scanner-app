@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { headers } from "next/headers";
 import { Providers } from "./providers";
+import { isAdminHost, requestHost } from "@/lib/host-rules";
 
 // Self-hosted at build time (next/font): no request to fonts.googleapis.com / gstatic at runtime --
 // the public pages run inside other organizations' websites (docs/custom-domain.md "Appearance").
@@ -28,7 +30,7 @@ const themeInitScript = `
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -39,7 +41,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        <Providers>{children}</Providers>
+        {/* A public address (prihlasky.<org>.cz…) serves only the form / portal: never the app shell. Its "/" is
+            a rewrite, so the browser path can't tell -- the host can. */}
+        <Providers publicHost={!isAdminHost(requestHost(await headers()))}>{children}</Providers>
       </body>
     </html>
   );

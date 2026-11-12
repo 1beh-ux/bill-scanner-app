@@ -5,7 +5,9 @@ import { ConfirmProvider } from "@/components/ConfirmDialog";
 import { ActingOrgStrip } from "@/components/ActingOrg";
 import ActivityTracker from "@/components/ActivityTracker";
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, publicHost = false }: { children: React.ReactNode; publicHost?: boolean }) {
+  // Public address: no sidebar, strips, activity tracking or app translations (the public pages load their own).
+  if (publicHost) return <>{children}</>;
   return (
     <I18nProvider>
       <ConfirmProvider>
