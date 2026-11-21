@@ -1,5 +1,6 @@
 "use client";
 
+import FieldInfo from "@/components/fields/FieldInfo";
 import { useEffect, useMemo, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -520,7 +521,7 @@ export default function EventParticipantsPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("documents", t("participantsPage.colDocuments"))}</th>
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("email", t("participantsPage.contactEmailLabel"))}</th>
                 {activeColumns.map((f) => (
-                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}</th>
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}<FieldInfo eventId={id} fieldKey={f.key} /></th>
                 ))}
                 <th className="p-2"></th>
               </tr>

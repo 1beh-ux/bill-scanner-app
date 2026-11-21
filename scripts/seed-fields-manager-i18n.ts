@@ -92,6 +92,8 @@ const rows: Row[] = [
   r("fieldsManager.enteredIn", "Kde se zadává", "Entered in"),
   r("fieldsManager.field", "Pole", "Field"),
   r("fieldsManager.group", "Skupina", "Group"),
+  r("fieldsManager.fieldDetails", "Podrobnosti pole", "Field details"),
+  r("fieldsManager.openInManager", "Otevřít v Poli →", "Open in Fields →"),
 ];
 
 async function main() {

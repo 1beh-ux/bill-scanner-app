@@ -1,5 +1,6 @@
 "use client";
 
+import FieldInfo from "@/components/fields/FieldInfo";
 import { useEffect, useMemo, useState, use } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { participantListName } from "@/lib/participant-name";
@@ -212,7 +213,7 @@ export default function MailParticipantsPage({
                 ))}
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{t("participantsPage.contactEmailLabel")}</th>
                 {extraColumns.map((f) => (
-                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}</th>
+                  <th key={f.id} className="p-2 text-[12px] font-medium text-ink-secondary">{f.label}<FieldInfo eventId={id} fieldKey={f.key} /></th>
                 ))}
               </tr>
             </thead>

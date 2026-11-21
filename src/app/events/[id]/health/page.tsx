@@ -1,4 +1,5 @@
 "use client";
+import FieldInfo from "@/components/fields/FieldInfo";
 import { AskParentButton } from "@/components/health/ParentQuestions";
 
 import { useCallback, useEffect, useMemo, useState, use } from "react";
@@ -296,7 +297,7 @@ export default function EventHealthPage({
                 <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("questions", t("healthPage.colQuestions"))}</th>
                 {anyListNotes && <th className="p-2 text-[12px] font-medium text-ink-secondary">{table.header("notes", t("participantDetail.notesTitle"))}</th>}
                 {activeColumns.map((f) => (
-                  <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}</th>
+                  <th key={f.key} className="p-2 text-[12px] font-medium text-ink-secondary">{table.header(`f:${f.key}`, f.label)}<FieldInfo eventId={id} fieldKey={f.key} /></th>
                 ))}
                 <th className="p-2"></th>
               </tr>
