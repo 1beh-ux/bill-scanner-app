@@ -61,3 +61,5 @@ async function main() {
 }
 
 main().then(() => process.exit(0)).catch((err) => { console.error(err instanceof Error ? err.message : err); process.exit(1); });
+
+export {}; // a module, not a global script (two scripts with main() must not collide in the type check)

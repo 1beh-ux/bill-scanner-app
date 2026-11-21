@@ -12,3 +12,5 @@ async function main() {
   console.log({ translations, nonInventedAddresses: { users, childGuardians: cg, participantGuardians: pg, organizations: orgs } });
 }
 main().then(() => process.exit(0)).catch((e) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });
+
+export {}; // a module, not a global script (two scripts with main() must not collide in the type check)
