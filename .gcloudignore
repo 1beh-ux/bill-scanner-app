@@ -1,0 +1,12 @@
+# What `gcloud builds submit` (production deploy, ~/claude-helpers/deploy.sh) uploads to the build bucket and
+# puts into the image. Same as the default gcloud generates (git's ignore rules), plus working material that
+# isn't part of the app. content/ (help pages) must stay: src/lib/help-content.ts reads it at runtime.
+.gcloudignore
+.git
+.gitignore
+#!include:.gitignore
+/docs/
+/export/
+/Claude outputs/
+*.tsbuildinfo
+# Patterns start with / so they only match at the repo root (src/app/api/**/export/ routes must stay).

@@ -136,14 +136,22 @@ Outside the repo: guard in `~/claude-helpers/deploy.sh` (original kept as `deplo
 5. Firebase → Authentication → Settings → Authorized domains: the staging host present, the rest unchanged.
 6. Sign in on the staging URL (and try another Google account — refused).
 
-## Still open
+## Still open → resolved 2026-11-21 (after your checks 1–3 passed)
 
-- Two translation keys exist only in production (`planBoard.dayMenu`, `statusUpdate.variant`) — added through the
-  admin page, no script creates them. On staging those two labels show as keys. Fix: add a small `-i18n` script.
-- Document-merge templates: the two test Docs exist in `Šablony/`; linking them in the app is a manual click.
-- Live e-mail test needs a mailbox connected on staging (your step; §4).
-- Not part of staging, but found: production builds upload untracked files (`docs/`, `export/`) to a US build
-  bucket and into the image (no `.gcloudignore`); the old `~/deploy-*.sh` one-offs bypass the new guard.
+- **Two translation keys only in production** (`planBoard.dayMenu`, `statusUpdate.variant`): not referenced anywhere
+  in `src/` — leftovers in the production table. Nothing on staging is missing; no fix needed.
+- **Document-merge templates**: now linked automatically. `seed-staging-drive.ts` creates two document types on the
+  2027 camp ("Potvrzení o přihlášce", "Bezinfekčnost") pointing at the test Docs, and fixed their placeholders to the
+  app's real keys (`{{participant_first_name}}`, `{{participant_last_name}}`; `{{datum_narozeni}}`, `{{adresa}}`,
+  `{{tricko}}`, `{{poznamka}}` were already right).
+- **Production build upload**: new `.gcloudignore` = git's ignore rules + root `docs/`, `export/`, `Claude outputs/`,
+  `*.tsbuildinfo`. Upload list: 1,285 files / 23 MB → 1,204 files / 12 MB; removed only those root folders, added
+  nothing; `content/help` (29), `src/` (798 — incl. the three `api/**/export/` routes), `prisma/`, `Dockerfile`
+  still present; no `.env*`. `export/` was checked first: definitions and counts only, no e-mail addresses.
+  Takes effect for production when this branch is merged into `master`.
+- **Old one-off deploy scripts** `~/deploy-planning.sh`, `~/deploy-registration.sh`, `~/deploy-kitchen.sh`: now
+  print "RETIRED …" and exit 1 (line 2 of each; delete those two lines to undo).
+- Live e-mail test: your step, unchanged (§4).
 - The staging DB costs money while running: stop it when not testing (command in the runbook).
 
 **Push test:** pushing commit `64c20cb` to `infra-staging` started staging build `f9cbc971` automatically

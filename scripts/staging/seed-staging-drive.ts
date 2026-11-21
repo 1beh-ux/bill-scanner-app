@@ -32,7 +32,29 @@ async function main() {
   const create = async (name: string, mimeType: string, parent: string) =>
     (await drive.files.create({ ...all, requestBody: { name, mimeType, parents: [parent] }, fields: "id" })).data.id!;
   const existing = await drive.files.list({ ...all, includeItemsFromAllDrives: true, q: `name = 'Testovací oddíl' and mimeType = '${FOLDER}' and '${parentId}' in parents and trashed = false`, fields: "files(id)" });
-  if (existing.data.files?.length) { console.log("already seeded in the staging folder -- nothing to do"); return; }
+  // Document types (event list items of kind "document") pointing at the test Doc templates; idempotent, also
+  // repairs placeholders in Docs created by an earlier version of this script ({{jmeno}} / {{prijmeni}}).
+  const linkTemplates = async (rootId: string) => {
+    const q = (where: string) => drive.files.list({ ...all, includeItemsFromAllDrives: true, q: `${where} and trashed = false`, fields: "files(id,name)" });
+    const tplFolder = (await q(`name = 'Šablony' and mimeType = '${FOLDER}' and '${rootId}' in parents`)).data.files?.[0]?.id;
+    if (!tplFolder) throw new Error("Šablony folder missing");
+    const files = (await q(`'${tplFolder}' in parents and mimeType = 'application/vnd.google-apps.document'`)).data.files ?? [];
+    const camp = await prisma.event.findFirstOrThrow({ where: { publicSlug: "staging-tabor-2027" } });
+    let linked = 0;
+    for (const [i, f] of files.entries()) {
+      await docs.documents.batchUpdate({ documentId: f.id!, requestBody: { requests: [
+        { replaceAllText: { containsText: { text: "{{jmeno}}", matchCase: true }, replaceText: "{{participant_first_name}}" } },
+        { replaceAllText: { containsText: { text: "{{prijmeni}}", matchCase: true }, replaceText: "{{participant_last_name}}" } },
+      ] } });
+      const name = (f.name ?? "").replace(/^Šablona – /, "").replace(/ \(TEST\)$/, "");
+      if (await prisma.eventListItem.findFirst({ where: { eventId: camp.id, kind: "document", name } })) continue;
+      await prisma.eventListItem.create({ data: { eventId: camp.id, kind: "document", name, sortOrder: 100 + i, data: { templateGoogleDocId: f.id!, autoAttachOnAccept: false } } });
+      linked++;
+    }
+    console.log(`document types: ${files.length} templates found, ${linked} newly linked to the 2027 camp`);
+  };
+  const existingRoot = existing.data.files?.[0]?.id;
+  if (existingRoot) { console.log("files already in the staging folder"); await linkTemplates(existingRoot); return; }
 
   const root = await create("Testovací oddíl", FOLDER, parentId);
   const sub: Record<string, string> = {};
@@ -40,8 +62,8 @@ async function main() {
 
   // Two invented document templates with merge fields.
   const templates = {
-    "Šablona – Potvrzení o přihlášce (TEST)": "POTVRZENÍ O PŘIHLÁŠCE (testovací šablona)\n\nÚčastník: {{jmeno}} {{prijmeni}}\nDatum narození: {{datum_narozeni}}\nAdresa: {{adresa}}\nVelikost trička: {{tricko}}\n\nToto je smyšlený dokument pro staging.\n",
-    "Šablona – Bezinfekčnost (TEST)": "PROHLÁŠENÍ O BEZINFEKČNOSTI (testovací šablona)\n\nProhlašuji, že {{jmeno}} {{prijmeni}} (nar. {{datum_narozeni}}) ...\nPoznámka: {{poznamka}}\n\nPodpis zákonného zástupce: ____________\n",
+    "Šablona – Potvrzení o přihlášce (TEST)": "POTVRZENÍ O PŘIHLÁŠCE (testovací šablona)\n\nÚčastník: {{participant_first_name}} {{participant_last_name}}\nDatum narození: {{datum_narozeni}}\nAdresa: {{adresa}}\nVelikost trička: {{tricko}}\n\nToto je smyšlený dokument pro staging.\n",
+    "Šablona – Bezinfekčnost (TEST)": "PROHLÁŠENÍ O BEZINFEKČNOSTI (testovací šablona)\n\nProhlašuji, že {{participant_first_name}} {{participant_last_name}} (nar. {{datum_narozeni}}) ...\nPoznámka: {{poznamka}}\n\nPodpis zákonného zástupce: ____________\n",
   };
   for (const [name, text] of Object.entries(templates)) {
     const id = await create(name, "application/vnd.google-apps.document", sub["Šablony"]);
@@ -75,6 +97,7 @@ async function main() {
       driveHealthFolderId: sub["Zdraví"], drivePlanningFolderId: sub["Plánování"], participantsSheetId: sheetIds["Import – čistý (TEST)"],
     },
   });
+  await linkTemplates(root);
   console.log(`Shared Drive seeded: 1 root folder, ${Object.keys(sub).length} subfolders, ${Object.keys(templates).length} doc templates, ${Object.keys(sheetIds).length} sheets; camp event linked`);
 }
 
