@@ -145,3 +145,7 @@ Outside the repo: guard in `~/claude-helpers/deploy.sh` (original kept as `deplo
 - Not part of staging, but found: production builds upload untracked files (`docs/`, `export/`) to a US build
   bucket and into the image (no `.gcloudignore`); the old `~/deploy-*.sh` one-offs bypass the new guard.
 - The staging DB costs money while running: stop it when not testing (command in the runbook).
+
+**Push test:** pushing commit `64c20cb` to `infra-staging` started staging build `f9cbc971` automatically
+(trigger `staging-deploy`, 17:09:51 UTC). The latest production (global) build is still 2026-11-12 13:33 UTC — no
+production build was created.
