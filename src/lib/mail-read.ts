@@ -1,4 +1,12 @@
 import { getGmailClient } from "@/lib/gmail-client";
+import { isStaging } from "@/lib/app-env";
+
+// Staging may be connected to a real mailbox (docs/staging/plan.md): its inbox holds real people's mail
+// and a reply would reach them, so the whole Mail Helper inbox side is off there.
+async function inboxClient(senderEmail: string) {
+  if (isStaging()) throw new Error("mail_inbox_disabled_on_staging");
+  return getGmailClient(senderEmail);
+}
 import { base64UrlEncode, encodeHeaderValue, textBodyPart } from "@/lib/mail-mime";
 
 export type GmailAttachmentMeta = {
@@ -119,7 +127,7 @@ export async function listInboxMessagesWithDetails(
   senderEmail: string,
   count: number
 ): Promise<GmailMessageDetail[]> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   const listRes = await gmail.users.messages.list({
     userId: "me",
     q: "in:inbox -from:me",
@@ -170,7 +178,7 @@ export function extractDisplayName(fromHeaderValue: string): string {
 
 /** Part 8/11-B.8: also returns the display name, used to name a newly-created guardian. */
 export async function getReplyToAddress(senderEmail: string, messageId: string): Promise<{ email: string; name: string }> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   const res = await gmail.users.messages.get({
     userId: "me",
     id: messageId,
@@ -187,7 +195,7 @@ export async function getMessageAttachmentContent(
   messageId: string,
   attachmentId: string
 ): Promise<Buffer> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   const res = await gmail.users.messages.attachments.get({ userId: "me", messageId, id: attachmentId });
   const data = res.data.data;
   if (!data) throw new Error("attachment_data_missing");
@@ -202,7 +210,7 @@ export async function replyToMessage(
   senderEmail: string,
   opts: { messageId: string; to: string; subject: string; body: string; fromName: string }
 ): Promise<void> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   const original = await gmail.users.messages.get({
     userId: "me",
     id: opts.messageId,
@@ -253,7 +261,7 @@ export async function ensureDoneLabel(
   labelName: string,
   create: boolean
 ): Promise<{ id: string | null; created: boolean }> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   const labelsRes = await gmail.users.labels.list({ userId: "me" });
   const found = (labelsRes.data.labels || []).find((l) => l.name?.toLowerCase() === labelName.toLowerCase());
   if (found?.id) return { id: found.id, created: false };
@@ -272,7 +280,7 @@ export async function moveMessageToDoneLabel(
   labelName: string
 ): Promise<void> {
   const { id } = await ensureDoneLabel(senderEmail, labelName, true);
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   await gmail.users.messages.modify({
     userId: "me",
     id: messageId,
@@ -281,6 +289,6 @@ export async function moveMessageToDoneLabel(
 }
 
 export async function moveMessageToTrash(senderEmail: string, messageId: string): Promise<void> {
-  const gmail = await getGmailClient(senderEmail);
+  const gmail = await inboxClient(senderEmail);
   await gmail.users.messages.trash({ userId: "me", id: messageId });
 }

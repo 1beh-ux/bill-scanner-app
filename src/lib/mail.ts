@@ -1,4 +1,5 @@
 import { getGmailClient } from "@/lib/gmail-client";
+import { stagingMailRewrite } from "@/lib/app-env";
 import { encodeHeaderValue, base64UrlEncode, chunk76, newMimeBoundary, textBodyPart, type InlineImage } from "@/lib/mail-mime";
 
 // Gmail sending was originally meant to go through Workspace domain-wide
@@ -41,6 +42,7 @@ export async function sendPlainTextEmail(opts: {
   subject: string;
   body: string;
 }): Promise<void> {
+  opts = stagingMailRewrite(opts);
   const gmail = await getGmailClient(opts.senderEmail);
   const raw = buildPlainTextRawMessage(opts);
   await gmail.users.messages.send({ userId: "me", requestBody: { raw } });
@@ -100,6 +102,7 @@ export async function sendEmailWithOptionalAttachment(opts: {
   // Images shown inside the text (src/lib/mail-mime.ts inlineMark).
   inline?: InlineImage[];
 }): Promise<void> {
+  opts = stagingMailRewrite(opts);
   const gmail = await getGmailClient(opts.senderEmail);
   const raw =
     opts.attachments && opts.attachments.length > 0

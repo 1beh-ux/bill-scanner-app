@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { embeddablePath, framingHeaders, isAdminHost, publicHostAllows, requestHost } from "@/lib/host-rules";
 import { embedOriginsOf } from "@/lib/public-host";
+import { isStaging } from "@/lib/app-env";
 
 // Every response gets its framing headers (src/lib/host-rules.ts framingHeaders).
 export async function proxy(req: NextRequest) {
@@ -11,6 +12,8 @@ export async function proxy(req: NextRequest) {
   const embedQuery = req.nextUrl.searchParams.get("embed") === "1";
   const origins = !admin && embeddablePath(pathname, embedQuery) ? await embedOriginsOf(host).catch(() => null) : null;
   for (const [k, v] of Object.entries(framingHeaders(admin, pathname, origins, embedQuery))) res.headers.set(k, v);
+  // Staging's public pages (registration, portal) must never be indexed (docs/staging/plan.md).
+  if (isStaging()) res.headers.set("X-Robots-Tag", "noindex, nofollow");
   return res;
 }
 
