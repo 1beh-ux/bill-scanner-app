@@ -101,9 +101,7 @@ All 131 migrations applied to the staging DB (from Cloud Shell first, then the t
 ## Production DB safety (step G)
 
 - Deletion protection on `bill-scanner-db`: **enabled** 2026-11-21 (state stayed RUNNABLE).
-- Point-in-time recovery: scheduled for 2026-11-21 21:53 UTC (22:53 Prague), as you asked. That schedule exists
-  only while this Claude session is open; if this line isn't updated, run it yourself:
-  `gcloud sql instances patch bill-scanner-db --project=prvni-beh-filesaver --enable-point-in-time-recovery --retained-transaction-log-days=7`
+- Point-in-time recovery: **enabled** 2026-11-21 22:12–22:18 UTC (7 days of transaction logs; the scheduled run did not fire because the session had closed, so it was run by hand the same night). State stayed RUNNABLE; tabornik.online answered 200 throughout.
 
 ## Everything created (project `prvni-beh-filesaver`)
 
