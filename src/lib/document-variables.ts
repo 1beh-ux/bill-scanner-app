@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { evaluateCalc, readCalcSpec } from "@/lib/field-calc";
+import { extendVariables, loadResolverContext, type GuardianIn } from "@/lib/field-resolver";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
@@ -373,6 +375,13 @@ export async function resolveVariables(
     }
   }
 
+  // Fields Manager (phase 1): with the organization flag on, aliases, guardian slot keys and the linked / free
+  // event variables are added -- only keys that don't exist today, so existing templates print the same.
+  const resolver = await loadResolverContext(event.id);
+  if (resolver.flagOn) {
+    const ownFieldKeys = new Set((await prisma.eventParticipantField.findMany({ where: { eventId: event.id }, select: { key: true } })).map((f) => f.key));
+    return { text: extendVariables(text, resolver, participant.guardians as GuardianIn[], ownFieldKeys), images, imageSizesMm };
+  }
   return { text, images, imageSizesMm };
 }
 
@@ -449,6 +458,11 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
   for (const f of fields) {
     // {{participant_name}} works in a composite's text too (as in the e-mails).
     if (f.fieldType === "composite") values[f.key] = composeValue(readComposite(f.options), (k) => values[k] ?? (k === "participant_name" ? participant.name : undefined));
+    // Fields Manager calculated fields (phase 1; created from phase 3 on): same inputs as a composite.
+    else if (f.fieldType === "calculated") {
+      const spec = readCalcSpec(f.fieldType, f.options);
+      values[f.key] = spec ? evaluateCalc(spec, { valueOf: (k) => values[k] ?? (k === "participant_name" ? participant.name : undefined), eventStart: event.startDate }) : "";
+    }
   }
   return values;
 }

@@ -64,6 +64,11 @@ byte-for-byte with the flag off, and with the flag on unless the phase says what
 - **Staging:** flag on for the staging organisation → golden documents identical; template check identical
   statuses; e-mail preview identical. Flag off → identical too.
 - **Go:** golden documents byte-identical with flag on and off.
+- **Done 2026-11-21 (staging):** `scripts/fields/compare-resolver.ts` — 110 variable sets (55 registrations ×
+  documents/e-mail), 3,355 existing keys compared flag off vs on, **0 differences**; with the flag on only new keys
+  appear (linked event variables, ticket aliases, `org_name`, `guardianN_*`). Found: the real send and the preview load
+  only guardians with "receives e-mail" on, so `guardianN_*` in documents counts only those — phase 3 must load all
+  guardians for slot keys (the legacy fixed keys keep today's rule).
 
 ## Phase 2 — read-only screens + field card (`fields-2-screens`)
 

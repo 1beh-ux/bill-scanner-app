@@ -4,11 +4,12 @@ import { getDocsClient, toDriveError } from "@/lib/drive";
 import { DriveError, type DriveErrorParams } from "@/lib/drive-errors";
 import { extractGoogleDocId } from "@/lib/document-merge";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
+import { classifyKey, loadResolverContext } from "@/lib/field-resolver";
 
 // Event-level keys document merge always resolves (see resolveVariables in
 // src/lib/document-variables.ts) -- not participant fields, so never "unmapped".
 // Event-level variables resolveVariables always provides (src/lib/document-variables.ts).
-const EVENT_KEYS = new Set(["participant_name", "date_range", "document_checklist", "sender_email", "organization_name", "camp_name", "questionnaire_url", "questionnaire_line", "registration_deadline", "registration_deadline_line", "health_notes", "portal_link", "portal_link_line", "details_link", "details_link_line", "membership_offer_link"]);
+export const EVENT_KEYS = new Set(["participant_name", "date_range", "document_checklist", "sender_email", "organization_name", "camp_name", "questionnaire_url", "questionnaire_line", "registration_deadline", "registration_deadline_line", "health_notes", "portal_link", "portal_link_line", "details_link", "details_link_line", "membership_offer_link"]);
 const VALID_KEY = /^[a-zA-Z][a-zA-Z0-9_]*$/;
 
 export type PlaceholderStatus = "ok" | "field_off" | "unknown" | "invalid";
@@ -77,6 +78,10 @@ export async function checkEventTemplates(eventId: string, opts: { docTypeId?: s
     prisma.eventParticipantField.findMany({ where: { eventId } }),
   ]);
   const byKey = new Map(fields.map((f) => [f.key, f]));
+  // Fields Manager (phase 1): with the organization flag on, aliases, guardian slot keys and linked / free event
+  // variables are known too. Keys that are fields of the event keep exactly today's status.
+  const resolver = await loadResolverContext(eventId);
+  const noFields = new Set<string>();
 
   const templates: TemplateCheckResult["templates"] = [];
   const usedKeys = new Set<string>();
@@ -92,9 +97,12 @@ export async function checkEventTemplates(eventId: string, opts: { docTypeId?: s
         docId: extractGoogleDocId(templateId),
         placeholders: found.map(({ key, hasSpaces }) => {
           usedKeys.add(key);
-          const field = byKey.get(key);
+          const aliasTarget = resolver.flagOn && !byKey.has(key) ? resolver.aliases[key] : undefined;
+          if (aliasTarget) usedKeys.add(aliasTarget);
+          const field = byKey.get(key) ?? (aliasTarget ? byKey.get(aliasTarget) : undefined);
+          const knownByResolver = resolver.flagOn && !byKey.has(key) && classifyKey(key, resolver, noFields).kind !== "unresolved";
           let status: PlaceholderStatus;
-          if (EVENT_KEYS.has(key) || (field && field.active && field.surfaces.includes("documents"))) status = "ok";
+          if (EVENT_KEYS.has(key) || knownByResolver || (field && field.active && field.surfaces.includes("documents"))) status = "ok";
           else if (field) status = "field_off";
           else status = VALID_KEY.test(key) ? "unknown" : "invalid";
           return { key, status, hasSpaces };
