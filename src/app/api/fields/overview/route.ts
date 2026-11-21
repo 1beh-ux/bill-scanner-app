@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
 
   // Event variables with this event's value where it doesn't depend on the participant.
   const resolver = await loadResolverContext(selected.id);
+  const freeLabels = new Map((await prisma.eventVariable.findMany({ where: { organizationId, OR: [{ eventId: null }, { eventId: selected.id }] }, select: { key: true, label: true, eventId: true }, orderBy: { eventId: { sort: "asc", nulls: "first" } } })).map((v) => [v.key, v.label]));
   const plain: Record<string, string> = {
     camp_name: event.name,
     date_range: event.endDate ? formatDateRange(event.startDate, event.endDate) : formatEventDate(event.startDate),
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
   const variables = [
     ...CODE_VARIABLES.map((v) => ({ ...v, value: v.key in plain ? plain[v.key] : null })),
     ...LINKED_VARIABLES.map((v) => ({ ...v, value: resolver.linked[v.key] ?? "" })),
-    ...Object.entries(resolver.free).map(([key, value]) => ({ key, label: key, kind: "free" as const, source: "manager", value })),
+    ...Object.entries(resolver.free).map(([key, value]) => ({ key, label: freeLabels.get(key) ?? key, kind: "free" as const, source: "manager", value })),
   ].map((v) => ({ ...v, aliases: Object.entries(EVENT_VARIABLE_ALIASES).filter(([, t]) => t === v.key).map(([a]) => a) }));
 
   return NextResponse.json({

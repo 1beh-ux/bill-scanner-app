@@ -1,12 +1,25 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { docsUsing, type FmDocTemplate, type FmOverview, type OvField } from "./types";
 
 // The field-details card (Fields Manager phase 2, read-only): what a field is, where its values live, where it
 // comes from and where it is used. Phase 2b embeds it in the roster, health, mail and documents screens.
-export default function FieldCard({ field, overview, docs, onShowInGraph }: { field: OvField; overview: FmOverview; docs: FmDocTemplate[] | null; onShowInGraph?: () => void }) {
+// onChanged set = editable (Fields tab, phase 3a): storage, required here, the organization default.
+export default function FieldCard({ field, overview, docs, onShowInGraph, onChanged }: { field: OvField; overview: FmOverview; docs: FmDocTemplate[] | null; onShowInGraph?: () => void; onChanged?: () => void }) {
   const { t } = useTranslations();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function patch(body: Record<string, unknown>) {
+    setBusy(true);
+    setError(null);
+    const res = await fetch(`/api/fields/${encodeURIComponent(field.key)}?event=${encodeURIComponent(overview.eventId ?? "")}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return setError(t("fieldsManager.saveFailed"));
+    onChanged?.();
+  }
+  const editable = !!onChanged;
   const sourceLabel = (id: string) => {
     const s = overview.sources.find((x) => x.id === id);
     return s ? (s.label ?? t(s.labelKey ?? "")) : id;
@@ -20,7 +33,14 @@ export default function FieldCard({ field, overview, docs, onShowInGraph }: { fi
       <div className="mt-0.5 font-mono text-[12px] text-ink-secondary">{field.key}</div>
       <div className="mt-2 flex flex-wrap gap-1">
         <span className={tag}>{t(`fieldsManager.type.${field.fieldType}`)}</span>
-        <span className={tag}>{t(`fieldsManager.storage.${field.storage}`)}</span>
+        {editable && field.fromTemplate && !field.calculated ? (
+          <select disabled={busy} value={field.storage} onChange={(e) => patch({ storage: e.target.value })} className="rounded-full border border-mist bg-paper px-2 py-0.5 text-[11px]" aria-label={t("fieldsManager.storedValues")}>
+            <option value="profile">{t("fieldsManager.storage.profile")}</option>
+            <option value="event">{t("fieldsManager.storage.event")}</option>
+          </select>
+        ) : (
+          <span className={tag}>{t(`fieldsManager.storage.${field.storage}`)}</span>
+        )}
         {field.required && <span className="rounded-full bg-pine-bg px-2 py-0.5 text-[11px] text-pine">{t("fieldsManager.required")}</span>}
         {!field.active && <span className={tag}>{t("fieldsManager.inactive")}</span>}
       </div>
@@ -53,8 +73,22 @@ export default function FieldCard({ field, overview, docs, onShowInGraph }: { fi
           <>
             <dt className="text-ink-secondary">{t("fieldsManager.requiredHere")}</dt>
             <dd>
-              {field.required ? t("fieldsManager.yes") : t("fieldsManager.no")}
+              {editable && field.kind === "custom" ? (
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" disabled={busy} checked={field.required} onChange={(e) => patch({ required: e.target.checked })} />
+                  {field.required ? t("fieldsManager.yes") : t("fieldsManager.no")}
+                </label>
+              ) : field.required ? (
+                t("fieldsManager.yes")
+              ) : (
+                t("fieldsManager.no")
+              )}
               <span className="text-ink-secondary"> · {t("fieldsManager.requiredDefault")}: {field.requiredDefault ? t("fieldsManager.yes") : t("fieldsManager.no")}</span>
+              {editable && field.requiredDefault !== field.required && (
+                <button type="button" disabled={busy} onClick={() => patch({ requiredDefault: field.required })} className="ml-2 rounded border border-mist px-1.5 text-[11px] hover:bg-paper-2">
+                  {t("fieldsManager.setAsDefault")}
+                </button>
+              )}
             </dd>
           </>
         )}
@@ -65,6 +99,7 @@ export default function FieldCard({ field, overview, docs, onShowInGraph }: { fi
           </>
         )}
       </dl>
+      {error && <p className="mt-2 text-[12px] text-red-700">{error}</p>}
       {onShowInGraph && (
         <button type="button" onClick={onShowInGraph} className="mt-3 rounded-lg border border-mist px-2.5 py-1 text-[12px] hover:bg-paper-2">
           {t("fieldsManager.showInGraph")}

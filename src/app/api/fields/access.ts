@@ -6,12 +6,12 @@ import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 import { hasFeature } from "@/lib/org-features";
 import { prisma } from "@/lib/prisma";
 
-export async function fieldsManagerAccess(): Promise<{ error: NextResponse } | { organizationId: string }> {
+export async function fieldsManagerAccess(): Promise<{ error: NextResponse } | { organizationId: string; userId: string }> {
   const user = await getCurrentUser();
   if (!user) return { error: NextResponse.json({ error: "Not authenticated" }, { status: 401 }) };
   const organizationId = await getActingOrgId(user);
   if (!isOrgAdmin(user) || !(await hasFeature(organizationId, "fields_manager"))) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
-  return { organizationId };
+  return { organizationId, userId: user.id };
 }
 
 /** The requested event if it belongs to the organization, else its most relevant one (latest start). */

@@ -1,5 +1,6 @@
 // Creating an event with the organization's defaults (category, list and field templates, modules,
 // the fixed participant fields) -- the "Nová akce" form and "Duplikovat akci" (src/lib/event-duplicate.ts) share it.
+import { featureOn } from "@/lib/org-features";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma";
 import { seedFixedParticipantFields } from "@/lib/participant-field-seed";
@@ -63,6 +64,8 @@ export async function createEventWithDefaults(o: { name: string; startDate: stri
     });
 
     const fieldTemplates = isPublic ? [] : await tx.participantFieldTemplate.findMany({ where: { organizationId: created.organizationId, active: true } });
+    // Decision B (Fields Manager): with the organization flag on, event copies start with the template's "required" default.
+    const copyRequired = fieldTemplates.length > 0 && featureOn((await tx.organization.findUnique({ where: { id: created.organizationId }, select: { features: true } }))?.features, "fields_manager");
     if (fieldTemplates.length > 0) {
       await tx.eventParticipantField.createMany({
         data: fieldTemplates.map((f) => ({
@@ -76,6 +79,7 @@ export async function createEventWithDefaults(o: { name: string; startDate: stri
           // which already gets this right.
           surfaces: f.defaultSurfaces,
           isFromTemplate: true,
+          ...(copyRequired && { requiredOnRegistration: f.requiredInRegistration }),
         })),
       });
     }

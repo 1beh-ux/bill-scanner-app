@@ -26,6 +26,8 @@ export default function FieldsManager() {
   const [data, setData] = useState<FmOverview | null>(null);
   const [failed, setFailed] = useState(false);
   const [docs, setDocs] = useState<FmDocTemplate[] | null>(null);
+  const [reload, setReload] = useState(0);
+  const refresh = useCallback(() => setReload((n) => n + 1), []);
 
   const setParams = useCallback(
     (patch: Record<string, string | null>) => {
@@ -60,12 +62,16 @@ export default function FieldsManager() {
     return () => {
       gone = true;
     };
-  }, [eventParam]);
+  }, [eventParam, reload]);
 
   if (roleLoaded && (role !== "admin" || !features.includes("fields_manager"))) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.adminOnly")}</div>;
   if (failed) return <div className="p-8 text-[14px] text-ink-secondary">{t("fieldsManager.loadFailed")}</div>;
   if (!data) return <div className="p-8 text-[14px] text-ink-secondary">{t("fieldsManager.loading")}</div>;
 
+  const setSlots = (n: number) =>
+    fetch("/api/fields/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guardianSlots: n }) })
+      .catch(() => null)
+      .then(refresh);
   const selectedField = key ? data.fields.find((f) => f.key === key) ?? null : null;
   const selectNode = (id: string | null) => setParams({ key: id?.startsWith("field:") ? id.slice(6) : null, node: id });
   const node = params.get("node") ?? (key ? `field:${key}` : null);
@@ -92,7 +98,11 @@ export default function FieldsManager() {
       <div className="mb-3 flex flex-wrap gap-2 text-[12px]">
         <span className="rounded-full border border-mist px-2.5 py-1">{t("fieldsManager.countFields", { n: String(data.fields.length) })}</span>
         <span className="rounded-full border border-dashed border-ember/60 px-2.5 py-1">{t("fieldsManager.countCalculated", { n: String(data.fields.filter((f) => f.calculated).length) })}</span>
-        <span className="rounded-full border border-mist px-2.5 py-1">{t("fieldsManager.countGuardianSlots", { n: String(data.guardianSlots) })}</span>
+        <span className="inline-flex items-center gap-1 rounded-full border border-mist px-2.5 py-1">
+          <button type="button" aria-label="−" disabled={data.guardianSlots <= 1} onClick={() => setSlots(data.guardianSlots - 1)} className="px-1 disabled:opacity-30">−</button>
+          {t("fieldsManager.countGuardianSlots", { n: String(data.guardianSlots) })}
+          <button type="button" aria-label="+" disabled={data.guardianSlots >= 6} onClick={() => setSlots(data.guardianSlots + 1)} className="px-1 disabled:opacity-30">+</button>
+        </span>
         <span className="rounded-full border border-mist px-2.5 py-1">{t("fieldsManager.countSources", { n: String(data.sources.length) })}</span>
       </div>
 
@@ -116,7 +126,7 @@ export default function FieldsManager() {
           </div>
         </div>
       )}
-      {tab === "list" && <FieldsList overview={data} docs={docs} selectedKey={key} onSelectKey={(k) => setParams({ key: k, node: `field:${k}` })} onShowInGraph={(k) => setParams({ tab: "overview", key: k, node: `field:${k}` })} />}
+      {tab === "list" && <FieldsList overview={data} docs={docs} selectedKey={key} onSelectKey={(k) => setParams({ key: k, node: `field:${k}` })} onShowInGraph={(k) => setParams({ tab: "overview", key: k, node: `field:${k}` })} onChanged={refresh} />}
       {tab === "usage" && <UsageMatrix overview={data} docs={docs} onSelectKey={(k) => setParams({ tab: "list", key: k, node: `field:${k}` })} />}
     </div>
   );

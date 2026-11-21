@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { eventHasFeature } from "@/lib/org-features";
 import type { ModuleKey, ParticipantFieldSurface, Prisma } from "@/generated/prisma";
 import { optionsFor } from "@/lib/registration-fields";
 
@@ -40,6 +41,9 @@ export async function syncParticipantFieldsForEvent(eventId: string, moduleFilte
     ? templates.filter((t) => t.defaultSurfaces.some((s) => MODULE_SURFACES[moduleFilter].includes(s)))
     : templates;
   const toAdd = relevant.filter((t) => !existingKeys.has(t.key));
+  // Decision B (Fields Manager): with the organization flag on, a new event copy starts with the template's
+  // "required" default. Flag off: not required, as before.
+  const copyRequired = toAdd.length > 0 && (await eventHasFeature(eventId, "fields_manager"));
 
   if (toAdd.length > 0) {
     await prisma.eventParticipantField.createMany({
@@ -51,6 +55,7 @@ export async function syncParticipantFieldsForEvent(eventId: string, moduleFilte
         options: (optionsFor(t) as Prisma.InputJsonValue | null) ?? undefined,
         surfaces: t.defaultSurfaces,
         isFromTemplate: true,
+        ...(copyRequired && { requiredOnRegistration: t.requiredInRegistration }),
       })),
     });
   }

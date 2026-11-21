@@ -94,6 +94,17 @@ const rows: Row[] = [
   r("fieldsManager.group", "Skupina", "Group"),
   r("fieldsManager.fieldDetails", "Podrobnosti pole", "Field details"),
   r("fieldsManager.openInManager", "Otevřít v Poli →", "Open in Fields →"),
+  r("fieldsManager.saveFailed", "Uložení se nepodařilo.", "Saving failed."),
+  r("fieldsManager.setAsDefault", "Nastavit jako výchozí", "Set as default"),
+  r("fieldsManager.save", "Uložit", "Save"),
+  r("fieldsManager.addVariable", "Přidat", "Add"),
+  r("fieldsManager.deleteVariable", "Smazat proměnnou", "Delete variable"),
+  r("fieldsManager.variableLabel", "Název (co uvidíte)", "Label (what you see)"),
+  r("fieldsManager.keyTaken", "Tento klíč už je použitý (pole, proměnná nebo starý název).", "This key is already used (a field, variable or old name)."),
+  r("fieldsManager.invalidKey", "Klíč: malá písmena bez diakritiky, číslice a _, začíná písmenem.", "Key: lowercase letters, digits and _, starting with a letter."),
+  r("fieldsManager.var.leader_name", "Hlavní vedoucí", "Main leader"),
+  r("fieldsManager.var.contact_phone", "Kontaktní telefon", "Contact phone"),
+  r("fieldsManager.var.payment_deadline", "Termín platby", "Payment deadline"),
 ];
 
 async function main() {

@@ -2,6 +2,7 @@
 // (docs/registration-slice5-spec.md) -- pure, no DB, no Node-only imports:
 // the portal, the public form, the admin roster and the self-check
 // (scripts/test-registration-slice5.ts) share it.
+import { writeTargets } from "@/lib/field-write-targets";
 import { isIsoDate, type PortalAccessLevel } from "@/lib/portal-rules";
 
 export type FieldAudience = "both" | "children" | "adults";
@@ -28,7 +29,7 @@ export function optionsFor(f: { options: unknown; adultOptions?: unknown }, isAd
 
 // --- Asked at registration (spec 2-3) --------------------------------------
 
-export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel };
+export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel; storage?: string };
 export type EventFieldRule = { key: string; label: string; fieldType: string; options: unknown; kind: string; requiredOnRegistration: boolean };
 
 /**
@@ -45,6 +46,8 @@ export type AskedField = {
   access: "edit" | "approval" | null;
   level: FieldLevel;
   audience: FieldAudience;
+  // Decision A (field-write-targets.ts): "event" = the registration only. Missing = "profile" (today).
+  storage?: string;
 };
 
 /**
@@ -66,7 +69,7 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
     }
     if (t.portalAccess !== "edit" && t.portalAccess !== "approval") continue;
     if (isAdult !== undefined && !appliesTo(t.audience, isAdult)) continue;
-    out.push({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, isAdult), source: "profile", access: t.portalAccess, level: t.level, audience: t.audience });
+    out.push({ key: t.key, label: t.label, fieldType: t.fieldType, options: optionsFor(t, isAdult), source: "profile", access: t.portalAccess, level: t.level, audience: t.audience, storage: t.storage });
   }
   const rank = new Map([...templates.keys()].map((k, i) => [k, i]));
   const at = (f: AskedField) => (f.source === "event" ? Number.MAX_SAFE_INTEGER : (rank.get(f.key) ?? Number.MAX_SAFE_INTEGER));
@@ -136,9 +139,10 @@ export function routeAnswers(
   const out = { participant: { ...values }, profile: {} as Record<string, string>, proposals: [] as { key: string; oldValue: string; newValue: string }[] };
   for (const f of asked) {
     const v = values[f.key];
-    if (v === undefined || f.source !== "profile") continue;
-    if (f.access === "edit" && v !== (live[f.key] ?? "")) out.profile[f.key] = v;
-    if (f.access === "approval" && v !== (shown[f.key] ?? live[f.key] ?? "")) out.proposals.push({ key: f.key, oldValue: live[f.key] ?? "", newValue: v });
+    if (v === undefined) continue;
+    const to = writeTargets({ fromTemplate: f.source === "profile", storage: f.storage, portalAccess: f.access }, { source: "portal" }).profile;
+    if (to === "write" && v !== (live[f.key] ?? "")) out.profile[f.key] = v;
+    if (to === "propose" && v !== (shown[f.key] ?? live[f.key] ?? "")) out.proposals.push({ key: f.key, oldValue: live[f.key] ?? "", newValue: v });
   }
   return out;
 }
