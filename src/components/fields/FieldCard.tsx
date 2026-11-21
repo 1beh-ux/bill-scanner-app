@@ -3,13 +3,15 @@
 import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { docsUsing, type FmDocTemplate, type FmOverview, type OvField } from "./types";
+import { RenameDialog } from "./FieldEditors";
 
 // The field-details card (Fields Manager phase 2, read-only): what a field is, where its values live, where it
 // comes from and where it is used. Phase 2b embeds it in the roster, health, mail and documents screens.
 // onChanged set = editable (Fields tab, phase 3a): storage, required here, the organization default.
-export default function FieldCard({ field, overview, docs, onShowInGraph, onChanged }: { field: OvField; overview: FmOverview; docs: FmDocTemplate[] | null; onShowInGraph?: () => void; onChanged?: () => void }) {
+export default function FieldCard({ field, overview, docs, onShowInGraph, onChanged, onRenamed }: { field: OvField; overview: FmOverview; docs: FmDocTemplate[] | null; onShowInGraph?: () => void; onChanged?: () => void; onRenamed?: (from: string, to: string, logId: string) => void }) {
   const { t } = useTranslations();
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function patch(body: Record<string, unknown>) {
     setBusy(true);
@@ -100,6 +102,20 @@ export default function FieldCard({ field, overview, docs, onShowInGraph, onChan
         )}
       </dl>
       {error && <p className="mt-2 text-[12px] text-red-700">{error}</p>}
+      {editable && field.kind === "custom" && !renaming && (
+        <button type="button" onClick={() => setRenaming(true)} className="mr-2 mt-3 rounded-lg border border-mist px-2.5 py-1 text-[12px] hover:bg-paper-2">
+          {t("fieldsManager.renameKey")}
+        </button>
+      )}
+      {renaming && (
+        <RenameDialog
+          field={field}
+          onDone={(to, logId) => {
+            setRenaming(false);
+            if (to && logId) onRenamed?.(field.key, to, logId);
+          }}
+        />
+      )}
       {onShowInGraph && (
         <button type="button" onClick={onShowInGraph} className="mt-3 rounded-lg border border-mist px-2.5 py-1 text-[12px] hover:bg-paper-2">
           {t("fieldsManager.showInGraph")}

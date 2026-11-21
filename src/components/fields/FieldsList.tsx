@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import FieldCard from "./FieldCard";
+import { NewFieldForm } from "./FieldEditors";
 import type { FmDocTemplate, FmOverview } from "./types";
 
 // Suggested free variables (questions Q14), offered as one-click keys.
@@ -19,6 +20,16 @@ export default function FieldsList({ overview, docs, selectedKey, onSelectKey, o
   const [q, setQ] = useState("");
   const [draft, setDraft] = useState<{ key: string; label: string; value: string } | null>(null);
   const [varError, setVarError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [renamed, setRenamed] = useState<{ from: string; to: string; logId: string } | null>(null);
+  async function undoRename() {
+    if (!renamed) return;
+    const res = await fetch("/api/fields/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ logId: renamed.logId }) }).catch(() => null);
+    if (!res?.ok) return setVarError(t("fieldsManager.undoFailed"));
+    onSelectKey(renamed.from);
+    setRenamed(null);
+    onChanged();
+  }
   // Free event variables (phase 3a): this event's value; built-in and linked ones are edited where they live today.
   async function saveVariable(body: { key: string; label?: string; value: string }, method: "PUT" | "DELETE" = "PUT") {
     setVarError(null);
@@ -39,7 +50,10 @@ export default function FieldsList({ overview, docs, selectedKey, onSelectKey, o
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(240px,1fr)_minmax(300px,1.4fr)]">
       <div className="rounded-xl border border-mist bg-paper p-3">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("fieldsManager.search")} className="mb-2 w-full rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px]" />
+        <div className="mb-2 flex gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("fieldsManager.search")} className="min-w-0 flex-1 rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px]" />
+          <button type="button" onClick={() => setCreating(true)} className="shrink-0 rounded-lg bg-ember px-3 py-1.5 text-[13px] text-white">+ {t("fieldsManager.newField")}</button>
+        </div>
         <div className="max-h-[70vh] space-y-3 overflow-auto">
           {overview.groups.map((g) => {
             const list = overview.fields.filter((f) => f.group === g.id && match(f.label, f.key));
@@ -96,8 +110,39 @@ export default function FieldsList({ overview, docs, selectedKey, onSelectKey, o
           </div>
         </div>
       </div>
-      <div>
-        {field && <FieldCard field={field} overview={overview} docs={docs} onShowInGraph={() => onShowInGraph(field.key)} onChanged={onChanged} />}
+      <div className="space-y-3">
+        {renamed && (
+          <div className="flex items-center justify-between gap-2 rounded-xl border border-pine bg-pine-bg px-3 py-2 text-[13px]">
+            <span>{t("fieldsManager.renamedTo", { from: renamed.from, to: renamed.to })}</span>
+            <button type="button" onClick={undoRename} className="rounded border border-pine px-2 py-0.5 text-[12px]">{t("fieldsManager.undo")}</button>
+          </div>
+        )}
+        {creating && (
+          <NewFieldForm
+            overview={overview}
+            onDone={(k) => {
+              setCreating(false);
+              if (k) {
+                onSelectKey(k);
+                onChanged();
+              }
+            }}
+          />
+        )}
+        {field && !creating && (
+          <FieldCard
+            field={field}
+            overview={overview}
+            docs={docs}
+            onShowInGraph={() => onShowInGraph(field.key)}
+            onChanged={onChanged}
+            onRenamed={(from, to, logId) => {
+              setRenamed({ from, to, logId });
+              onSelectKey(to);
+              onChanged();
+            }}
+          />
+        )}
         {variable && (
           <div className="rounded-xl border border-mist bg-paper p-4 text-[13px]">
             <h3 className="text-[15px] font-semibold text-ink">{variable.label}</h3>
