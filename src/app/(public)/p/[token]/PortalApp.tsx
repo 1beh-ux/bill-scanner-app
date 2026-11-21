@@ -388,7 +388,8 @@ function MemberCard({ member, t, onOpen }: { member: Member; t: T; onOpen: () =>
 // A value as shown (Ano/Ne, a Czech date), "—" when empty.
 function showValue(f: Field, v: string, t: T) {
   if (!v) return "—";
-  if (f.fieldType === "boolean") return toBoolean(v, f.options) === "true" ? t("portal.yes") : toBoolean(v, f.options) === "false" ? t("portal.no") : v;
+  if (f.fieldType === "boolean" || f.fieldType === "consent") return toBoolean(v, f.options) === "true" ? t("portal.yes") : toBoolean(v, f.options) === "false" ? t("portal.no") : v;
+  if (f.fieldType === "multi") return v.split("\n").filter(Boolean).join(", ");
   if (f.fieldType === "date" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return date(v);
   return v;
 }
@@ -746,7 +747,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
         // Every picked person's required fields filled (an Ano/Ne box is always an answer) and the tick where needed.
         const stepDone = picked.every((id) => {
           const step = e.steps[id];
-          return !step || (step.fields.every((f) => f.fieldType === "boolean" || answers[id]?.[f.key]?.trim()) && (!step.reviewTick || reviewed[id]));
+          return !step || (step.fields.every((f) => f.fieldType === "boolean" || f.fieldType === "consent" || answers[id]?.[f.key]?.trim()) && (!step.reviewTick || reviewed[id]));
         });
         return (
           <li key={e.id} className={eventCard + " flex flex-col gap-3"}>
@@ -851,10 +852,10 @@ function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: {
         <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
           <span>
             {f.label}
-            {f.fieldType !== "boolean" && " *"}
+            {f.fieldType !== "boolean" && f.fieldType !== "consent" && " *"}
             {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
           </span>
-          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} />
+          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean" && f.fieldType !== "consent"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} />
         </label>
       ))}
       {step.fields.some((f) => f.source === "profile") && <p className="text-[12px] text-ink-secondary">{t("portal.stepSavedToProfile")}</p>}

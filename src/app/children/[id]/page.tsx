@@ -366,7 +366,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
 
 // One org-wide field by its type; values are plain strings ("true"/"false" for booleans), as on participants.
 function ProfileInput({ field, value, onChange, badge }: { field: Field; value: string; onChange: (v: string) => void; badge: React.ReactNode }) {
-  if (field.fieldType === "boolean") {
+  if (field.fieldType === "boolean" || field.fieldType === "consent") {
     return (
       <label className="flex items-center gap-2 text-[13px] text-ink-secondary">
         <input type="checkbox" checked={toBoolean(value, field.options) === "true"} onChange={(e) => onChange(String(e.target.checked))} />
@@ -389,9 +389,12 @@ function ProfileInput({ field, value, onChange, badge }: { field: Field; value: 
             </option>
           ))}
         </select>
+      ) : field.fieldType === "longtext" || field.fieldType === "multi" ? (
+        // Several choices: one per line here (the portal shows ticks).
+        <textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass + " mt-1"} />
       ) : (
         <input
-          type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}
+          type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : field.fieldType === "email" ? "email" : field.fieldType === "phone" ? "tel" : "text"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className={inputClass + " mt-1"}

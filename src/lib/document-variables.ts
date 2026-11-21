@@ -435,8 +435,8 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
     } else if (f.kind === "custom" && f.fieldType !== "composite") {
       // Stored as plain strings; "true"/"false" of boolean fields read Ano/Ne.
       const raw = participant.customFieldValues?.[f.key];
-      const b = f.fieldType === "boolean" ? toBoolean(raw, f.options) : null;
-      values[f.key] = b === "true" ? "Ano" : b === "false" ? "Ne" : raw ?? "";
+      const b = f.fieldType === "boolean" || f.fieldType === "consent" ? toBoolean(raw, f.options) : null;
+      values[f.key] = b === "true" ? "Ano" : b === "false" ? "Ne" : f.fieldType === "multi" && raw ? raw.split("\n").filter(Boolean).join(", ") : raw ?? "";
     } else if (f.kind === "computed") {
       if (f.computedType === "effective_price") {
         const price = effectivePriceCzk(participant, event);

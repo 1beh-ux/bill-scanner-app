@@ -1,4 +1,5 @@
-export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite";
+// + the Fields Manager types (prisma enum ParticipantFieldType, phase 0).
+export type ParticipantFieldType = "text" | "number" | "date" | "boolean" | "select" | "image" | "composite" | "longtext" | "multi" | "consent" | "email" | "phone" | "calculated";
 
 // "Složené pole": other fields' values joined by a separator (empty ones skipped).
 // template (2026-10-27): text with {{key}} values of the event's fields, {{#key}}…{{/key}} only when that

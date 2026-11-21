@@ -729,7 +729,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
 
 // One admin-defined field by its type; values are plain strings ("true"/"false" for booleans).
 function FieldInput({ field, value, onChange }: { field: ParticipantFieldDef; value: string; onChange: (v: string) => void }) {
-  if (field.fieldType === "boolean") {
+  if (field.fieldType === "boolean" || field.fieldType === "consent") {
     // Imported values like "Ano"/"x" count via the field's Ano/Ne setting; a value
     // meaning neither is shown so it isn't silently read as unticked.
     const b = toBoolean(value, field.options);
@@ -760,10 +760,11 @@ function FieldInput({ field, value, onChange }: { field: ParticipantFieldDef; va
     );
   }
   // Text grows to fit its value (long health/questionnaire answers stay readable).
-  if (field.fieldType === "text") return label(<AutoTextarea value={value} onChange={onChange} className={inputClass} />);
+  // Several choices: one per line here (the portal shows ticks).
+  if (field.fieldType === "text" || field.fieldType === "longtext" || field.fieldType === "multi") return label(<AutoTextarea value={value} onChange={onChange} className={inputClass} />);
   return label(
     <input
-      type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : "text"}
+      type={field.fieldType === "number" ? "number" : field.fieldType === "date" ? "date" : field.fieldType === "email" ? "email" : field.fieldType === "phone" ? "tel" : "text"}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={inputClass}

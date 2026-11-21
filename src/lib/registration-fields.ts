@@ -94,7 +94,15 @@ export function cleanFieldValue(f: { fieldType: string; options: unknown }, raw:
   if (!value) return "";
   if (f.fieldType === "select" && selectOptions(f.options).length && !selectOptions(f.options).includes(value)) return null;
   if (f.fieldType === "date" && !isIsoDate(value)) return null;
-  if (f.fieldType === "boolean") return value === "true" ? "true" : "false";
+  if (f.fieldType === "boolean" || f.fieldType === "consent") return value === "true" ? "true" : "false";
+  // Fields Manager types (phase 3c). Several choices: items one per line, each a listed option.
+  if (f.fieldType === "multi") {
+    const items = [...new Set(value.split("\n").map((x) => x.trim()).filter(Boolean))];
+    const opts = selectOptions(f.options);
+    return opts.length && items.some((x) => !opts.includes(x)) ? null : items.join("\n");
+  }
+  if (f.fieldType === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? value : null;
+  if (f.fieldType === "phone") return /^\+?[\d\s()-]{6,20}$/.test(value) ? value : null;
   return value;
 }
 
@@ -115,7 +123,7 @@ export function checkAnswers(
   const values: Record<string, string> = {};
   const errors: string[] = [];
   for (const f of asked) {
-    const v = f.fieldType === "boolean" && !answers[f.key] ? "false" : cleanFieldValue(f, answers[f.key]);
+    const v = (f.fieldType === "boolean" || f.fieldType === "consent") && !answers[f.key] ? "false" : cleanFieldValue(f, answers[f.key]);
     if (!v) errors.push(f.key);
     else values[f.key] = v;
   }

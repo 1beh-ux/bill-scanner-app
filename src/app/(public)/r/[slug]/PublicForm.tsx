@@ -338,7 +338,7 @@ export default function PublicForm({
                       {f.label}
                       {f.required && " *"}
                     </span>
-                    <FieldInput field={{ ...f, options: optionsFor(f, p.isAdult) }} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
+                    <FieldInput field={{ ...f, options: optionsFor(f, p.isAdult) }} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean" && f.fieldType !== "consent"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
                   </label>
                   </Fragment>
                 ))}
