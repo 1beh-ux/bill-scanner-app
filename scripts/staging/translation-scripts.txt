@@ -88,3 +88,4 @@ seed-multi-org-i18n
 seed-public-hosts-setup-i18n
 seed-travel-rates
 fields/seed-legacy-aliases
+seed-fields-manager-i18n

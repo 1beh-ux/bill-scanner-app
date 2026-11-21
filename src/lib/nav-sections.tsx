@@ -1,8 +1,9 @@
 import type { LucideIcon } from "lucide-react";
-import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette, BarChart3, Fuel, Car } from "lucide-react";
+import { Calendar, UserCog, LayoutTemplate, Languages, Users, Landmark, LayoutDashboard, LifeBuoy, Baby, Plug, Building2, Globe, Palette, BarChart3, Fuel, Car, Workflow } from "lucide-react";
 
 // superAdminOnly: Překlady, Kurzy -- app-wide, not one organization's (organizations step 2).
-export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean };
+// feature: shown only when the acting organization has that flag (src/lib/org-features.ts).
+export type NavItemDef = { path: string; labelKey: string; icon: LucideIcon; adminOnly?: boolean; superAdminOnly?: boolean; feature?: string };
 export type NavSectionDef = { sectionLabelKey: string; items: NavItemDef[] };
 
 // Single source of truth for event-independent destinations, shared by
@@ -29,6 +30,8 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
       // as a user, so a global/all-events list belongs with the other org-wide admin pages, not Bills.
       { path: "/authors", labelKey: "nav.authors", icon: Users, adminOnly: true },
       { path: "/templates", labelKey: "nav.templates", icon: LayoutTemplate, adminOnly: true },
+      // Fields Manager (docs/fields-manager-design/), behind the organization flag.
+      { path: "/fields", labelKey: "nav.fieldsManager", icon: Workflow, adminOnly: true, feature: "fields_manager" },
       // Cestovní příkazy (2026-11-03): the decree's rates by valid-from date, and the cars used on orders.
       { path: "/travel-rates", labelKey: "nav.travelRates", icon: Fuel, adminOnly: true },
       { path: "/vehicles", labelKey: "nav.vehicles", icon: Car, adminOnly: true },
@@ -57,11 +60,11 @@ export const NAV_SECTIONS: Record<"bills" | "organization" | "app", NavSectionDe
   },
 };
 
-export const navItemVisible = (i: { adminOnly?: boolean; superAdminOnly?: boolean }, role: string | null, isSuperAdmin: boolean) =>
-  (!i.adminOnly || role === "admin") && (!i.superAdminOnly || isSuperAdmin);
+export const navItemVisible = (i: { adminOnly?: boolean; superAdminOnly?: boolean; feature?: string }, role: string | null, isSuperAdmin: boolean, features: readonly string[] = []) =>
+  (!i.adminOnly || role === "admin") && (!i.superAdminOnly || isSuperAdmin) && (!i.feature || features.includes(i.feature));
 
-export function visibleNavSections(role: string | null, isSuperAdmin: boolean): NavSectionDef[] {
+export function visibleNavSections(role: string | null, isSuperAdmin: boolean, features: readonly string[] = []): NavSectionDef[] {
   return Object.values(NAV_SECTIONS)
-    .map((s) => ({ ...s, items: s.items.filter((i) => navItemVisible(i, role, isSuperAdmin)) }))
+    .map((s) => ({ ...s, items: s.items.filter((i) => navItemVisible(i, role, isSuperAdmin, features)) }))
     .filter((s) => s.items.length > 0);
 }

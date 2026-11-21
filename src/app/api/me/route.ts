@@ -13,14 +13,17 @@ export async function GET() {
   const actingId = await getActingOrgId(user);
   const orgSelect = { id: true, name: true, shortName: true } as const;
   const [organization, homeOrganization, memberOf] = await Promise.all([
-    prisma.organization.findUniqueOrThrow({ where: { id: actingId }, select: orgSelect }),
+    prisma.organization.findUniqueOrThrow({ where: { id: actingId }, select: { ...orgSelect, features: true } }),
     prisma.organization.findUniqueOrThrow({ where: { id: user.homeOrganizationId }, select: orgSelect }),
     // Other organizations this person may switch to (a super-admin's list comes from /api/organizations).
     prisma.organization.findMany({ where: { active: true, memberships: { some: { userId: user.id } } }, select: orgSelect, orderBy: { name: "asc" } }),
   ]);
+  const { features, ...actingOrg } = organization;
   return NextResponse.json({
     id: user.id,
-    organization,
+    organization: actingOrg,
+    // The acting organization's feature flags (src/lib/org-features.ts), e.g. "fields_manager". UI only; the server checks.
+    features,
     homeOrganization,
     organizations: memberOf.length && !user.impersonatedBy ? [homeOrganization, ...memberOf] : [],
     email: user.email,

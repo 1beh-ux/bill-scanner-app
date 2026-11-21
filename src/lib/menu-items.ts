@@ -20,6 +20,7 @@ export type MenuItem = {
   module?: MenuModule;
   adminOnly?: boolean;
   superAdminOnly?: boolean;
+  feature?: string; // shown only with this organization flag (nav-sections.tsx)
 };
 
 const ev = (path: string) => (eventId: string | null) => (eventId ? `/events/${eventId}${path}` : "/events");
@@ -73,6 +74,6 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: "kitchen-shopping", section: "kitchen", labelKey: "kitchen.navShopping", icon: ShoppingCart, href: ev("/kitchen/shopping"), module: "kitchen" },
   { id: "kitchen-today", section: "kitchen", labelKey: "kitchen.navToday", icon: ChefHat, href: ev("/kitchen/today"), module: "kitchen" },
   { id: "event-settings", section: "event", labelKey: "nav.eventSetup", icon: Settings, href: (id) => (id ? `/events/${id}` : "/events") },
-  ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
+  ...NAV_SECTIONS.organization.items.map((i) => ({ id: i.path, section: "organization" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly, feature: i.feature })),
   ...NAV_SECTIONS.app.items.map((i) => ({ id: i.path, section: "app" as const, labelKey: i.labelKey, icon: i.icon, href: () => i.path, adminOnly: i.adminOnly, superAdminOnly: i.superAdminOnly })),
 ];

@@ -20,7 +20,7 @@ type EventOption = { id: string; name: string; status: string };
 const SECTION_HELP: Partial<Record<MenuSection, string>> = { bills: "uctenky", tickets: "vstupenky", bank: "banka", participants: "ucastnici", health: "zdravi", mail: "posta", planning: "planovani", kitchen: "kuchyne" };
 
 export default function AppSidebar() {
-  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, isSuperAdmin, hiddenModules } =
+  const { t, lang, setLang, currentEventId, setCurrentEventId, theme, setTheme, role, isSuperAdmin, hiddenModules, features } =
     useTranslations();
   const pathname = usePathname();
   const router = useRouter();
@@ -97,7 +97,7 @@ export default function AppSidebar() {
   const showParticipants = (moduleAccess.participants && !hiddenModules.includes("participants")) || showHealth || showMail;
   const moduleShown = { health: showHealth, mail: showMail, planning: showPlanning, roster: showParticipants, bank: showParticipants && !!moduleAccess.bankCheck, bankRecon: !!moduleAccess.bank, tickets: !!moduleAccess.tickets, adults: !!moduleAccess.adults, bills: !!moduleAccess.bills, kitchen: !!moduleAccess.kitchen && !hiddenModules.includes("kitchen") };
 
-  const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin) && (!i.module || moduleShown[i.module])).map((i) => ({
+  const visibleItems = MENU_ITEMS.filter((i) => navItemVisible(i, role, isSuperAdmin, features) && (!i.module || moduleShown[i.module])).map((i) => ({
     ...i,
     href: i.href(eventId),
     label: t(i.labelKey),

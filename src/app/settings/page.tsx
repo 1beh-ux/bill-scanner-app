@@ -21,7 +21,7 @@ type GoogleAccount = {
 };
 
 export default function SettingsPage() {
-  const { t, roleLoaded, role, isSuperAdmin, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules } = useTranslations();
+  const { t, roleLoaded, role, isSuperAdmin, lang, setLang, theme, setTheme, hiddenModules, setHiddenModules, features } = useTranslations();
   const confirm = useConfirm();
   const [google, setGoogle] = useState<GoogleAccount | null>(null);
   // ?driveConnect=connected|error|in_use after coming back from Google's consent screen
@@ -143,7 +143,7 @@ export default function SettingsPage() {
           {/* Saved with the form below (E-maily) -- the native form attribute, no second save button. */}
           <select form="personal-settings" value={landingPath} onChange={(e) => setLandingPath(e.target.value)} className={inputClass + " mt-1"}>
             <option value="">{t("settingsPage.landingPathDefault")}</option>
-            {visibleNavSections(role, isSuperAdmin).map((section) => (
+            {visibleNavSections(role, isSuperAdmin, features).map((section) => (
               <optgroup key={section.sectionLabelKey} label={t(section.sectionLabelKey)}>
                 {section.items.map((item) => (
                   <option key={item.path} value={item.path}>
@@ -177,7 +177,7 @@ export default function SettingsPage() {
           </summary>
           <div className="mt-2 flex flex-col gap-1.5">
             {MENU_SECTIONS.map((section) => {
-              const items = MENU_ITEMS.filter((i) => i.section === section.id && navItemVisible(i, role, isSuperAdmin));
+              const items = MENU_ITEMS.filter((i) => i.section === section.id && navItemVisible(i, role, isSuperAdmin, features));
               if (items.length === 0) return null;
               return (
                 <div key={section.id} className="flex flex-wrap items-center gap-x-4 gap-y-1">

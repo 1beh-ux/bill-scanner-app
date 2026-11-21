@@ -29,6 +29,8 @@ interface I18nContextValue {
   impersonatedBy: { displayName: string; email: string; viewing: string } | null;
   hiddenModules: string[];
   setHiddenModules: (m: string[]) => void;
+  // The acting organization's feature flags (/api/me), e.g. "fields_manager". UI only; the server checks.
+  features: string[];
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -114,6 +116,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const [memberOrganizations, setMemberOrganizations] = useState<OrgRef[]>([]);
   const [impersonatedBy, setImpersonatedBy] = useState<{ displayName: string; email: string; viewing: string } | null>(null);
   const [hiddenModules, setHiddenModules] = useState<string[]>([]);
+  const [features, setFeatures] = useState<string[]>([]);
   // Default "light" here is just the initial render value — the no-flash
   // script in layout.tsx already set the real class on <html> before this
   // ever runs, so the effect below reads that back rather than guessing.
@@ -161,7 +164,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     fetch("/api/me")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { role: Role; isSuperAdmin?: boolean; organization?: OrgRef; homeOrganization?: OrgRef; organizations?: OrgRef[]; impersonatedBy?: { displayName: string; email: string; viewing: string } | null; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[] } | null) => {
+      .then((data: { role: Role; isSuperAdmin?: boolean; organization?: OrgRef; homeOrganization?: OrgRef; organizations?: OrgRef[]; impersonatedBy?: { displayName: string; email: string; viewing: string } | null; preferredLang?: Lang; preferredTheme?: Theme; hiddenModules?: string[]; features?: string[] } | null) => {
         setRole(data?.role ?? null);
         setIsSuperAdmin(data?.isSuperAdmin === true);
         setOrganization(data?.organization ?? null);
@@ -173,6 +176,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
           else localStorage.removeItem("role");
         } catch {}
         setHiddenModules(data?.hiddenModules ?? []);
+        setFeatures(Array.isArray(data?.features) ? data.features : []);
         // Reconcile to the server's values without re-PATCHing them right
         // back -- this is the server telling the client, not a user action.
         if (data?.preferredLang) setLang(data.preferredLang, false);
@@ -224,7 +228,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   return (
     <I18nContext.Provider
-      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, organization, homeOrganization, memberOrganizations, impersonatedBy, hiddenModules, setHiddenModules }}
+      value={{ lang, setLang, t, currentEventId, setCurrentEventId, theme, setTheme, role, roleLoaded, isSuperAdmin, organization, homeOrganization, memberOrganizations, impersonatedBy, hiddenModules, setHiddenModules, features }}
     >
       {children}
     </I18nContext.Provider>
