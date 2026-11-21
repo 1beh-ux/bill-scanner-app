@@ -230,6 +230,9 @@ dashed lines. The 7 computed fixed fields map to `builtin` ids; their rows stay 
 - **Uniqueness, per organization:** an alias may not equal any live field key, template key, event-variable key,
   guardian slot key, or another alias. Creating a field or variable whose key equals an existing alias is refused
   with "already used as the old name of X — rename X back or remove the alias first".
+- **Exception — `legacy` aliases:** the four fixed guardian keys (`zast_jmeno`, `zak_zast_jmeno`, `vztah`,
+  `zast_telefon`) are both live fixed fields and aliases of `guardian1_*` until the fixed rows are retired. The resolver
+  finds the field first; both give the same value, so the overlap is harmless (found while building phase 0).
 - Resolution is one hop: alias → canonical. A rename of a field that has aliases repoints them (no chains).
 - Removing an alias is only possible when nothing uses it: no Doc template, saved column config, saved sync mapping
   or e-mail template contains it (the usage check of §2). Phase 7 offers "convert to direct" to get there.

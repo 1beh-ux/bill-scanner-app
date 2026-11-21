@@ -257,27 +257,27 @@ model User {
   moduleAccess           UserEventModuleAccess[]
   // Other organizations this person works in (their own one is organizationId above).
   memberships            OrganizationMembership[]
-  driveAccount           DriveAccount?           @relation("DriveAccountConnectedBy")
-  eventsDriveConfigured  Event[]                 @relation("EventDriveConfiguredBy")
-  authorBankAudits       AuthorBankAudit[]       @relation("AuthorBankAuditChangedBy")
-  billsCreated           Bill[]                  @relation("BillCreatedBy")
-  billsApproved          Bill[]                  @relation("BillApprovedBy")
-  billsPaid              Bill[]                  @relation("BillPaidBy")
+  driveAccount           DriveAccount?            @relation("DriveAccountConnectedBy")
+  eventsDriveConfigured  Event[]                  @relation("EventDriveConfiguredBy")
+  authorBankAudits       AuthorBankAudit[]        @relation("AuthorBankAuditChangedBy")
+  billsCreated           Bill[]                   @relation("BillCreatedBy")
+  billsApproved          Bill[]                   @relation("BillApprovedBy")
+  billsPaid              Bill[]                   @relation("BillPaidBy")
   auditLogEntries        BillAuditLog[]
-  incidentsCreated       Incident[]              @relation("IncidentCreatedBy")
-  incidentUpdates        IncidentUpdate[]        @relation("IncidentUpdatedBy")
-  medChecklistGiven      MedChecklist[]          @relation("MedChecklistGivenBy")
-  parentEmailsSent       ParentEmailLog[]        @relation("ParentEmailSentBy")
-  mailAccountsConnected  MailSenderAccount[]     @relation("MailAccountConnectedBy")
-  documentsReceived      ParticipantDocument[]   @relation("ParticipantDocumentReceivedBy")
-  mailActionsPerformed   MailActionLog[]         @relation("MailActionLogUser")
-  childChangesDecided    ChildChange[]           @relation("ChildChangeDecidedBy")
-  documentsReviewed      ParticipantDocument[]   @relation("ParticipantDocumentReviewedBy")
-  personDocumentsCreated PersonDocument[]        @relation("PersonDocumentCreatedBy")
-  personDocumentsRevoked PersonDocument[]        @relation("PersonDocumentRevokedBy")
-  childEmailsSent        ChildEmailLog[]         @relation("ChildEmailSentBy")
-  bankTokensSet          BankAccount[]           @relation("BankAccountTokenSetBy")
-  bankMovementsDecided   BankMovement[]          @relation("BankMovementDecidedBy")
+  incidentsCreated       Incident[]               @relation("IncidentCreatedBy")
+  incidentUpdates        IncidentUpdate[]         @relation("IncidentUpdatedBy")
+  medChecklistGiven      MedChecklist[]           @relation("MedChecklistGivenBy")
+  parentEmailsSent       ParentEmailLog[]         @relation("ParentEmailSentBy")
+  mailAccountsConnected  MailSenderAccount[]      @relation("MailAccountConnectedBy")
+  documentsReceived      ParticipantDocument[]    @relation("ParticipantDocumentReceivedBy")
+  mailActionsPerformed   MailActionLog[]          @relation("MailActionLogUser")
+  childChangesDecided    ChildChange[]            @relation("ChildChangeDecidedBy")
+  documentsReviewed      ParticipantDocument[]    @relation("ParticipantDocumentReviewedBy")
+  personDocumentsCreated PersonDocument[]         @relation("PersonDocumentCreatedBy")
+  personDocumentsRevoked PersonDocument[]         @relation("PersonDocumentRevokedBy")
+  childEmailsSent        ChildEmailLog[]          @relation("ChildEmailSentBy")
+  bankTokensSet          BankAccount[]            @relation("BankAccountTokenSetBy")
+  bankMovementsDecided   BankMovement[]           @relation("BankMovementDecidedBy")
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -535,16 +535,16 @@ model Event {
   ticketOrders           TicketOrder[]
   // Osobní účtenky (2026-10-30): who pays out the event's reimbursements -- personal bills they paid for are
   // netted with each person's payout (src/lib/personal-bills.ts).
-  treasurerAuthorId String? @map("treasurer_author_id")
-  treasurer         Author? @relation("EventTreasurer", fields: [treasurerAuthorId], references: [id], onDelete: SetNull)
-  personalBills     PersonalBill[]
+  treasurerAuthorId      String?                 @map("treasurer_author_id")
+  treasurer              Author?                 @relation("EventTreasurer", fields: [treasurerAuthorId], references: [id], onDelete: SetNull)
+  personalBills          PersonalBill[]
   // Where people pay the event (settlement links): "treasurer" = the Pokladník's own account (and Fio token),
   // "event" = the event's bank account (Banka).
-  settlementReceiver String @default("treasurer") @map("settlement_receiver")
-  settlementLinks    SettlementLink[]
-  paymentCorrections PaymentCorrection[]
+  settlementReceiver     String                  @default("treasurer") @map("settlement_receiver")
+  settlementLinks        SettlementLink[]
+  paymentCorrections     PaymentCorrection[]
   // The texts sent with the links (Platby): { owes, owed, both } with {jmeno} {akce} {castka} {odkaz}.
-  settlementMessages Json?  @map("settlement_messages")
+  settlementMessages     Json?                   @map("settlement_messages")
   eventPersons           EventPerson[]
   kitchenSettings        EventKitchenSettings?
   planEntries            PlanEntry[]
@@ -554,13 +554,16 @@ model Event {
   mealNotes              MealNote[]
 
   // Owner (docs/organizations-change-notes.md).
-  organizationId String       @map("organization_id")
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId  String           @map("organization_id")
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  travelOrders    TravelOrder[]
+  travelPlaces    TravelPlace[]
+  // Fields Manager (design §3)
+  eventVariables  EventVariable[]
+  syncReviewItems SyncReviewItem[]
+  importRuns      ImportRun[]
 
   @@index([organizationId])
-  travelOrders TravelOrder[]
-  travelPlaces TravelPlace[]
-
   @@map("events")
 }
 
@@ -615,31 +618,31 @@ model Author {
   createdAt          DateTime @default(now()) @map("created_at")
 
   // The person in Lidé this payer is (2026-10-30, personal bills: an adult picked as a share holder).
-  childId            String?  @map("child_id")
+  childId           String?   @map("child_id")
   // Their own Fio API token (read-only), encrypted (src/lib/bank/token-crypto.ts): payments into their account
   // carrying a settlement link's variable symbol are confirmed automatically. Never sent to a client.
-  fioTokenEncrypted  String?   @map("fio_token_encrypted")
-  fioTokenSetAt      DateTime? @map("fio_token_set_at")
+  fioTokenEncrypted String?   @map("fio_token_encrypted")
+  fioTokenSetAt     DateTime? @map("fio_token_set_at")
   // One Fio call per token per 30 s: claimed here before each call (src/lib/settlement-links.ts).
-  fioLastCheckedAt   DateTime? @map("fio_last_checked_at")
-  fioLastSuccessAt   DateTime? @map("fio_last_success_at")
-  fioLastError       String?   @map("fio_last_error")
+  fioLastCheckedAt  DateTime? @map("fio_last_checked_at")
+  fioLastSuccessAt  DateTime? @map("fio_last_success_at")
+  fioLastError      String?   @map("fio_last_error")
   // Cestovní příkazy (2026-11-03): a payer's own contact when they are not linked to an adult in Lidé
   // (an adult's comes from Lidé: address fields, first guardian's phone). Phone stored as "+420 xxx xxx xxx".
-  phone              String?
-  address            String?
+  phone             String?
+  address           String?
 
-  mergedInto  Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
-  child       Child?              @relation(fields: [childId], references: [id], onDelete: SetNull)
-  personalBills      PersonalBill[]      @relation("PersonalBillAuthor")
-  personalShares     PersonalBillShare[]
-  settlementLinks    SettlementLink[]
-  treasurerOf        Event[]             @relation("EventTreasurer")
-  mergedFrom  Author[]            @relation("AuthorMerge")
-  eventAccess AuthorEventAccess[]
-  bills       Bill[]
-  bankAudits  AuthorBankAudit[]
-  vehicles    Vehicle[]
+  mergedInto      Author?             @relation("AuthorMerge", fields: [mergedIntoAuthorId], references: [id])
+  child           Child?              @relation(fields: [childId], references: [id], onDelete: SetNull)
+  personalBills   PersonalBill[]      @relation("PersonalBillAuthor")
+  personalShares  PersonalBillShare[]
+  settlementLinks SettlementLink[]
+  treasurerOf     Event[]             @relation("EventTreasurer")
+  mergedFrom      Author[]            @relation("AuthorMerge")
+  eventAccess     AuthorEventAccess[]
+  bills           Bill[]
+  bankAudits      AuthorBankAudit[]
+  vehicles        Vehicle[]
 
   // Owner (docs/organizations-change-notes.md).
   organizationId String       @map("organization_id")
@@ -869,19 +872,19 @@ model Participant {
   acceptedVariableSymbol String?            @map("accepted_variable_symbol")
   createdAt              DateTime           @default(now()) @map("created_at")
 
-  event          Event                 @relation(fields: [eventId], references: [id])
-  child          Child?                @relation(fields: [childId], references: [id])
-  guardians      ParticipantGuardian[]
-  incidents      Incident[]
+  event           Event                 @relation(fields: [eventId], references: [id])
+  child           Child?                @relation(fields: [childId], references: [id])
+  guardians       ParticipantGuardian[]
+  incidents       Incident[]
   parentQuestions ParentQuestion[]
   mealAbsences    MealAbsence[]
   diet            ParticipantDiet?
-  medPlans       ParticipantMedPlan[]
-  medChecklist   MedChecklist[]
-  emailLogs      ParentEmailLog[]
-  documents      ParticipantDocument[]
-  mailActionLogs MailActionLog[]
-  bankMovements  BankMovement[]
+  medPlans        ParticipantMedPlan[]
+  medChecklist    MedChecklist[]
+  emailLogs       ParentEmailLog[]
+  documents       ParticipantDocument[]
+  mailActionLogs  MailActionLog[]
+  bankMovements   BankMovement[]
 
   @@unique([eventId, registrationNumber])
   @@index([childId])
@@ -1006,6 +1009,10 @@ model ChildGuardian {
   relationship           String?
   phone                  String?
   receivesCommunications Boolean @default(true) @map("receives_communications")
+  // Fields Manager phase 0 (design §3): guardian slot (1..6; null = legacy row, ordered as today) and
+  // custom guardian properties beyond the fixed ones.
+  position               Int?
+  extra                  Json?
 
   child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
 
@@ -1080,6 +1087,10 @@ model ParticipantGuardian {
   relationship           String?
   phone                  String?
   receivesCommunications Boolean @default(true) @map("receives_communications")
+  // Fields Manager phase 0 (design §3): guardian slot (1..6; null = legacy row, ordered as today) and
+  // custom guardian properties beyond the fixed ones.
+  position               Int?
+  extra                  Json?
 
   participant Participant      @relation(fields: [participantId], references: [id])
   emailLogs   ParentEmailLog[]
@@ -1097,6 +1108,30 @@ enum ParticipantFieldType {
   // Computed from other fields joined by a separator (e.g. full address);
   // options = { parts: fieldKey[], separator } -- never stored per participant.
   composite
+  // Fields Manager (docs/fields-manager-design/design.md §3), phase 0: added, not used until phase 3.
+  // Values stay strings: multi = items joined with "\n"; consent = "true"/"false" (+ "<key>__at" date).
+  longtext
+  multi
+  consent
+  email
+  phone
+  // New calculated model, options = CalcSpec (design §5); `composite` stays readable forever.
+  calculated
+}
+
+// Fields Manager decision A (design §7): where a template field's values are stored.
+// profile = the person's profile + the registration copy (today's behaviour for every template);
+// event = the registration only (e.g. t-shirt size).
+enum FieldStorage {
+  profile
+  event
+}
+
+// Fields Manager aliases (design §6): what an old key points to.
+enum AliasTarget {
+  field
+  guardian
+  event_variable
 }
 
 // Deliberately distinct from ModuleKey -- "list" (the central Seznam
@@ -1194,6 +1229,9 @@ model ParticipantFieldTemplate {
   // Order for parents (2026-10-23): the portal profile, the public form and the registration step
   // list fields by this (null = after the ordered ones, by label). Šablony -> Účastníci -> Pořadí polí.
   portalSortOrder        Int?                      @map("portal_sort_order")
+  // Fields Manager phase 0 (design §3, §7): storage scope (default = today) and the manager's UI section.
+  storage                FieldStorage              @default(profile)
+  section                String?
 
   // Owner (docs/organizations-change-notes.md).
   organizationId   String?                    @map("organization_id")
@@ -1250,19 +1288,19 @@ model EventParticipantField {
 // Dospělí na akci (2026-10-28): an adult of Lidé (Child.isAdult) at the event -- a leader, helper, cook.
 // Not a participant: no registration, no portal, no e-mail. Dates null = the event's.
 model EventPerson {
-  id        String    @id @default(uuid())
-  eventId   String    @map("event_id")
-  childId   String    @map("child_id")
+  id        String   @id @default(uuid())
+  eventId   String   @map("event_id")
+  childId   String   @map("child_id")
   // Display only: vedoucí, pomocník, kuchař…
   label     String?
   // The days at the event ("YYYY-MM-DD"), any intervals; empty = the whole event (follows it if it moves).
-  days      String[]  @default([])
+  days      String[] @default([])
   // Eats at the camp (the kitchen counts them).
-  eats      Boolean   @default(true)
-  createdAt DateTime  @default(now()) @map("created_at")
+  eats      Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
 
-  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  child Child @relation(fields: [childId], references: [id], onDelete: Cascade)
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  child        Child         @relation(fields: [childId], references: [id], onDelete: Cascade)
   mealAbsences MealAbsence[]
 
   @@unique([eventId, childId])
@@ -1809,57 +1847,66 @@ model PublicHost {
 // One scout group / organisation. Every org-level table points here
 // (docs/organizations-change-notes.md); existing data belongs to "Pionýrská skupina Záře".
 model Organization {
-  memberships             OrganizationMembership[]
-  id                      String   @id @default(uuid())
-  ingredients             Ingredient[]
-  meals                   Meal[]
-  name                    String
-  shortName               String   @map("short_name")
-  contactEmail            String?  @map("contact_email")
+  memberships               OrganizationMembership[]
+  id                        String                   @id @default(uuid())
+  ingredients               Ingredient[]
+  meals                     Meal[]
+  name                      String
+  shortName                 String                   @map("short_name")
+  contactEmail              String?                  @map("contact_email")
   // Parent portal "Zapomněl(a) jsem odkaz" (2026-10-23): the mailbox it sends from (a connected
   // MailSenderAccount; null = the feature is off), and whether a new link replaces the old one.
-  portalRecoverySenderEmail String? @map("portal_recovery_sender_email")
+  portalRecoverySenderEmail String?                  @map("portal_recovery_sender_email")
   // Uploaded files every e-mail of a kind carries (Šablony -> E-maily): { purposeKey: EmailFile[] } (src/lib/email-files.ts).
-  emailFiles                Json?   @map("email_files")
+  emailFiles                Json?                    @map("email_files")
   // The participant export's default columns (field keys, in order); an event may have its own.
-  exportColumns             Json?   @map("export_columns")
+  exportColumns             Json?                    @map("export_columns")
   // "Cenová kategorie" on the portal profile (Šablony -> Pořadí polí pro rodiče): { show, section, order }
   // (src/lib/portal-rules.ts readProfileCategory); null = not shown.
-  profileCategory           Json?   @map("profile_category")
-  portalRecoveryNewLink   Boolean  @default(false) @map("portal_recovery_new_link")
+  profileCategory           Json?                    @map("profile_category")
+  portalRecoveryNewLink     Boolean                  @default(false) @map("portal_recovery_new_link")
   // "Ještě nejsem členem" next to it: an event's public registration, or any web address.
-  portalJoinEventId       String?  @map("portal_join_event_id")
-  portalJoinUrl           String?  @map("portal_join_url")
-  active                  Boolean  @default(true)
+  portalJoinEventId         String?                  @map("portal_join_event_id")
+  portalJoinUrl             String?                  @map("portal_join_url")
+  active                    Boolean                  @default(true)
   // Look of the public pages (/r, /p, landing; docs/custom-domain.md "Appearance"). Null = today's look.
-  publicFontFamily        String?  @map("public_font_family")
-  publicHeadingFontFamily String?  @map("public_heading_font_family")
-  publicBaseFontSize      Int?     @map("public_base_font_size")
+  publicFontFamily          String?                  @map("public_font_family")
+  publicHeadingFontFamily   String?                  @map("public_heading_font_family")
+  publicBaseFontSize        Int?                     @map("public_base_font_size")
   // compact | normal | large
-  publicHeadingScale      String?  @map("public_heading_scale")
+  publicHeadingScale        String?                  @map("public_heading_scale")
   // compact | normal | relaxed
-  publicLineHeight        String?  @map("public_line_height")
+  publicLineHeight          String?                  @map("public_line_height")
   // light | dark | null (= the visitor's system setting); ?theme= on the URL still wins.
-  publicTheme             String?  @map("public_theme")
+  publicTheme               String?                  @map("public_theme")
   // true = no page / card background: the embedding website's shows through.
-  publicTransparent       Boolean  @default(false) @map("public_transparent")
+  publicTransparent         Boolean                  @default(false) @map("public_transparent")
   // Content width in px; 0 = the full width (100 %); null = today's (form 672 / 896 px, portal 896 px).
-  publicContentWidth      Int?     @map("public_content_width")
+  publicContentWidth        Int?                     @map("public_content_width")
   // The columns above = the base (the parent portal). Partial layers on top (src/lib/public-appearance.ts
   // pageAppearance): pages embedded with ?embed=1, and the standalone Veřejná přihláška page.
-  appearanceEmbed         Json?    @map("appearance_embed")
-  appearanceRegistration  Json?    @map("appearance_registration")
+  appearanceEmbed           Json?                    @map("appearance_embed")
+  appearanceRegistration    Json?                    @map("appearance_registration")
   // The parent portal profile's own sections after Základní / Podrobné údaje: [{ key, label }] in order
   // (src/lib/portal-rules.ts readProfileSections), e.g. health details, educational notes.
-  portalProfileSections   Json?    @map("portal_profile_sections")
+  portalProfileSections     Json?                    @map("portal_profile_sections")
   // Own wording of the public registration form and parent portal texts ({ "public.doneTitle": "…" }),
   // over the translations (src/lib/public-texts.ts); an event's own (Event.publicTexts) wins on its page.
-  publicTexts             Json?    @map("public_texts")
+  publicTexts               Json?                    @map("public_texts")
   // Cestovní příkazy (2026-11-03): printed on the order ("IČ: …", "V <city> dne").
-  address                 String?
-  ico                     String?
-  city                    String?
-  createdAt               DateTime @default(now()) @map("created_at")
+  address                   String?
+  ico                       String?
+  city                      String?
+  createdAt                 DateTime                 @default(now()) @map("created_at")
+  // Fields Manager (docs/fields-manager-design/design.md §3, §13): per-organization feature flags
+  // ("fields_manager"), guardian slots offered by imports and documents (1..6), extra guardian properties.
+  features                  String[]                 @default([])
+  guardianSlots             Int                      @default(2) @map("guardian_slots")
+  guardianProps             Json?                    @map("guardian_props")
+  fieldAliases              FieldAlias[]
+  eventVariables            EventVariable[]
+  documentEdits             DocumentEdit[]
+  fieldChangeLog            FieldChangeLog[]
 
   users                     User[]
   travelRateSets            TravelRateSet[]
@@ -2319,7 +2366,6 @@ model Ticket {
   @@map("tickets")
 }
 
-
 // ===== Kuchyně (docs/kitchen-planning-design.md, phase 1) =====
 // The library (ingredients, meals) is the organization's; everything else belongs to an event.
 // No prices, no nutrition: the only norm is grams (ml, pieces) per portion of a standard adult.
@@ -2500,16 +2546,16 @@ model PlanEntry {
 
 // Anonymous extras only (visitors, "výlet bez oběda"); named adults are EventPerson.
 model HeadcountAdjust {
-  id         String         @id @default(uuid())
-  eventId    String         @map("event_id")
-  dateFrom   DateTime       @map("date_from") @db.Date
-  dateTo     DateTime       @map("date_to") @db.Date
-  slotItemId String?        @map("slot_item_id")
+  id         String   @id @default(uuid())
+  eventId    String   @map("event_id")
+  dateFrom   DateTime @map("date_from") @db.Date
+  dateTo     DateTime @map("date_to") @db.Date
+  slotItemId String?  @map("slot_item_id")
   // Negative allowed.
   count      Int
   label      String
-  factor     Decimal        @default(1.0) @db.Decimal(6, 3)
-  createdAt  DateTime       @default(now()) @map("created_at")
+  factor     Decimal  @default(1.0) @db.Decimal(6, 3)
+  createdAt  DateTime @default(now()) @map("created_at")
 
   event    Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   slotItem EventListItem? @relation("HeadcountAdjustSlot", fields: [slotItemId], references: [id], onDelete: Cascade)
@@ -2520,15 +2566,15 @@ model HeadcountAdjust {
 
 // Exactly one of participantId / eventPersonId (also a SQL CHECK).
 model MealAbsence {
-  id            String         @id @default(uuid())
-  eventId       String         @map("event_id")
-  participantId String?        @map("participant_id")
-  eventPersonId String?        @map("event_person_id")
-  date          DateTime       @db.Date
+  id            String   @id @default(uuid())
+  eventId       String   @map("event_id")
+  participantId String?  @map("participant_id")
+  eventPersonId String?  @map("event_person_id")
+  date          DateTime @db.Date
   // null = the whole day.
-  slotItemId    String?        @map("slot_item_id")
+  slotItemId    String?  @map("slot_item_id")
   reason        String?
-  createdAt     DateTime       @default(now()) @map("created_at")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   event       Event          @relation(fields: [eventId], references: [id], onDelete: Cascade)
   participant Participant?   @relation(fields: [participantId], references: [id], onDelete: Cascade)
@@ -2541,15 +2587,15 @@ model MealAbsence {
 
 // A participant's confirmed allergens / diet (Strava účastníků), from the allergy text it was confirmed against.
 model ParticipantDiet {
-  id            String    @id @default(uuid())
-  participantId String    @unique @map("participant_id")
-  allergens     String[]  @default([])
-  dietFlags     String[]  @default([]) @map("diet_flags")
-  rawText       String    @map("raw_text")
-  rawTextHash   String    @map("raw_text_hash")
-  confirmedById String?   @map("confirmed_by_id")
-  confirmedAt   DateTime  @default(now()) @map("confirmed_at")
-  note          String?
+  id               String   @id @default(uuid())
+  participantId    String   @unique @map("participant_id")
+  allergens        String[] @default([])
+  dietFlags        String[] @default([]) @map("diet_flags")
+  rawText          String   @map("raw_text")
+  rawTextHash      String   @map("raw_text_hash")
+  confirmedById    String?  @map("confirmed_by_id")
+  confirmedAt      DateTime @default(now()) @map("confirmed_at")
+  note             String?
   // Audit 2026-11-05: words of the text that map to no allergen / diet ("anafylaxe", "nesmí ořechy"), as they
   // were when confirmed, and that the confirmer ticked "Nepřiřazené výrazy jsem posoudil/a" (else a note is required).
   unmapped         String[] @default([])
@@ -2581,12 +2627,12 @@ model MealFeedback {
 }
 
 model ShoppingCheck {
-  id           String     @id @default(uuid())
-  eventId      String     @map("event_id")
-  ingredientId String     @map("ingredient_id")
-  forDate      DateTime   @map("for_date") @db.Date
-  checked      Boolean    @default(false)
-  qtyBought    Decimal?   @map("qty_bought") @db.Decimal(12, 3)
+  id           String   @id @default(uuid())
+  eventId      String   @map("event_id")
+  ingredientId String   @map("ingredient_id")
+  forDate      DateTime @map("for_date") @db.Date
+  checked      Boolean  @default(false)
+  qtyBought    Decimal? @map("qty_bought") @db.Decimal(12, 3)
 
   event      Event      @relation(fields: [eventId], references: [id], onDelete: Cascade)
   ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
@@ -2670,23 +2716,23 @@ model PersonalBillShare {
 // counted -- official bills, personal parts -- the result, a QR and the confirmations. Amounts are always computed
 // live (src/lib/settlement-links.ts); settling uses the bills' / shares' own flags.
 model SettlementLink {
-  id             String    @id @default(uuid())
-  eventId        String    @map("event_id")
-  authorId       String    @map("author_id")
-  token          String    @unique
+  id              String    @id @default(uuid())
+  eventId         String    @map("event_id")
+  authorId        String    @map("author_id")
+  token           String    @unique
   // 7 digits starting with 9: matched on incoming payments (Fio) to settle automatically.
-  variableSymbol String    @unique @map("variable_symbol")
+  variableSymbol  String    @unique @map("variable_symbol")
   // "Zaplatil(a) jsem" (their claim, not proof) / "Peníze jsem dostal(a)" (their payout arrived).
-  claimedAt      DateTime? @map("claimed_at")
-  receivedAt     DateTime? @map("received_at")
+  claimedAt       DateTime? @map("claimed_at")
+  receivedAt      DateTime? @map("received_at")
   // "Souhlasím s vyúčtováním" (the event pays them): when, and the amount it was then.
-  acceptedAt     DateTime? @map("accepted_at")
-  acceptedAmount Decimal?  @map("accepted_amount") @db.Decimal(12, 2)
+  acceptedAt      DateTime? @map("accepted_at")
+  acceptedAmount  Decimal?  @map("accepted_amount") @db.Decimal(12, 2)
   // Person to person: { [creditorAuthorId]: ISO } -- "I paid them".
-  pairClaims     Json      @default("{}") @map("pair_claims")
+  pairClaims      Json      @default("{}") @map("pair_claims")
   // Bank movements already used to settle (never twice).
-  paidMovementIds String[] @default([]) @map("paid_movement_ids")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  paidMovementIds String[]  @default([]) @map("paid_movement_ids")
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
   author Author @relation(fields: [authorId], references: [id], onDelete: Cascade)
@@ -2698,17 +2744,17 @@ model SettlementLink {
 // A cancelled payment (2026-11-03, "Zrušit platbu" on a personal bill): the paid part is open again; this keeps
 // what was cancelled, by whom and why (the reason is mandatory) -- shown in Platby -> Historie plateb.
 model PaymentCorrection {
-  id             String   @id @default(uuid())
-  eventId        String   @map("event_id")
-  authorId       String   @map("author_id")
-  personalBillId String?  @map("personal_bill_id")
+  id             String    @id @default(uuid())
+  eventId        String    @map("event_id")
+  authorId       String    @map("author_id")
+  personalBillId String?   @map("personal_bill_id")
   title          String
-  amountCzk      Decimal  @map("amount_czk") @db.Decimal(12, 2)
+  amountCzk      Decimal   @map("amount_czk") @db.Decimal(12, 2)
   // When it had been paid, and how (null user = the bank / the link).
   paidAt         DateTime? @map("paid_at")
   note           String
-  userId         String?  @map("user_id")
-  createdAt      DateTime @default(now()) @map("created_at")
+  userId         String?   @map("user_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
@@ -2756,30 +2802,30 @@ enum VehicleFuel {
 
 // Vozidla (A3): own cars used on travel orders. The owner is an adult in Lidé and/or a payer, else a plain name.
 model Vehicle {
-  id             String         @id @default(uuid())
-  organizationId String         @map("organization_id")
-  label          String
-  cylinderCc     Int?           @map("cylinder_cc")
-  plate          String?
-  gearbox        VehicleGearbox
-  fuel           VehicleFuel
+  id              String         @id @default(uuid())
+  organizationId  String         @map("organization_id")
+  label           String
+  cylinderCc      Int?           @map("cylinder_cc")
+  plate           String?
+  gearbox         VehicleGearbox
+  fuel            VehicleFuel
   // Consumption from the technical licence (TP), up to 4 values; the set ones > 0 are averaged.
-  tpConsumption1 Decimal?       @map("tp_consumption_1") @db.Decimal(5, 2)
-  tpConsumption2 Decimal?       @map("tp_consumption_2") @db.Decimal(5, 2)
-  tpConsumption3 Decimal?       @map("tp_consumption_3") @db.Decimal(5, 2)
-  tpConsumption4 Decimal?       @map("tp_consumption_4") @db.Decimal(5, 2)
-  ownerChildId   String?        @map("owner_child_id")
-  ownerAuthorId  String?        @map("owner_author_id")
-  ownerName      String?        @map("owner_name")
+  tpConsumption1  Decimal?       @map("tp_consumption_1") @db.Decimal(5, 2)
+  tpConsumption2  Decimal?       @map("tp_consumption_2") @db.Decimal(5, 2)
+  tpConsumption3  Decimal?       @map("tp_consumption_3") @db.Decimal(5, 2)
+  tpConsumption4  Decimal?       @map("tp_consumption_4") @db.Decimal(5, 2)
+  ownerChildId    String?        @map("owner_child_id")
+  ownerAuthorId   String?        @map("owner_author_id")
+  ownerName       String?        @map("owner_name")
   // Who added it (a non-admin edits only their own).
-  createdByUserId String?       @map("created_by_user_id")
-  archivedAt     DateTime?      @map("archived_at")
-  createdAt      DateTime       @default(now()) @map("created_at")
-  updatedAt      DateTime       @default(now()) @updatedAt @map("updated_at")
+  createdByUserId String?        @map("created_by_user_id")
+  archivedAt      DateTime?      @map("archived_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id])
-  ownerChild   Child?       @relation(fields: [ownerChildId], references: [id], onDelete: SetNull)
-  ownerAuthor  Author?      @relation(fields: [ownerAuthorId], references: [id], onDelete: SetNull)
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  ownerChild   Child?        @relation(fields: [ownerChildId], references: [id], onDelete: SetNull)
+  ownerAuthor  Author?       @relation(fields: [ownerAuthorId], references: [id], onDelete: SetNull)
   travelOrders TravelOrder[]
 
   @@index([organizationId])
@@ -2944,4 +2990,111 @@ model OrganizationMembership {
   @@id([userId, organizationId])
   @@index([organizationId])
   @@map("organization_memberships")
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Fields Manager, phase 0 (docs/fields-manager-design/design.md §3). Additive: nothing reads these tables until the
+// organization flag "fields_manager" is on and the later phases ship.
+
+// Old key -> canonical key (rename / merge in alias mode, legacy guardian keys). One hop, unique per organization.
+model FieldAlias {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  alias          String
+  targetKind     AliasTarget  @map("target_kind")
+  targetKey      String       @map("target_key")
+  reason         String // rename | merge | legacy
+  createdById    String?      @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([organizationId, alias])
+  @@index([organizationId, targetKey])
+  @@map("field_aliases")
+}
+
+// Free event variables (place, leader_name, ...). Linked (camp_name, dates) and calculated (date_range) ones are code.
+// eventId null = an organization-level value.
+model EventVariable {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  eventId        String?      @map("event_id")
+  event          Event?       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  key            String
+  label          String
+  value          String       @default("")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@unique([organizationId, eventId, key])
+  @@index([eventId])
+  @@map("event_variables")
+}
+
+// Rows an automatic sync was unsure about (design §10); any admin of the event resolves them.
+model SyncReviewItem {
+  id           String    @id @default(uuid())
+  eventId      String    @map("event_id")
+  event        Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  syncId       String    @map("sync_id")
+  rowKey       String    @map("row_key")
+  kind         String // possible_match | difference | unmatched | guardian_conflict | bad_value
+  payload      Json
+  status       String    @default("pending") // pending | applied | dismissed
+  resolvedById String?   @map("resolved_by_id")
+  resolvedAt   DateTime? @map("resolved_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([eventId, syncId, rowKey, kind])
+  @@index([eventId, status])
+  @@map("sync_review_items")
+}
+
+// Every write of one import / sync run, so the whole run can be undone (design §9).
+model ImportRun {
+  id          String    @id @default(uuid())
+  eventId     String    @map("event_id")
+  event       Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  syncId      String?   @map("sync_id")
+  writes      Json // [{ table, id, key, before, after }]
+  createdById String?   @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  undoneAt    DateTime? @map("undone_at")
+
+  @@index([eventId, createdAt])
+  @@map("import_runs")
+}
+
+// Pending Google Docs requests, sent in one batchUpdate on Save (design §11).
+model DocumentEdit {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  googleDocId    String       @map("google_doc_id")
+  request        Json
+  reason         String
+  status         String       @default("pending") // pending | saved | discarded | failed
+  createdById    String?      @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  savedRevision  String?      @map("saved_revision")
+
+  @@index([googleDocId, status])
+  @@index([organizationId])
+  @@map("document_edits")
+}
+
+// Every Fields Manager action with before/after, for undo and audit (design §1, §12).
+model FieldChangeLog {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  action         String // create | edit | rename | merge | delete | guardians | variable
+  before         Json?
+  after          Json?
+  byId           String?      @map("by_id")
+  at             DateTime     @default(now())
+  undoneAt       DateTime?    @map("undone_at")
+
+  @@index([organizationId, at])
+  @@map("field_change_log")
 }

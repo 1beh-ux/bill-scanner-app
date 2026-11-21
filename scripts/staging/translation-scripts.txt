@@ -87,3 +87,4 @@ seed-audit-2026-11-i18n
 seed-multi-org-i18n
 seed-public-hosts-setup-i18n
 seed-travel-rates
+fields/seed-legacy-aliases
