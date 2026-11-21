@@ -124,7 +124,7 @@ async function main() {
   const camp = await createEventWithDefaults({ name: "Letní tábor 2027 (STAGING)", startDate: "2027-07-03", endDate: "2027-07-17", organizationId: org.id, isPublic: false });
   await prisma.event.update({
     where: { id: camp.id },
-    data: { publicRegistration: true, publicSlug: "staging-tabor-2027", registrationDeadline: new Date("2027-05-31"), memberPriceCzk: 4500, nonMemberPriceCzk: 5200, publicContactEmail: "tabor@example.invalid", location: "Tábořiště Testov" },
+    data: { publicRegistration: true, registrationConnected: true, publicSlug: "staging-tabor-2027", registrationDeadline: new Date("2027-05-31"), memberPriceCzk: 4500, nonMemberPriceCzk: 5200, publicContactEmail: "tabor@example.invalid", location: "Tábořiště Testov" },
   });
   for (const moduleKey of ["participants", "registration", "portal", "health", "mail"] as const)
     await prisma.eventModule.upsert({ where: { eventId_moduleKey: { eventId: camp.id, moduleKey } }, update: { enabled: true }, create: { eventId: camp.id, moduleKey, enabled: true } });

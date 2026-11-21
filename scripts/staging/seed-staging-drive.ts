@@ -21,16 +21,20 @@ async function main() {
   const docs = google.docs({ version: "v1", auth });
   const sheets = google.sheets({ version: "v4", auth });
 
-  const drives = (await drive.drives.list({ pageSize: 50 })).data.drives ?? [];
-  const sd = drives.find((d) => d.name === SHARED_DRIVE);
-  if (!sd?.id) throw new Error(`Shared Drive "${SHARED_DRIVE}" not visible to ${SA} -- add it as Content manager`);
+  // Either a Shared Drive of that name (account = member) or a folder of that name shared with the account
+  // (e.g. inside an existing Shared Drive) -- "Tábornik"/"Táborník" both accepted.
+  const nameRe = /^T[aá]born[ií]k STAGING$/;
   const all = { supportsAllDrives: true };
+  const sd = ((await drive.drives.list({ pageSize: 50 })).data.drives ?? []).find((d) => nameRe.test(d.name ?? ""));
+  const shared = sd ? null : ((await drive.files.list({ ...all, includeItemsFromAllDrives: true, q: `sharedWithMe and mimeType = '${FOLDER}' and trashed = false`, fields: "files(id,name)" })).data.files ?? []).find((f) => nameRe.test(f.name ?? ""));
+  const parentId = sd?.id ?? shared?.id;
+  if (!parentId) throw new Error(`Neither a Shared Drive nor a shared folder "${SHARED_DRIVE}" is visible to ${SA}`);
   const create = async (name: string, mimeType: string, parent: string) =>
     (await drive.files.create({ ...all, requestBody: { name, mimeType, parents: [parent] }, fields: "id" })).data.id!;
-  const existing = await drive.files.list({ ...all, includeItemsFromAllDrives: true, corpora: "drive", driveId: sd.id, q: `name = 'Testovací oddíl' and mimeType = '${FOLDER}' and trashed = false`, fields: "files(id)" });
-  if (existing.data.files?.length) { console.log("already seeded in the Shared Drive -- nothing to do"); return; }
+  const existing = await drive.files.list({ ...all, includeItemsFromAllDrives: true, q: `name = 'Testovací oddíl' and mimeType = '${FOLDER}' and '${parentId}' in parents and trashed = false`, fields: "files(id)" });
+  if (existing.data.files?.length) { console.log("already seeded in the staging folder -- nothing to do"); return; }
 
-  const root = await create("Testovací oddíl", FOLDER, sd.id);
+  const root = await create("Testovací oddíl", FOLDER, parentId);
   const sub: Record<string, string> = {};
   for (const n of ["Šablony", "Účastníci", "Import", "Účtenky", "Export", "Zdraví", "Plánování"]) sub[n] = await create(n, FOLDER, root);
 
