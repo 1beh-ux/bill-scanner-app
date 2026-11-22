@@ -19,6 +19,7 @@ export type FieldInfo = {
   fieldType?: string;
   options?: unknown;
   computedType?: string | null;
+  section?: string | null; // Fields Manager phase 4: the "category" level of the import policy
 };
 
 function fixedKey(match: (f: (typeof FIXED_PARTICIPANT_FIELDS)[number]) => boolean): string {
@@ -41,6 +42,18 @@ export const MATCH_BY_NAME = "__name"; // name (+ date of birth when two share a
 
 export type OnNew = "create" | "report";
 export type OnMatch = "fill" | "overwrite" | "skip";
+
+// Fields Manager phase 4 (design §9) -- all optional; an old connection without them plans exactly as before.
+// Existing values: keep (fill empty only) / replace; most specific level wins: cell -> person -> category -> all.
+export type FieldMode = "keep" | "replace";
+export type ImportPolicy = {
+  all: FieldMode | "skip";
+  byCategory?: Record<string, FieldMode>; // field section -> mode
+  byPerson?: Record<string, FieldMode | "skip">; // participant id -> mode
+  byCell?: Record<string, Record<string, FieldMode>>; // participant id -> field key -> mode
+};
+/** guardian<N>_<prop> import targets: explicit guardian slots (the old guardian columns pair by position). */
+export const GUARDIAN_SLOT_TARGET = /^guardian([1-9])_(name|email|phone|relation)$/;
 export const SYNC_INTERVALS = [1, 3, 6, 12, 24];
 
 /** Everything that decides the plan (the connection's settings minus scheduling/bookkeeping). */
@@ -53,6 +66,9 @@ export type SyncSettings = {
   // later sync applies the same fix (the sheet itself is never written).
   overrides: Record<string, Record<string, string>>;
   excluded: string[]; // rowKeys never imported
+  valueMap?: Record<string, Record<string, string>>; // header -> sheet value -> stored value
+  policy?: ImportPolicy; // replaces onMatch when present
+  mergeInto?: Record<string, string>; // rowKey -> participant id (a typo in the name, a different spelling)
 };
 
 export type ParticipantSync = SyncSettings & {
@@ -97,7 +113,7 @@ export type ExistingParticipant = {
   values?: Record<string, string>;
 };
 
-export type GuardianRow = { name: string; email: string; relationship: string; phone: string };
+export type GuardianRow = { name: string; email: string; relationship: string; phone: string; position?: number };
 export type ParsedRow = {
   name: string;
   firstName: string;
@@ -110,6 +126,7 @@ export type ParsedRow = {
   registrationNumber: string;
   // Raw value per mapped target (any field, incl. match-only ones like the variable symbol).
   targetValues: Record<string, string>;
+  guardiansWithoutEmail: number; // slot guardians with a name/phone but no e-mail -- not imported, reported
 };
 
 export type RowStatus =
@@ -147,6 +164,8 @@ export type PlanRow = {
   changes: Change[];
   create?: ParsedRow;
   patch?: ParticipantPatch;
+  warnings?: string[]; // not blocking (e.g. a guardian without an e-mail is left out)
+  merged?: boolean; // matched by the user's "merge into", not by the key
 };
 
 const EMAIL_RE = /\S+@\S+\.\S+/;
@@ -251,6 +270,18 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
   const gNames = columnsFor(cells, targets, GUARDIAN_NAME_FIELD);
   const phones = columnsFor(cells, targets, GUARDIAN_PHONE_FIELD);
   const rels = columnsFor(cells, targets, GUARDIAN_RELATIONSHIP_FIELD);
+  // Explicit slots: guardian<N>_<prop> columns; several columns for one prop are joined with a space.
+  const slots = new Map<number, GuardianRow>();
+  targets.forEach((t, i) => {
+    const m = t.match(GUARDIAN_SLOT_TARGET);
+    const v = (cells[i] ?? "").trim();
+    if (!m || !v) return;
+    const g = slots.get(Number(m[1])) ?? { name: "", email: "", relationship: "", phone: "", position: Number(m[1]) };
+    const prop = m[2] === "relation" ? "relationship" : (m[2] as "name" | "email" | "phone");
+    g[prop] = g[prop] ? `${g[prop]} ${v}` : v;
+    slots.set(Number(m[1]), g);
+  });
+  const slotted = [...slots.values()].sort((a, b) => a.position! - b.position!);
   const customFieldValues: Record<string, string> = {};
   for (const f of fields) {
     if (f.kind !== "custom" || f.fieldType === "composite") continue;
@@ -266,7 +297,8 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
     groupName: resolve(GROUP_FIELD),
     dateOfBirthRaw,
     dateOfBirthIso: formatDob(dateOfBirthRaw, dateOrder),
-    guardians: emails.map((email, i) => ({ email, name: gNames[i] ?? "", phone: phones[i] ?? "", relationship: rels[i] ?? "" })),
+    guardians: [...emails.map((email, i) => ({ email, name: gNames[i] ?? "", phone: phones[i] ?? "", relationship: rels[i] ?? "" })), ...slotted.filter((g) => g.email)],
+    guardiansWithoutEmail: slotted.filter((g) => !g.email).length,
     customFieldValues,
     registrationNumber: resolve(REGNUM_TARGET),
     targetValues: Object.fromEntries([...new Set(targets)].filter((x) => x !== IGNORE).map((x) => [x, resolve(x)])),
@@ -311,34 +343,49 @@ export function canCreate(matchBy: string, fields: FieldInfo[]): boolean {
   return !!f && f.kind === "custom" && f.fieldType !== "composite";
 }
 
-function diff(row: ParsedRow, p: ExistingParticipant, mode: "fill" | "overwrite", matchBy: string): { patch: ParticipantPatch; changes: Change[] } {
+/** The connection's policy; an old one's onMatch reads as fill = keep, overwrite = replace, skip = skip. */
+export function policyOf(s: Pick<SyncSettings, "onMatch" | "policy">): ImportPolicy {
+  return s.policy ?? { all: s.onMatch === "overwrite" ? "replace" : s.onMatch === "skip" ? "skip" : "keep" };
+}
+/** Most specific wins: cell -> person -> category -> all. Pure. */
+export function fieldMode(policy: ImportPolicy, participantId: string, key: string, section?: string | null): FieldMode {
+  const person = policy.byPerson?.[participantId];
+  return (
+    policy.byCell?.[participantId]?.[key] ??
+    (person && person !== "skip" ? person : undefined) ??
+    (section ? policy.byCategory?.[section] : undefined) ??
+    (policy.all === "skip" ? "keep" : policy.all)
+  );
+}
+
+function diff(row: ParsedRow, p: ExistingParticipant, modeOf: (field: string) => FieldMode, nameLocked: boolean, matchBy: string): { patch: ParticipantPatch; changes: Change[] } {
   const patch: ParticipantPatch = { guardiansAdd: [], guardiansUpdate: [] };
   const changes: Change[] = [];
-  const take = (current: string | null | undefined, incoming: string) =>
-    !!incoming && (mode === "overwrite" ? (current ?? "") !== incoming : !current);
+  const take = (current: string | null | undefined, incoming: string, field: string) =>
+    !!incoming && (modeOf(field) === "replace" ? (current ?? "") !== incoming : !current);
 
-  // Names are the identity when matching by name -- never rewritten then.
-  if (matchBy !== MATCH_BY_NAME && (row.firstName || row.lastName)) {
+  // Names are the identity when matching by name (or merged by hand) -- never rewritten then.
+  if (!nameLocked && (row.firstName || row.lastName)) {
     const fullNow = fullNameFrom(p.firstName, p.lastName) || p.name;
     const fullNew = fullNameFrom(row.firstName, row.lastName);
-    if (mode === "overwrite" ? fullNow !== fullNew : !p.firstName && !p.lastName && !p.name) {
+    if (modeOf(NAME_FIELD) === "replace" ? fullNow !== fullNew : !p.firstName && !p.lastName && !p.name) {
       patch.firstName = row.firstName || null;
       patch.lastName = row.lastName || null;
       patch.name = fullNew;
       changes.push({ field: NAME_FIELD, from: fullNow, to: fullNew });
     }
   }
-  if (take(p.groupName, row.groupName)) {
+  if (take(p.groupName, row.groupName, GROUP_FIELD)) {
     patch.groupName = row.groupName;
     changes.push({ field: GROUP_FIELD, from: p.groupName ?? "", to: row.groupName });
   }
-  if (row.dateOfBirthIso && take(p.dateOfBirth, row.dateOfBirthIso)) {
+  if (row.dateOfBirthIso && take(p.dateOfBirth, row.dateOfBirthIso, DOB_FIELD)) {
     patch.dateOfBirth = row.dateOfBirthIso;
     changes.push({ field: DOB_FIELD, from: p.dateOfBirth ?? "", to: row.dateOfBirthIso });
   }
   for (const [key, value] of Object.entries(row.customFieldValues)) {
     // The match key already matched (case/accents folded) -- never rewritten.
-    if (key === matchBy || !take(p.customFieldValues[key], value)) continue;
+    if (key === matchBy || !take(p.customFieldValues[key], value, key)) continue;
     (patch.customFieldValues ??= {})[key] = value;
     changes.push({ field: key, from: p.customFieldValues[key] ?? "", to: value });
   }
@@ -350,9 +397,9 @@ function diff(row: ParsedRow, p: ExistingParticipant, mode: "fill" | "overwrite"
       continue;
     }
     const upd: ParticipantPatch["guardiansUpdate"][number] = { id: existing.id };
-    if (take(existing.name, g.name)) upd.name = g.name;
-    if (take(existing.phone, g.phone)) upd.phone = g.phone;
-    if (take(existing.relationship, g.relationship)) upd.relationship = g.relationship;
+    if (take(existing.name, g.name, "guardian")) upd.name = g.name;
+    if (take(existing.phone, g.phone, "guardian")) upd.phone = g.phone;
+    if (take(existing.relationship, g.relationship, "guardian")) upd.relationship = g.relationship;
     if (Object.keys(upd).length > 1) {
       patch.guardiansUpdate.push(upd);
       changes.push({ field: "guardian", from: g.email, to: [upd.name, upd.phone, upd.relationship].filter(Boolean).join(", ") });
@@ -380,6 +427,9 @@ export function planSync(input: {
   const dateOrder = detectDateOrder(rawDobs);
   const seen = new Set(input.seenKeys);
   const excluded = new Set(settings.excluded);
+  const policy = policyOf(settings);
+  const sectionOf = new Map(fields.map((f) => [f.key, f.section]));
+  const byId = new Map(existing.map((p) => [p.id, p]));
 
   const byKey = new Map<string, ExistingParticipant[]>();
   for (const p of existing) {
@@ -402,17 +452,24 @@ export function planSync(input: {
       cells[c] = value;
       edited.push(c);
     }
+    // Value translation ("Ano" -> "true", "M" -> "Medium"), remembered on the connection.
+    cells.forEach((v, c) => {
+      const map = settings.valueMap?.[headers[c]?.trim() ?? ""];
+      if (map && Object.hasOwn(map, v.trim())) cells[c] = map[v.trim()];
+    });
     const row = parseRow(cells, headers, targets, fields, dateOrder);
     const matchKey = matchKeyOf(row, settings.matchBy);
     const out: PlanRow = { rowNumber, rowKey, cells, edited, matchKey, status: "error", errors: [], participant: null, changes: [] };
     plan.push(out);
 
     if (excluded.has(rowKey)) return void (out.status = "excluded");
+    if (row.guardiansWithoutEmail) out.warnings = ["guardian_no_email"];
+    const forced = settings.mergeInto?.[rowKey] ? byId.get(settings.mergeInto[rowKey]) : undefined;
     if (row.guardians.some((g) => !EMAIL_RE.test(g.email))) out.errors.push("invalid_email");
     if (row.firstName && EMAIL_RE.test(row.firstName)) out.errors.push("name_looks_like_email");
-    if (!matchKey) out.errors.push(settings.matchBy === MATCH_BY_NAME ? "missing_name" : "missing_key");
+    if (!matchKey && !forced) out.errors.push(settings.matchBy === MATCH_BY_NAME ? "missing_name" : "missing_key");
 
-    let candidates = matchKey ? (byKey.get(matchKey) ?? []) : [];
+    let candidates = forced ? [forced] : matchKey ? (byKey.get(matchKey) ?? []) : [];
     // Same name twice (twins, coincidence): date of birth picks one; still two -> refuse to guess.
     if (candidates.length > 1 && row.dateOfBirthIso) {
       const byDob = candidates.filter((p) => p.dateOfBirth === row.dateOfBirthIso);
@@ -424,8 +481,10 @@ export function planSync(input: {
     const p = candidates[0];
     if (p) {
       out.participant = { id: p.id, name: p.name };
-      if (settings.onMatch === "skip") return void (out.status = "skip");
-      const { patch, changes } = diff(row, p, settings.onMatch, settings.matchBy);
+      if (forced) out.merged = true;
+      if ((policy.byPerson?.[p.id] ?? policy.all) === "skip") return void (out.status = "skip");
+      const modeOf = (field: string) => fieldMode(policy, p.id, field, sectionOf.get(field));
+      const { patch, changes } = diff(row, p, modeOf, settings.matchBy === MATCH_BY_NAME || !!forced, settings.matchBy);
       out.changes = changes;
       out.status = changes.length > 0 ? "update" : "same";
       if (changes.length > 0) out.patch = patch;
@@ -504,7 +563,21 @@ export function sanitizeSettings(s: Partial<SyncSettings>): SyncSettings {
   if (s.overrides && typeof s.overrides === "object") {
     for (const [k, v] of Object.entries(s.overrides).slice(0, 5000)) if (isStringRecord(v)) overrides[k] = v;
   }
+  const modes = (v: unknown, skip: boolean) =>
+    Object.fromEntries(Object.entries(v && typeof v === "object" ? v : {}).filter(([, m]) => m === "keep" || m === "replace" || (skip && m === "skip"))) as Record<string, FieldMode>;
+  const p = s.policy && typeof s.policy === "object" ? s.policy : undefined;
+  const policy: ImportPolicy | undefined = p && {
+    all: p.all === "replace" || p.all === "skip" ? p.all : "keep",
+    byCategory: modes(p.byCategory, false),
+    byPerson: modes(p.byPerson, true),
+    byCell: Object.fromEntries(Object.entries(p.byCell && typeof p.byCell === "object" ? p.byCell : {}).map(([k, v]) => [k, modes(v, false)])),
+  };
+  const valueMap = s.valueMap && typeof s.valueMap === "object" ? Object.fromEntries(Object.entries(s.valueMap).filter(([, v]) => isStringRecord(v))) : undefined;
   return {
+    // Phase 4 keys only when present: an old connection reads back exactly as before.
+    ...(valueMap && { valueMap }),
+    ...(policy && { policy }),
+    ...(isStringRecord(s.mergeInto) && { mergeInto: s.mergeInto }),
     mapping: isStringRecord(s.mapping) ? s.mapping : {},
     matchBy: typeof s.matchBy === "string" && s.matchBy ? s.matchBy : MATCH_BY_NAME,
     onNew: s.onNew === "report" ? "report" : "create",

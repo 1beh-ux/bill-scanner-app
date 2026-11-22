@@ -1,6 +1,6 @@
 // Self-check for the pure participant sync planner: `npx tsx src/lib/participant-sync.check.ts`
 import assert from "node:assert/strict";
-import { canCreate, planSync, readSyncs, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
+import { canCreate, fieldMode, planSync, policyOf, readSyncs, sanitizeSettings, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
 
 const fields: FieldInfo[] = [
   { key: "Name", label: "Jméno a příjmení dítěte", kind: "builtin" },
@@ -96,4 +96,46 @@ const base: SyncSettings = { mapping: {}, matchBy: MATCH_BY_NAME, onNew: "create
 }
 
 assert.deepEqual(readSyncs([{ id: "a", onMatch: "bogus", everyHours: 5 }, { nope: 1 }]).map((s) => [s.onMatch, s.everyHours, s.matchBy]), [["fill", 6, MATCH_BY_NAME]]);
+
+// ---- Fields Manager phase 4 ----
+// Old connections read back without the new keys (so they plan exactly as before).
+assert.deepEqual(Object.keys(sanitizeSettings({ onMatch: "overwrite" })).sort(), ["excluded", "mapping", "matchBy", "onMatch", "onNew", "overrides"]);
+assert.deepEqual(policyOf({ onMatch: "fill" }), { all: "keep" });
+assert.deepEqual(policyOf({ onMatch: "overwrite" }), { all: "replace" });
+// Policy precedence: all -> category -> person -> cell, most specific wins.
+{
+  const pol = { all: "keep" as const, byCategory: { zdravi: "replace" as const }, byPerson: { p1: "keep" as const }, byCell: { p1: { alergie: "replace" as const } } };
+  assert.equal(fieldMode(pol, "p2", "alergie", "zdravi"), "replace"); // category
+  assert.equal(fieldMode(pol, "p1", "leky", "zdravi"), "keep"); // person beats category
+  assert.equal(fieldMode(pol, "p1", "alergie", "zdravi"), "replace"); // cell beats person
+  assert.equal(fieldMode({ all: "skip" }, "p1", "x"), "keep");
+}
+// Slot guardians, a guardian without e-mail reported, value translation, per-cell replace, merge into.
+{
+  const plan = planSync({
+    headers: ["Jméno", "Alergie", "Rodič 2", "Mail 2", "Rodič 3", "Plavec"],
+    rows: [
+      ["Jan Novák", "prach", "Petr Novák", "tata@x.cz", "Babička", "A"],
+      ["Jenda Novák", "", "", "", "", "N"],
+    ],
+    settings: {
+      ...base,
+      mapping: { "Jméno": "Name", Alergie: "alergie", "Rodič 2": "guardian2_name", "Mail 2": "guardian2_email", "Rodič 3": "guardian3_name", Plavec: "plavec" },
+      valueMap: { Plavec: { A: "true", N: "false" } },
+      policy: { all: "keep", byCell: { p1: { alergie: "replace" } } },
+      mergeInto: { "k:jenda novak": "p1" },
+    },
+    fields: [...fields, { key: "plavec", label: "Plavec", kind: "custom", fieldType: "boolean" }],
+    existing: [{ ...existing[0], customFieldValues: { formId: "F-1", alergie: "pyl" } }],
+    seenKeys: [],
+  });
+  const [a, b] = plan;
+  assert.equal(a.status, "update");
+  assert.deepEqual(a.patch?.customFieldValues, { alergie: "prach", plavec: "true" }); // replaced (cell rule) + translated
+  assert.deepEqual(a.patch?.guardiansAdd, [{ name: "Petr Novák", email: "tata@x.cz", relationship: "", phone: "", position: 2 }]);
+  assert.deepEqual(a.warnings, ["guardian_no_email"]);
+  assert.equal(b.merged, true); // "Jenda Novák" merged into Jan Novák by hand
+  assert.equal(b.participant?.id, "p1");
+  assert.ok(!b.changes.some((c) => c.field === "Name")); // a merged row never renames the person
+}
 console.log("participant-sync ok");

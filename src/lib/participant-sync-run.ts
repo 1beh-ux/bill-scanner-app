@@ -12,6 +12,7 @@ import { fieldTextValues } from "@/lib/document-variables";
 import { linkChildrenIfConnected, withMembers } from "@/lib/children";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
 import { resultRows,
+  GUARDIAN_SLOT_TARGET,
   MATCH_BY_NAME,
   REGNUM_TARGET,
   countPlan,
@@ -79,7 +80,7 @@ export function restrictSettings(s: SyncSettings, fields: FieldInfo[]): SyncSett
   const keys = new Set([...fields.map((f) => f.key), REGNUM_TARGET]);
   return {
     ...s,
-    mapping: Object.fromEntries(Object.entries(s.mapping).filter(([, v]) => keys.has(v))),
+    mapping: Object.fromEntries(Object.entries(s.mapping).filter(([, v]) => keys.has(v) || GUARDIAN_SLOT_TARGET.test(v))),
     matchBy: s.matchBy === MATCH_BY_NAME || keys.has(s.matchBy) ? s.matchBy : MATCH_BY_NAME,
   };
 }
@@ -123,15 +124,20 @@ export async function planFor(eventId: string, table: Table, settings: SyncSetti
 
 const nullIfEmpty = (s: string | undefined) => s?.trim() || null;
 
-/** Writes the plan's create/update rows. Returns counts and the keys now known to exist. */
+/** One write of an import, enough to undo it (Fields Manager phase 4, ImportRun.writes). key "cf:<field>" = a
+ * custom value; no key = the row was created. */
+export type ImportWrite = { table: "participant" | "guardian" | "document" | "child"; id: string; key?: string; before?: unknown; after?: unknown };
+
+/** Writes the plan's create/update rows. Returns counts, the keys now known to exist and every write made. */
 export async function applyPlan(
   eventId: string,
   plan: PlanRow[],
   markDocument?: { docTypeId: string; userId: string }
-): Promise<{ counts: Record<string, number>; seen: string[]; failedRows: number[] }> {
+): Promise<{ counts: Record<string, number>; seen: string[]; failedRows: number[]; writes: ImportWrite[] }> {
   const counts = countPlan(plan);
   const seen: string[] = [];
   const failedRows: number[] = [];
+  const writes: ImportWrite[] = [];
   for (const r of plan) {
     try {
       if (r.status === "create" && r.create) {
@@ -146,17 +152,33 @@ export async function applyPlan(
             dateOfBirth: c.dateOfBirthIso ? new Date(c.dateOfBirthIso) : null,
             customFieldValues: c.customFieldValues,
             guardians: {
-              create: c.guardians.map((g) => ({ email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship) })),
+              create: c.guardians.map((g) => ({ email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position })),
             },
           },
         });
-        if (markDocument && (await markReceived(created.id, markDocument))) counts.documentsMarked = (counts.documentsMarked ?? 0) + 1;
+        writes.push({ table: "participant", id: created.id });
+        const doc = markDocument && (await markReceived(created.id, markDocument));
+        if (doc) {
+          counts.documentsMarked = (counts.documentsMarked ?? 0) + 1;
+          writes.push({ table: "document", id: doc });
+        }
       } else if (r.status === "update" && r.patch && r.participant) {
         const { patch } = r;
         const id = r.participant.id;
+        const rowWrites: ImportWrite[] = [];
         await prisma.$transaction(async (tx) => {
           // Custom values merged into the CURRENT ones (not the ones read when planning).
-          const now = await tx.participant.findUniqueOrThrow({ where: { id }, select: { customFieldValues: true } });
+          const now = await tx.participant.findUniqueOrThrow({ where: { id }, select: { customFieldValues: true, name: true, firstName: true, lastName: true, groupName: true, dateOfBirth: true } });
+          const cf = (now.customFieldValues as Record<string, string> | null) ?? {};
+          const w = (key: string, before: unknown, after: unknown) => rowWrites.push({ table: "participant", id, key, before: before ?? null, after: after ?? null });
+          if (patch.name !== undefined) {
+            w("name", now.name, patch.name);
+            w("firstName", now.firstName, patch.firstName ?? null);
+            w("lastName", now.lastName, patch.lastName ?? null);
+          }
+          if (patch.groupName !== undefined) w("groupName", now.groupName, patch.groupName);
+          if (patch.dateOfBirth !== undefined) w("dateOfBirth", now.dateOfBirth?.toISOString() ?? null, new Date(patch.dateOfBirth).toISOString());
+          for (const [k, v] of Object.entries(patch.customFieldValues ?? {})) w(`cf:${k}`, cf[k], v);
           await tx.participant.update({
             where: { id },
             data: {
@@ -169,17 +191,23 @@ export async function applyPlan(
             },
           });
           for (const g of patch.guardiansAdd) {
-            await tx.participantGuardian.create({
-              data: { participantId: id, email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship) },
+            const made = await tx.participantGuardian.create({
+              data: { participantId: id, email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position },
             });
+            rowWrites.push({ table: "guardian", id: made.id });
           }
           for (const { id: guardianId, ...data } of patch.guardiansUpdate) {
+            const before = await tx.participantGuardian.findUniqueOrThrow({ where: { id: guardianId }, select: { name: true, phone: true, relationship: true } });
             await tx.participantGuardian.update({ where: { id: guardianId }, data });
+            for (const [k, v] of Object.entries(data)) rowWrites.push({ table: "guardian", id: guardianId, key: k, before: before[k as keyof typeof before], after: v });
           }
         });
+        writes.push(...rowWrites);
       }
-      if (markDocument && r.participant && ["update", "same", "skip"].includes(r.status) && (await markReceived(r.participant.id, markDocument))) {
+      const doc = markDocument && r.participant && ["update", "same", "skip"].includes(r.status) && (await markReceived(r.participant.id, markDocument));
+      if (doc) {
         counts.documentsMarked = (counts.documentsMarked ?? 0) + 1;
+        writes.push({ table: "document", id: doc });
       }
       if (r.matchKey && ["create", "update", "same", "skip"].includes(r.status)) seen.push(r.matchKey);
     } catch (err) {
@@ -190,20 +218,21 @@ export async function applyPlan(
     }
   }
   await linkChildrenIfConnected(eventId);
-  return { counts, seen, failedRows };
+  return { counts, seen, failedRows, writes };
 }
 
-/** Ticks the document as received (no file) unless it already is. True when newly ticked. */
-async function markReceived(participantId: string, m: { docTypeId: string; userId: string }): Promise<boolean> {
+/** Ticks the document as received (no file) unless it already is. The new row's id when newly ticked. */
+async function markReceived(participantId: string, m: { docTypeId: string; userId: string }): Promise<string | null> {
   const existing = await prisma.participantDocument.findFirst({
     where: { participantId, eventListItemId: m.docTypeId, ...RECEIVED_WHERE },
     select: { id: true },
   });
-  if (existing) return false;
-  await prisma.participantDocument.create({
+  if (existing) return null;
+  const made = await prisma.participantDocument.create({
     data: { participantId, eventListItemId: m.docTypeId, receivedVia: "sheet", receivedByUserId: m.userId },
+    select: { id: true },
   });
-  return true;
+  return made.id;
 }
 
 const ISSUE_STATUSES = new Set(["unmatched", "seen_missing", "error"]);
