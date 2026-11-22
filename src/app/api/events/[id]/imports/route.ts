@@ -11,7 +11,7 @@ import { httpStatusForDriveError } from "@/lib/drive-errors";
 import { extractSpreadsheetId } from "@/lib/sheet-import";
 import { applyPlan, loadImportFields, loadSyncs, planFor, publicSync, readSyncSheet, updateSyncs, type Table } from "@/lib/participant-sync-run";
 import { countPlan, policyOf, resultRows, sanitizeSettings } from "@/lib/participant-sync";
-import { recordImportRun, writeProfileValues } from "@/lib/import-run";
+import { createdPeople, recordImportRun, writeProfileValues } from "@/lib/import-run";
 
 const MAX_ROWS = 5000;
 const MAX_COLS = 200;
@@ -45,14 +45,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { id: eventId } = await params;
   const a = await access(eventId);
   if ("error" in a) return a.error;
-  const [syncs, runs, fields] = await Promise.all([
+  const [syncs, runs, fields, participants] = await Promise.all([
     loadSyncs(eventId),
     prisma.importRun.findMany({ where: { eventId }, orderBy: { createdAt: "desc" }, take: 10, select: { id: true, syncId: true, createdAt: true, undoneAt: true, writes: true } }),
     fieldsFor(eventId, a.organizationId),
+    // For "merge into": any participant of the event.
+    prisma.participant.findMany({ where: { eventId }, orderBy: { name: "asc" }, select: { id: true, name: true, dateOfBirth: true } }),
   ]);
   return NextResponse.json({
     syncs: syncs.map(publicSync),
     fields,
+    participants: participants.map((p) => ({ id: p.id, name: p.name, dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null })),
     runs: runs.map(({ writes, ...r }) => ({ ...r, writes: (writes as unknown[]).length })),
   });
 }
@@ -83,9 +86,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const shown = plan.map((r) => ({ ...r, create: undefined, patch: undefined }));
   if (body.action === "plan") return NextResponse.json({ plan: shown, counts: countPlan(plan) });
 
+  const started = new Date();
   const applied = await applyPlan(eventId, plan);
   const profileWrites = await writeProfileValues(a.organizationId, applied.writes, policyOf(settings));
-  const run = await recordImportRun(eventId, syncId, a.userId, [...applied.writes, ...profileWrites]);
+  const people = await createdPeople(applied.writes, started);
+  const run = await recordImportRun(eventId, syncId, a.userId, [...applied.writes, ...people, ...profileWrites]);
   if (sync) {
     // The choices made here are remembered for the next run of this connection (old keys kept as they were).
     await updateSyncs(eventId, (list) =>

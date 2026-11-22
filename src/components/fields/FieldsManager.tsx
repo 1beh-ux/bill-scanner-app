@@ -7,11 +7,12 @@ import FieldsOverview from "./FieldsOverview";
 import FieldsList from "./FieldsList";
 import UsageMatrix from "./UsageMatrix";
 import FieldCard from "./FieldCard";
+import ImportWizard from "./ImportWizard";
 import type { FmDocTemplate, FmOverview } from "./types";
 
 // Organizace -> Pole (Fields Manager, phase 2: read-only). Tab, event and selection live in the URL
 // (?tab=&event=&key=) so links and the back button work. Behind the organization flag "fields_manager".
-const TABS = ["overview", "list", "usage"] as const;
+const TABS = ["overview", "list", "usage", "import"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function FieldsManager() {
@@ -127,6 +128,7 @@ export default function FieldsManager() {
         </div>
       )}
       {tab === "list" && <FieldsList overview={data} docs={docs} selectedKey={key} onSelectKey={(k) => setParams({ key: k, node: `field:${k}` })} onShowInGraph={(k) => setParams({ tab: "overview", key: k, node: `field:${k}` })} onChanged={refresh} />}
+      {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} guardianSlots={data.guardianSlots} />}
       {tab === "usage" && <UsageMatrix overview={data} docs={docs} onSelectKey={(k) => setParams({ tab: "list", key: k, node: `field:${k}` })} />}
     </div>
   );

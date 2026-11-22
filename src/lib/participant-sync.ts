@@ -202,6 +202,33 @@ export function guessMapping(headers: string[], fields: FieldInfo[]): Record<str
   return Object.fromEntries(guesses.map(([h, g]) => [h, hasLast && g === NAME_FIELD ? FIRST_NAME_FIELD : g]));
 }
 
+const LEGACY_GUARDIAN: Record<string, string> = { [GUARDIAN_NAME_FIELD]: "name", [GUARDIAN_EMAIL_FIELD]: "email", [GUARDIAN_PHONE_FIELD]: "phone", [GUARDIAN_RELATIONSHIP_FIELD]: "relation" };
+/** The old "pair guardians by position" columns -> explicit slots (the Nth e-mail column = guardian N). Pure. */
+export function slotMapping(headers: string[], mapping: Record<string, string>): Record<string, string> {
+  const seen: Record<string, number> = {};
+  const out: Record<string, string> = {};
+  for (const h of headers.map((x) => x.trim())) {
+    const t = mapping[h];
+    if (!t) continue;
+    const prop = LEGACY_GUARDIAN[t];
+    out[h] = prop ? `guardian${(seen[prop] = (seen[prop] ?? 0) + 1)}_${prop}` : t;
+  }
+  return out;
+}
+
+/** A column's values -> a field type for "new field from this column", with options for a short list. Pure. */
+export function guessType(values: string[]): { fieldType: string; options?: string[] } {
+  const v = values.map((x) => x.trim()).filter(Boolean);
+  const distinct = [...new Set(v)];
+  if (!v.length) return { fieldType: "text" };
+  if (v.every((x) => toBoolean(x) !== null)) return { fieldType: "boolean" };
+  if (v.every((x) => /^\d{1,2}\.\s*\d{1,2}\.\s*\d{4}$|^\d{4}-\d{2}-\d{2}$/.test(x))) return { fieldType: "date" };
+  if (v.every((x) => /^-?\d+([.,]\d+)?$/.test(x))) return { fieldType: "number" };
+  if (v.every((x) => /\S+@\S+\.\S+/.test(x))) return { fieldType: "email" };
+  if (distinct.length <= 8 && v.length >= distinct.length * 2) return { fieldType: "select", options: distinct };
+  return { fieldType: v.some((x) => x.length > 60) ? "longtext" : "text" };
+}
+
 /** Diacritics-, case- and whitespace-insensitive ("Novak" matches "Novák"). */
 export function normalizeKey(s: string): string {
   return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");

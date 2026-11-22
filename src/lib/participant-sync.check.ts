@@ -1,6 +1,6 @@
 // Self-check for the pure participant sync planner: `npx tsx src/lib/participant-sync.check.ts`
 import assert from "node:assert/strict";
-import { canCreate, fieldMode, planSync, policyOf, readSyncs, sanitizeSettings, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
+import { canCreate, fieldMode, guessType, planSync, policyOf, readSyncs, sanitizeSettings, slotMapping, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
 
 const fields: FieldInfo[] = [
   { key: "Name", label: "Jméno a příjmení dítěte", kind: "builtin" },
@@ -138,4 +138,14 @@ assert.deepEqual(policyOf({ onMatch: "overwrite" }), { all: "replace" });
   assert.equal(b.participant?.id, "p1");
   assert.ok(!b.changes.some((c) => c.field === "Name")); // a merged row never renames the person
 }
+// Old positional guardian columns -> explicit slots; column types guessed for "new field from column".
+assert.deepEqual(slotMapping(["E-mail 1", "Rodič", "E-mail 2", "X"], { "E-mail 1": "Email", "Rodič": "zak_zast_jmeno", "E-mail 2": "Email", X: "alergie" }).X, "alergie");
+{
+  const m = slotMapping(["a", "b"], { a: "Email", b: "Email" });
+  assert.deepEqual(Object.values(m).map((v) => v.replace(/_.*/, "")), ["guardian1", "guardian2"]);
+}
+assert.deepEqual(guessType(["ano", "ne", "Ano"]), { fieldType: "boolean" });
+assert.deepEqual(guessType(["S", "M", "S", "L", "M", "S"]), { fieldType: "select", options: ["S", "M", "L"] });
+assert.equal(guessType(["1. 2. 2015", "2015-03-04"]).fieldType, "date");
+assert.equal(guessType(["Novák, Praha", "Malá, Brno"]).fieldType, "text");
 console.log("participant-sync ok");

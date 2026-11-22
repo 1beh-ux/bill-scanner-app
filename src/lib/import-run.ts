@@ -55,6 +55,14 @@ export async function writeProfileValues(organizationId: string, writes: ImportW
   return out;
 }
 
+/** People (Lidé) the run's linking created for its new participants -- so undo can remove them again. */
+export async function createdPeople(writes: ImportWrite[], since: Date): Promise<ImportWrite[]> {
+  const ids = writes.filter((w) => w.table === "participant" && !w.key).map((w) => w.id);
+  if (!ids.length) return [];
+  const ps = await prisma.participant.findMany({ where: { id: { in: ids }, child: { createdAt: { gte: since } } }, select: { childId: true } });
+  return [...new Set(ps.map((p) => p.childId!))].map((id) => ({ table: "child" as const, id }));
+}
+
 export const recordImportRun = (eventId: string, syncId: string | null, userId: string | null, writes: ImportWrite[]) =>
   prisma.importRun.create({ data: { eventId, syncId, createdById: userId, writes: writes as unknown as Prisma.InputJsonValue }, select: { id: true } });
 
@@ -72,8 +80,19 @@ export async function undoImportRun(eventId: string, runId: string): Promise<{ u
   let undone = 0;
   let kept = 0;
   const count = (ok: boolean) => (ok ? undone++ : kept++);
-  for (const w of [...(run.writes as ImportWrite[])].reverse()) {
-    if (w.table === "document") {
+  const writes = run.writes as ImportWrite[];
+  // People created by the run go last: only once their participations are gone.
+  for (const w of [...writes.filter((x) => !(x.table === "child" && !x.key)).reverse(), ...writes.filter((x) => x.table === "child" && !x.key)]) {
+    if (w.table === "child" && !w.key) {
+      // Like Lidé -> Smazat: only a person with no registrations and no documents (guardians etc. cascade).
+      const c = await prisma.child.findUnique({ where: { id: w.id }, select: { familyId: true, _count: { select: { participants: true, documents: true } } } });
+      const free = c && c._count.participants === 0 && c._count.documents === 0;
+      if (free) {
+        await prisma.child.delete({ where: { id: w.id } });
+        if (c.familyId) await prisma.family.deleteMany({ where: { id: c.familyId, members: { none: {} } } });
+      }
+      count(!!free);
+    } else if (w.table === "document") {
       count((await prisma.participantDocument.deleteMany({ where: { id: w.id, receivedVia: "sheet", gcsPath: null } })).count > 0);
     } else if (w.table === "guardian" && !w.key) {
       const used = await prisma.parentEmailLog.count({ where: { guardianId: w.id } });
