@@ -52,6 +52,8 @@ export type ImportPolicy = {
   byPerson?: Record<string, FieldMode | "skip">; // participant id -> mode
   byCell?: Record<string, Record<string, FieldMode>>; // participant id -> field key -> mode
 };
+/** mergeInto value: "this row is a new person" (decided in the review queue). */
+export const NEW_PERSON = "__new";
 /** guardian<N>_<prop> import targets: explicit guardian slots (the old guardian columns pair by position). */
 export const GUARDIAN_SLOT_TARGET = /^guardian([1-9])_(name|email|phone|relation)$/;
 export const SYNC_INTERVALS = [1, 3, 6, 12, 24];
@@ -518,7 +520,9 @@ export function planSync(input: {
       return;
     }
     if (seen.has(matchKey!)) return void (out.status = "seen_missing");
-    if (settings.onNew !== "create" || !canCreate(settings.matchBy, fields)) return void (out.status = "unmatched");
+    // A row the review queue decided is a new person is created even where new rows are only reported.
+    const decidedNew = settings.mergeInto?.[rowKey] === NEW_PERSON;
+    if ((settings.onNew !== "create" && !decidedNew) || !canCreate(settings.matchBy, fields)) return void (out.status = "unmatched");
     if (!row.name) {
       out.errors.push("missing_name");
       return;

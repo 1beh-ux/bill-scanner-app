@@ -11,7 +11,9 @@ import { readSheetTable } from "@/lib/sheet-import";
 import { fieldTextValues } from "@/lib/document-variables";
 import { linkChildrenIfConnected, withMembers } from "@/lib/children";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
+import { eventHasFeature } from "@/lib/org-features";
 import { resultRows,
+  policyOf,
   GUARDIAN_SLOT_TARGET,
   MATCH_BY_NAME,
   REGNUM_TARGET,
@@ -221,6 +223,29 @@ export async function applyPlan(
   return { counts, seen, failedRows, writes };
 }
 
+/**
+ * Fields Manager phase 5 (design §10): an automatic run that can't ask -- uncertain rows go to the review queue,
+ * the rest is written (participants, then profiles through writeTargets) and recorded as an ImportRun.
+ */
+export async function runWithReview(eventId: string, sync: ParticipantSync, table: Table, fields: FieldInfo[], markDocument?: { docTypeId: string; userId: string }) {
+  const { reviewPlan } = await import("@/lib/sync-review");
+  const { queueItems } = await import("@/lib/sync-review-run");
+  const { createdPeople, recordImportRun, writeProfileValues } = await import("@/lib/import-run");
+  const pol = policyOf(sync);
+  const full = await planFor(eventId, table, sync, fields, sync.seenKeys);
+  const replacePlan = await planFor(eventId, table, { ...sync, policy: { all: pol.all === "skip" ? "skip" : "replace", byPerson: pol.byPerson } }, fields, sync.seenKeys);
+  const { apply: plan, items } = reviewPlan({ plan: full, replacePlan, existing: await loadExisting(eventId), fields, headers: table.headers, mergeInto: sync.mergeInto });
+  const { queued } = await queueItems(eventId, sync.id, items);
+  const started = new Date();
+  const applied = await applyPlan(eventId, plan, markDocument);
+  const org = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { organizationId: true } });
+  const profile = await writeProfileValues(org.organizationId, applied.writes, pol);
+  const all = [...applied.writes, ...(await createdPeople(applied.writes, started)), ...profile];
+  const run = all.length ? await recordImportRun(eventId, sync.id, null, all) : null;
+  applied.counts.queued = queued;
+  return { plan, applied, runId: run?.id ?? null };
+}
+
 /** Ticks the document as received (no file) unless it already is. The new row's id when newly ticked. */
 async function markReceived(participantId: string, m: { docTypeId: string; userId: string }): Promise<string | null> {
   const existing = await prisma.participantDocument.findFirst({
@@ -263,9 +288,16 @@ export async function runSavedSync(eventId: string, syncId: string, auto: boolea
     const sheet = await readSyncSheet(eventId, sync.sheetId, sync.tab);
     if ("error" in sheet) summary.error = sheet.error;
     else {
-      const plan = await planFor(eventId, sheet, sync, await loadImportFields(eventId), sync.seenKeys);
+      const fields = await loadImportFields(eventId);
       const markDocument = sync.markDocumentId && sync.ownerUserId ? { docTypeId: sync.markDocumentId, userId: sync.ownerUserId } : undefined;
-      const applied = await applyPlan(eventId, plan, markDocument);
+      // Fields Manager phase 5: an automatic run of a flagged organization holds uncertain rows for review.
+      const { plan, applied } =
+        auto && (await eventHasFeature(eventId, "fields_manager"))
+          ? await runWithReview(eventId, sync, sheet, fields, markDocument)
+          : await (async () => {
+              const plan = await planFor(eventId, sheet, sync!, fields, sync!.seenKeys);
+              return { plan, applied: await applyPlan(eventId, plan, markDocument) };
+            })();
       summary.counts = applied.counts;
       seen = applied.seen;
       rows = resultRows(plan, applied.failedRows);

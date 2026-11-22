@@ -9,8 +9,9 @@ import { fieldsManagerAccess } from "@/app/api/fields/access";
 import { prisma } from "@/lib/prisma";
 import { httpStatusForDriveError } from "@/lib/drive-errors";
 import { extractSpreadsheetId } from "@/lib/sheet-import";
-import { applyPlan, loadImportFields, loadSyncs, planFor, publicSync, readSyncSheet, updateSyncs, type Table } from "@/lib/participant-sync-run";
-import { countPlan, policyOf, resultRows, sanitizeSettings } from "@/lib/participant-sync";
+import { randomUUID } from "node:crypto";
+import { applyPlan, loadImportFields, loadSyncs, planFor, publicSync, readSyncSheet, restrictSettings, updateSyncs, type Table } from "@/lib/participant-sync-run";
+import { countPlan, policyOf, resultRows, sanitizeSettings, SYNC_INTERVALS } from "@/lib/participant-sync";
 import { createdPeople, recordImportRun, writeProfileValues } from "@/lib/import-run";
 
 const MAX_ROWS = 5000;
@@ -72,6 +73,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const sheet = await readSyncSheet(eventId, sheetId, typeof body.tab === "string" ? body.tab : undefined);
     if ("error" in sheet) return NextResponse.json({ error: sheet.error.code, ...sheet.error.params }, { status: httpStatusForDriveError(sheet.error.code) });
     return NextResponse.json(sheet);
+  }
+  if (body.action === "save") {
+    // Phase 5: the wizard's choices as a saved connection (new, or the one it started from) + its schedule.
+    const sheetId = extractSpreadsheetId(typeof body.sheetId === "string" ? body.sheetId : "");
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 100) : "";
+    if (!sheetId || !name) return NextResponse.json({ error: "invalid" }, { status: 400 });
+    const settings = restrictSettings(sanitizeSettings((body.settings ?? {}) as object), await fieldsFor(eventId, a.organizationId));
+    const schedule = { autoSync: body.autoSync === true, everyHours: SYNC_INTERVALS.includes(body.everyHours as number) ? (body.everyHours as number) : 6 };
+    const id = typeof body.syncId === "string" && body.syncId ? body.syncId : randomUUID();
+    let found = false;
+    await updateSyncs(eventId, (list) => {
+      const next = list.map((s) => (s.id !== id ? s : ((found = true), { ...s, ...settings, ...schedule, name, sheetId, tab: typeof body.tab === "string" ? body.tab : s.tab, ownerUserId: a.userId })));
+      return found ? next : [...list, { id, name, sheetId, tab: typeof body.tab === "string" ? body.tab : undefined, ...settings, ...schedule, seenKeys: [], ownerUserId: a.userId }];
+    });
+    return NextResponse.json({ syncId: id });
   }
   if (body.action !== "plan" && body.action !== "apply") return NextResponse.json({ error: "invalid_action" }, { status: 400 });
 

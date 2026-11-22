@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
     events: events.map((e) => ({ id: e.id, name: e.name, startDate: e.startDate, kind: e.kind, status: e.status })),
     eventId: selected.id,
     guardianSlots: guardianSlots(org.guardianSlots),
+    reviewCount: await prisma.syncReviewItem.count({ where: { eventId: selected.id, status: "pending" } }),
     aliases,
     variables,
     ...overview,

@@ -8,6 +8,7 @@ import {
   guessMapping,
   guessType,
   slotMapping,
+  SYNC_INTERVALS,
   isWritableField,
   IGNORE,
   MATCH_BY_NAME,
@@ -26,7 +27,7 @@ import { slugKey } from "./FieldEditors";
 // the server plans exactly what it will write.
 type Table = { headers: string[]; rows: string[][] };
 type Field = FieldInfo & { section: string | null };
-type Sync = { id: string; name: string; sheetId: string; tab?: string; mapping: Record<string, string>; matchBy: string; onNew: OnNew; onMatch: string; valueMap?: Record<string, Record<string, string>>; policy?: ImportPolicy; mergeInto?: Record<string, string>; excluded: string[]; overrides: Record<string, Record<string, string>> };
+type Sync = { id: string; name: string; sheetId: string; tab?: string; autoSync?: boolean; everyHours?: number; mapping: Record<string, string>; matchBy: string; onNew: OnNew; onMatch: string; valueMap?: Record<string, Record<string, string>>; policy?: ImportPolicy; mergeInto?: Record<string, string>; excluded: string[]; overrides: Record<string, Record<string, string>> };
 type Person = { id: string; name: string; dateOfBirth: string | null };
 type Run = { id: string; createdAt: string; undoneAt: string | null; writes: number };
 type PlanRow = { rowNumber: number; rowKey: string; cells: string[]; status: string; errors: string[]; warnings?: string[]; merged?: boolean; participant: { id: string; name: string } | null; changes: { field: string; from: string; to: string }[] };
@@ -45,6 +46,7 @@ export default function ImportWizard({ eventId, guardianSlots }: { eventId: stri
   const [step, setStep] = useState(0);
   const [table, setTable] = useState<Table | null>(null);
   const [syncId, setSyncId] = useState<string | null>(null);
+  const [source, setSource] = useState<{ sheetId: string; tab?: string; name: string; autoSync: boolean; everyHours: number } | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [matchBy, setMatchBy] = useState(MATCH_BY_NAME);
   const [onNew, setOnNew] = useState<OnNew>("create");
@@ -82,7 +84,9 @@ export default function ImportWizard({ eventId, guardianSlots }: { eventId: stri
     return res?.ok ? json : null;
   };
 
-  function loadTable(next: Table, sync: Sync | null) {
+  function loadTable(next: Table & { tab?: string }, sync: Sync | null, sheetId?: string) {
+    const sheet = sync?.sheetId ?? sheetId;
+    setSource(sheet ? { sheetId: sheet, tab: next.tab ?? sync?.tab, name: sync?.name ?? "", autoSync: sync?.autoSync ?? false, everyHours: sync?.everyHours ?? 6 } : null);
     const headers = next.headers.map((h) => h.trim());
     setTable({ headers, rows: next.rows });
     setSyncId(sync?.id ?? null);
@@ -258,6 +262,11 @@ export default function ImportWizard({ eventId, guardianSlots }: { eventId: stri
                   setReload((n) => n + 1);
                   setStep(0);
                 }} />
+              {source && <SaveConnection source={source} setSource={setSource} save={async () => {
+                const r = await post({ action: "save", syncId, ...source, settings: settings() });
+                if (r) setSyncId((r as { syncId: string }).syncId);
+                return !!r;
+              }} />}
             </>
           ) : (
             <>
@@ -279,6 +288,33 @@ export default function ImportWizard({ eventId, guardianSlots }: { eventId: stri
         </div>
       )}
     </div>
+  );
+}
+
+type Source = { sheetId: string; tab?: string; name: string; autoSync: boolean; everyHours: number };
+/** Phase 5: keep the choices as a connection, optionally synced automatically (uncertain rows go to "Ke kontrole"). */
+function SaveConnection({ source, setSource, save }: { source: Source; setSource: (s: Source) => void; save: () => Promise<boolean> }) {
+  const { t } = useTranslations();
+  const [saved, setSaved] = useState(false);
+  return (
+    <section className="space-y-2 rounded-xl border border-mist p-3">
+      <h3 className="font-semibold">{t("fieldsManager.import.saveTitle")}</h3>
+      <p className="text-ink-secondary">{t("fieldsManager.import.saveHelp")}</p>
+      <input value={source.name} onChange={(e) => setSource({ ...source, name: e.target.value })} placeholder={t("fieldsManager.import.saveName")} className={`${input} w-full max-w-sm`} />
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={source.autoSync} onChange={(e) => setSource({ ...source, autoSync: e.target.checked })} />
+        {t("fieldsManager.import.autoSync")}
+        <select value={source.everyHours} disabled={!source.autoSync} onChange={(e) => setSource({ ...source, everyHours: Number(e.target.value) })} className={input}>
+          {SYNC_INTERVALS.map((h) => (
+            <option key={h} value={h}>{t("fieldsManager.everyHours", { n: String(h) })}</option>
+          ))}
+        </select>
+      </label>
+      <button type="button" disabled={!source.name.trim()} onClick={async () => setSaved(await save())} className="rounded-lg bg-ember px-3 py-1 text-white disabled:opacity-40">
+        {t("fieldsManager.import.save")}
+      </button>
+      {saved && <span className="ml-2 text-ink-secondary">{t("fieldsManager.import.saved2")}</span>}
+    </section>
   );
 }
 
@@ -328,7 +364,7 @@ function UndoButton({ eventId, runId, onDone }: { eventId: string; runId: string
   );
 }
 
-function SourceStep({ data, post, busy, onTable, onUndone, eventId }: { data: Data; post: (b: object) => Promise<Table | null>; busy: boolean; onTable: (t: Table, s: Sync | null) => void; onUndone: () => void; eventId: string }) {
+function SourceStep({ data, post, busy, onTable, onUndone, eventId }: { data: Data; post: (b: object) => Promise<(Table & { tab?: string }) | null>; busy: boolean; onTable: (t: Table & { tab?: string }, s: Sync | null, sheetId?: string) => void; onUndone: () => void; eventId: string }) {
   const { t } = useTranslations();
   const [sheet, setSheet] = useState("");
   const [text, setText] = useState("");
@@ -364,7 +400,7 @@ function SourceStep({ data, post, busy, onTable, onUndone, eventId }: { data: Da
           disabled={busy || !sheet.trim()}
           onClick={async () => {
             const table = await post({ action: "read", sheetId: sheet.trim() });
-            if (table) onTable(table, null);
+            if (table) onTable(table, null, sheet.trim());
           }}
           className="rounded-lg bg-ember px-3 py-1 text-white disabled:opacity-40"
         >

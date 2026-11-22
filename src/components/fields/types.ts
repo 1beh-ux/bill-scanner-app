@@ -11,6 +11,7 @@ export type FmOverview = {
   events: FmEvent[];
   eventId: string | null;
   guardianSlots: number;
+  reviewCount?: number;
   aliases: FmAlias[];
   variables: FmVariable[];
   groups: OvGroup[];
