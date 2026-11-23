@@ -233,6 +233,8 @@ const rows: Row[] = [
   r("fieldsManager.panel.type", "Typ", "Type"),
   r("fieldsManager.panel.toProfile", "Ukládat i do profilu", "Also save to the profile"),
   r("fieldsManager.panel.toProfileHelp", "vypnuto = jen v přihlášce této akce", "off = only on this event's registration"),
+  r("fieldsManager.panel.toProfileNever", "údaj přihlášky – pro každou akci jiný, do profilu se neukládá", "a registration value – different for each event, never saved to the profile"),
+  r("fieldsManager.panel.toProfileAlways", "údaj osoby – ukládá se vždy", "a person's value – always saved"),
   r("fieldsManager.panel.lockedShort", "Pevné", "Fixed"),
   r("fieldsManager.panel.locked", "Pevné pole organizace", "Organization fixed field"),
   r("fieldsManager.panel.lockedHelp", "v každé akci, povinné; správce akce ho nevypne", "in every event, required; event managers can't switch it off"),

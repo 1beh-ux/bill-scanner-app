@@ -237,12 +237,12 @@ export async function undoChange(organizationId: string, logId: string): Promise
   }
 
   if (log.action === "make_calculated") {
-    const b = log.before as { fields: { table: "template" | "event"; id: string; fieldType: string; options: unknown }[]; values: ValueWrite[] };
+    const b = log.before as { fields: { table: "template" | "event"; id: string; fieldType: string; options: unknown; requiredInRegistration?: boolean; requiredOnRegistration?: boolean }[]; values: ValueWrite[] };
     for (const f of b.fields) {
       // Empty options were NULL: put NULL back (leaving it out would keep the calculation's spec).
       const data = { fieldType: f.fieldType as never, options: f.options === null || f.options === undefined ? Prisma.DbNull : (f.options as Prisma.InputJsonValue) };
-      if (f.table === "template") count((await prisma.participantFieldTemplate.updateMany({ where: { id: f.id, fieldType: "calculated" }, data })).count > 0);
-      else count((await prisma.eventParticipantField.updateMany({ where: { id: f.id, fieldType: "calculated" }, data })).count > 0);
+      if (f.table === "template") count((await prisma.participantFieldTemplate.updateMany({ where: { id: f.id, fieldType: "calculated" }, data: { ...data, ...(f.requiredInRegistration !== undefined && { requiredInRegistration: f.requiredInRegistration }) } })).count > 0);
+      else count((await prisma.eventParticipantField.updateMany({ where: { id: f.id, fieldType: "calculated" }, data: { ...data, ...(f.requiredOnRegistration !== undefined && { requiredOnRegistration: f.requiredOnRegistration }) } })).count > 0);
     }
     for (const v of b.values) count(await restoreValue(v));
     invalidateResolverContext();
@@ -351,8 +351,8 @@ export async function makeCalculated(organizationId: string, userId: string | nu
   const log = await prisma.$transaction(
     async (tx) => {
       const fieldsBefore = [
-        ...(await tx.participantFieldTemplate.findMany({ where: { id: { in: templates.map((t) => t.id) } }, select: { id: true, fieldType: true, options: true } })).map((f) => ({ table: "template" as const, ...f })),
-        ...(await tx.eventParticipantField.findMany({ where: { id: { in: copies.map((c) => c.id) } }, select: { id: true, fieldType: true, options: true } })).map((f) => ({ table: "event" as const, ...f })),
+        ...(await tx.participantFieldTemplate.findMany({ where: { id: { in: templates.map((t) => t.id) } }, select: { id: true, fieldType: true, options: true, requiredInRegistration: true } })).map((f) => ({ table: "template" as const, ...f })),
+        ...(await tx.eventParticipantField.findMany({ where: { id: { in: copies.map((c) => c.id) } }, select: { id: true, fieldType: true, options: true, requiredOnRegistration: true } })).map((f) => ({ table: "event" as const, ...f })),
       ];
       const values: ValueWrite[] = [];
       if (fillFrom) {
@@ -371,8 +371,9 @@ export async function makeCalculated(organizationId: string, userId: string | nu
         }
       }
       const options = spec as unknown as Prisma.InputJsonValue;
-      await tx.participantFieldTemplate.updateMany({ where: { id: { in: templates.map((t) => t.id) } }, data: { fieldType: "calculated", options } });
-      await tx.eventParticipantField.updateMany({ where: { id: { in: copies.map((c) => c.id) } }, data: { fieldType: "calculated", options } });
+      // A calculated value is never asked: "required" goes off (the form would otherwise ask for it).
+      await tx.participantFieldTemplate.updateMany({ where: { id: { in: templates.map((t) => t.id) } }, data: { fieldType: "calculated", options, requiredInRegistration: false } });
+      await tx.eventParticipantField.updateMany({ where: { id: { in: copies.map((c) => c.id) } }, data: { fieldType: "calculated", options, requiredOnRegistration: false } });
       return tx.fieldChangeLog.create({ data: { organizationId, action: "make_calculated", byId: userId, before: JSON.parse(JSON.stringify({ fields: fieldsBefore, values })), after: { key, spec, filled: values.length } as unknown as Prisma.InputJsonValue } });
     },
     { timeout: 120_000 },
@@ -409,7 +410,9 @@ function editDistance(a: string, b: string) {
 export function looksDuplicate(a: { key: string; label: string; fieldType: string }, b: { key: string; label: string; fieldType: string }): boolean {
   if (!typesCompatible(a.fieldType, b.fieldType) || a.fieldType === "calculated" || b.fieldType === "calculated" || a.fieldType === "composite" || b.fieldType === "composite") return false;
   const [la, lb, ka, kb] = [norm(a.label), norm(b.label), norm(a.key.replace(/_/g, " ")), norm(b.key.replace(/_/g, " "))];
-  const close = (x: string, y: string) => x.length >= 4 && y.length >= 4 && (x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x))) || (x.length >= 6 && editDistance(x, y) <= 2));
+  // A word contained in a much longer one is a part of it ("adresa" / "adresa město"), not a duplicate.
+  const similarLength = (x: string, y: string) => Math.min(x.length, y.length) / Math.max(x.length, y.length) >= 0.7;
+  const close = (x: string, y: string) => x.length >= 4 && y.length >= 4 && (x === y || (Math.min(x.length, y.length) >= 6 && similarLength(x, y) && (x.includes(y) || y.includes(x))) || (x.length >= 6 && editDistance(x, y) <= 2));
   const group = (...xs: string[]) => xs.map((x) => SYNONYM_GROUP[x.replace(/ /g, "")]).find(Boolean);
   const ga = group(la, ka);
   const syn = !!ga && ga === group(lb, kb);

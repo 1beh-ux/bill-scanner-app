@@ -38,7 +38,7 @@ export default function FieldsTable({ overview, selected, onSelect, onPatch, onC
     () => [
       { id: "group", label: t("fieldsManager.group"), value: (f) => f.group, can: () => false },
       { id: "type", label: t("fieldsManager.panel.type"), value: (f) => f.fieldType, can: () => false },
-      { id: "profile", label: t("fieldsManager.panel.toProfile"), value: (f) => yn(f.storage === "profile"), can: tmpl, body: (_f, v) => ({ storage: v === "1" ? "profile" : "event" }) },
+      { id: "profile", label: t("fieldsManager.panel.toProfile"), value: (f) => yn(f.storage !== "event" && !f.calculated), can: tmpl, body: (_f, v) => ({ storage: v === "1" ? "profile" : "event" }) },
       { id: "required", label: t("fieldsManager.required"), value: (f) => yn(f.required || f.system), can: (f) => f.kind === "custom" && !f.locked, body: (_f, v) => ({ required: v === "1" }) },
       { id: "locked", label: t("fieldsManager.panel.lockedShort"), value: (f) => yn(f.locked || f.system), can: (f) => f.fromTemplate && !f.system, body: (_f, v) => ({ locked: v === "1" }) },
       ...USES.map((u): Col => ({ id: u, label: t(`fieldsManager.use.${u}`), value: (f) => yn(usesOn(f, u)), can: (f) => !(u === "import" && f.calculated), body: (_f, v) => ({ surface: { use: u, on: v === "1" } }) })),

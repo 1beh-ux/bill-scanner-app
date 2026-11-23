@@ -18,9 +18,10 @@ for (const g of SUGGESTED_GROUPS) assert.ok(CODE_READERS[g.target], g.id);
 const f = (key: string, label: string, fieldType = "text") => ({ key, label, fieldType });
 assert.ok(looksDuplicate(f("allergies", "Alergie"), f("alergie", "Alergie dítěte"))); // known pair
 assert.ok(looksDuplicate(f("chronicIssues", "Chronic issues"), f("chronicka_onemocneni", "Chronická onemocnění")));
-assert.ok(looksDuplicate(f("poznamka", "Poznámka rodiče"), f("poznamka_rodice", "Poznámka od rodiče"))); // near label
+assert.ok(looksDuplicate(f("poznamka_rodice", "Poznámka rodiče"), f("poznamka_rodicu", "Poznámka rodičů"))); // near label
 assert.ok(!looksDuplicate(f("tricko", "Velikost trička", "select"), f("vyska_cm", "Výška", "number")));
 assert.ok(!looksDuplicate(f("mesto", "Město"), f("psc", "PSČ")));
+assert.ok(!looksDuplicate(f("adresa", "Adresa"), f("adresa_mesto", "Adresa – město"))); // a part, not a duplicate (production copy)
 assert.ok(!looksDuplicate(f("alergie", "Alergie"), f("allergies", "Alergie", "select"))); // type differs
 assert.equal(pairKey(["b", "a"]), "a|b");
 assert.deepEqual(partsOf({ kind: "age", source: "datum_narozeni", asOf: "event_start" }), ["datum_narozeni"]);

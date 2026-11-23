@@ -118,11 +118,13 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         ) : (
           <p className="text-ink-secondary">{t("fieldsManager.panel.fixedLabel")}</p>
         )}
-        {field.fromTemplate && !field.calculated && (
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={field.storage === "profile"} onChange={(e) => onPatch(field.key, { storage: e.target.checked ? "profile" : "event" }, { storage: field.storage })} />
+        {/* Round 2b: the only place storage shows. Organization fields switch it; a registration value like Skupina is
+            shown off, the person's own fixed values (birth date, guardian) on -- both fixed. */}
+        {!field.calculated && (
+          <label className={`flex items-center gap-2 ${field.fromTemplate ? "" : "text-ink-secondary"}`}>
+            <input type="checkbox" disabled={!field.fromTemplate} checked={field.storage !== "event"} onChange={(e) => onPatch(field.key, { storage: e.target.checked ? "profile" : "event" }, { storage: field.storage })} />
             {t("fieldsManager.panel.toProfile")}
-            <span className="text-[12px] text-ink-secondary">{t("fieldsManager.panel.toProfileHelp")}</span>
+            <span className="text-[12px] text-ink-secondary">{t(field.fromTemplate ? "fieldsManager.panel.toProfileHelp" : field.storage === "event" ? "fieldsManager.panel.toProfileNever" : "fieldsManager.panel.toProfileAlways")}</span>
           </label>
         )}
         {field.fromTemplate && !field.system && (
