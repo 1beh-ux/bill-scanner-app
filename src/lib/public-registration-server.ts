@@ -4,6 +4,7 @@
 // their PENDING registrations. Possible duplicates are never merged here (the
 // admin links/merges them on the Lidé page); auto-accept per event (E) runs
 // afterwards in the route.
+import { writeTargets } from "@/lib/field-write-targets";
 import { prisma } from "@/lib/prisma";
 import { createRegistration, oddilField, requiredEventFields, templateRules, visibleTemplates } from "@/lib/portal-server";
 import { askedFields, askedNow } from "@/lib/registration-fields";
@@ -58,7 +59,9 @@ export async function publicFormContext(event: PublicEvent) {
   const fields: FormField[] = [
     ...templates
       .filter((t) => eventKeys.has(t.key) && (t.level === "basic" || askedKeys.has(t.key)))
-      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, group: groupOf(t), required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience })),
+      // A field stored on the registration only (Fields Manager "Jen přihláška") is asked like the others but never
+      // written into the person's profile -- the same rule as the portal (writeTargets). Default storage: unchanged.
+      .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, group: groupOf(t), required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience, ...(writeTargets({ fromTemplate: true, storage: t.storage }, { source: "public_form" }).profile === "no" && { eventOnly: true }) })),
     ...asked.filter((f) => f.source === "event").map((f) => ({ key: f.key, label: f.label, fieldType: f.fieldType, options: f.options, required: true, eventOnly: true })),
   ];
   return { fields, rules, oddil: await oddilField(event.id, rules) };

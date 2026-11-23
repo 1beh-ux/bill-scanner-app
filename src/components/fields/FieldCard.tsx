@@ -4,6 +4,10 @@ import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { docsUsing, type FmDocTemplate, type FmOverview, type OvField } from "./types";
 import { RenameDialog } from "./FieldEditors";
+import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
+
+// A key the app itself defines (name, birth date, guardian...) -- the server refuses to rename it anyway.
+const FIXED_KEYS = new Set(FIXED_PARTICIPANT_FIELDS.map((f) => f.key));
 
 // The field-details card (Fields Manager phase 2, read-only): what a field is, where its values live, where it
 // comes from and where it is used. Phase 2b embeds it in the roster, health, mail and documents screens.
@@ -102,7 +106,8 @@ export default function FieldCard({ field, overview, docs, onShowInGraph, onChan
         )}
       </dl>
       {error && <p className="mt-2 text-[12px] text-red-700">{error}</p>}
-      {editable && field.kind === "custom" && !renaming && (
+      {/* Fixed fields (name, birth date, guardian...) can't be renamed: no button at all (staging test 2026-11-22). */}
+      {editable && field.kind === "custom" && field.storage !== "fixed" && field.storage !== "guardian" && !FIXED_KEYS.has(field.key) && !renaming && (
         <button type="button" onClick={() => setRenaming(true)} className="mr-2 mt-3 rounded-lg border border-mist px-2.5 py-1 text-[12px] hover:bg-paper-2">
           {t("fieldsManager.renameKey")}
         </button>

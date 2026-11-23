@@ -144,11 +144,12 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
       include: { guardians: true },
     }),
     // The person's organization's templates.
-    prisma.participantFieldTemplate.findMany({ where: { organization: { children: { some: { id: childId } } } }, select: { key: true } }),
+    prisma.participantFieldTemplate.findMany({ where: { organization: { children: { some: { id: childId } } } }, select: { key: true, storage: true } }),
   ]);
   if (!child || !latest || child._count.guardians > 0) return false;
   if (child.fieldValues && Object.keys(child.fieldValues as object).length > 0) return false;
-  const keys = new Set(templates.map((t) => t.key));
+  // Fields stored on the registration only (Fields Manager "Jen přihláška") never go into the profile.
+  const keys = new Set(templates.filter((t) => t.storage !== "event").map((t) => t.key));
   const values: Record<string, string> = {};
   for (const [k, v] of Object.entries((latest.customFieldValues as Record<string, unknown> | null) ?? {})) {
     if (keys.has(k) && typeof v === "string" && v !== "") values[k] = v;
