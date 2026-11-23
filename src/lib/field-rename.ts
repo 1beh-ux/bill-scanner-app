@@ -32,8 +32,8 @@ export function moveValue(map: Record<string, unknown> | null, from: string, to:
   return { ...rest, [to]: v };
 }
 
-const CONFIG_FIELDS = ["participantsListColumns", "documentsListColumns", "healthListColumns", "exportColumns", "participantLayout", "healthNotes"] as const;
-const CONFIG_SELECT = { participantsListColumns: true, documentsListColumns: true, healthListColumns: true, exportColumns: true, participantLayout: true, healthNotes: true, participantSyncs: true } as const;
+export const CONFIG_FIELDS = ["participantsListColumns", "documentsListColumns", "healthListColumns", "exportColumns", "participantLayout", "healthNotes"] as const;
+export const CONFIG_SELECT = { participantsListColumns: true, documentsListColumns: true, healthListColumns: true, exportColumns: true, participantLayout: true, healthNotes: true, participantSyncs: true } as const;
 
 /** Why `to` can't be used, or null. */
 export async function renameBlocker(db: Tx, organizationId: string, from: string, to: string): Promise<string | null> {

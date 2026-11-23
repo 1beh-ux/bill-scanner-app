@@ -144,3 +144,31 @@ export async function saveEdits(eventId: string, organizationId: string, docType
     return { saved: edits.length - missingIds.size, nothingToChange: missingIds.size, docId, copied: docId !== found.docId };
   }
 }
+
+/**
+ * Phase 7 "change directly": a pending rename edit for every template of the organization that uses an old key
+ * (each Doc read once). They wait in Dokumenty for Save like any other edit. Unreadable Docs are skipped and counted.
+ */
+export async function queueRenamesWhereUsed(organizationId: string, userId: string | null, renames: { from: string; to: string }[]) {
+  const items = await prisma.eventListItem.findMany({ where: { kind: "document", event: { organizationId } }, select: { eventId: true, data: true } });
+  const byDoc = new Map<string, string>();
+  for (const i of items) {
+    const t = (i.data as DocumentTypeData | null)?.templateGoogleDocId;
+    if (t && !byDoc.has(extractGoogleDocId(t))) byDoc.set(extractGoogleDocId(t), i.eventId);
+  }
+  const ids: string[] = [];
+  let unreadable = 0;
+  for (const [docId, eventId] of byDoc) {
+    const keys = await readDoc(eventId, docId).then((d) => new Set(findPlaceholders(docParagraphs(d)).map((p) => p.key)), () => null);
+    if (!keys) {
+      unreadable++;
+      continue;
+    }
+    for (const r of renames.filter((x) => keys.has(x.from))) {
+      const edit: DocEdit = { type: "rename", from: r.from, to: r.to };
+      const same = (await pendingEdits(organizationId, docId)).find((e) => editKey(e.request as DocEdit) === editKey(edit));
+      ids.push((same ?? (await prisma.documentEdit.create({ data: { organizationId, googleDocId: docId, request: edit as unknown as Prisma.InputJsonValue, reason: "merge", createdById: userId } }))).id);
+    }
+  }
+  return { ids, docs: byDoc.size, unreadable };
+}
