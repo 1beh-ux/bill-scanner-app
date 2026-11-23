@@ -220,6 +220,14 @@ const rows: Row[] = [
   r("fieldsManager.import.issue.guardian_no_email", "zástupce bez e-mailu se nepřevede", "a guardian without an e-mail is left out"),
   r("fieldsManager.import.err.invalid_table", "Tabulka je prázdná nebo příliš velká.", "The table is empty or too large."),
   r("fieldsManager.import.err.spreadsheet_id_required", "Vložte odkaz na Google tabulku.", "Paste a Google Sheet link."),
+  // Redesign R1–R6: import
+  r("fieldsManager.import.existingTitle", "Hodnoty, které už v aplikaci jsou", "Values already in the app"),
+  r("fieldsManager.import.finer", "Podrobněji – {n} lidí má vyplněnou jinou hodnotu", "In detail – {n} people have a different value filled in"),
+  r("fieldsManager.import.translateTitle", "Převod hodnot", "Value translation"),
+  r("fieldsManager.import.peopleHelp", "Ke komu který řádek patří. Řádek bez shody můžete přiřadit ručně komukoli (např. překlep ve jméně).", "Who each row belongs to. A row without a match can be assigned to anyone by hand (e.g. a typo in the name)."),
+  r("fieldsManager.import.who", "Kdo", "Who"),
+  r("fieldsManager.import.showAll", "Zobrazit všech {n}", "Show all {n}"),
+  r("fieldsManager.import.saveSettings", "Uložit nastavení", "Save settings"),
   // Phase 5: saved connections + review queue
   r("fieldsManager.tab.review", "Ke kontrole", "To review"),
   r("fieldsManager.import.saveTitle", "Uložit jako propojení", "Save as a connection"),

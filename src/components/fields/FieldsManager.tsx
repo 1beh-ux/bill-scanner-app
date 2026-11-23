@@ -135,7 +135,7 @@ export default function FieldsManager() {
       {tab === "cleanup" && <CleanupPanel overview={data} onChanged={refresh} />}
       {tab === "documents" && data.eventId && <DocumentEditor key={data.eventId} eventId={data.eventId} docs={docs} />}
       {tab === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
-      {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} guardianSlots={data.guardianSlots} />}
+      {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
       {tab === "usage" && <UsageMatrix overview={data} docs={docs} onSelectKey={(k) => setParams({ tab: "list", key: k, node: `field:${k}` })} />}
     </div>
   );

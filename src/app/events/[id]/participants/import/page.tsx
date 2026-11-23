@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, use } from "react";
+import { useRouter } from "next/navigation";
+import ImportWizard from "@/components/fields/ImportWizard";
 import { useTranslations } from "@/lib/i18n";
 import { useConfirm } from "@/components/ConfirmDialog";
 import { driveErrorText } from "@/lib/drive-error-messages";
@@ -14,8 +16,32 @@ import type { PublicSync } from "@/lib/participant-sync-run";
 // (src/lib/participant-sync.ts + participant-sync-run.ts).
 type Editing = { mode: "sheet"; sync: PublicSync | null } | { mode: "paste" };
 
+/**
+ * Redesign R1 (2026-11-23): with the organization's Fields Manager flag on, this address leads to the new import --
+ * organization admins to Pole -> Import, everyone else with import rights gets the same import here. Flag off: the
+ * old page below, unchanged. (Menu, roster button and other links all point here, so none of them needs to change.)
+ */
 export default function ParticipantImportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: eventId } = use(params);
+  const { t, features, role, roleLoaded } = useTranslations();
+  const router = useRouter();
+  const flag = features.includes("fields_manager");
+  const toManager = roleLoaded && flag && role === "admin";
+  useEffect(() => {
+    if (toManager) router.replace(`/fields?tab=import&event=${encodeURIComponent(eventId)}`);
+  }, [toManager, router, eventId]);
+  if (!roleLoaded || toManager) return <div className="p-8 text-[14px] text-ink-secondary">{t("common.loading")}</div>;
+  if (flag)
+    return (
+      <div className="mx-auto max-w-7xl p-4 md:p-8">
+        <h1 className="mb-3 text-[22px] font-semibold text-ink">{t("nav.participantsImport")}</h1>
+        <ImportWizard eventId={eventId} />
+      </div>
+    );
+  return <OldParticipantImport eventId={eventId} />;
+}
+
+function OldParticipantImport({ eventId }: { eventId: string }) {
   const { t } = useTranslations();
   const confirm = useConfirm();
   const [syncs, setSyncs] = useState<PublicSync[] | null>(null);
