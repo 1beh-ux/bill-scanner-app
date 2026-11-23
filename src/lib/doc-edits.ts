@@ -122,6 +122,9 @@ export function buildRequests(edits: DocEdit[], paras: Para[]): { requests: docs
   return { requests: [...ranged.flatMap((r) => r.reqs), ...replaceAll], missing };
 }
 
+/** One string per edit, independent of key order (Postgres JSONB reorders object keys). */
+export const editKey = (e: DocEdit) => (e.type === "rename" ? `rename|${e.from}|${e.to}` : `typed|${e.text}|${e.key}`);
+
 /** Untrusted body -> an edit, or null. */
 export function readEdit(v: unknown): DocEdit | null {
   const o = (v ?? {}) as Record<string, unknown>;

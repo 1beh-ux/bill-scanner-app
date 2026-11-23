@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
+import { editKey } from "@/lib/doc-edits";
 import type { FmDocTemplate } from "./types";
 
 // Fields Manager phase 6 (design §11, screens 18–19): a document type's Google Doc with its placeholders coloured
@@ -72,7 +73,7 @@ export default function DocumentEditor({ eventId, docs }: { eventId: string; doc
 
   const unique = (s: Status) => [...new Map((data?.placeholders ?? []).filter((p) => p.status === s).map((p) => [p.raw, p])).values()];
   const aliases = unique("alias");
-  const pendingKey = (e: Edit) => JSON.stringify(e);
+  const pendingKey = editKey;
   const queued = new Set((data?.edits ?? []).map((e) => pendingKey(e.edit)));
 
   return (

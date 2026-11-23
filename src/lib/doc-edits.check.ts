@@ -1,7 +1,7 @@
 // Self-check for Google Docs template edits (invented Docs JSON): `npx tsx src/lib/doc-edits.check.ts`
 import assert from "node:assert/strict";
 import type { docs_v1 } from "googleapis";
-import { brokenPlaceholders, buildRequests, docParagraphs, findPlaceholders, readEdit, textOccurrences } from "@/lib/doc-edits";
+import { brokenPlaceholders, buildRequests, editKey, docParagraphs, findPlaceholders, readEdit, textOccurrences } from "@/lib/doc-edits";
 
 // A paragraph as Google returns it: text runs with indexes (a placeholder split by bold formatting = two runs).
 const para = (start: number, ...runs: string[]): docs_v1.Schema$StructuralElement => {
@@ -58,5 +58,6 @@ assert.equal(buildRequests([{ type: "typed", text: "Testov", key: "place" }, { t
 
 assert.equal(readEdit({ type: "rename", from: "a", to: "1bad" }), null);
 assert.deepEqual(readEdit({ type: "typed", text: "Testov", key: "place" }), { type: "typed", text: "Testov", key: "place" });
+assert.equal(editKey(JSON.parse('{"key":"place","text":"Testov","type":"typed"}')), editKey({ type: "typed", text: "Testov", key: "place" }));
 console.log("doc-edits ok");
 export {};

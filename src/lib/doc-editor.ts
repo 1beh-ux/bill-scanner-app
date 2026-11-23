@@ -9,7 +9,7 @@ import { extractGoogleDocId } from "@/lib/document-merge";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 import { classifyKey, loadResolverContext } from "@/lib/field-resolver";
 import { EVENT_KEYS } from "@/lib/template-check";
-import { brokenPlaceholders, buildRequests, docParagraphs, findPlaceholders, textOccurrences, type DocEdit } from "@/lib/doc-edits";
+import { brokenPlaceholders, buildRequests, docParagraphs, editKey, findPlaceholders, textOccurrences, type DocEdit } from "@/lib/doc-edits";
 
 export type PhStatus = "current" | "alias" | "variable" | "spaces" | "unresolved";
 
@@ -85,7 +85,7 @@ export async function queueEdit(eventId: string, organizationId: string, docType
   const found = await docType(eventId, docTypeId);
   if (!found) return null;
   // The same edit twice is one edit.
-  const same = (await pendingEdits(organizationId, found.docId)).find((e) => JSON.stringify(e.request) === JSON.stringify(edit));
+  const same = (await pendingEdits(organizationId, found.docId)).find((e) => editKey(e.request as DocEdit) === editKey(edit));
   return same ?? prisma.documentEdit.create({ data: { organizationId, googleDocId: found.docId, request: edit as unknown as Prisma.InputJsonValue, reason, createdById: userId } });
 }
 
