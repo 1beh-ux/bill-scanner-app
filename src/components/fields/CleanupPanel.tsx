@@ -9,7 +9,9 @@ import type { FmOverview } from "./types";
 // listed below with "Vrátit zpět".
 type Preview = { blocker: string | null; profilesMoved: number; registrationsMoved: number; conflicts: number; settings: number; syncs: number; codeReaders: { key: string; readers: string[] }[] };
 type LogRow = { id: string; action: string; at: string; undoneAt: string | null; target: string | null; oldKeys: string[]; mode: string | null; moved: number | null; conflicts: number | null; mergeLogId: string | null };
-type Data = { suggestions: { id: string; keys: string[]; target: string }[]; log: LogRow[] };
+type Data = { suggestions: { id: string; keys: string[]; target: string }[]; log: LogRow[]; proposals: { keys: [string, string]; labels: [string, string] }[]; ageProposal: { key: string; source: string } | null };
+type MergePrefill = { target: string; old: string[]; n: number };
+type CalcPrefill = { key: string; kind: "join" | "age"; source?: string; n: number };
 const input = "rounded border border-mist bg-paper px-2 py-1 text-[13px]";
 
 export default function CleanupPanel({ overview, onChanged }: { overview: FmOverview; onChanged: () => void }) {
@@ -18,6 +20,8 @@ export default function CleanupPanel({ overview, onChanged }: { overview: FmOver
   const [reload, setReload] = useState(0);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mergePrefill, setMergePrefill] = useState<MergePrefill>({ target: "", old: [], n: 0 });
+  const [calcPrefill, setCalcPrefill] = useState<CalcPrefill>({ key: "", kind: "join", n: 0 });
   useEffect(() => {
     let gone = false;
     fetch("/api/fields/merge")
@@ -53,8 +57,31 @@ export default function CleanupPanel({ overview, onChanged }: { overview: FmOver
     <div className="space-y-4 text-[13px]">
       <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-900">{t("fieldsManager.cleanup.warning")}</p>
       {msg && <p className="text-red-700">{msg}</p>}
-      <MergeForm keys={keys} labelOf={labelOf} suggestions={data?.suggestions ?? []} post={post} busy={busy} onDone={done} />
-      <CalcForm keys={keys} labelOf={labelOf} post={post} busy={busy} onDone={done} />
+      {data && (data.proposals.length > 0 || data.ageProposal) && (
+        <section className="space-y-1 rounded-xl border border-dashed border-ember/60 p-3">
+          <h3 className="font-semibold">{t("fieldsManager.cleanup.proposals")}</h3>
+          <p className="text-ink-secondary">{t("fieldsManager.cleanup.proposalsHelp")}</p>
+          {data.proposals.map((pr) => (
+            <div key={pr.keys.join("|")} className="flex flex-wrap items-center gap-2 border-t border-mist py-1">
+              <span>{pr.labels[0]} <span className="font-mono text-[11px] text-ink-secondary">{pr.keys[0]}</span></span>
+              <span>≈</span>
+              <span>{pr.labels[1]} <span className="font-mono text-[11px] text-ink-secondary">{pr.keys[1]}</span></span>
+              <span className="ml-auto flex gap-1">
+                <button type="button" onClick={() => setMergePrefill({ target: pr.keys[0], old: [pr.keys[1]], n: mergePrefill.n + 1 })} className="rounded border border-mist px-2 py-0.5 hover:bg-paper-2">{t("fieldsManager.cleanup.mergeThis")}</button>
+                <button type="button" disabled={busy} onClick={async () => (await post({ action: "not_duplicate", oldKeys: pr.keys })) && done()} className="rounded border border-mist px-2 py-0.5 hover:bg-paper-2">{t("fieldsManager.cleanup.notDuplicate")}</button>
+              </span>
+            </div>
+          ))}
+          {data.ageProposal && (
+            <div className="flex flex-wrap items-center gap-2 border-t border-mist py-1">
+              <span>{t("fieldsManager.cleanup.ageProposal", { key: data.ageProposal.key, source: data.ageProposal.source })}</span>
+              <button type="button" onClick={() => setCalcPrefill({ key: data.ageProposal!.key, kind: "age", source: data.ageProposal!.source, n: calcPrefill.n + 1 })} className="ml-auto rounded border border-mist px-2 py-0.5 hover:bg-paper-2">{t("fieldsManager.cleanup.prepare")}</button>
+            </div>
+          )}
+        </section>
+      )}
+      <MergeForm key={`m${mergePrefill.n}`} prefill={mergePrefill} keys={keys} labelOf={labelOf} suggestions={data?.suggestions ?? []} post={post} busy={busy} onDone={done} />
+      <CalcForm key={`c${calcPrefill.n}`} prefill={calcPrefill} keys={keys} labelOf={labelOf} post={post} busy={busy} onDone={done} />
       {data && data.log.length > 0 && (
         <section className="space-y-1 rounded-xl border border-mist p-3">
           <h3 className="font-semibold">{t("fieldsManager.cleanup.history")}</h3>
@@ -124,10 +151,11 @@ function Safety({ value, setValue, backup, setBackup, word }: { value: string; s
   );
 }
 
-function MergeForm({ keys, labelOf, suggestions, post, busy, onDone }: FormProps & { suggestions: Data["suggestions"] }) {
+function MergeForm({ keys, labelOf, suggestions, post, busy, onDone, prefill }: FormProps & { suggestions: Data["suggestions"]; prefill: MergePrefill }) {
   const { t } = useTranslations();
-  const [target, setTarget] = useState("");
-  const [old, setOld] = useState<string[]>([]);
+  const [target, setTarget] = useState(prefill.target);
+  const [old, setOld] = useState<string[]>(prefill.old);
+  const [rows, setRows] = useState<MergeRow[] | null>(null);
   const [mode, setMode] = useState<"alias" | "direct">("alias");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [confirmText, setConfirmText] = useState("");
@@ -136,6 +164,7 @@ function MergeForm({ keys, labelOf, suggestions, post, busy, onDone }: FormProps
   const all = [...new Set([...keys, ...suggestions.flatMap((s) => s.keys)])];
   const reset = () => {
     setPreview(null);
+    setRows(null);
     setResult(null);
     setConfirmText("");
   };
@@ -181,7 +210,10 @@ function MergeForm({ keys, labelOf, suggestions, post, busy, onDone }: FormProps
           </label>
         ))}
       </div>
-      <button type="button" disabled={busy || !target || !old.length} onClick={async () => setPreview((await post({ action: "preview", target, oldKeys: old })) as Preview | null)} className="rounded-lg border border-mist px-3 py-1 hover:bg-paper-2 disabled:opacity-40">
+      <button type="button" disabled={busy || !target || !old.length} onClick={async () => {
+        setPreview((await post({ action: "preview", target, oldKeys: old })) as Preview | null);
+        setRows(((await post({ action: "rows", target, oldKeys: old })) as unknown as { rows: MergeRow[] } | null)?.rows ?? null);
+      }} className="rounded-lg border border-mist px-3 py-1 hover:bg-paper-2 disabled:opacity-40">
         {t("fieldsManager.checkRename")}
       </button>
       {preview?.blocker && <p className="text-red-700">{t(`fieldsManager.err.${preview.blocker}`)}</p>}
@@ -193,6 +225,7 @@ function MergeForm({ keys, labelOf, suggestions, post, busy, onDone }: FormProps
             <li>{t("fieldsManager.cleanup.willRepoint", { settings: String(preview.settings), syncs: String(preview.syncs) })}</li>
             <li>{t(mode === "direct" ? "fieldsManager.cleanup.willQueueDocs" : "fieldsManager.cleanup.willAlias")}</li>
           </ul>
+          {rows && <MergeRows rows={rows} target={target} old={old} />}
           {preview.codeReaders.map((c) => (
             <p key={c.key} className="text-amber-800">{t("fieldsManager.cleanup.codeReads", { key: c.key, readers: c.readers.map((r) => t(`fieldsManager.cleanup.reader.${r}`)).join(", ") })}</p>
           ))}
@@ -218,9 +251,12 @@ function MergeForm({ keys, labelOf, suggestions, post, busy, onDone }: FormProps
   );
 }
 
-function CalcForm({ keys, labelOf, post, busy, onDone }: FormProps) {
+function CalcForm({ keys, labelOf, post, busy, onDone, prefill }: FormProps & { prefill: CalcPrefill }) {
   const { t } = useTranslations();
-  const [key, setKey] = useState("");
+  const [key, setKey] = useState(prefill.key);
+  const [kind, setKind] = useState<"join" | "age">(prefill.kind);
+  const [source, setSource] = useState(prefill.source ?? "");
+  const [rows, setRows] = useState<CalcRow[] | null>(null);
   const [parts, setParts] = useState<string[]>([]);
   const [separator, setSeparator] = useState(", ");
   const [fillFrom, setFillFrom] = useState("");
@@ -241,6 +277,23 @@ function CalcForm({ keys, labelOf, post, busy, onDone }: FormProps) {
           ))}
         </select>
       </label>
+      <div className="flex gap-1">
+        {(["join", "age"] as const).map((k) => (
+          <button key={k} type="button" onClick={() => (setKind(k), setLoss(null))} className={`rounded border px-2 py-0.5 text-[12px] ${kind === k ? "border-ember bg-paper-2" : "border-mist"}`}>{t(`fieldsManager.calcKind.${k}`)}</button>
+        ))}
+      </div>
+      {kind === "age" && (
+        <label className="block">
+          {t("fieldsManager.fromField")}{" "}
+          <select value={source} onChange={(e) => (setSource(e.target.value), setLoss(null))} className={input}>
+            <option value="">—</option>
+            {[...new Set([source, ...keys])].filter(Boolean).filter((k) => k !== key).map((k) => (
+              <option key={k} value={k}>{labelOf(k)} ({k})</option>
+            ))}
+          </select>
+        </label>
+      )}
+      {kind === "join" && (<>
       <div>
         {t("fieldsManager.cleanup.calcParts")}
         <div className="mt-1 flex flex-wrap gap-2">
@@ -255,13 +308,19 @@ function CalcForm({ keys, labelOf, post, busy, onDone }: FormProps) {
       <label>
         {t("fieldsManager.separator")} <input value={separator} onChange={(e) => setSeparator(e.target.value)} className={`${input} w-16 font-mono`} />
       </label>
-      <button type="button" disabled={busy || !key || !parts.length} onClick={async () => setLoss((await post({ action: "calc_preview", key, parts })) as typeof loss)} className="ml-2 rounded-lg border border-mist px-3 py-1 hover:bg-paper-2 disabled:opacity-40">
+      </>)}
+      <button type="button" disabled={busy || !key || (kind === "join" ? !parts.length : !source)} onClick={async () => {
+        const r = (await post({ action: "calc_preview", key, kind, parts, source, separator })) as unknown as ({ profiles: number; registrations: number; rows: CalcRow[] } | null);
+        setLoss(r);
+        setRows(r?.rows ?? null);
+      }} className="ml-2 rounded-lg border border-mist px-3 py-1 hover:bg-paper-2 disabled:opacity-40">
         {t("fieldsManager.checkRename")}
       </button>
       {loss && result === null && (
         <div className="space-y-2 rounded-lg bg-paper-2 p-2">
           <p className={loss.profiles + loss.registrations ? "text-amber-800" : ""}>{t("fieldsManager.cleanup.calcLoss", { profiles: String(loss.profiles), registrations: String(loss.registrations) })}</p>
-          {loss.profiles + loss.registrations > 0 && (
+          {rows && <CalcRows rows={rows} />}
+          {kind === "join" && loss.profiles + loss.registrations > 0 && (
             <label className="block">
               {t("fieldsManager.cleanup.fillFrom")}{" "}
               <select value={fillFrom} onChange={(e) => setFillFrom(e.target.value)} className={input}>
@@ -277,7 +336,7 @@ function CalcForm({ keys, labelOf, post, busy, onDone }: FormProps) {
             type="button"
             disabled={busy || !backup || confirmText.trim() !== key}
             onClick={async () => {
-              const r = await post({ action: "make_calculated", key, parts, separator, fillFrom: fillFrom || undefined, confirm: confirmText.trim() });
+              const r = await post({ action: "make_calculated", key, kind, source, parts, separator, fillFrom: kind === "join" ? fillFrom || undefined : undefined, confirm: confirmText.trim() });
               if (r) {
                 setResult(r.filled);
                 onDone();
@@ -291,5 +350,67 @@ function CalcForm({ keys, labelOf, post, busy, onDone }: FormProps) {
       )}
       {result !== null && <p className="font-medium">{t("fieldsManager.cleanup.calcDone", { n: String(result) })}</p>}
     </section>
+  );
+}
+
+type MergeRow = { name: string; where: "profile" | "registration"; target: string; old: Record<string, string>; result: string; status: "fill" | "differ" | "same" };
+type CalcRow = { name: string; stored: string; result: string; status: "lose" | "new" | "same" | "differ" };
+
+/** R15: the merge with real data, filterable (like the import preview). */
+function MergeRows({ rows, target, old }: { rows: MergeRow[]; target: string; old: string[] }) {
+  const { t } = useTranslations();
+  const [f, setF] = useState<"all" | MergeRow["status"]>("all");
+  const shown = rows.filter((r) => f === "all" || r.status === f);
+  const color = { fill: "bg-emerald-50", differ: "bg-amber-50", same: "" };
+  return (
+    <div className="space-y-1">
+      <select value={f} onChange={(e) => setF(e.target.value as typeof f)} className={input}>
+        {(["all", "fill", "differ", "same"] as const).map((x) => (
+          <option key={x} value={x}>{t(`fieldsManager.cleanup.rows.${x}`)} ({x === "all" ? rows.length : rows.filter((r) => r.status === x).length})</option>
+        ))}
+      </select>
+      <div className="max-h-[40vh] overflow-auto rounded border border-mist bg-paper">
+        <table className="w-full text-[12px]">
+          <thead className="sticky top-0 bg-paper-2 text-left">
+            <tr><th className="p-1">{t("fieldsManager.import.who")}</th><th className="p-1 font-mono">{target}</th>{old.map((k) => <th key={k} className="p-1 font-mono">{k}</th>)}<th className="p-1">{t("fieldsManager.cleanup.rows.result")}</th></tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={i} className={`border-t border-mist ${color[r.status]}`}>
+                <td className="p-1">{r.name}</td><td className="p-1">{r.target}</td>{old.map((k) => <td key={k} className="p-1">{r.old[k]}</td>)}<td className="p-1 font-medium">{r.result}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function CalcRows({ rows }: { rows: CalcRow[] }) {
+  const { t } = useTranslations();
+  const [f, setF] = useState<"all" | CalcRow["status"]>("all");
+  const shown = rows.filter((r) => f === "all" || r.status === f);
+  const color = { lose: "bg-red-50", new: "bg-emerald-50", differ: "bg-amber-50", same: "" };
+  return (
+    <div className="space-y-1">
+      <select value={f} onChange={(e) => setF(e.target.value as typeof f)} className={input}>
+        {(["all", "lose", "differ", "new", "same"] as const).map((x) => (
+          <option key={x} value={x}>{t(`fieldsManager.cleanup.calcRows.${x}`)} ({x === "all" ? rows.length : rows.filter((r) => r.status === x).length})</option>
+        ))}
+      </select>
+      <div className="max-h-[40vh] overflow-auto rounded border border-mist bg-paper">
+        <table className="w-full text-[12px]">
+          <thead className="sticky top-0 bg-paper-2 text-left">
+            <tr><th className="p-1">{t("fieldsManager.import.who")}</th><th className="p-1">{t("fieldsManager.cleanup.calcRows.stored")}</th><th className="p-1">{t("fieldsManager.cleanup.calcRows.result")}</th></tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={i} className={`border-t border-mist ${color[r.status]}`}><td className="p-1">{r.name}</td><td className="p-1">{r.stored}</td><td className="p-1 font-medium">{r.result}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

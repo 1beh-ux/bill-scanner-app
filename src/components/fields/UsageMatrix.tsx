@@ -7,7 +7,9 @@ import { docsUsing, type FmDocTemplate, type FmOverview, type UseId } from "./ty
 // selected event with its group, required flag (event value; organization default beside it), uses and documents.
 const COLS: UseId[] = ["lists", "health", "mail", "email", "documents", "form"];
 
-export default function UsageMatrix({ overview, docs, onSelectKey }: { overview: FmOverview; docs: FmDocTemplate[] | null; onSelectKey: (k: string) => void }) {
+// Redesign R13/R14: a dot is a switch (saved at once, undo in the bar); documents are one column, the templates
+// that use the field are counted (the list is in the field's panel).
+export default function UsageMatrix({ overview, docs, onSelectKey, onPatch }: { overview: FmOverview; docs: FmDocTemplate[] | null; onSelectKey: (k: string) => void; onPatch?: (key: string, body: Record<string, unknown>, undo?: Record<string, unknown>) => Promise<boolean> }) {
   const { t } = useTranslations();
   const groupLabel = (id: string) => {
     const g = overview.groups.find((x) => x.id === id);
@@ -28,7 +30,7 @@ export default function UsageMatrix({ overview, docs, onSelectKey }: { overview:
               <th key={c} className={`${th} text-center`}>{t(`fieldsManager.use.${c}`)}</th>
             ))}
             <th className={th}>{t("fieldsManager.portal")}</th>
-            <th className={th}>{t("fieldsManager.documents")}</th>
+            <th className={th}>{t("fieldsManager.place.templatesShort")}</th>
           </tr>
         </thead>
         <tbody>
@@ -49,11 +51,23 @@ export default function UsageMatrix({ overview, docs, onSelectKey }: { overview:
                   </span>
                 )}
               </td>
-              {COLS.map((c) => (
-                <td key={c} className="px-2 py-1.5 text-center">{tick(f.uses.includes(c))}</td>
-              ))}
+              {COLS.map((c) => {
+                const on = f.uses.includes(c);
+                const canToggle = onPatch && !f.calculated && (c === "form" ? f.kind === "custom" : true);
+                return (
+                  <td key={c} className="px-2 py-1.5 text-center">
+                    {canToggle ? (
+                      <button type="button" onClick={() => onPatch!(f.key, c === "form" ? { required: !f.required } : { surface: { use: c, on: !on } }, c === "form" ? { required: f.required } : { surface: { use: c, on } })} className="hover:scale-125" aria-label={t(`fieldsManager.use.${c}`)}>
+                        {tick(on)}
+                      </button>
+                    ) : (
+                      tick(on)
+                    )}
+                  </td>
+                );
+              })}
               <td className="px-2 py-1.5 text-ink-secondary">{f.portalAccess ? t(`fieldsManager.portalAccess.${f.portalAccess}`) : "—"}</td>
-              <td className="px-2 py-1.5 text-[12px]">{docs === null ? "…" : docsUsing(f, docs).map((d) => d.name).join(", ") || "—"}</td>
+              <td className="px-2 py-1.5 text-[12px]">{docs === null ? "…" : docsUsing(f, docs).length || "—"}</td>
             </tr>
           ))}
         </tbody>

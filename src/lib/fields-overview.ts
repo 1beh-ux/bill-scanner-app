@@ -54,6 +54,9 @@ export type OvField = {
   values: { profiles: number; registrations: number };
   sources: string[];
   uses: UseId[];
+  /** Redesign R7/R9: the calculated spec / the contact rule, edited in the panel. */
+  options: unknown;
+  computedType: string | null;
 };
 export type OvGroup = { id: string; label: string | null; labelKey: string | null };
 export type OvSource = { id: string; kind: "sync" | "form" | "portal"; label: string | null; labelKey: string | null; autoSync?: boolean; everyHours?: number };
@@ -143,6 +146,8 @@ export function buildOverview(input: {
       values: { profiles: input.profileCounts.get(f.key) ?? 0, registrations: input.registrationCounts.get(f.key) ?? 0 },
       sources: src,
       uses: USE_IDS.filter((u) => uses.has(u)),
+      options: f.options ?? null,
+      computedType: f.computedType,
     });
   }
 

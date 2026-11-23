@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
-import { applyMerge, calculatedLoss, deleteMergedFields, makeCalculated, mergePreview, undoChange, SUGGESTED_GROUPS } from "@/lib/field-merge";
+import { applyMerge, calcRows, calculatedLoss, deleteMergedFields, duplicateProposals, makeCalculated, mergePreview, mergeRows, pairKey, partsOf, undoChange, SUGGESTED_GROUPS, type MakeCalcSpec } from "@/lib/field-merge";
 import { queueRenamesWhereUsed } from "@/lib/doc-editor";
 import { fieldsManagerAccess } from "../access";
 
@@ -21,6 +21,12 @@ const fail = (err: unknown) => {
   return NextResponse.json({ error: /^[a-z_]+$/.test(code) ? code : "failed" }, { status: 400 });
 };
 
+/** The body's calculation: joined parts (default) or an age from a date field. */
+function calcSpec(b: Record<string, unknown>): MakeCalcSpec {
+  if (b.kind === "age") return { kind: "age", source: keys([b.source])[0] ?? "", asOf: "event_start" };
+  return { kind: "join", parts: keys(b.parts), separator: typeof b.separator === "string" ? b.separator.slice(0, 10) : ", " };
+}
+
 export async function GET() {
   const a = await fieldsManagerAccess();
   if ("error" in a) return a.error;
@@ -30,6 +36,9 @@ export async function GET() {
   ]);
   const have = new Set(templates.map((t) => t.key));
   return NextResponse.json({
+    proposals: await duplicateProposals(a.organizationId),
+    // Age typed by hand next to the birth date (redesign R9): offered as "make calculated".
+    ageProposal: have.has("vek_ucastnika") ? { key: "vek_ucastnika", source: "datum_narozeni" } : null,
     suggestions: SUGGESTED_GROUPS.map((g) => ({ ...g, keys: g.keys.filter((k) => have.has(k)) })).filter((g) => g.keys.length >= 2 && g.keys.includes(g.target)),
     log: logs.map((l) => ({ id: l.id, action: l.action, at: l.at, undoneAt: l.undoneAt, ...pick(l.after) })),
   });
@@ -63,11 +72,20 @@ export async function POST(req: NextRequest) {
         const after = log.after as { moved: number; conflicts: { table: string; id: string; key: string }[] };
         return NextResponse.json({ logId: log.id, moved: after.moved, conflicts: after.conflicts.length, docEdits: docs?.ids.length ?? 0, unreadableDocs: docs?.unreadable ?? 0 });
       }
-      case "calc_preview":
-        return NextResponse.json(await calculatedLoss(a.organizationId, str(b.key), keys(b.parts)));
+      case "rows":
+        return NextResponse.json({ rows: await mergeRows(a.organizationId, target, oldKeys) });
+      case "not_duplicate": {
+        if (oldKeys.length !== 2) return NextResponse.json({ error: "invalid" }, { status: 400 });
+        await prisma.fieldChangeLog.create({ data: { organizationId: a.organizationId, action: "not_duplicate", byId: a.userId, before: {}, after: { keys: pairKey(oldKeys).split("|") } } });
+        return NextResponse.json({ ok: true });
+      }
+      case "calc_preview": {
+        const spec = calcSpec(b);
+        return NextResponse.json({ ...(await calculatedLoss(a.organizationId, str(b.key), partsOf(spec))), rows: await calcRows(a.organizationId, str(b.key), spec) });
+      }
       case "make_calculated": {
         if (b.confirm !== str(b.key)) return NextResponse.json({ error: "confirm_mismatch" }, { status: 400 });
-        const log = await makeCalculated(a.organizationId, a.userId, str(b.key), { kind: "join", parts: keys(b.parts), separator: typeof b.separator === "string" ? b.separator.slice(0, 10) : ", " }, str(b.fillFrom) || undefined);
+        const log = await makeCalculated(a.organizationId, a.userId, str(b.key), calcSpec(b), str(b.fillFrom) || undefined);
         return NextResponse.json({ logId: log.id, filled: (log.after as { filled: number }).filled });
       }
       case "delete": {

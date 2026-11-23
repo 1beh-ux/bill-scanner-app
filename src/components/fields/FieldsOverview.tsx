@@ -8,7 +8,9 @@ import { docsUsing, type FmDocTemplate, type FmOverview, type OvField } from "./
 // connections lit; a calculated field also shows the fields it is built from as orange dashed lines.
 type Edge = { from: string; to: string; kind: "src" | "use" | "dep" };
 
-export default function FieldsOverview({ overview, docs, selected, onSelect }: { overview: FmOverview; docs: FmDocTemplate[] | null; selected: string | null; onSelect: (id: string | null) => void }) {
+// Redesign R13/R14: Ctrl/⌘-click on a node while another is selected switches their connection on or off
+// (onConnect); documents are one place ("Dokumenty") -- the templates are listed in the panel.
+export default function FieldsOverview({ overview, docs, selected, onSelect, onConnect }: { overview: FmOverview; docs: FmDocTemplate[] | null; selected: string | null; onSelect: (id: string | null) => void; onConnect?: (selected: string, clicked: string) => void }) {
   const { t } = useTranslations();
   const boxRef = useRef<HTMLDivElement>(null);
   const [paths, setPaths] = useState<{ d: string; kind: Edge["kind"]; on: boolean }[]>([]);
@@ -16,10 +18,8 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
 
   // Use nodes: the module surfaces, with "documents" split into each template once the template check loaded.
   const useNodes = useMemo(() => {
-    const base = overview.uses.filter((u) => u !== "documents").map((u) => ({ id: `use:${u}`, label: t(`fieldsManager.use.${u}`) }));
-    const docNodes = docs ? docs.filter((d) => !d.error).map((d) => ({ id: `doc:${d.docTypeId}`, label: d.name })) : [{ id: "use:documents", label: t("fieldsManager.use.documents") }];
-    return [...base, ...docNodes];
-  }, [overview.uses, docs, t]);
+    return overview.uses.map((u) => ({ id: `use:${u}`, label: t(`fieldsManager.use.${u}`) }));
+  }, [overview.uses, t]);
 
   const edges = useMemo(() => {
     const out: Edge[] = [];
@@ -27,8 +27,8 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
       const fid = `field:${f.key}`;
       for (const s of f.sources) out.push({ from: `src:${s}`, to: fid, kind: "src" });
       for (const u of f.uses) if (u !== "documents") out.push({ from: fid, to: `use:${u}`, kind: "use" });
-      if (docs) for (const d of docsUsing(f, docs)) out.push({ from: fid, to: `doc:${d.docTypeId}`, kind: "use" });
-      else if (f.uses.includes("documents")) out.push({ from: fid, to: "use:documents", kind: "use" });
+      // Documents: switched on for documents, or used by a template (then the line is there even if switched off).
+      if (f.uses.includes("documents") || docsUsing(f, docs).length) out.push({ from: fid, to: "use:documents", kind: "use" });
       for (const dep of f.deps) if (overview.fields.some((x) => x.key === dep)) out.push({ from: `field:${dep}`, to: fid, kind: "dep" });
     }
     return out;
@@ -104,7 +104,10 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
   const dim = (id: string) => (lit && !lit.nodes.has(id) ? "opacity-35" : "");
   const sel = (id: string) => (selected === id ? "ring-2 ring-ember" : "");
   const node = "block w-full truncate rounded-lg border bg-paper px-3 py-1.5 text-left text-[13px] transition-opacity hover:bg-paper-2";
-  const toggle = (id: string) => onSelect(selected === id ? null : id);
+  const toggle = (id: string, e?: React.MouseEvent) => {
+    if ((e?.ctrlKey || e?.metaKey) && selected && selected !== id && onConnect) return onConnect(selected, id);
+    onSelect(selected === id ? null : id);
+  };
   const fieldsBy = (g: string) => overview.fields.filter((f) => f.group === g);
   const fieldClass = (f: OvField) => (f.calculated ? "border-dashed border-ember/60" : "border-mist");
 
@@ -127,7 +130,7 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
         <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">{t("fieldsManager.sources")}</h3>
         {overview.sources.length === 0 && <p className="text-[12px] text-ink-secondary">{t("fieldsManager.noSources")}</p>}
         {overview.sources.map((s) => (
-          <button key={s.id} type="button" data-node={`src:${s.id}`} onClick={() => toggle(`src:${s.id}`)} className={`${node} border-l-4 border-mist border-l-amber-600 ${dim(`src:${s.id}`)} ${sel(`src:${s.id}`)}`}>
+          <button key={s.id} type="button" data-node={`src:${s.id}`} onClick={(e) => toggle(`src:${s.id}`, e)} className={`${node} border-l-4 border-mist border-l-amber-600 ${dim(`src:${s.id}`)} ${sel(`src:${s.id}`)}`}>
             {s.label ?? t(s.labelKey ?? "")}
             {s.autoSync && <span className="ml-1 text-[11px] text-ink-secondary">· {t("fieldsManager.everyHours", { n: String(s.everyHours ?? 1) })}</span>}
           </button>
@@ -138,8 +141,9 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
           <div key={g.id} className="space-y-1.5">
             <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">{g.label ?? t(g.labelKey ?? "")}</h3>
             {fieldsBy(g.id).map((f) => (
-              <button key={f.key} type="button" data-node={`field:${f.key}`} onClick={() => toggle(`field:${f.key}`)} title={f.key} className={`${node} ${fieldClass(f)} ${dim(`field:${f.key}`)} ${sel(`field:${f.key}`)} ${f.active ? "" : "italic text-ink-secondary"}`}>
+              <button key={f.key} type="button" data-node={`field:${f.key}`} onClick={(e) => toggle(`field:${f.key}`, e)} title={f.key} className={`${node} ${fieldClass(f)} ${dim(`field:${f.key}`)} ${sel(`field:${f.key}`)} ${f.active ? "" : "italic text-ink-secondary"}`}>
                 {f.label}
+                <span className="ml-1 font-mono text-[11px] text-ink-secondary">· {f.key}</span>
                 {f.calculated && <span className="float-right text-[11px] text-ember">{t("fieldsManager.calc")}</span>}
               </button>
             ))}
@@ -149,7 +153,7 @@ export default function FieldsOverview({ overview, docs, selected, onSelect }: {
       <div className="sticky top-2 self-start space-y-1.5">
         <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">{t("fieldsManager.usedIn")}</h3>
         {useNodes.map((u) => (
-          <button key={u.id} type="button" data-node={u.id} onClick={() => toggle(u.id)} className={`${node} border-l-4 border-mist border-l-pine ${dim(u.id)} ${sel(u.id)}`}>
+          <button key={u.id} type="button" data-node={u.id} onClick={(e) => toggle(u.id, e)} className={`${node} border-l-4 border-mist border-l-pine ${dim(u.id)} ${sel(u.id)}`}>
             {u.label}
           </button>
         ))}

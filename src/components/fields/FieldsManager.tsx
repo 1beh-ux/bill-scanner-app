@@ -6,7 +6,7 @@ import { useTranslations } from "@/lib/i18n";
 import FieldsOverview from "./FieldsOverview";
 import FieldsList from "./FieldsList";
 import UsageMatrix from "./UsageMatrix";
-import FieldCard from "./FieldCard";
+import DetailPanel from "./DetailPanel";
 import ImportWizard from "./ImportWizard";
 import ReviewQueue from "./ReviewQueue";
 import DocumentEditor from "./DocumentEditor";
@@ -15,8 +15,10 @@ import type { FmDocTemplate, FmOverview } from "./types";
 
 // Organizace -> Pole (Fields Manager, phase 2: read-only). Tab, event and selection live in the URL
 // (?tab=&event=&key=) so links and the back button work. Behind the organization flag "fields_manager".
-const TABS = ["overview", "list", "usage", "documents", "import", "review", "cleanup"] as const;
+// Redesign R7: Přehled and Pole are one screen ("overview", diagram or list view); ?tab=list still opens it.
+const TABS = ["overview", "usage", "documents", "import", "review", "cleanup"] as const;
 type Tab = (typeof TABS)[number];
+const SURFACE_USES = new Set(["lists", "health", "mail", "email", "documents"]);
 
 export default function FieldsManager() {
   const { t, role, roleLoaded, features } = useTranslations();
@@ -24,6 +26,7 @@ export default function FieldsManager() {
   const pathname = usePathname();
   const params = useSearchParams();
   const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "overview";
+  const view = params.get("view") === "list" || params.get("tab") === "list" ? "list" : "diagram";
   const eventParam = params.get("event");
   const key = params.get("key");
 
@@ -31,6 +34,8 @@ export default function FieldsManager() {
   const [failed, setFailed] = useState(false);
   const [docs, setDocs] = useState<FmDocTemplate[] | null>(null);
   const [reload, setReload] = useState(0);
+  const [creating, setCreating] = useState(false);
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
   const refresh = useCallback(() => setReload((n) => n + 1), []);
 
   const setParams = useCallback(
@@ -76,9 +81,41 @@ export default function FieldsManager() {
     fetch("/api/fields/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ guardianSlots: n }) })
       .catch(() => null)
       .then(refresh);
-  const selectedField = key ? data.fields.find((f) => f.key === key) ?? null : null;
-  const selectNode = (id: string | null) => setParams({ key: id?.startsWith("field:") ? id.slice(6) : null, node: id });
+  const selectNode = (id: string | null) => {
+    setCreating(false);
+    setParams({ key: id?.startsWith("field:") ? id.slice(6) : null, node: id });
+  };
   const node = params.get("node") ?? (key ? `field:${key}` : null);
+  /** One change from the panel or a Ctrl-click: saved at once; `undo` (the reverse change) offered in the bar. */
+  const patchField = async (k: string, body: Record<string, unknown>, undo?: Record<string, unknown>) => {
+    const res = await fetch(`/api/fields/${encodeURIComponent(k)}?event=${encodeURIComponent(data.eventId ?? "")}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+    if (!res?.ok) {
+      setToast({ text: t("fieldsManager.saveFailed") });
+      return false;
+    }
+    refresh();
+    setToast({ text: t("fieldsManager.savedChange", { key: k }), undo: undo ? () => void patchField(k, undo).then(() => setToast(null)) : undefined });
+    return true;
+  };
+  // R13: Ctrl/⌘-click -- the selected field and a place (or the other way round) are connected / disconnected.
+  const connect = (selected: string, clicked: string) => {
+    const fieldId = selected.startsWith("field:") ? selected : clicked.startsWith("field:") ? clicked : null;
+    const otherId = fieldId === selected ? clicked : selected;
+    const f = fieldId ? data.fields.find((x) => x.key === fieldId.slice(6)) : undefined;
+    if (!f) return setToast({ text: t("fieldsManager.ctrlHelp") });
+    const use = otherId.startsWith("use:") ? otherId.slice(4) : otherId === "src:portal" ? "portal" : null;
+    if (use && SURFACE_USES.has(use)) {
+      const on = !f.uses.includes(use as never);
+      return void patchField(f.key, { surface: { use, on } }, { surface: { use, on: !on } });
+    }
+    if (use === "form" && f.kind === "custom") return void patchField(f.key, { required: !f.required }, { required: f.required });
+    if (use === "portal" && f.fromTemplate) {
+      const next = f.portalAccess && f.portalAccess !== "hidden" ? "hidden" : "edit";
+      return void patchField(f.key, { portalAccess: next }, { portalAccess: f.portalAccess ?? "hidden" });
+    }
+    setToast({ text: t("fieldsManager.ctrlNotPossible") });
+  };
+  const openTab = (x: string, extra: Record<string, string> = {}) => setParams({ tab: x, ...extra });
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-8">
@@ -119,24 +156,41 @@ export default function FieldsManager() {
         ))}
       </nav>
 
+      {toast && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-pine bg-pine-bg px-3 py-2 text-[13px]">
+          <span className="flex-1">{toast.text}</span>
+          {toast.undo && <button type="button" onClick={toast.undo} className="rounded border border-pine px-2 py-0.5 text-[12px]">{t("fieldsManager.undo")}</button>}
+          <button type="button" onClick={() => setToast(null)} aria-label="×" className="px-1">×</button>
+        </div>
+      )}
       {tab === "overview" && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
-          <FieldsOverview overview={data} docs={docs} selected={node} onSelect={selectNode} />
-          <div className="lg:sticky lg:top-4 lg:self-start">
-            {selectedField ? (
-              <FieldCard field={selectedField} overview={data} docs={docs} />
+        <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["diagram", "list"] as const).map((v) => (
+                <button key={v} type="button" onClick={() => setParams({ view: v === "list" ? "list" : null, tab: null })} className={`rounded-full border px-3 py-1 text-[12px] ${view === v ? "border-ember bg-paper-2 font-medium" : "border-mist"}`}>
+                  {t(`fieldsManager.view.${v}`)}
+                </button>
+              ))}
+              <span className="text-[12px] text-ink-secondary">{t("fieldsManager.ctrlHelp")}</span>
+              <button type="button" onClick={() => setCreating(true)} className="ml-auto rounded-lg bg-ember px-3 py-1.5 text-[13px] text-white">+ {t("fieldsManager.newField")}</button>
+            </div>
+            {view === "diagram" ? (
+              <FieldsOverview overview={data} docs={docs} selected={node} onSelect={selectNode} onConnect={connect} />
             ) : (
-              <p className="rounded-xl border border-mist bg-paper p-4 text-[13px] text-ink-secondary">{t("fieldsManager.overviewHelp")}</p>
+              <FieldsList overview={data} selected={node} onSelect={selectNode} onChanged={refresh} />
             )}
+          </div>
+          <div className="lg:sticky lg:top-4 lg:max-h-[92vh] lg:self-start lg:overflow-auto">
+            <DetailPanel overview={data} docs={docs} selected={node} creating={creating} setCreating={setCreating} onSelect={selectNode} onChanged={refresh} onPatch={patchField} onOpenTab={openTab} />
           </div>
         </div>
       )}
-      {tab === "list" && <FieldsList overview={data} docs={docs} selectedKey={key} onSelectKey={(k) => setParams({ key: k, node: `field:${k}` })} onShowInGraph={(k) => setParams({ tab: "overview", key: k, node: `field:${k}` })} onChanged={refresh} />}
       {tab === "cleanup" && <CleanupPanel overview={data} onChanged={refresh} />}
-      {tab === "documents" && data.eventId && <DocumentEditor key={data.eventId} eventId={data.eventId} docs={docs} />}
+      {tab === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} />}
       {tab === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
       {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
-      {tab === "usage" && <UsageMatrix overview={data} docs={docs} onSelectKey={(k) => setParams({ tab: "list", key: k, node: `field:${k}` })} />}
+      {tab === "usage" && <UsageMatrix overview={data} docs={docs} onPatch={patchField} onSelectKey={(k) => setParams({ tab: null, view: "list", key: k, node: `field:${k}` })} />}
     </div>
   );
 }

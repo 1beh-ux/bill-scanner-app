@@ -28,10 +28,10 @@ const COLOR: Record<Status, string> = {
   unresolved: "bg-red-100 text-red-800",
 };
 
-export default function DocumentEditor({ eventId, docs }: { eventId: string; docs: FmDocTemplate[] | null }) {
+export default function DocumentEditor({ eventId, docs, initialDoc }: { eventId: string; docs: FmDocTemplate[] | null; initialDoc?: string | null }) {
   const { t } = useTranslations();
   const usable = (docs ?? []).filter((d) => !d.error);
-  const [docType, setDocType] = useState<string>("");
+  const [docType, setDocType] = useState<string>(initialDoc ?? "");
   const [data, setData] = useState<Analysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

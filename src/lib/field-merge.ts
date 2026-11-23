@@ -338,11 +338,16 @@ export async function deleteMergedFields(organizationId: string, userId: string 
  * the JSON; `fillFrom` first copies the stored value into that part where all parts are empty, so nobody's printed
  * value disappears.
  */
-export async function makeCalculated(organizationId: string, userId: string | null, key: string, spec: { kind: "join"; parts: string[]; separator: string }, fillFrom?: string) {
+/** What a field can be turned into: joined parts (address) or an age from a date (redesign R9: age). */
+export type MakeCalcSpec = { kind: "join"; parts: string[]; separator: string } | { kind: "age"; source: string; asOf: "event_start" };
+export const partsOf = (spec: MakeCalcSpec) => (spec.kind === "join" ? spec.parts : [spec.source]);
+
+export async function makeCalculated(organizationId: string, userId: string | null, key: string, spec: MakeCalcSpec, fillFrom?: string) {
   const { templates, copies } = await fieldsOf(organizationId, [key]);
   if (!templates.length && !copies.length) throw new Error("not_found");
   if (copies.some((c) => c.kind !== "custom")) throw new Error("fixed_field");
-  if (spec.parts.includes(key) || !spec.parts.length || (fillFrom && !spec.parts.includes(fillFrom))) throw new Error("invalid_calc");
+  const parts = partsOf(spec);
+  if (parts.includes(key) || !parts.length || parts.some((x) => !x) || (fillFrom && (spec.kind !== "join" || !parts.includes(fillFrom)))) throw new Error("invalid_calc");
   const log = await prisma.$transaction(
     async (tx) => {
       const fieldsBefore = [
@@ -351,7 +356,7 @@ export async function makeCalculated(organizationId: string, userId: string | nu
       ];
       const values: ValueWrite[] = [];
       if (fillFrom) {
-        const empty = (m: Values) => spec.parts.every((p) => !filled(m[p]));
+        const empty = (m: Values) => parts.every((p) => !filled(m[p]));
         for (const c of await tx.child.findMany({ where: { organizationId }, select: { id: true, fieldValues: true } })) {
           const m = (c.fieldValues as Values | null) ?? {};
           if (!filled(m[key]) || !empty(m)) continue;
@@ -384,4 +389,85 @@ export async function calculatedLoss(organizationId: string, key: string, parts:
     prisma.participant.findMany({ where: { event: { organizationId } }, select: { customFieldValues: true } }),
   ]);
   return { profiles: children.filter((c) => lose(c.fieldValues as Values | null)).length, registrations: participants.filter((p) => lose(p.customFieldValues as Values | null)).length };
+}
+
+// ---- redesign R15: proposals, "not a duplicate", previews with real data ---------------------------------------
+
+const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// Known pairs written differently (Czech / English / old camelCase keys): same group = the same thing.
+const SYNONYM_GROUP: Record<string, string> = { allergies: "A", alergie: "A", chronicissues: "C", chronickaonemocneni: "C", medsnotes: "M", pravidelneleky: "M", leky: "M" };
+function editDistance(a: string, b: string) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+/** Two fields that may be the same thing (label or key alike, or a known pair). Pure. */
+export function looksDuplicate(a: { key: string; label: string; fieldType: string }, b: { key: string; label: string; fieldType: string }): boolean {
+  if (!typesCompatible(a.fieldType, b.fieldType) || a.fieldType === "calculated" || b.fieldType === "calculated" || a.fieldType === "composite" || b.fieldType === "composite") return false;
+  const [la, lb, ka, kb] = [norm(a.label), norm(b.label), norm(a.key.replace(/_/g, " ")), norm(b.key.replace(/_/g, " "))];
+  const close = (x: string, y: string) => x.length >= 4 && y.length >= 4 && (x === y || (Math.min(x.length, y.length) >= 6 && (x.includes(y) || y.includes(x))) || (x.length >= 6 && editDistance(x, y) <= 2));
+  const group = (...xs: string[]) => xs.map((x) => SYNONYM_GROUP[x.replace(/ /g, "")]).find(Boolean);
+  const ga = group(la, ka);
+  const syn = !!ga && ga === group(lb, kb);
+  return close(la, lb) || close(ka, kb) || syn;
+}
+export const pairKey = (keys: string[]) => [...keys].sort().join("|");
+
+/** Proposed duplicate pairs among the organization's active fields, minus the ones marked "not a duplicate". */
+export async function duplicateProposals(organizationId: string) {
+  const [templates, dismissed] = await Promise.all([
+    prisma.participantFieldTemplate.findMany({ where: { organizationId, active: true }, select: { key: true, label: true, fieldType: true } }),
+    prisma.fieldChangeLog.findMany({ where: { organizationId, action: "not_duplicate", undoneAt: null }, select: { after: true } }),
+  ]);
+  const no = new Set(dismissed.map((d) => pairKey(((d.after as { keys?: string[] }).keys ?? []))));
+  const out: { keys: [string, string]; labels: [string, string] }[] = [];
+  for (let i = 0; i < templates.length; i++)
+    for (let j = i + 1; j < templates.length; j++) {
+      const [a, b] = [templates[i], templates[j]];
+      if (looksDuplicate(a, b) && !no.has(pairKey([a.key, b.key]))) out.push({ keys: [a.key, b.key], labels: [a.label, b.label] });
+    }
+  return out;
+}
+
+type Row = { name: string; where: "profile" | "registration"; target: string; old: Record<string, string>; result: string; status: "fill" | "differ" | "same" };
+/** The merge with real data: one row per person / registration that has any of the values (first 500). */
+export async function mergeRows(organizationId: string, target: string, oldKeys: string[]): Promise<Row[]> {
+  const [children, participants] = await Promise.all([
+    prisma.child.findMany({ where: { organizationId }, select: { name: true, fieldValues: true }, orderBy: { name: "asc" } }),
+    prisma.participant.findMany({ where: { event: { organizationId } }, select: { name: true, customFieldValues: true, event: { select: { name: true } } }, orderBy: { name: "asc" } }),
+  ]);
+  const rows: Row[] = [];
+  const add = (name: string, where: Row["where"], m: Values | null) => {
+    if (!m || ![target, ...oldKeys].some((k) => filled(m[k]))) return;
+    const r = mergeMap(m, oldKeys, target);
+    const t = String(m[target] ?? "");
+    rows.push({ name, where, target: t, old: Object.fromEntries(oldKeys.map((k) => [k, String(m[k] ?? "")])), result: String((r.next ?? m)[target] ?? ""), status: r.next ? "fill" : r.conflicts.length ? "differ" : "same" });
+  };
+  for (const c of children) add(c.name, "profile", c.fieldValues as Values | null);
+  for (const p of participants) add(`${p.name} · ${p.event.name}`, "registration", p.customFieldValues as Values | null);
+  return rows.slice(0, 500);
+}
+
+/** "Make calculated" with real data: stored value vs. what the calculation will print (first 500). */
+export async function calcRows(organizationId: string, key: string, spec: MakeCalcSpec) {
+  const { evaluateCalc } = await import("@/lib/field-calc");
+  const [children, participants] = await Promise.all([
+    prisma.child.findMany({ where: { organizationId }, select: { name: true, fieldValues: true }, orderBy: { name: "asc" } }),
+    prisma.participant.findMany({ where: { event: { organizationId } }, select: { name: true, customFieldValues: true, event: { select: { name: true, startDate: true } } }, orderBy: { name: "asc" } }),
+  ]);
+  const parts = partsOf(spec);
+  const out: { name: string; stored: string; result: string; status: "lose" | "new" | "same" | "differ" }[] = [];
+  const add = (name: string, m: Values | null, eventStart: Date | null) => {
+    if (!m || ![key, ...parts].some((k) => filled(m[k]))) return;
+    const result = evaluateCalc(spec as never, { valueOf: (k) => (m[k] === undefined ? undefined : String(m[k])), eventStart, today: new Date() });
+    const stored = String(m[key] ?? "").trim();
+    out.push({ name, stored, result, status: stored && !result ? "lose" : !stored ? "new" : stored === result.trim() ? "same" : "differ" });
+  };
+  for (const c of children) add(c.name, c.fieldValues as Values | null, null);
+  for (const p of participants) add(`${p.name} · ${p.event.name}`, p.customFieldValues as Values | null, p.event.startDate);
+  return out.slice(0, 500);
 }

@@ -21,16 +21,28 @@ export const slugKey = (s: string) =>
     .slice(0, 40)
     .replace(/^(?=[0-9_])/, "f_");
 
-export function NewFieldForm({ overview, onDone }: { overview: FmOverview; onDone: (key: string | null) => void }) {
+type CalcState = { kind: (typeof CALC_KINDS)[number]; parts: string[]; separator: string; text: string; source: string; then: string; else: string; test: string };
+const EMPTY_CALC: CalcState = { kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled" };
+/** A saved spec -> the editor's state (redesign R7: a calculated field is edited with the same editor). */
+function calcState(spec: unknown): CalcState {
+  const o = (spec ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  const kind = (CALC_KINDS as readonly string[]).includes(str(o.kind)) ? (o.kind as CalcState["kind"]) : "join";
+  const test = o.test === "yes" || o.test === "filled" ? o.test : o.test && typeof o.test === "object" ? str((o.test as { equals?: unknown }).equals) : "filled";
+  return { ...EMPTY_CALC, kind, parts: Array.isArray(o.parts) ? o.parts.filter((x): x is string => typeof x === "string") : [], separator: typeof o.separator === "string" ? o.separator : " ", text: str(o.text), source: str(o.source), then: str(o.then), else: str(o.else), test };
+}
+
+/** New field, or (with `edit`) the calculation of an existing calculated field. */
+export function NewFieldForm({ overview, onDone, edit }: { overview: FmOverview; onDone: (key: string | null) => void; edit?: { key: string; spec: unknown } }) {
   const { t } = useTranslations();
   const [label, setLabel] = useState("");
   const [key, setKey] = useState("");
   const [keyTouched, setKeyTouched] = useState(false);
-  const [type, setType] = useState<(typeof TYPES)[number]>("text");
+  const [type, setType] = useState<(typeof TYPES)[number]>(edit ? "calculated" : "text");
   const [options, setOptions] = useState("");
-  const [calc, setCalc] = useState<{ kind: (typeof CALC_KINDS)[number]; parts: string[]; separator: string; text: string; source: string; then: string; else: string; test: string }>({ kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled" });
+  const [calc, setCalc] = useState<CalcState>(edit ? calcState(edit.spec) : EMPTY_CALC);
   const [error, setError] = useState<string | null>(null);
-  const keys = overview.fields.filter((f) => f.kind !== "computed" || f.key === "Name").map((f) => f.key);
+  const keys = overview.fields.filter((f) => (f.kind !== "computed" || f.key === "Name") && f.key !== edit?.key).map((f) => f.key);
 
   function spec() {
     if (calc.kind === "join") return { kind: "join", parts: calc.parts, separator: calc.separator };
@@ -41,6 +53,12 @@ export function NewFieldForm({ overview, onDone }: { overview: FmOverview; onDon
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (edit) {
+      const res = await fetch(`/api/fields/${encodeURIComponent(edit.key)}?event=${encodeURIComponent(overview.eventId ?? "")}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ calc: spec() }) }).catch(() => null);
+      if (res?.ok) return onDone(edit.key);
+      const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
+      return setError(t(`fieldsManager.err.${code ?? "failed"}`));
+    }
     const body = { event: overview.eventId, label, key, fieldType: type, options: type === "calculated" ? spec() : type === "select" || type === "multi" ? options.split("\n") : undefined };
     const res = await fetch("/api/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     if (res?.ok) return onDone(key);
@@ -50,7 +68,8 @@ export function NewFieldForm({ overview, onDone }: { overview: FmOverview; onDon
 
   return (
     <form onSubmit={save} className="space-y-2 rounded-xl border border-mist bg-paper p-4 text-[13px]">
-      <h3 className="text-[15px] font-semibold">{t("fieldsManager.newField")}</h3>
+      <h3 className="text-[15px] font-semibold">{edit ? t("fieldsManager.editCalc") : t("fieldsManager.newField")}</h3>
+      {!edit && (<>
       <label className="block">
         {t("fieldsManager.label")}
         <input required value={label} onChange={(e) => (setLabel(e.target.value), !keyTouched && setKey(slugKey(e.target.value)))} className={input} />
@@ -66,6 +85,7 @@ export function NewFieldForm({ overview, onDone }: { overview: FmOverview; onDon
           </button>
         ))}
       </div>
+      </>)}
       {(type === "select" || type === "multi") && (
         <label className="block">
           {t("fieldsManager.optionsOnePerLine")}
@@ -125,7 +145,7 @@ export function NewFieldForm({ overview, onDone }: { overview: FmOverview; onDon
       )}
       {error && <p className="text-[12px] text-red-700">{error}</p>}
       <div className="flex gap-2">
-        <button className="rounded-lg bg-ember px-3 py-1 text-white">{t("fieldsManager.create")}</button>
+        <button className="rounded-lg bg-ember px-3 py-1 text-white">{edit ? t("fieldsManager.save") : t("fieldsManager.create")}</button>
         <button type="button" onClick={() => onDone(null)} className="rounded-lg border border-mist px-3 py-1">{t("fieldsManager.cancel")}</button>
       </div>
     </form>

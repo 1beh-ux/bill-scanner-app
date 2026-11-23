@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateCalc, readCalcSpec } from "@/lib/field-calc";
 import { extendVariables, loadResolverContext, type GuardianIn } from "@/lib/field-resolver";
+import { contactEmail, readContactRule } from "@/lib/contact-email";
+import { applySentences, loadSentences, sentenceValues } from "@/lib/sentences";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
@@ -379,6 +381,8 @@ export async function resolveVariables(
   // event variables are added -- only keys that don't exist today, so existing templates print the same.
   const resolver = await loadResolverContext(event.id);
   if (resolver.flagOn) {
+    // Redesign R10 (Q-R4): the organization's own wording of the sentence variables, when it set one.
+    Object.assign(text, applySentences(text, await loadSentences(event.id), sentenceValues(text, event)));
     const ownFieldKeys = new Set((await prisma.eventParticipantField.findMany({ where: { eventId: event.id }, select: { key: true } })).map((f) => f.key));
     return { text: extendVariables(text, resolver, participant.guardians as GuardianIn[], ownFieldKeys), images, imageSizesMm };
   }
@@ -444,7 +448,11 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
       } else if (f.computedType === "variable_symbol") {
         values[f.key] = buildVariableSymbol(participant, event);
       } else if (f.computedType === "contact_email") {
-        values[f.key] = resolveContactEmail(participant);
+        // Redesign R9: the event's own rule when the admin set one in the Fields Manager, else today's value.
+        const rule = (f.options as { contactRule?: unknown } | null)?.contactRule;
+        values[f.key] = rule
+          ? contactEmail(readContactRule(rule), participant, adultOf(participant, event), fields.filter((x) => x.fieldType === "email").map((x) => x.key))
+          : resolveContactEmail(participant);
       } else if (f.computedType === "membership_status") {
         values[f.key] = memberLabel(participant, event);
       } else if (f.computedType === "price_category") {
