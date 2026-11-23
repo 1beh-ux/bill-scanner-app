@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
 import FieldsOverview from "./FieldsOverview";
 import FieldsList from "./FieldsList";
-import UsageMatrix from "./UsageMatrix";
+import FieldsTable from "./FieldsTable";
 import DetailPanel from "./DetailPanel";
 import ImportWizard from "./ImportWizard";
 import ReviewQueue from "./ReviewQueue";
@@ -16,7 +16,8 @@ import type { FmDocTemplate, FmOverview } from "./types";
 // Organizace -> Pole (Fields Manager, phase 2: read-only). Tab, event and selection live in the URL
 // (?tab=&event=&key=) so links and the back button work. Behind the organization flag "fields_manager".
 // Redesign R7: Přehled and Pole are one screen ("overview", diagram or list view); ?tab=list still opens it.
-const TABS = ["overview", "usage", "documents", "import", "review", "cleanup"] as const;
+// Round 2: "Kde se používá" is the list view itself (an editable table); ?tab=usage opens it.
+const TABS = ["overview", "documents", "import", "review", "cleanup"] as const;
 type Tab = (typeof TABS)[number];
 const SURFACE_USES = new Set(["lists", "health", "mail", "email", "documents"]);
 
@@ -26,7 +27,7 @@ export default function FieldsManager() {
   const pathname = usePathname();
   const params = useSearchParams();
   const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "overview";
-  const view = params.get("view") === "list" || params.get("tab") === "list" ? "list" : "diagram";
+  const view = params.get("view") === "list" || params.get("tab") === "list" || params.get("tab") === "usage" ? "list" : "diagram";
   const eventParam = params.get("event");
   const key = params.get("key");
 
@@ -178,7 +179,10 @@ export default function FieldsManager() {
             {view === "diagram" ? (
               <FieldsOverview overview={data} docs={docs} selected={node} onSelect={selectNode} onConnect={connect} />
             ) : (
-              <FieldsList overview={data} selected={node} onSelect={selectNode} onChanged={refresh} />
+              <>
+                <FieldsTable overview={data} selected={node} onSelect={selectNode} onPatch={patchField} onChanged={refresh} />
+                <FieldsList overview={data} selected={node} onSelect={selectNode} onChanged={refresh} variablesOnly />
+              </>
             )}
           </div>
           <div className="lg:sticky lg:top-4 lg:max-h-[92vh] lg:self-start lg:overflow-auto">
@@ -190,7 +194,6 @@ export default function FieldsManager() {
       {tab === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} />}
       {tab === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
       {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
-      {tab === "usage" && <UsageMatrix overview={data} docs={docs} onPatch={patchField} onSelectKey={(k) => setParams({ tab: null, view: "list", key: k, node: `field:${k}` })} />}
     </div>
   );
 }

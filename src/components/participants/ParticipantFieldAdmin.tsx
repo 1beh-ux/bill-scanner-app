@@ -205,6 +205,8 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     return undefined;
   }
 
+  const lockMessage = (code: unknown) => (code === "locked_field" || code === "system_field" ? t(`fieldsManager.err.${code}`) : t("listTemplateAdmin.errorSaveFailed"));
+
   function resetAddForm() {
     setKey("");
     setFieldLabel("");
@@ -389,11 +391,14 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
   }
 
   async function toggleActive(field: Field) {
-    await fetch(itemUrl(fieldId(isEvent, field)), {
+    setError(null);
+    const res = await fetch(itemUrl(fieldId(isEvent, field)), {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !field.active }),
     });
+    // Fields Manager: a system / organization fixed field can't be switched off here.
+    if (res.status === 409) setError(lockMessage((await res.json().catch(() => ({}))).error));
     load();
   }
 
@@ -401,7 +406,7 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
     if (!(await confirm({ message: t("listTemplateAdmin.confirmDelete", { name: field.label }), danger: true }))) return;
     const res = await fetch(itemUrl(fieldId(isEvent, field)), { method: "DELETE" });
     if (!res.ok) {
-      setError(t("listTemplateAdmin.errorDeleteFailed"));
+      setError(res.status === 409 ? lockMessage((await res.json().catch(() => ({}))).error) : t("listTemplateAdmin.errorDeleteFailed"));
       return;
     }
     load();

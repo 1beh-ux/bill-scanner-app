@@ -204,3 +204,20 @@ so (flag off in production until you switch it on).
 - **Q-R7:** order A → F.
 - **Addition (R12, parent portal):** Ctrl-click adding of fields to the portal source as in R13, plus drag & drop of
   fields between *základní* and *podrobné* (basic / detailed level) — that decides what parents see and when.
+
+## 8. Round 2 (staging review 2026-11-23) — decisions
+
+- **Pevná pole, two layers:** (1) *system fields* the app needs — first name, surname, birth date, and for children
+  a guardian with e-mail / phone: always asked, nobody removes them, only their visibility changes; (2) the
+  organization admin can mark any other field **Pevné pole organizace** = present and required in every event, event
+  managers can't switch it off or delete it (only the admin).
+- **Jméno a příjmení dítěte** is shown and treated as calculated (first + surname); still stored behind the scenes
+  and kept up to date automatically; a combined import column is split as today.
+- **Stav registrace** → calculated / system (read-only). **Skupina** → a normal field (not fixed).
+- **Per-template switch-off:** a field deselected for one document template prints empty in that template only;
+  default = a field connected to *Šablony dokumentů* is on in all of them.
+- UI: Pevná pole as the top section; Základní nastavení for every field (fixed: visibility); "Ukládat i do profilu"
+  as a switch in Základní nastavení (default on); portal settings only when the field is in the portal; Rodičovský
+  portál always among Zdroje, its basic / detailed ordering also from Kde se používá; "Dokumenty" → "Šablony
+  dokumentů" with per-template pills; the list view becomes the editable table (filters, selection, bulk change)
+  replacing the separate "Kde se používá" tab.

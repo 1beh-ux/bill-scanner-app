@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { invalidateResolverContext } from "@/lib/field-resolver";
 import { calcDeps, readCalcSpec } from "@/lib/field-calc";
 import { readContactRule } from "@/lib/contact-email";
+import { setLocked, SYSTEM_KEYS } from "@/lib/org-locked";
 import { fieldsManagerAccess, pickEvent } from "../access";
 
 const SURFACES: Record<string, string[]> = { lists: ["list"], health: ["health_list", "health_detail"], mail: ["mail_list"], email: ["email"], documents: ["documents"], import: ["import"] };
@@ -23,6 +24,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   const { organizationId, userId } = access;
   const { key } = await params;
   const b = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>;
+  // Round 2: lock / unlock the field for the whole organization ("Pevné pole organizace").
+  if (b.locked !== undefined) {
+    if (typeof b.locked !== "boolean" || SYSTEM_KEYS.has(key)) return bad();
+    try {
+      const r = await setLocked(organizationId, key, b.locked, userId);
+      invalidateResolverContext();
+      return NextResponse.json({ ok: true, ...r });
+    } catch (err) {
+      return bad(err instanceof Error && err.message === "no_template" ? "no_template" : "invalid");
+    }
+  }
   const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule } = b;
   if (storage !== undefined && storage !== "profile" && storage !== "event") return bad("invalid_storage");
   if (requiredDefault !== undefined && typeof requiredDefault !== "boolean") return bad();

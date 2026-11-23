@@ -37,8 +37,8 @@ const ov = buildOverview({
 
 const f = (k: string) => ov.fields.find((x) => x.key === k)!;
 // Storage and groups.
-assert.equal(f("Name").storage, "fixed");
-assert.equal(f("Name").group, "basic");
+assert.equal(f("Name").storage, "calculated"); // round 2: the full name is calculated from first name + surname
+assert.equal(f("Name").group, "fixed");
 assert.equal(f("zast_jmeno").storage, "guardian");
 assert.equal(f("zast_jmeno").group, "guardians");
 assert.equal(f("Email").calculated, true);
@@ -71,11 +71,23 @@ assert.deepEqual(f("pojistovna").aliases, ["stara_pojistovna"]);
 assert.deepEqual(f("pojistovna").values, { profiles: 1, registrations: 1 });
 assert.deepEqual(f("alergie_x").values, { profiles: 1, registrations: 0 });
 // Groups: fixed order, only used ones.
-assert.deepEqual(ov.groups.map((g) => g.id), ["basic", "detailed", "section:szdravi", "event", "guardians", "calculated"]);
+assert.deepEqual(ov.groups.map((g) => g.id), ["fixed", "basic", "detailed", "section:szdravi", "event", "guardians", "calculated"]);
 assert.equal(ov.groups.find((g) => g.id === "section:szdravi")!.label, "Zdravotní údaje");
 // No public form: no form source, but the event's asked fields still "use" the registration.
 const noForm = buildOverview({ templates: [], eventFields: [E("q", { requiredOnRegistration: true })], syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: false });
-assert.deepEqual(noForm.sources, []);
+assert.deepEqual(noForm.sources.map((x) => x.id), ["portal"]); // round 2: the portal is always a source
 assert.deepEqual(noForm.fields[0].sources, []);
 
+// Round 2: system fields are fixed and always asked by the form; a locked field joins them; status calculated,
+// group a normal registration field.
+{
+  const sys = buildOverview({ templates: [], eventFields: [E("participant_first_name", { kind: "builtin" }), E("registrace", { kind: "builtin" }), E("skupina", { kind: "builtin" }), E("q", { requiredOnRegistration: true })], syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: true, systemKeys: new Set(["participant_first_name"]), lockedKeys: new Set(["q"]) });
+  const g = (k: string) => sys.fields.find((x) => x.key === k)!;
+  assert.equal(g("participant_first_name").group, "fixed");
+  assert.ok(g("participant_first_name").system && g("participant_first_name").uses.includes("form"));
+  assert.equal(g("q").group, "fixed");
+  assert.ok(g("q").locked);
+  assert.equal(g("registrace").calculated, true);
+  assert.notEqual(g("skupina").storage, "fixed");
+}
 console.log("fields-overview: ok");

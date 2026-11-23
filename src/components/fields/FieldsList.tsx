@@ -14,7 +14,7 @@ const CATEGORIES = ["event", "participant", "sentence", "free"] as const;
 
 // The list view of the Fields screen (redesign R7: Přehled and Pole are one screen -- this is its left column in
 // list form; the details are in the shared right panel). Fields by group, then the variables by kind (R10).
-export default function FieldsList({ overview, selected, onSelect, onChanged }: { overview: FmOverview; selected: string | null; onSelect: (id: string) => void; onChanged: () => void }) {
+export default function FieldsList({ overview, selected, onSelect, onChanged, variablesOnly }: { overview: FmOverview; selected: string | null; onSelect: (id: string) => void; onChanged: () => void; variablesOnly?: boolean }) {
   const { t } = useTranslations();
   const [q, setQ] = useState("");
   const [draft, setDraft] = useState<{ key: string; label: string; value: string } | null>(null);
@@ -39,7 +39,7 @@ export default function FieldsList({ overview, selected, onSelect, onChanged }: 
     <div className="rounded-xl border border-mist bg-paper p-3">
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("fieldsManager.search")} className="mb-2 w-full rounded-lg border border-mist bg-paper px-3 py-1.5 text-[13px]" />
       <div className="max-h-[75vh] space-y-3 overflow-auto">
-        {overview.groups.map((g) => {
+        {!variablesOnly && overview.groups.map((g) => {
           const list = overview.fields.filter((f) => f.group === g.id && match(f.label, f.key));
           if (!list.length) return null;
           return (

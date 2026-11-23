@@ -11,6 +11,8 @@ export type DocumentTypeData = {
   // template to merge + export on acceptance, and whether to do so by
   // default (per-send opt-out happens in ComposeEmailModal, not here).
   templateGoogleDocId?: string;
+  // Fields Manager round 2 (2026-11-23): fields switched off for this template only -- printed empty here.
+  disabledFields?: string[];
   autoAttachOnAccept?: boolean;
   // The same PDF for everyone (e.g. "Pokyny"): the Google Doc is exported as
   // is -- no merge, no per-participant copy -- and it is not a tracked
@@ -58,4 +60,11 @@ export function buildDocumentChecklistLines(
     }
     return `- ${icon} ${displayName} — ${word}`;
   });
+}
+
+/** A document type's text variables with its switched-off fields printed empty (Fields Manager). Pure. */
+export function blankDisabled(text: Record<string, string>, data: DocumentTypeData | null | undefined): Record<string, string> {
+  const off = Array.isArray(data?.disabledFields) ? data!.disabledFields.filter((k) => typeof k === "string") : [];
+  if (!off.length) return text;
+  return { ...text, ...Object.fromEntries(off.map((k) => [k, ""])) };
 }

@@ -39,14 +39,7 @@ export default function FieldCard({ field, overview, docs, onShowInGraph, onChan
       <div className="mt-0.5 font-mono text-[12px] text-ink-secondary">{field.key}</div>
       <div className="mt-2 flex flex-wrap gap-1">
         <span className={tag}>{t(`fieldsManager.type.${field.fieldType}`)}</span>
-        {editable && field.fromTemplate && !field.calculated ? (
-          <select disabled={busy} value={field.storage} onChange={(e) => patch({ storage: e.target.value })} className="rounded-full border border-mist bg-paper px-2 py-0.5 text-[11px]" aria-label={t("fieldsManager.storedValues")}>
-            <option value="profile">{t("fieldsManager.storage.profile")}</option>
-            <option value="event">{t("fieldsManager.storage.event")}</option>
-          </select>
-        ) : (
-          <span className={tag}>{t(`fieldsManager.storage.${field.storage}`)}</span>
-        )}
+        <span className={tag}>{t(`fieldsManager.storage.${field.storage}`)}</span>
         {field.required && <span className="rounded-full bg-pine-bg px-2 py-0.5 text-[11px] text-pine">{t("fieldsManager.required")}</span>}
         {!field.active && <span className={tag}>{t("fieldsManager.inactive")}</span>}
       </div>

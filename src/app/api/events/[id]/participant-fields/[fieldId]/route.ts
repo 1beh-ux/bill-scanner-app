@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { lockBlocker } from "@/lib/org-locked";
+import { featureOn } from "@/lib/org-features";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
@@ -8,6 +10,11 @@ async function loadOwnedField(eventId: string, fieldId: string) {
   const field = await prisma.eventParticipantField.findUnique({ where: { id: fieldId } });
   if (!field || field.eventId !== eventId) return null;
   return field;
+}
+
+async function lockFor(eventId: string, key: string, change: Parameters<typeof lockBlocker>[3]) {
+  const e = await prisma.event.findUnique({ where: { id: eventId }, select: { organizationId: true, organization: { select: { features: true } } } });
+  return e ? lockBlocker(e.organizationId, featureOn(e.organization.features, "fields_manager"), key, change) : null;
 }
 
 export async function PATCH(
@@ -43,6 +50,9 @@ export async function PATCH(
   if (existing.kind !== "custom" && (key !== undefined || label !== undefined || fieldType !== undefined || options !== undefined)) {
     return NextResponse.json({ error: "fixed_field_not_editable" }, { status: 400 });
   }
+  // Pevná pole (Fields Manager round 2): system fields stay on, organization-locked ones stay on and required.
+  const locked = await lockFor(eventId, existing.key, { active, requiredOnRegistration, rename: key !== undefined && key !== existing.key });
+  if (locked) return NextResponse.json({ error: locked }, { status: 409 });
 
   let newKey: string | undefined;
   if (key !== undefined && key !== existing.key) {
@@ -152,6 +162,8 @@ export async function DELETE(
   if (existing.kind !== "custom") {
     return NextResponse.json({ error: "fixed_field_not_deletable" }, { status: 400 });
   }
+  const locked = await lockFor(eventId, existing.key, { remove: true });
+  if (locked) return NextResponse.json({ error: locked }, { status: 409 });
 
   // Unlike EventListItem (referenced by ParticipantDocument's FK), nothing
   // references EventParticipantField by foreign key -- values live in

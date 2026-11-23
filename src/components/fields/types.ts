@@ -21,7 +21,7 @@ export type FmOverview = {
   uses: UseId[];
 };
 
-export type FmDocTemplate = { docTypeId: string; name: string; error: string | null; placeholders: { key: string; status: string; hasSpaces: boolean }[] };
+export type FmDocTemplate = { docTypeId: string; name: string; error: string | null; disabled?: string[]; placeholders: { key: string; status: string; hasSpaces: boolean }[] };
 
 /** Document templates that use a field (directly or through one of its aliases). */
 export function docsUsing(field: Pick<OvField, "key" | "aliases">, docs: FmDocTemplate[] | null): FmDocTemplate[] {

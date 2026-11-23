@@ -107,34 +107,59 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         </section>
       )}
 
-      {(custom || field.fromTemplate) && (
-        <section className={box}>
-          <h4 className="font-semibold">{t("fieldsManager.panel.basics")}</h4>
+      <section className={box}>
+        <h4 className="font-semibold">{t("fieldsManager.panel.basics")}</h4>
+        {field.system && <p className="rounded-lg bg-paper-2 p-2 text-[12px]">🔒 {t("fieldsManager.panel.systemHelp")}</p>}
+        {custom || field.fromTemplate ? (
           <form className="flex gap-1" onSubmit={(e) => (e.preventDefault(), label.trim() && label !== field.label && onPatch(field.key, { label }, { label: field.label }))}>
             <input value={label} onChange={(e) => setLabel(e.target.value)} className={`${input} min-w-0 flex-1`} aria-label={t("fieldsManager.label")} />
             <button disabled={label === field.label} className="rounded border border-mist px-2 hover:bg-paper-2 disabled:opacity-40">{t("fieldsManager.save")}</button>
           </form>
-          {field.fromTemplate && (
-            <div className="flex flex-wrap items-center gap-2">
-              <label>
-                {t("fieldsManager.portal")}{" "}
-                <select value={field.portalAccess ?? "hidden"} onChange={(e) => onPatch(field.key, { portalAccess: e.target.value }, { portalAccess: field.portalAccess })} className={input}>
-                  {["edit", "approval", "read", "hidden"].map((a) => (
-                    <option key={a} value={a}>{t(`fieldsManager.portalAccess.${a}`)}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                {t("fieldsManager.panel.level")}{" "}
-                <select value={field.level ?? "basic"} onChange={(e) => onPatch(field.key, { level: e.target.value }, { level: field.level })} className={input}>
-                  <option value="basic">{t("fieldsManager.groupBasic")}</option>
-                  <option value="detailed">{t("fieldsManager.groupDetailed")}</option>
-                </select>
-              </label>
-            </div>
-          )}
-        </section>
-      )}
+        ) : (
+          <p className="text-ink-secondary">{t("fieldsManager.panel.fixedLabel")}</p>
+        )}
+        {field.fromTemplate && !field.calculated && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={field.storage === "profile"} onChange={(e) => onPatch(field.key, { storage: e.target.checked ? "profile" : "event" }, { storage: field.storage })} />
+            {t("fieldsManager.panel.toProfile")}
+            <span className="text-[12px] text-ink-secondary">{t("fieldsManager.panel.toProfileHelp")}</span>
+          </label>
+        )}
+        {field.fromTemplate && !field.system && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={field.locked} onChange={(e) => onPatch(field.key, { locked: e.target.checked }, { locked: !e.target.checked })} />
+            {t("fieldsManager.panel.locked")}
+            <span className="text-[12px] text-ink-secondary">{t("fieldsManager.panel.lockedHelp")}</span>
+          </label>
+        )}
+        {field.fromTemplate && (
+          <>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={!!field.portalAccess && field.portalAccess !== "hidden"} onChange={(e) => onPatch(field.key, { portalAccess: e.target.checked ? "edit" : "hidden" }, { portalAccess: field.portalAccess ?? "hidden" })} />
+              {t("fieldsManager.panel.inPortal")}
+            </label>
+            {field.portalAccess && field.portalAccess !== "hidden" && (
+              <div className="flex flex-wrap items-center gap-2 pl-6">
+                <label>
+                  {t("fieldsManager.panel.whoChanges")}{" "}
+                  <select value={field.portalAccess} onChange={(e) => onPatch(field.key, { portalAccess: e.target.value }, { portalAccess: field.portalAccess })} className={input}>
+                    {["edit", "approval", "read"].map((a) => (
+                      <option key={a} value={a}>{t(`fieldsManager.portalAccess.${a}`)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  {t("fieldsManager.panel.level")}{" "}
+                  <select value={field.level ?? "basic"} onChange={(e) => onPatch(field.key, { level: e.target.value }, { level: field.level })} className={input}>
+                    <option value="basic">{t("fieldsManager.groupBasic")}</option>
+                    <option value="detailed">{t("fieldsManager.groupDetailed")}</option>
+                  </select>
+                </label>
+              </div>
+            )}
+          </>
+        )}
+      </section>
 
       <section className={box}>
         <h4 className="font-semibold">{t("fieldsManager.usedIn")}</h4>
@@ -164,7 +189,7 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         </div>
       </section>
 
-      {field.calculated && field.kind !== "computed" && (
+      {field.fieldType === "calculated" && (
         <section className={box}>
           {editCalc ? (
             <NewFieldForm overview={overview} edit={{ key: field.key, spec: field.options }} onDone={(k) => (setEditCalc(false), k && onChanged())} />
@@ -174,6 +199,12 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         </section>
       )}
 
+      {field.kind === "builtin" && field.calculated && (
+        <section className={box}>
+          <h4 className="font-semibold">{t("fieldsManager.panel.definition")}</h4>
+          <p>{t(field.deps.length ? "fieldsManager.builtin.full_name" : "fieldsManager.builtin.registration_status")}</p>
+        </section>
+      )}
       {field.kind === "computed" && field.computedType && (
         <section className={box}>
           <h4 className="font-semibold">{t("fieldsManager.panel.definition")}</h4>
@@ -309,7 +340,6 @@ function SourcePanel({ overview, sourceId, onPatch, onOpenTab, onChanged }: Prop
   const { t } = useTranslations();
   const src = overview.sources.find((s) => s.id === sourceId);
   const fed = overview.fields.filter((f) => f.sources.includes(sourceId));
-  const [drag, setDrag] = useState<string | null>(null);
   if (!src) return null;
   const box = "rounded-xl border border-mist bg-paper p-3 text-[13px] space-y-2";
   return (
@@ -327,34 +357,7 @@ function SourcePanel({ overview, sourceId, onPatch, onOpenTab, onChanged }: Prop
         {src.kind === "portal" && <p className="text-[12px] text-ink-secondary">{t("fieldsManager.source.portalHelp")}</p>}
       </section>
       {src.kind === "portal" ? (
-        (["basic", "detailed"] as const).map((level) => (
-          <section
-            key={level}
-            className={`${box} ${drag ? "ring-1 ring-ember/40" : ""}`}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={async () => {
-              const f = overview.fields.find((x) => x.key === drag);
-              setDrag(null);
-              if (f && f.level !== level) {
-                await onPatch(f.key, { level }, { level: f.level });
-                onChanged();
-              }
-            }}
-          >
-            <h4 className="font-semibold">{t(level === "basic" ? "fieldsManager.groupBasic" : "fieldsManager.groupDetailed")}</h4>
-            {fed.filter((f) => (f.level ?? "basic") === level).map((f) => (
-              <div key={f.key} draggable onDragStart={() => setDrag(f.key)} className="flex cursor-grab items-center gap-2 rounded border border-mist px-2 py-1">
-                <span className="flex-1">{f.label} <span className="font-mono text-[11px] text-ink-secondary">{f.key}</span></span>
-                <select value={f.portalAccess ?? "hidden"} onChange={(e) => onPatch(f.key, { portalAccess: e.target.value }, { portalAccess: f.portalAccess })} className={input}>
-                  {["edit", "approval", "read", "hidden"].map((a) => (
-                    <option key={a} value={a}>{t(`fieldsManager.portalAccess.${a}`)}</option>
-                  ))}
-                </select>
-              </div>
-            ))}
-            {fed.filter((f) => (f.level ?? "basic") === level).length === 0 && <p className="text-[12px] text-ink-secondary">{t("fieldsManager.source.dropHere")}</p>}
-          </section>
-        ))
+        <PortalLevels overview={overview} onPatch={onPatch} onChanged={onChanged} />
       ) : (
         <section className={box}>
           <h4 className="font-semibold">{t("fieldsManager.source.fills", { n: String(fed.length) })}</h4>
@@ -370,7 +373,7 @@ function SourcePanel({ overview, sourceId, onPatch, onOpenTab, onChanged }: Prop
 
 /** R13/R14: a place where fields are used -- what it is, which fields are on there, link to its settings; documents
  * as one place with the list of templates and which fields each uses. */
-function PlacePanel({ overview, docs, use, onOpenTab }: Props & { use: string }) {
+function PlacePanel({ overview, docs, use, onOpenTab, onPatch, onChanged }: Props & { use: string }) {
   const { t } = useTranslations();
   const on = overview.fields.filter((f) => f.uses.includes(use as never));
   const box = "rounded-xl border border-mist bg-paper p-3 text-[13px] space-y-2";
@@ -382,21 +385,8 @@ function PlacePanel({ overview, docs, use, onOpenTab }: Props & { use: string })
         <p className="text-ink-secondary">{t(`fieldsManager.place.${use}`)}</p>
         {href[use] && <Link href={href[use]} className="text-ember hover:underline">{t("fieldsManager.place.open")} ↗</Link>}
       </section>
-      {use === "documents" && (
-        <section className={box}>
-          <h4 className="font-semibold">{t("fieldsManager.place.templates")}</h4>
-          {docs === null && <p className="text-ink-secondary">{t("fieldsManager.loadingDocuments")}</p>}
-          {docs?.map((d) => (
-            <div key={d.docTypeId} className="space-y-0.5 border-t border-mist pt-1">
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{d.name}</span>
-                <button type="button" onClick={() => onOpenTab("documents", { doc: d.docTypeId })} className="ml-auto text-[12px] text-ember hover:underline">{t("fieldsManager.hintOpen")}</button>
-              </div>
-              {d.error ? <p className="text-[12px] text-red-700">{t("fieldsManager.doc.unreadable")}</p> : <p className="font-mono text-[11px] text-ink-secondary">{d.placeholders.map((x) => x.key).join(", ") || "—"}</p>}
-            </div>
-          ))}
-        </section>
-      )}
+      {use === "portal" && <PortalLevels overview={overview} onPatch={onPatch} onChanged={onChanged} />}
+      {use === "documents" && <TemplatePills overview={overview} docs={docs} onOpenTab={onOpenTab} onChanged={onChanged} />}
       <section className={box}>
         <h4 className="font-semibold">{t("fieldsManager.place.fields", { n: String(on.length) })}</h4>
         {on.map((f) => (
@@ -405,5 +395,102 @@ function PlacePanel({ overview, docs, use, onOpenTab }: Props & { use: string })
       </section>
       <p className="text-[12px] text-ink-secondary">{t("fieldsManager.ctrlHelp")}</p>
     </div>
+  );
+}
+
+/** The parent portal's fields by level (základní / podrobné): drag between them, change who may change a value, add a
+ * field. The same block from Zdroje → Rodičovský portál and from Kde se používá → Rodičovský portál. */
+function PortalLevels({ overview, onPatch, onChanged }: { overview: FmOverview; onPatch: Props["onPatch"]; onChanged: () => void }) {
+  const { t } = useTranslations();
+  const [drag, setDrag] = useState<string | null>(null);
+  const inPortal = overview.fields.filter((f) => f.fromTemplate && f.portalAccess && f.portalAccess !== "hidden");
+  const addable = overview.fields.filter((f) => f.fromTemplate && !f.calculated && (!f.portalAccess || f.portalAccess === "hidden"));
+  const box = "rounded-xl border border-mist bg-paper p-3 text-[13px] space-y-2";
+  return (
+    <>
+      {(["basic", "detailed"] as const).map((level) => (
+        <section
+          key={level}
+          className={`${box} ${drag ? "ring-1 ring-ember/40" : ""}`}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={async () => {
+            const f = overview.fields.find((x) => x.key === drag);
+            setDrag(null);
+            if (f && (f.level ?? "basic") !== level) {
+              await onPatch(f.key, { level }, { level: f.level });
+              onChanged();
+            }
+          }}
+        >
+          <h4 className="font-semibold">{t(level === "basic" ? "fieldsManager.groupBasic" : "fieldsManager.groupDetailed")}</h4>
+          {inPortal.filter((f) => (f.level ?? "basic") === level).map((f) => (
+            <div key={f.key} draggable onDragStart={() => setDrag(f.key)} className="flex cursor-grab items-center gap-2 rounded border border-mist px-2 py-1">
+              <span className="flex-1">⋮⋮ {f.label} <span className="font-mono text-[11px] text-ink-secondary">{f.key}</span></span>
+              <select value={f.portalAccess ?? "hidden"} onChange={(e) => onPatch(f.key, { portalAccess: e.target.value }, { portalAccess: f.portalAccess })} className={input}>
+                {["edit", "approval", "read", "hidden"].map((a) => (
+                  <option key={a} value={a}>{t(`fieldsManager.portalAccess.${a}`)}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+          {inPortal.filter((f) => (f.level ?? "basic") === level).length === 0 && <p className="text-[12px] text-ink-secondary">{t("fieldsManager.source.dropHere")}</p>}
+        </section>
+      ))}
+      {addable.length > 0 && (
+        <select value="" onChange={(e) => e.target.value && onPatch(e.target.value, { portalAccess: "edit" }, { portalAccess: "hidden" })} className={`${input} w-full`}>
+          <option value="">+ {t("fieldsManager.source.addToPortal")}</option>
+          {addable.map((f) => (
+            <option key={f.key} value={f.key}>{f.label} ({f.key})</option>
+          ))}
+        </select>
+      )}
+    </>
+  );
+}
+
+/** Šablony dokumentů: a pill per template; open one to switch fields off / on for that template only (default on). */
+function TemplatePills({ overview, docs, onOpenTab, onChanged }: { overview: FmOverview; docs: FmDocTemplate[] | null; onOpenTab: Props["onOpenTab"]; onChanged: () => void }) {
+  const { t } = useTranslations();
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const docFields = overview.fields.filter((f) => f.uses.includes("documents"));
+  const box = "rounded-xl border border-mist bg-paper p-3 text-[13px] space-y-2";
+  if (docs === null) return <p className="text-ink-secondary">{t("fieldsManager.loadingDocuments")}</p>;
+  const toggle = async (docType: string, key: string, on: boolean) => {
+    setBusy(true);
+    await fetch("/api/fields/doc-fields", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: overview.eventId, docType, key, on }) }).catch(() => null);
+    setBusy(false);
+    onChanged();
+  };
+  return (
+    <section className={box}>
+      <h4 className="font-semibold">{t("fieldsManager.place.templates")}</h4>
+      <div className="flex flex-wrap gap-1">
+        {docs.map((d) => (
+          <button key={d.docTypeId} type="button" onClick={() => setOpen(open === d.docTypeId ? null : d.docTypeId)} className={`rounded-full border px-2.5 py-0.5 text-[12px] ${open === d.docTypeId ? "border-ember bg-paper-2" : "border-mist"} ${d.error ? "text-red-700" : ""}`}>
+            {d.name}{d.disabled?.length ? ` · −${d.disabled.length}` : ""}
+          </button>
+        ))}
+      </div>
+      {docs.filter((d) => d.docTypeId === open).map((d) => {
+        const used = new Set(d.placeholders.map((p) => p.key));
+        return (
+          <div key={d.docTypeId} className="space-y-1 border-t border-mist pt-2">
+            <p className="text-[12px] text-ink-secondary">{t("fieldsManager.place.pillsHelp")}</p>
+            <div className="flex flex-wrap gap-1">
+              {docFields.map((f) => {
+                const on = !d.disabled?.includes(f.key);
+                return (
+                  <button key={f.key} type="button" disabled={busy} onClick={() => toggle(d.docTypeId, f.key, !on)} title={used.has(f.key) ? t("fieldsManager.place.usedInTemplate") : undefined} className={`rounded-full border px-2 py-0.5 text-[12px] ${on ? "border-pine bg-pine-bg text-pine" : "border-mist text-ink-secondary line-through"} ${used.has(f.key) ? "font-semibold" : ""}`}>
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+            <button type="button" onClick={() => onOpenTab("documents", { doc: d.docTypeId })} className="text-[12px] text-ember hover:underline">{t("fieldsManager.hintOpen")} ↗</button>
+          </div>
+        );
+      })}
+    </section>
   );
 }

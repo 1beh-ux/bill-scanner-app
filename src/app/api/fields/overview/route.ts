@@ -9,6 +9,7 @@ import { loadResolverContext } from "@/lib/field-resolver";
 import { CODE_VARIABLES, LINKED_VARIABLES, EVENT_VARIABLE_ALIASES, formatEventDate } from "@/lib/event-variables";
 import { formatDateRange } from "@/lib/document-variables";
 import { guardianSlots } from "@/lib/org-features";
+import { lockedKeys, SYSTEM_KEYS } from "@/lib/org-locked";
 import { contactEmail, readContactRule } from "@/lib/contact-email";
 import { resolveContactEmail } from "@/lib/document-variables";
 import { fieldsManagerAccess, pickEvent } from "../access";
@@ -58,6 +59,8 @@ export async function GET(req: NextRequest) {
     profileCounts: countValues(children.map((c) => c.fieldValues as Record<string, unknown> | null)),
     registrationCounts: countValues(participants.map((p) => p.customFieldValues as Record<string, unknown> | null)),
     publicRegistration: event.publicRegistration,
+    systemKeys: SYSTEM_KEYS,
+    lockedKeys: await lockedKeys(organizationId),
   });
 
   // Event variables with this event's value where it doesn't depend on the participant.

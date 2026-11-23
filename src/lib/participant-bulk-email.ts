@@ -10,7 +10,7 @@ import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
 import { participantsRootFolderId, syncParticipantDocumentToDrive, documentFileBaseName } from "@/lib/mail-drive-sync";
 import { getOrCreateSubfolder } from "@/lib/drive";
-import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
+import { blankDisabled, documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 
 export interface BulkEmailResult {
   participantId: string;
@@ -129,7 +129,7 @@ async function buildAutoAttachDocuments(
       const buffer = await mergeAndExportDocument(
         event.id,
         data.templateGoogleDocId,
-        text,
+        blankDisabled(text, data),
         images,
         participantFolderId ? { folderId: participantFolderId, name: documentFileBaseName(participant.name, docType) } : undefined,
         imageSizesMm

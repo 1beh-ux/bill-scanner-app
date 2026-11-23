@@ -54,6 +54,9 @@ export type OvField = {
   values: { profiles: number; registrations: number };
   sources: string[];
   uses: UseId[];
+  /** Round 2: a system field (always asked, can't be switched off) / locked for the whole organization. */
+  system: boolean;
+  locked: boolean;
   /** Redesign R7/R9: the calculated spec / the contact rule, edited in the panel. */
   options: unknown;
   computedType: string | null;
@@ -61,6 +64,13 @@ export type OvField = {
 export type OvGroup = { id: string; label: string | null; labelKey: string | null };
 export type OvSource = { id: string; kind: "sync" | "form" | "portal"; label: string | null; labelKey: string | null; autoSync?: boolean; everyHours?: number };
 export type Overview = { groups: OvGroup[]; fields: OvField[]; sources: OvSource[]; uses: UseId[] };
+
+const fixedKey = (prop: string) => FIXED_PARTICIPANT_FIELDS.find((d) => d.builtinProp === prop)?.key ?? "";
+const NAME_KEY = fixedKey("name");
+const FIRST_KEY = fixedKey("firstName");
+const LAST_KEY = fixedKey("lastName");
+const STATUS_KEY = fixedKey("registrationStatus");
+const GROUP_KEY = fixedKey("groupName");
 
 const USE_BY_SURFACE: Record<string, UseId> = { list: "lists", health_list: "health", health_detail: "health", mail_list: "mail", email: "email", documents: "documents" };
 
@@ -84,7 +94,11 @@ export function buildOverview(input: {
   profileCounts: Map<string, number>;
   registrationCounts: Map<string, number>;
   publicRegistration: boolean;
+  systemKeys?: Set<string>;
+  lockedKeys?: Set<string>;
 }): Overview {
+  const systemKeys = input.systemKeys ?? new Set<string>();
+  const lockedKeys = input.lockedKeys ?? new Set<string>();
   const tpl = new Map(input.templates.map((t) => [t.key, t]));
   const aliasesOf = new Map<string, string[]>();
   for (const a of input.aliases) aliasesOf.set(a.targetKey, [...(aliasesOf.get(a.targetKey) ?? []), a.alias]);
@@ -106,10 +120,19 @@ export function buildOverview(input: {
   for (const f of ordered) {
     const t = f.kind === "custom" ? tpl.get(f.key) : undefined;
     const spec = readCalcSpec(f.fieldType, f.options);
-    const calculated = f.kind === "computed" || !!spec;
-    const fixed = FIXED_PARTICIPANT_FIELDS.some((d) => d.key === f.key) && f.kind !== "custom";
+    // Round 2: the full name is calculated from first name + surname, the registration status comes from the
+    // workflow (calculated), the group is a normal registration field.
+    const isName = f.key === NAME_KEY && f.kind !== "custom";
+    const isStatus = f.key === STATUS_KEY && f.kind !== "custom";
+    const isGroup = f.key === GROUP_KEY && f.kind !== "custom";
+    const calculated = f.kind === "computed" || !!spec || isName || isStatus;
+    const fixed = FIXED_PARTICIPANT_FIELDS.some((d) => d.key === f.key) && f.kind !== "custom" && !isGroup && !isStatus;
+    const system = systemKeys.has(f.key);
+    const locked = lockedKeys.has(f.key);
     const storage: OvField["storage"] = calculated ? "calculated" : f.kind === "guardian" ? "guardian" : fixed ? "fixed" : t ? (t.storage === "event" ? "event" : "profile") : "event";
-    const group = calculated
+    const group = system || locked || isName
+      ? "fixed"
+      : calculated
       ? "calculated"
       : f.kind === "guardian"
         ? "guardians"
@@ -119,7 +142,8 @@ export function buildOverview(input: {
             ? t.section || (t.profileSection && sectionLabel.has(t.profileSection) ? `section:${t.profileSection}` : t.level === "detailed" ? "detailed" : "basic")
             : "event";
     const portal = !!t && t.portalAccess !== "hidden";
-    const asked = f.kind === "custom" && f.requiredOnRegistration && (!t || t.portalAccess === "edit" || t.portalAccess === "approval");
+    // System fields are always asked by the form.
+    const asked = system || (f.kind === "custom" && f.requiredOnRegistration && (!t || t.portalAccess === "edit" || t.portalAccess === "approval"));
     const uses = new Set<UseId>(f.surfaces.map((s) => USE_BY_SURFACE[s]).filter((u): u is UseId => !!u));
     if (portal) uses.add("portal");
     if (asked) uses.add("form");
@@ -134,7 +158,7 @@ export function buildOverview(input: {
       group,
       storage,
       calculated,
-      deps: spec ? calcDeps(spec) : [],
+      deps: spec ? calcDeps(spec) : isName ? [FIRST_KEY, LAST_KEY] : [],
       surfaces: f.surfaces,
       active: f.active,
       required: f.requiredOnRegistration,
@@ -146,16 +170,20 @@ export function buildOverview(input: {
       values: { profiles: input.profileCounts.get(f.key) ?? 0, registrations: input.registrationCounts.get(f.key) ?? 0 },
       sources: src,
       uses: USE_IDS.filter((u) => uses.has(u)),
+      system,
+      locked,
       options: f.options ?? null,
       computedType: f.computedType,
     });
   }
 
   if (input.publicRegistration) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceForm" });
-  if (fields.some((f) => f.sources.includes("portal"))) sources.push({ id: "portal", kind: "portal", label: null, labelKey: "fieldsManager.sourcePortal" });
+  // Round 2: the parent portal is always a source (even with no field in it yet -- fields are added from its panel).
+  sources.push({ id: "portal", kind: "portal", label: null, labelKey: "fieldsManager.sourcePortal" });
 
   // Groups in a fixed order; custom profile sections in the organization's order; empty groups dropped.
   const groupOrder: OvGroup[] = [
+    { id: "fixed", label: null, labelKey: "fieldsManager.groupFixed" },
     { id: "basic", label: null, labelKey: "fieldsManager.groupBasic" },
     { id: "detailed", label: null, labelKey: "fieldsManager.groupDetailed" },
     ...input.profileSections.map((s) => ({ id: `section:${s.key}`, label: s.label, labelKey: null })),

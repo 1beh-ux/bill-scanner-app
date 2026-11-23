@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { blankDisabled, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
 import { mergeAndExportDocument } from "@/lib/document-merge";
@@ -25,7 +26,7 @@ export async function GET(
   if (!input.templateGoogleDocId) return NextResponse.json({ error: "no_template" }, { status: 404 });
 
   try {
-    const pdf = await mergeAndExportDocument(eventId, input.templateGoogleDocId, input.text, input.images, undefined, input.imageSizesMm);
+    const pdf = await mergeAndExportDocument(eventId, input.templateGoogleDocId, blankDisabled(input.text, input.docType.data as DocumentTypeData | null), input.images, undefined, input.imageSizesMm);
     return new NextResponse(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",
