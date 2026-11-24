@@ -52,10 +52,19 @@ async function main() {
   const pay = await docType(y2027.event.id, "test_platba", "Platba (TEST)");
   await prisma.event.update({ where: { id: y2027.event.id }, data: { paymentDocTypeId: pay.id } });
 
+  // The same modules as the organization's real membership year "Registrace 2027" (Přihláška, Lidé, Platby...):
+  // without the registration module the public page and the portal card stay off.
+  const model = await prisma.event.findFirst({ where: { organizationId: org.id, name: "Registrace 2027" }, select: { id: true } });
+  const modules = model ? await prisma.eventModule.findMany({ where: { eventId: model.id } }) : [];
+  for (const id of [y2026.event.id, y2027.event.id])
+    for (const m of modules)
+      await prisma.eventModule.upsert({ where: { eventId_moduleKey: { eventId: id, moduleKey: m.moduleKey } }, update: { enabled: m.enabled }, create: { eventId: id, moduleKey: m.moduleKey, enabled: m.enabled } });
+
   const count = async (id: string) => ({
     fields: await prisma.eventParticipantField.count({ where: { eventId: id } }),
     documentTypes: await prisma.eventListItem.count({ where: { eventId: id, kind: "document", active: true } }),
     participants: await prisma.participant.count({ where: { eventId: id } }),
+    modulesOn: (await prisma.eventModule.findMany({ where: { eventId: id, enabled: true }, select: { moduleKey: true } })).map((m) => m.moduleKey).join(","),
   });
   console.log(JSON.stringify({
     organization: org.name,
