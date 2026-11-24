@@ -37,6 +37,7 @@ async function main() {
     { key: "registrationSettings.title", cs: "Registrace a členství", en: "Registration & membership" },
     { key: "registrationSettings.hint", cs: "Vše je volitelné. Když je vypnuto, akce funguje přesně jako dosud.", en: "All optional. With it off, the event works exactly as before." },
     { key: "registrationSettings.connected", cs: "Připojeno k registraci", en: "Connected to registration" },
+    { key: "registrationSettings.membershipPeople", cs: "Členský rok je vždy propojený s Lidmi: každá přihláška (z portálu, z veřejné stránky i z importu) vytvoří nebo propojí osobu a rodinu v Lidech — tak se člověk stává členem.", en: "A membership year is always connected to People: every registration (portal, public page or import) creates or links the person and family in People — that's how someone becomes a member." },
     { key: "registrationSettings.connectedHint", cs: "Účastníci se propojí s dětmi. U běžné akce se pak člen pozná i podle přijaté přihlášky do členského roku (podle roku začátku akce) — ruční pole členství platí dál.", en: "Participants get linked to children. In a regular event, a child also counts as a member from an accepted membership-year registration (by the event's start year) — the manual membership field still applies." },
     { key: "registrationSettings.kind", cs: "Typ akce", en: "Event type" },
     { key: "registrationSettings.kindEvent", cs: "Akce (tábor, výprava…)", en: "Event (camp, trip…)" },

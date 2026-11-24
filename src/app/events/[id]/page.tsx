@@ -1055,12 +1055,15 @@ function RegistrationSettings({
       <p className="mb-3 max-w-md text-[12.5px] text-ink-secondary">{t("registrationSettings.hint")}</p>
       {error && <p className="mb-3 text-[13px] text-red-600">{error}</p>}
       <form onSubmit={save} className="flex max-w-md flex-col gap-3">
+        {kind === "membership" ? (
+          <p className="text-[12.5px] text-ink-secondary">{t("registrationSettings.membershipPeople")}</p>
+        ) : (<>
         <label className="flex items-center gap-2 text-[14px] text-ink">
           <input type="checkbox" checked={connected} onChange={(e) => setConnected(e.target.checked)} className="h-4 w-4 accent-ember" />
           {t("registrationSettings.connected")}
         </label>
         <span className="-mt-2 text-[11.5px] text-ink-secondary">{t("registrationSettings.connectedHint")}</span>
-        {(connected || kind === "membership") && (
+        {connected && (
           <fieldset className="-mt-1 flex flex-col gap-1 pl-6 text-[13px] text-ink">
             <legend className="mb-1 text-[12.5px] text-ink-secondary">{t("registrationSettings.linkMode")}</legend>
             {(["all", "existing"] as const).map((m) => (
@@ -1074,6 +1077,7 @@ function RegistrationSettings({
             ))}
           </fieldset>
         )}
+        </>)}
         <label className="text-[13px] text-ink-secondary">
           {t("registrationSettings.kind")}
           <select value={kind} onChange={(e) => setKind(e.target.value as EventDetail["kind"])} className={inputClass + " mt-1"}>

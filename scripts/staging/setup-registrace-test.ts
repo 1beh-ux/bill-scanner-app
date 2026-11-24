@@ -36,7 +36,6 @@ async function main() {
   await docType(y2026.event.id, "test_registracni_list", "Registrační list (TEST)");
 
   const y2027 = await event("TEST Registrace 2027", "2027-01-01", "2027-12-31", {
-    peopleLinkMode: "existing",
     portalOpen: true,
     eligibility: { attendedEventIds: [y2026.event.id] },
     autoAccept: "accept",

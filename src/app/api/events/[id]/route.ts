@@ -271,6 +271,8 @@ export async function PATCH(
       ...(registrationConnected !== undefined && { registrationConnected }),
       ...((registrationConnected === true || kind === "membership") && { peopleUnlinked: false }),
       ...(peopleLinkMode !== undefined && { peopleLinkMode }),
+      // A membership year is how one becomes a member: always connected, always creating people (no settings).
+      ...(kind === "membership" && { registrationConnected: true, peopleLinkMode: "all" as const }),
       ...(portalOpen !== undefined && { portalOpen }),
       // Stored cleaned (src/lib/portal-rules.ts readEligibility); null/{} = nobody.
       ...(eligibility !== undefined && { eligibility: eligibility === null ? Prisma.DbNull : readEligibility(eligibility) }),
