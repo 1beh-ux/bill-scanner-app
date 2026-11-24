@@ -3,6 +3,7 @@
 // the portal, the public form, the admin roster and the self-check
 // (scripts/test-registration-slice5.ts) share it.
 import { writeTargets } from "@/lib/field-write-targets";
+import { readFormConfig } from "@/lib/form-config";
 import { isIsoDate, type PortalAccessLevel } from "@/lib/portal-rules";
 
 export type FieldAudience = "both" | "children" | "adults";
@@ -30,7 +31,7 @@ export function optionsFor(f: { options: unknown; adultOptions?: unknown }, isAd
 // --- Asked at registration (spec 2-3) --------------------------------------
 
 export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel; storage?: string };
-export type EventFieldRule = { key: string; label: string; fieldType: string; options: unknown; kind: string; requiredOnRegistration: boolean };
+export type EventFieldRule = { key: string; label: string; fieldType: string; options: unknown; kind: string; requiredOnRegistration: boolean; formConfig?: unknown; active?: boolean };
 
 /**
  * One field the registration step asks: a profile field (the event's field has
@@ -48,6 +49,11 @@ export type AskedField = {
   audience: FieldAudience;
   // Decision A (field-write-targets.ts): "event" = the registration only. Missing = "profile" (today).
   storage?: string;
+  // Pole -> Formulář (form-config.ts): set only for a question with its own settings. required false = may stay
+  // empty; when "after" = after acceptance; hint = a line under the question. Missing = today's rules.
+  required?: boolean;
+  when?: "registration" | "after";
+  hint?: string | null;
 };
 
 /**
@@ -61,6 +67,30 @@ export type AskedField = {
 export function askedFields(eventFields: EventFieldRule[], templates: Map<string, TemplateRule>, isAdult?: boolean | null): AskedField[] {
   const out: AskedField[] = [];
   for (const f of eventFields) {
+    // A question with its own settings (Pole -> Formulář): asked as set, independent of the parent portal.
+    const cfg = f.kind === "custom" && f.active !== false ? readFormConfig(f.formConfig) : null;
+    if (cfg) {
+      if (!cfg.ask) continue;
+      const tc = templates.get(f.key);
+      const audience = cfg.audience ?? tc?.audience ?? "both";
+      if (isAdult !== undefined && !appliesTo(audience, isAdult)) continue;
+      out.push({
+        key: f.key,
+        label: cfg.label ?? tc?.label ?? f.label,
+        fieldType: tc?.fieldType ?? f.fieldType,
+        options: tc ? optionsFor(tc, isAdult) : f.options,
+        source: tc ? "profile" : "event",
+        // Answering the question writes the profile (a proposal when parents only propose changes there).
+        access: tc ? (tc.portalAccess === "approval" ? "approval" : "edit") : null,
+        level: cfg.when === "after" ? "detailed" : "basic",
+        audience,
+        storage: tc?.storage,
+        required: cfg.required,
+        when: cfg.when,
+        hint: cfg.hint,
+      });
+      continue;
+    }
     if (f.kind !== "custom" || !f.requiredOnRegistration) continue;
     const t = templates.get(f.key);
     if (!t) {
@@ -82,7 +112,7 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
  * profile fields; the detailed ones and the event's own questions are filled after acceptance (portal
  * registration card, or the participant's own link). Off = everything at once, as before.
  */
-export const isBasicAsk = (f: AskedField) => f.source === "profile" && f.level === "basic";
+export const isBasicAsk = (f: AskedField) => (f.when ? f.when === "registration" : f.source === "profile" && f.level === "basic");
 export const askedNow = (asked: AskedField[], later: boolean) => (later ? asked.filter(isBasicAsk) : asked);
 export const askedLater = (asked: AskedField[], later: boolean) => (later ? asked.filter((f) => !isBasicAsk(f)) : []);
 
@@ -123,9 +153,13 @@ export function checkAnswers(
   const values: Record<string, string> = {};
   const errors: string[] = [];
   for (const f of asked) {
+    if (f.fieldType === "calculated") continue; // shown, never answered
     const v = (f.fieldType === "boolean" || f.fieldType === "consent") && !answers[f.key] ? "false" : cleanFieldValue(f, answers[f.key]);
-    if (!v) errors.push(f.key);
-    else values[f.key] = v;
+    // An optional question (Formulář settings) may stay empty; a consent still needs its tick when required.
+    if (!v || (f.fieldType === "consent" && f.required && v !== "true")) {
+      if (f.required === false && v !== null) continue;
+      errors.push(f.key);
+    } else values[f.key] = v;
   }
   if (needsReviewTick(asked, opts.prefill) && !opts.reviewed) errors.push("reviewed");
   return errors.length ? { ok: false, errors } : { ok: true, values };
@@ -161,4 +195,4 @@ export function routeAnswers(
  * questions on the participant.
  */
 export const askedMissing = (asked: AskedField[], profile: Record<string, string> | null, participant: Record<string, string | undefined>) =>
-  asked.some((f) => !(f.source === "profile" && profile ? profile[f.key] : participant[f.key])?.trim());
+  asked.some((f) => f.required !== false && f.fieldType !== "calculated" && !(f.source === "profile" && profile ? profile[f.key] : participant[f.key])?.trim());

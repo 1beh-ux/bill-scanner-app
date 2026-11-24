@@ -1278,6 +1278,9 @@ model EventParticipantField {
   // field with an org template only while parents may edit it (edit/approval);
   // an event-only field is an event question, stored on the participant only.
   requiredOnRegistration Boolean                   @default(false) @map("required_on_registration")
+  // Pole -> Formulář (2026-11-24): this event's question settings for the field -- ask, required, for whom, when,
+  // own wording, hint. null = today's rules (portal level + "Vyžadovat při přihlášce"); src/lib/form-config.ts.
+  formConfig             Json?                     @map("form_config")
 
   event Event @relation(fields: [eventId], references: [id])
 

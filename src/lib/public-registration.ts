@@ -18,7 +18,7 @@ export const PUBLIC_AUDIENCES: PublicAudience[] = ["children", "children_adults"
 export const readAudience = (v: unknown): PublicAudience => (PUBLIC_AUDIENCES as unknown[]).includes(v) ? (v as PublicAudience) : "any";
 
 // group: the profile part's name (Šablony -> Účastníci), shown as a heading when a form has several.
-export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; group?: string; required: boolean; audience?: FieldAudience; eventOnly?: boolean };
+export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; group?: string; required: boolean; audience?: FieldAudience; eventOnly?: boolean; hint?: string };
 export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null };
 export type PersonIn = {
   firstName: string;

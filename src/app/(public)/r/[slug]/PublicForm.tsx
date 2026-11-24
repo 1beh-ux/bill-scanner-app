@@ -338,6 +338,7 @@ export default function PublicForm({
                       {f.label}
                       {f.required && " *"}
                     </span>
+                    {f.hint && <span className="text-[12px]">{f.hint}</span>}
                     <FieldInput
                       field={{ ...f, options: f.fieldType === "calculated" ? f.options : optionsFor(f, p.isAdult) }}
                       value={p.values[f.key] ?? ""}

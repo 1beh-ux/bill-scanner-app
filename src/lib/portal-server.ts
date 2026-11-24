@@ -1,5 +1,6 @@
 // Parent portal, server side (docs/registration-portal-spec.md G, slice 3 B):
 import { detailsDocuments } from "@/lib/details-documents";
+import { Prisma } from "@/generated/prisma";
 import { ticketFormFields } from "@/lib/ticket-fields-server";
 // resolving the token + birth-date cookie, what the portal shows, and the
 // portal registration. A token is either a child's (that child only) or a
@@ -132,7 +133,11 @@ export async function templateRules(organizationId: string): Promise<Map<string,
 /** The events' fields marked "Vyžadovat při přihlášce", in the event's field order. */
 export const requiredEventFields = (eventIds: string[]) =>
   eventIds.length
-    ? prisma.eventParticipantField.findMany({ where: { eventId: { in: eventIds }, active: true, kind: "custom", requiredOnRegistration: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] })
+    ? prisma.eventParticipantField.findMany({
+        // Marked "Vyžadovat", or with its own question settings (Pole -> Formulář; askedFields decides from them).
+        where: { eventId: { in: eventIds }, active: true, kind: "custom", OR: [{ requiredOnRegistration: true }, { formConfig: { not: Prisma.DbNull } }] },
+        orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
+      })
     : Promise.resolve([]);
 
 /** A profile as the parent sees it: live values, a pending proposal instead where there is one. */

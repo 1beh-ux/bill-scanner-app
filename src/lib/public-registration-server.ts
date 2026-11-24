@@ -7,7 +7,7 @@
 import { writeTargets } from "@/lib/field-write-targets";
 import { prisma } from "@/lib/prisma";
 import { createRegistration, oddilField, requiredEventFields, templateRules, visibleTemplates } from "@/lib/portal-server";
-import { askedFields, askedNow } from "@/lib/registration-fields";
+import { askedFields, askedNow, type TemplateRule } from "@/lib/registration-fields";
 import { readPriceRules } from "@/lib/price-rules";
 import { fullNameFrom } from "@/lib/participant-name";
 import { newPortalToken } from "@/lib/portal-gate";
@@ -46,7 +46,7 @@ export async function publicFormContext(event: PublicEvent) {
     requiredEventFields([event.id]),
     templateRules(event.organizationId),
     prisma.organization.findUniqueOrThrow({ where: { id: event.organizationId }, select: { portalProfileSections: true } }),
-    prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true, kind: "custom" }, select: { key: true } }),
+    prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true, kind: "custom" }, select: { key: true, formConfig: true } }),
   ]);
   // Only the organization's fields this event has (2026-10-27): one removed from the event isn't asked.
   const eventKeys = new Set(own.map((f) => f.key));
@@ -55,6 +55,30 @@ export async function publicFormContext(event: PublicEvent) {
   const groupOf = (t: { profileSection: string | null; level: "basic" | "detailed" }) => sections.find((s) => s.key === sectionOf(t, sections))?.label;
   // Two-step events: the detailed fields and the event's questions come after acceptance.
   const asked = askedNow(askedFields(eventFields, tplRules), event.detailsAfterAcceptance);
+  // Pole -> Formulář: an event whose questions have their own settings asks exactly those -- wording, required,
+  // for whom, hint -- independent of the portal; a calculated one is shown, worked out live.
+  if (own.some((f) => f.formConfig !== null)) {
+    const tpl = (k: string) => tplRules.get(k);
+    return {
+      fields: asked.map((f) => {
+        const t = tpl(f.key) as (TemplateRule & { profileSection: string | null; adultOptions?: unknown }) | undefined;
+        return {
+          key: f.key,
+          label: f.label,
+          fieldType: f.fieldType,
+          options: t ? t.options : f.options,
+          adultOptions: t?.adultOptions ?? undefined,
+          group: t ? groupOf({ profileSection: t.profileSection, level: t.level }) : undefined,
+          required: f.required !== false && f.fieldType !== "calculated",
+          audience: f.audience,
+          hint: f.hint ?? undefined,
+          ...((f.source === "event" || writeTargets({ fromTemplate: !!t, storage: t?.storage }, { source: "public_form" }).profile === "no") && { eventOnly: true }),
+        };
+      }),
+      rules,
+      oddil: await oddilField(event.id, rules),
+    };
+  }
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
   const fields: FormField[] = [
     ...templates

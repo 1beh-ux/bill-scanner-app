@@ -75,7 +75,7 @@ type Pricing = {
   members: { id: string; isAdult: boolean; isMember: boolean; categories: CategoryOption[] }[];
 };
 // The registration step (slice 5 #3): the event's required fields for one person.
-type StepField = { key: string; label: string; fieldType: string; options: unknown; source: "profile" | "event"; access: "edit" | "approval" | null; value: string };
+type StepField = { key: string; label: string; fieldType: string; options: unknown; source: "profile" | "event"; access: "edit" | "approval" | null; value: string; required?: boolean; hint?: string | null };
 type Step = { fields: StepField[]; reviewTick: boolean };
 type Data = {
   kind: "child" | "family";
@@ -856,10 +856,11 @@ function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: {
         <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
           <span>
             {f.label}
-            {f.fieldType !== "boolean" && f.fieldType !== "consent" && " *"}
+            {f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated" && " *"}
             {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
           </span>
-          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} calc={{ values, missingLabel: t("portal.calcMissing"), labelOf: (k) => step.fields.find((x) => x.key === k)?.label ?? k }} />
+          {f.hint && <span className="text-[12px] text-ink-secondary">{f.hint}</span>}
+          <FieldInput field={f} value={values[f.key] ?? ""} required={f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} calc={{ values, missingLabel: t("portal.calcMissing"), labelOf: (k) => step.fields.find((x) => x.key === k)?.label ?? k }} />
         </label>
       ))}
       {step.fields.some((f) => f.source === "profile") && <p className="text-[12px] text-ink-secondary">{t("portal.stepSavedToProfile")}</p>}

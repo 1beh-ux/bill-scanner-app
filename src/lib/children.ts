@@ -5,7 +5,7 @@
 // Profile editing + push to events: src/lib/child-profile.ts.
 import { NOT_TEST_EVENT } from "@/lib/test-events";
 import { prisma } from "@/lib/prisma";
-import type { Prisma } from "@/generated/prisma";
+import { Prisma } from "@/generated/prisma";
 import { participantDisplayName } from "@/lib/participant-name";
 import { readPriceRules } from "@/lib/price-rules";
 import type { DetailsAsk, PriceContext } from "@/lib/document-variables";
@@ -261,7 +261,8 @@ export async function priceContext(eventId: string): Promise<PriceContext> {
  */
 export async function detailsAsk(eventId: string): Promise<DetailsAsk> {
   const [eventFields, templates, adults] = await Promise.all([
-    prisma.eventParticipantField.findMany({ where: { eventId, active: true, kind: "custom", requiredOnRegistration: true }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
+    // Marked "Vyžadovat", or with its own question settings (Pole -> Formulář).
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true, kind: "custom", OR: [{ requiredOnRegistration: true }, { formConfig: { not: Prisma.DbNull } }] }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
     prisma.participantFieldTemplate.findMany({ where: { active: true, organization: { events: { some: { id: eventId } } } }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }] }),
     prisma.participant.findMany({ where: { eventId, child: { isAdult: true } }, select: { childId: true } }),
   ]);
