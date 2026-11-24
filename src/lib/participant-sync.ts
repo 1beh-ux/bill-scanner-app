@@ -231,6 +231,22 @@ export function guessType(values: string[]): { fieldType: string; options?: stri
   return { fieldType: v.some((x) => x.length > 60) ? "longtext" : "text" };
 }
 
+/**
+ * The new import's guess (2026-11-24 use-case test): a column whose header IS a field's name goes to that field
+ * (e.g. "Oddíl / členství ve skupině", "Kontaktní email dítěte"), before the keyword guesses -- which would send
+ * them to Skupina / a guardian's e-mail. Pure.
+ */
+export function guessMappingByLabel(headers: string[], fields: FieldInfo[]): Record<string, string> {
+  const fold = (x: string) => normalizeKey(x).replace(/[^a-z0-9]+/g, " ").trim();
+  const byLabel = new Map(fields.filter((f) => isWritableField(f) && f.kind === "custom").map((f) => [fold(f.label), f.key]));
+  const guessed = guessMapping(headers, fields);
+  for (const h of headers) {
+    const exact = byLabel.get(fold(h));
+    if (exact) guessed[h.trim()] = exact;
+  }
+  return guessed;
+}
+
 /** Diacritics-, case- and whitespace-insensitive ("Novak" matches "Novák"). */
 export function normalizeKey(s: string): string {
   return s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");

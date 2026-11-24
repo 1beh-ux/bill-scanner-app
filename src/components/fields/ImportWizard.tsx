@@ -6,7 +6,7 @@ import { parseTable } from "@/lib/planning-import";
 import { toBoolean } from "@/lib/participant-fields";
 import {
   canCreate,
-  guessMapping,
+  guessMappingByLabel,
   guessType,
   slotMapping,
   SYNC_INTERVALS,
@@ -112,7 +112,7 @@ export default function ImportWizard({ eventId }: { eventId: string }) {
     const headers = next.headers.map((h) => h.trim());
     setTable({ headers, rows: next.rows });
     setSyncId(sync?.id ?? null);
-    setMapping(slotMapping(headers, sync ? sync.mapping : guessMapping(headers, data!.fields)));
+    setMapping(slotMapping(headers, sync ? sync.mapping : guessMappingByLabel(headers, data!.fields)));
     setMatchBy(sync?.matchBy ?? MATCH_BY_NAME);
     setOnNew(sync?.onNew ?? "create");
     setValueMap(sync?.valueMap ?? {});

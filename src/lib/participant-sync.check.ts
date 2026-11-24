@@ -1,6 +1,6 @@
 // Self-check for the pure participant sync planner: `npx tsx src/lib/participant-sync.check.ts`
 import assert from "node:assert/strict";
-import { canCreate, fieldMode, guessType, planSync, policyOf, readSyncs, sanitizeSettings, slotMapping, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
+import { canCreate, fieldMode, guessMappingByLabel, guessType, planSync, policyOf, readSyncs, sanitizeSettings, slotMapping, MATCH_BY_NAME, REGNUM_TARGET, type ExistingParticipant, type FieldInfo, type SyncSettings } from "@/lib/participant-sync";
 
 const fields: FieldInfo[] = [
   { key: "Name", label: "Jméno a příjmení dítěte", kind: "builtin" },
@@ -148,4 +148,12 @@ assert.deepEqual(guessType(["ano", "ne", "Ano"]), { fieldType: "boolean" });
 assert.deepEqual(guessType(["S", "M", "S", "L", "M", "S"]), { fieldType: "select", options: ["S", "M", "L"] });
 assert.equal(guessType(["1. 2. 2015", "2015-03-04"]).fieldType, "date");
 assert.equal(guessType(["Novák, Praha", "Malá, Brno"]).fieldType, "text");
+// The new import's guess: a header that IS a field's name wins over keyword guesses (use-case test 2026-11-24).
+{
+  const fs2: FieldInfo[] = [...fields, { key: "oddil", label: "Oddíl / členství ve skupině", kind: "custom", fieldType: "select" }, { key: "kontaktni_email_ditete", label: "Kontaktní email dítěte (pokud používá, nepovinné)", kind: "custom", fieldType: "email" }];
+  const m = guessMappingByLabel(["Oddíl / členství ve skupině", "Kontaktní email dítěte (pokud používá, nepovinné)", "E-mail zákonného zástupce"], fs2);
+  assert.equal(m["Oddíl / členství ve skupině"], "oddil");
+  assert.equal(m["Kontaktní email dítěte (pokud používá, nepovinné)"], "kontaktni_email_ditete");
+  assert.equal(m["E-mail zákonného zástupce"], "Email"); // keyword guess where no field has that name
+}
 console.log("participant-sync ok");
