@@ -90,4 +90,24 @@ assert.deepEqual(noForm.fields[0].sources, []);
   assert.equal(g("registrace").calculated, true);
   assert.notEqual(g("skupina").storage, "fixed");
 }
+// 2026-11-24: what the real form asks; organization fields not in the event listed (off); the form's fixed questions.
+{
+  const ov2 = buildOverview({
+    templates: [T("basic_portal"), T("detail_portal", { level: "detailed" }), T("detail_req", { level: "detailed" }), T("hidden_req", { portalAccess: "hidden" }), T("not_here")],
+    eventFields: [E("basic_portal"), E("detail_portal"), E("detail_req", { requiredOnRegistration: true }), E("hidden_req", { requiredOnRegistration: true })],
+    syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: true,
+    formQuestions: [{ key: "portal_note", label: "Poznámka" }],
+  });
+  const g = (k: string) => ov2.fields.find((x) => x.key === k)!;
+  assert.ok(g("basic_portal").uses.includes("form")); // basic portal field: the form asks it
+  assert.ok(!g("detail_portal").uses.includes("form")); // detailed, not required: not on the form
+  assert.ok(g("detail_req").uses.includes("form")); // detailed + "Vyžadovat při přihlášce"
+  assert.ok(!g("hidden_req").uses.includes("form")); // hidden from parents: the form can't ask it
+  assert.equal(g("not_here").inEvent, false); // an organization field this event doesn't use -- listed, off
+  assert.equal(g("portal_note").kind, "form");
+  assert.equal(ov2.fields[0].key, "portal_note"); // the form's fixed questions first
+  // Two-step event: a detailed required field is asked after acceptance, not on the public form.
+  const two = buildOverview({ templates: [T("d", { level: "detailed" })], eventFields: [E("d", { requiredOnRegistration: true })], syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: true, detailsAfterAcceptance: true });
+  assert.ok(!two.fields[0].uses.includes("form"));
+}
 console.log("fields-overview: ok");

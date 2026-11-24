@@ -74,8 +74,28 @@ export default function DetailPanel(p: Props) {
 
 function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRenamed }: Props & { field: OvField; onRenamed: (from: string, to: string, logId: string) => void }) {
   const { t } = useTranslations();
+  const ticketEvent = overview.variables.some((v) => v.category === "order");
   const [editCalc, setEditCalc] = useState(false);
   const [label, setLabel] = useState(field.label);
+  // The form's own fixed question (buyer, note...): what it is and where its wording is changed.
+  if (field.kind === "form")
+    return (
+      <div className="space-y-2 rounded-xl border border-mist bg-paper p-4 text-[13px]">
+        <h3 className="text-[15px] font-semibold text-ink">🔒 {field.label}</h3>
+        <p className="text-ink-secondary">{t(ticketEvent ? "fieldsManager.formQuestion.ticket" : "fieldsManager.formQuestion.registration")}</p>
+        <Link href={`/events/${overview.eventId}?tab=${ticketEvent ? "vstupenky" : "verejna"}`} className="text-ember hover:underline">{t("fieldsManager.panel.changeThere")} ↗</Link>
+      </div>
+    );
+  // An organization field this event doesn't use (yet).
+  if (!field.inEvent)
+    return (
+      <div className="space-y-2 rounded-xl border border-dashed border-mist bg-paper p-4 text-[13px]">
+        <h3 className="text-[15px] font-semibold text-ink">{field.label}</h3>
+        <div className="font-mono text-[12px] text-ink-secondary">{field.key}</div>
+        <p className="text-ink-secondary">{t("fieldsManager.notInEvent")}</p>
+        <button type="button" onClick={() => onPatch(field.key, { inEvent: true }, { inEvent: false })} className="rounded-lg bg-ember px-3 py-1 text-white">{t("fieldsManager.useInEvent")}</button>
+      </div>
+    );
   const hints = fieldHints(field, overview.fields, docs, { contactMissing: overview.contactMissing });
   const enabledFor = (u: string) => (u === "lists" ? field.surfaces.includes("list") : u === "health" ? field.surfaces.some((s) => s.startsWith("health")) : u === "mail" ? field.surfaces.includes("mail_list") : field.surfaces.includes(u));
   const usingDocs = docsUsing(field, docs);
@@ -125,6 +145,12 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
             <input type="checkbox" disabled={!field.fromTemplate} checked={field.storage !== "event"} onChange={(e) => onPatch(field.key, { storage: e.target.checked ? "profile" : "event" }, { storage: field.storage })} />
             {t("fieldsManager.panel.toProfile")}
             <span className="text-[12px] text-ink-secondary">{t(field.fromTemplate ? "fieldsManager.panel.toProfileHelp" : field.storage === "event" ? "fieldsManager.panel.toProfileNever" : "fieldsManager.panel.toProfileAlways")}</span>
+          </label>
+        )}
+        {field.fromTemplate && !field.system && !field.locked && (
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={field.active} onChange={(e) => onPatch(field.key, { inEvent: e.target.checked }, { inEvent: !e.target.checked })} />
+            {t("fieldsManager.useInEvent")}
           </label>
         )}
         {field.fromTemplate && !field.system && (

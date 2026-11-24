@@ -54,6 +54,8 @@ export type OvField = {
   values: { profiles: number; registrations: number };
   sources: string[];
   uses: UseId[];
+  /** 2026-11-24: an organization field this event doesn't use (yet) -- listed so it can be switched on here. */
+  inEvent: boolean;
   /** Round 2: a system field (always asked, can't be switched off) / locked for the whole organization. */
   system: boolean;
   locked: boolean;
@@ -98,6 +100,10 @@ export function buildOverview(input: {
   lockedKeys?: Set<string>;
   /** A ticket event (2026-11-24): its fields are asked on the ticket form; no parent portal. */
   ticketForm?: boolean;
+  /** The form's own fixed questions that aren't fields (ticket buyer, registration note): shown, never edited. */
+  formQuestions?: { key: string; label: string }[];
+  /** Two-step event: detailed fields are asked after acceptance, not on the public form. */
+  detailsAfterAcceptance?: boolean;
 }): Overview {
   const systemKeys = input.systemKeys ?? new Set<string>();
   const lockedKeys = input.lockedKeys ?? new Set<string>();
@@ -145,7 +151,11 @@ export function buildOverview(input: {
             : "event";
     const portal = !!t && t.portalAccess !== "hidden";
     // System fields are always asked by the form.
-    const asked = system || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && f.requiredOnRegistration && (!t || t.portalAccess === "edit" || t.portalAccess === "approval"));
+    // As the public form does it (publicFormContext): an organization field in the portal is asked at the basic level
+    // (or when marked "Vyžadovat při přihlášce" -- after acceptance on a two-step event), an event question when marked.
+    const inPortal = !!t && t.portalAccess !== "hidden";
+    const askedTemplate = inPortal && f.active && (t!.level === "basic" || (f.requiredOnRegistration && (t!.portalAccess === "edit" || t!.portalAccess === "approval") && !(input.detailsAfterAcceptance && t!.level === "detailed")));
+    const asked = system || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && (t ? askedTemplate : f.requiredOnRegistration && f.active));
     const uses = new Set<UseId>(f.surfaces.map((s) => USE_BY_SURFACE[s]).filter((u): u is UseId => !!u));
     if (portal) uses.add("portal");
     if (asked) uses.add("form");
@@ -174,11 +184,33 @@ export function buildOverview(input: {
       uses: USE_IDS.filter((u) => uses.has(u)),
       system,
       locked,
+      inEvent: true,
       options: f.options ?? null,
       computedType: f.computedType,
     });
   }
 
+  // Organization fields this event doesn't have: listed (switched off) so they can be taken into the event here.
+  const inEventKeys = new Set(input.eventFields.map((f) => f.key));
+  if (!input.ticketForm)
+    for (const t of input.templates.filter((x) => x.active && !inEventKeys.has(x.key))) {
+      const calc = t.fieldType === "calculated";
+      fields.push({
+        key: t.key, label: t.label, fieldType: t.fieldType, kind: "custom",
+        group: lockedKeys.has(t.key) ? "fixed" : calc ? "calculated" : t.section || (t.profileSection && sectionLabel.has(t.profileSection) ? `section:${t.profileSection}` : t.level === "detailed" ? "detailed" : "basic"),
+        storage: calc ? "calculated" : t.storage === "event" ? "event" : "profile", calculated: calc, deps: [], surfaces: [], active: false,
+        required: false, requiredDefault: t.requiredInRegistration, portalAccess: t.portalAccess, level: t.level, fromTemplate: true,
+        aliases: aliasesOf.get(t.key) ?? [], values: { profiles: input.profileCounts.get(t.key) ?? 0, registrations: 0 },
+        sources: [], uses: [], inEvent: false, system: false, locked: lockedKeys.has(t.key), options: null, computedType: null,
+      });
+    }
+  // The form's own fixed questions (not fields): shown on top, asked always.
+  for (const q of input.formQuestions ?? [])
+    fields.unshift({
+      key: q.key, label: q.label, fieldType: "text", kind: "form", group: "fixed", storage: "event", calculated: false, deps: [], surfaces: [], active: true,
+      required: true, requiredDefault: null, portalAccess: null, level: null, fromTemplate: false, aliases: [], values: { profiles: 0, registrations: 0 },
+      sources: input.publicRegistration || input.ticketForm ? ["form"] : [], uses: ["form", "email"], inEvent: true, system: true, locked: false, options: null, computedType: null,
+    });
   if (input.ticketForm) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceTicketForm" });
   else if (input.publicRegistration) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceForm" });
   // Round 2: the parent portal is always a source (even with no field in it yet -- fields are added from its panel);

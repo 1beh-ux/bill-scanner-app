@@ -11,7 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { invalidateResolverContext } from "@/lib/field-resolver";
 import { calcDeps, readCalcSpec } from "@/lib/field-calc";
 import { readContactRule } from "@/lib/contact-email";
-import { setLocked, SYSTEM_KEYS } from "@/lib/org-locked";
+import { lockBlocker, setLocked, SYSTEM_KEYS } from "@/lib/org-locked";
 import { fieldsManagerAccess, pickEvent } from "../access";
 
 const SURFACES: Record<string, string[]> = { lists: ["list"], health: ["health_list", "health_detail"], mail: ["mail_list"], email: ["email"], documents: ["documents"], import: ["import"] };
@@ -24,6 +24,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   const { organizationId, userId } = access;
   const { key } = await params;
   const b = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>;
+  // 2026-11-24: use the organization field in this event (a copy from the template) / stop using it (switched off,
+  // values kept). System and organization-fixed fields can't be dropped.
+  if (b.inEvent !== undefined) {
+    if (typeof b.inEvent !== "boolean") return bad();
+    const { selected: ev } = await pickEvent(organizationId, req.nextUrl.searchParams.get("event"));
+    const tpl = await prisma.participantFieldTemplate.findFirst({ where: { organizationId, key } });
+    if (!ev || !tpl) return bad("no_template");
+    const copy = await prisma.eventParticipantField.findFirst({ where: { eventId: ev.id, key } });
+    if (!b.inEvent) {
+      const blocked = await lockBlocker(organizationId, true, key, { active: false });
+      if (blocked) return NextResponse.json({ error: blocked }, { status: 409 });
+      if (copy) await prisma.eventParticipantField.update({ where: { id: copy.id }, data: { active: false } });
+    } else if (copy) await prisma.eventParticipantField.update({ where: { id: copy.id }, data: { active: true } });
+    else
+      await prisma.eventParticipantField.create({
+        data: { eventId: ev.id, key, label: tpl.label, fieldType: tpl.fieldType, options: (tpl.options ?? undefined) as Prisma.InputJsonValue | undefined, surfaces: tpl.defaultSurfaces, isFromTemplate: true, requiredOnRegistration: tpl.requiredInRegistration },
+      });
+    await prisma.fieldChangeLog.create({ data: { organizationId, action: "edit", byId: userId, before: { key, eventId: ev.id, inEvent: !!copy?.active }, after: { key, eventId: ev.id, inEvent: b.inEvent } } });
+    invalidateResolverContext(ev.id);
+    return NextResponse.json({ ok: true });
+  }
   // Round 2: lock / unlock the field for the whole organization ("Pevné pole organizace").
   if (b.locked !== undefined) {
     if (typeof b.locked !== "boolean" || SYSTEM_KEYS.has(key)) return bad();

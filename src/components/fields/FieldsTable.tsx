@@ -36,6 +36,7 @@ export default function FieldsTable({ overview, selected, onSelect, onPatch, onC
   const tmpl = (f: OvField) => f.fromTemplate && !f.calculated;
   const cols: Col[] = useMemo(
     () => [
+      { id: "inEvent", label: t("fieldsManager.table.inEvent"), value: (f) => yn(f.inEvent && f.active), can: (f) => f.fromTemplate && !f.system && !f.locked, body: (_f, v) => ({ inEvent: v === "1" }) },
       { id: "group", label: t("fieldsManager.group"), value: (f) => f.group, can: () => false },
       { id: "type", label: t("fieldsManager.panel.type"), value: (f) => f.fieldType, can: () => false },
       { id: "profile", label: t("fieldsManager.panel.toProfile"), value: (f) => yn(f.storage !== "event" && !f.calculated), can: tmpl, body: (_f, v) => ({ storage: v === "1" ? "profile" : "event" }) },
@@ -79,7 +80,7 @@ export default function FieldsTable({ overview, selected, onSelect, onPatch, onC
     let skipped = 0;
     for (const key of picked) {
       const f = overview.fields.find((x) => x.key === key);
-      if (!f || !bulkCol.can(f) || bulkCol.value(f) === bulk.value) {
+      if (!f || !editable(f, bulkCol) || bulkCol.value(f) === bulk.value) {
         skipped++;
         continue;
       }
@@ -91,9 +92,11 @@ export default function FieldsTable({ overview, selected, onSelect, onPatch, onC
     onChanged();
   }
 
+  // Only "V akci" applies to a field the event doesn't use; nothing applies to the form's fixed questions.
+  const editable = (f: OvField, c: Col) => f.kind !== "form" && (c.id === "inEvent" || f.inEvent) && c.can(f);
   const cell = (f: OvField, c: Col) => {
     const v = c.value(f);
-    if (!c.can(f) || !c.body) return <span className={c.options || c.id === "group" || c.id === "type" ? "" : v === "1" ? "text-pine" : "text-mist"}>{c.options || c.id === "group" || c.id === "type" ? shownText(c, v) : v === "1" ? "●" : "○"}</span>;
+    if (!editable(f, c) || !c.body) return <span className={c.options || c.id === "group" || c.id === "type" ? "" : v === "1" ? "text-pine" : "text-mist"}>{c.options || c.id === "group" || c.id === "type" ? shownText(c, v) : v === "1" ? "●" : "○"}</span>;
     if (c.options)
       return (
         <select value={v} onChange={(e) => onPatch(f.key, c.body!(f, e.target.value), c.body!(f, v))} className="rounded border border-mist bg-paper px-1 py-0.5 text-[12px]">

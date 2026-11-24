@@ -14,6 +14,14 @@ import { contactEmail, readContactRule } from "@/lib/contact-email";
 import { resolveContactEmail } from "@/lib/document-variables";
 import { fieldsManagerAccess, pickEvent } from "../access";
 
+// What the ticket form always asks (not fields; stored on the order).
+const TICKET_QUESTIONS = [
+  { key: "buyer_name", label: "Jméno a příjmení kupujícího" },
+  { key: "order_email", label: "E-mail kupujícího" },
+  { key: "order_phone", label: "Telefon kupujícího" },
+  { key: "order_items", label: "Vstupenky (druh a počet)" },
+  { key: "order_note", label: "Poznámka k objednávce" },
+];
 const TICKET_VARIABLES: [string, string][] = [
   ["event_name", "Název akce"], ["event_date", "Termín akce"], ["event_place", "Místo"], ["buyer_name", "Jméno kupujícího"],
   ["order_number", "Číslo objednávky"], ["order_items", "Objednané vstupenky"], ["order_total", "Celkem"], ["ticket_count", "Počet vstupenek"],
@@ -69,6 +77,8 @@ export async function GET(req: NextRequest) {
     publicRegistration: event.publicRegistration,
     systemKeys: event.kind === "public_event" ? new Set() : SYSTEM_KEYS,
     ticketForm: event.kind === "public_event",
+    detailsAfterAcceptance: event.detailsAfterAcceptance,
+    formQuestions: event.kind === "public_event" ? TICKET_QUESTIONS : event.publicRegistration ? [{ key: "portal_note", label: "Poznámka k přihlášce" }] : [],
     lockedKeys: await lockedKeys(organizationId),
   });
 

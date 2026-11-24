@@ -8,7 +8,8 @@
 import { Client } from "pg";
 
 const EXCLUDE_EVENT_NAME = "Podzimní prázdniny 2026";
-const SKIP = new Set(["_prisma_migrations", "app_settings", "translations", "user_activity", "ai_usage", "portal_rate_hits"]);
+// public_hosts: production's own web addresses -- staging would send visitors to the production site.
+const SKIP = new Set(["_prisma_migrations", "app_settings", "translations", "user_activity", "ai_usage", "portal_rate_hits", "public_hosts"]);
 // Rows with these credentials can't be kept without them (NOT NULL token): left out, references to them nulled.
 const DROP_CREDENTIAL_TABLES = new Set(["drive_accounts", "mail_sender_accounts"]);
 const NULL_COLUMNS: Record<string, string[]> = { bank_accounts: ["token_encrypted", "token_set_at", "token_set_by_user_id"], authors: ["fio_token_encrypted", "fio_token_set_at"] };

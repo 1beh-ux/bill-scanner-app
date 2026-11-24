@@ -104,6 +104,7 @@ export default function FieldsManager() {
     const otherId = fieldId === selected ? clicked : selected;
     const f = fieldId ? data.fields.find((x) => x.key === fieldId.slice(6)) : undefined;
     if (!f) return setToast({ text: t("fieldsManager.ctrlHelp") });
+    if (f.kind === "form" || !f.inEvent) return setToast({ text: t("fieldsManager.ctrlNotPossible") });
     const use = otherId.startsWith("use:") ? otherId.slice(4) : otherId === "src:portal" ? "portal" : null;
     if (use && SURFACE_USES.has(use)) {
       const on = !f.uses.includes(use as never);

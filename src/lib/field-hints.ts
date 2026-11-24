@@ -17,6 +17,8 @@ export type Hint = { id: string; level: "warn" | "info"; params?: Record<string,
  */
 export function fieldHints(f: OvField, all: OvField[], docs: DocUse[] | null, extra: { contactMissing?: number } = {}): Hint[] {
   const out: Hint[] = [];
+  // A field this event doesn't use, or one of the form's own fixed questions: nothing to suggest.
+  if (!f.inEvent || f.kind === "form") return out;
   if (f.required && f.portalAccess === "hidden") out.push({ id: "asked_hidden", level: "warn", fix: { kind: "patch", body: { portalAccess: "edit" } } });
   const names = new Set([f.key, ...f.aliases]);
   const using = (docs ?? []).filter((d) => d.placeholders.some((p) => names.has(p.key)));
