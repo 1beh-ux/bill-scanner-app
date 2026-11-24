@@ -10,6 +10,7 @@ import { CODE_VARIABLES, LINKED_VARIABLES, EVENT_VARIABLE_ALIASES, formatEventDa
 import { formatDateRange } from "@/lib/document-variables";
 import { guardianSlots } from "@/lib/org-features";
 import { lockedKeys, SYSTEM_KEYS } from "@/lib/org-locked";
+import { readPriceRules } from "@/lib/price-rules";
 import { contactEmail, readContactRule } from "@/lib/contact-email";
 import { resolveContactEmail } from "@/lib/document-variables";
 import { fieldsManagerAccess, pickEvent } from "../access";
@@ -77,8 +78,17 @@ export async function GET(req: NextRequest) {
     publicRegistration: event.publicRegistration,
     systemKeys: event.kind === "public_event" ? new Set() : SYSTEM_KEYS,
     ticketForm: event.kind === "public_event",
+    // The price category is chosen on the form from the event's price rules (its choices = the categories).
+    askedBuiltins: (() => {
+      const rules = readPriceRules(event.priceRules);
+      const key = eventFields.find((f) => f.computedType === "price_category")?.key;
+      return key && rules?.categories.length && event.publicRegistration ? new Map([[key, rules.categories.map((c) => c.label)]]) : new Map<string, string[]>();
+    })(),
     detailsAfterAcceptance: event.detailsAfterAcceptance,
-    formQuestions: event.kind === "public_event" ? TICKET_QUESTIONS : event.publicRegistration ? [{ key: "portal_note", label: "Poznámka k přihlášce" }] : [],
+    formQuestions:
+      event.kind === "public_event"
+        ? TICKET_QUESTIONS
+        : [{ key: "is_adult", label: "Dospělý / dítě" }, ...(event.publicRegistration ? [{ key: "portal_note", label: "Poznámka k přihlášce" }] : [])],
     lockedKeys: await lockedKeys(organizationId),
   });
 

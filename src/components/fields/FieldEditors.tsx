@@ -7,7 +7,7 @@ import type { FmOverview, OvField } from "./types";
 
 // Phase 3b: a new field (any type, calculated included) and renaming a key with a preview + confirmation.
 const TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone", "calculated"] as const;
-const CALC_KINDS = ["join", "template", "age", "if"] as const;
+const CALC_KINDS = ["join", "template", "age", "if", "contact"] as const;
 const input = "w-full rounded border border-mist bg-paper px-2 py-1 text-[13px]";
 
 /** Label -> a key: lowercase ASCII, digits, underscores. */
@@ -21,15 +21,15 @@ export const slugKey = (s: string) =>
     .slice(0, 40)
     .replace(/^(?=[0-9_])/, "f_");
 
-type CalcState = { kind: (typeof CALC_KINDS)[number]; parts: string[]; separator: string; text: string; source: string; then: string; else: string; test: string };
-const EMPTY_CALC: CalcState = { kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled" };
+type CalcState = { kind: (typeof CALC_KINDS)[number]; parts: string[]; separator: string; text: string; source: string; then: string; else: string; test: string; adult: string; guardians: string };
+const EMPTY_CALC: CalcState = { kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled", adult: "auto", guardians: "first" };
 /** A saved spec -> the editor's state (redesign R7: a calculated field is edited with the same editor). */
 function calcState(spec: unknown): CalcState {
   const o = (spec ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const kind = (CALC_KINDS as readonly string[]).includes(str(o.kind)) ? (o.kind as CalcState["kind"]) : "join";
   const test = o.test === "yes" || o.test === "filled" ? o.test : o.test && typeof o.test === "object" ? str((o.test as { equals?: unknown }).equals) : "filled";
-  return { ...EMPTY_CALC, kind, parts: Array.isArray(o.parts) ? o.parts.filter((x): x is string => typeof x === "string") : [], separator: typeof o.separator === "string" ? o.separator : " ", text: str(o.text), source: str(o.source), then: str(o.then), else: str(o.else), test };
+  return { ...EMPTY_CALC, kind, parts: Array.isArray(o.parts) ? o.parts.filter((x): x is string => typeof x === "string") : [], separator: typeof o.separator === "string" ? o.separator : " ", text: str(o.text), source: str(o.source), then: str(o.then), else: str(o.else), test, adult: typeof o.adult === "string" ? o.adult : o.kind === "contact" ? "" : "auto", guardians: str(o.guardians) || "first" };
 }
 
 /** New field, or (with `edit`) the calculation of an existing calculated field. */
@@ -48,6 +48,7 @@ export function NewFieldForm({ overview, onDone, edit }: { overview: FmOverview;
     if (calc.kind === "join") return { kind: "join", parts: calc.parts, separator: calc.separator };
     if (calc.kind === "template") return { kind: "template", text: calc.text };
     if (calc.kind === "age") return { kind: "age", source: calc.source, asOf: "event_start" };
+    if (calc.kind === "contact") return { kind: "contact", adult: calc.adult || null, guardians: calc.guardians };
     return { kind: "if", source: calc.source, test: calc.test === "filled" || calc.test === "yes" ? calc.test : { equals: calc.test }, then: calc.then, else: calc.else };
   }
   async function save(e: React.FormEvent) {
@@ -133,6 +134,28 @@ export function NewFieldForm({ overview, onDone, edit }: { overview: FmOverview;
                 <option key={k} value={k}>{k}</option>
               ))}
             </select>
+          )}
+          {calc.kind === "contact" && (
+            <div className="space-y-1">
+              <label className="block">
+                {t("fieldsManager.contact.adults")}{" "}
+                <select value={calc.adult} onChange={(e) => setCalc({ ...calc, adult: e.target.value })} className={input}>
+                  <option value="">{t("fieldsManager.contact.adultsGuardian")}</option>
+                  <option value="auto">{t("fieldsManager.contact.adultsAuto")}</option>
+                  {overview.fields.filter((f) => f.fieldType === "email").map((f) => (
+                    <option key={f.key} value={f.key}>{f.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                {t("fieldsManager.contact.guardians")}{" "}
+                <select value={calc.guardians} onChange={(e) => setCalc({ ...calc, guardians: e.target.value })} className={input}>
+                  {["first", "first_receiving", "all_receiving"].map((g) => (
+                    <option key={g} value={g}>{t(`fieldsManager.contact.g.${g}`)}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
           )}
           {calc.kind === "if" && (
             <div className="grid grid-cols-3 gap-1">

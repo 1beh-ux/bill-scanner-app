@@ -446,7 +446,10 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
                     {f.label}
                     {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
                   </span>
-                  {editable ? (
+                  {f.fieldType === "calculated" ? (
+                    // A calculated field: read-only, worked out from the profile's values as they are edited here.
+                    <FieldInput field={f} value="" onChange={() => {}} yesLabel={t("portal.yes")} calc={{ values: { ...values, is_adult: member.isAdult ? "Ano" : "Ne" }, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }} />
+                  ) : editable ? (
                     <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
                   ) : (
                     <span className="text-[15px] text-ink">{showValue(f, f.value, t)}</span>
@@ -856,7 +859,7 @@ function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: {
             {f.fieldType !== "boolean" && f.fieldType !== "consent" && " *"}
             {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
           </span>
-          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean" && f.fieldType !== "consent"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} />
+          <FieldInput field={f} value={values[f.key] ?? ""} required={f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} calc={{ values, missingLabel: t("portal.calcMissing"), labelOf: (k) => step.fields.find((x) => x.key === k)?.label ?? k }} />
         </label>
       ))}
       {step.fields.some((f) => f.source === "profile") && <p className="text-[12px] text-ink-secondary">{t("portal.stepSavedToProfile")}</p>}

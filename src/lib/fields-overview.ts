@@ -104,6 +104,8 @@ export function buildOverview(input: {
   formQuestions?: { key: string; label: string }[];
   /** Two-step event: detailed fields are asked after acceptance, not on the public form. */
   detailsAfterAcceptance?: boolean;
+  /** Built-in values the form asks as a question (the price category, with its choices). */
+  askedBuiltins?: Map<string, string[]>;
 }): Overview {
   const systemKeys = input.systemKeys ?? new Set<string>();
   const lockedKeys = input.lockedKeys ?? new Set<string>();
@@ -136,9 +138,10 @@ export function buildOverview(input: {
     const calculated = f.kind === "computed" || !!spec || isName || isStatus;
     const fixed = FIXED_PARTICIPANT_FIELDS.some((d) => d.key === f.key) && f.kind !== "custom" && !isGroup && !isStatus;
     const system = systemKeys.has(f.key);
+    const askedBuiltin = input.askedBuiltins?.has(f.key) ?? false;
     const locked = lockedKeys.has(f.key);
     const storage: OvField["storage"] = calculated ? "calculated" : f.kind === "guardian" ? "guardian" : fixed ? "fixed" : t ? (t.storage === "event" ? "event" : "profile") : "event";
-    const group = system || locked || isName
+    const group = system || locked || isName || askedBuiltin
       ? "fixed"
       : calculated
       ? "calculated"
@@ -155,7 +158,7 @@ export function buildOverview(input: {
     // (or when marked "Vyžadovat při přihlášce" -- after acceptance on a two-step event), an event question when marked.
     const inPortal = !!t && t.portalAccess !== "hidden";
     const askedTemplate = inPortal && f.active && (t!.level === "basic" || (f.requiredOnRegistration && (t!.portalAccess === "edit" || t!.portalAccess === "approval") && !(input.detailsAfterAcceptance && t!.level === "detailed")));
-    const asked = system || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && (t ? askedTemplate : f.requiredOnRegistration && f.active));
+    const asked = system || askedBuiltin || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && (t ? askedTemplate : f.requiredOnRegistration && f.active));
     const uses = new Set<UseId>(f.surfaces.map((s) => USE_BY_SURFACE[s]).filter((u): u is UseId => !!u));
     if (portal) uses.add("portal");
     if (asked) uses.add("form");
@@ -185,7 +188,7 @@ export function buildOverview(input: {
       system,
       locked,
       inEvent: true,
-      options: f.options ?? null,
+      options: askedBuiltin ? input.askedBuiltins!.get(f.key)! : (f.options ?? null),
       computedType: f.computedType,
     });
   }

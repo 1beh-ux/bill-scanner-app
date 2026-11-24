@@ -71,4 +71,14 @@ assert.deepEqual(calcDeps(specTpl), ["jmeno", "plavec"]);
 assert.deepEqual(calcDeps({ kind: "age", source: "datum_narozeni", asOf: "event_start" }), ["datum_narozeni"]);
 assert.deepEqual(calcDeps(b), []);
 
+// 2026-11-24: contact e-mail as a calculation -- adult's own e-mail field first, else guardian 1, 2, ...
+{
+  const spec = readCalcSpec("calculated", { kind: "contact", adult: "auto", guardians: "first" })!;
+  const g = [{ email: "", receivesCommunications: true }, { email: "g2@x.cz", receivesCommunications: false }];
+  const ctx = (adult: boolean, own: string) => ({ valueOf: (k: string) => (k === "kontaktni_email_ditete" ? own : undefined), person: { isAdult: adult, guardians: g, emailKeys: ["kontaktni_email_ditete"] } });
+  assert.equal(evaluateCalc(spec, ctx(true, "me@x.cz")), "me@x.cz"); // adult: own e-mail
+  assert.equal(evaluateCalc(spec, ctx(true, "")), "g2@x.cz"); // adult without own: guardian 1 has none -> 2
+  assert.equal(evaluateCalc(spec, ctx(false, "me@x.cz")), "g2@x.cz"); // child: guardians
+  assert.deepEqual(calcDeps(readCalcSpec("calculated", { kind: "contact", adult: "email_x" })!), ["email_x"]);
+}
 console.log("field-calc: ok");

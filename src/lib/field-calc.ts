@@ -1,6 +1,7 @@
 // Calculated fields (Fields Manager phase 1, docs/fields-manager-design/design.md §5). New fields use
 // fieldType "calculated" with options = CalcSpec; old "composite" fields are read as join / template and evaluate
 // exactly as composeValue() does today. Never stored per person, never an import target. Pure.
+import { contactEmail } from "@/lib/contact-email";
 import { composeValue, readComposite } from "@/lib/participant-fields";
 
 export const SEPARATOR_PRESETS = [" ", ", ", "; ", "/", " / ", " - ", " | ", "", "\n"] as const;
@@ -12,7 +13,10 @@ export type CalcSpec =
   | { kind: "template"; text: string }
   | { kind: "age"; source: string; asOf: "event_start" | "today" | { date: string } }
   | { kind: "if"; source: string; test: "filled" | "yes" | { equals: string }; then: string; else: string }
-  | { kind: "builtin"; id: BuiltinCalc };
+  | { kind: "builtin"; id: BuiltinCalc }
+  // 2026-11-24: the contact e-mail as a standard calculation -- an adult's own e-mail field first ("auto" = the first
+  // e-mail field filled), else the guardians in their order (1, 2, ...).
+  | { kind: "contact"; adult: string | null; guardians: "first" | "first_receiving" | "all_receiving" };
 
 const BUILTINS: BuiltinCalc[] = ["full_name", "contact_email", "price", "variable_symbol", "payment_qr", "membership_status", "price_category", "details_status"];
 const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback);
@@ -43,6 +47,10 @@ export function readCalcSpec(fieldType: string, options: unknown): CalcSpec | nu
     }
     case "builtin":
       return BUILTINS.includes(o.id as BuiltinCalc) ? { kind: "builtin", id: o.id as BuiltinCalc } : null;
+    case "contact": {
+      const g = o.guardians === "first_receiving" || o.guardians === "all_receiving" ? o.guardians : "first";
+      return { kind: "contact", adult: typeof o.adult === "string" && o.adult ? o.adult : null, guardians: g };
+    }
     default:
       return null;
   }
@@ -60,6 +68,8 @@ export function calcDeps(spec: CalcSpec): string[] {
       return spec.source ? [spec.source] : [];
     case "builtin":
       return [];
+    case "contact":
+      return spec.adult && spec.adult !== "auto" ? [spec.adult] : [];
   }
 }
 
@@ -91,6 +101,8 @@ export type CalcContext = {
   today?: Date;
   /** Built-in values (full name, price, ...) are computed by today's code; the resolver passes them in. */
   builtin?: (id: BuiltinCalc) => string;
+  /** The person, for the contact calculation: adult or not, guardians in their order, the e-mail fields. */
+  person?: { isAdult: boolean; guardians: { email: string; receivesCommunications: boolean }[]; emailKeys: string[] };
 };
 
 /** The value of a calculated field. Empty string when it can't be computed -- never throws. */
@@ -114,5 +126,10 @@ export function evaluateCalc(spec: CalcSpec, ctx: CalcContext): string {
     }
     case "builtin":
       return ctx.builtin?.(spec.id) ?? "";
+    case "contact": {
+      if (!ctx.person) return "";
+      const values = Object.fromEntries(ctx.person.emailKeys.concat(spec.adult && spec.adult !== "auto" ? [spec.adult] : []).map((k) => [k, ctx.valueOf(k) ?? ""]));
+      return contactEmail({ adultSelfField: spec.adult, guardians: spec.guardians }, { guardians: ctx.person.guardians, customFieldValues: values }, ctx.person.isAdult, ctx.person.emailKeys);
+    }
   }
 }

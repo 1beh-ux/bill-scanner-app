@@ -22,6 +22,7 @@ export function contactEmail(rule: ContactRule, p: { guardians: Guardian[]; cust
   }
   const receiving = p.guardians.filter((g) => g.receivesCommunications && g.email);
   if (rule.guardians === "all_receiving") return [...new Set(receiving.map((g) => g.email))].join(", ") || p.guardians[0]?.email || "";
-  if (rule.guardians === "first") return p.guardians[0]?.email ?? "";
+  // Guardian 1, else 2, ... -- the first one with an e-mail.
+  if (rule.guardians === "first") return p.guardians.find((g) => g.email)?.email ?? "";
   return receiving[0]?.email ?? p.guardians[0]?.email ?? "";
 }

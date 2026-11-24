@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { evaluateCalc, readCalcSpec } from "@/lib/field-calc";
-import { extendVariables, loadResolverContext, type GuardianIn } from "@/lib/field-resolver";
+import { extendVariables, loadResolverContext, orderGuardians, type GuardianIn } from "@/lib/field-resolver";
 import { contactEmail, readContactRule } from "@/lib/contact-email";
 import { applySentences, loadSentences, sentenceValues } from "@/lib/sentences";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
@@ -383,6 +383,8 @@ export async function resolveVariables(
   if (resolver.flagOn) {
     // Redesign R10 (Q-R4): the organization's own wording of the sentence variables, when it set one.
     Object.assign(text, applySentences(text, await loadSentences(event.id), sentenceValues(text, event)));
+    // {{is_adult}} (2026-11-24): Ano / Ne -- 18+ at the event's start, or as set by hand on the person's profile.
+    if (!("is_adult" in text)) text.is_adult = adultOf(participant, event) ? "Ano" : "Ne";
     const ownFieldKeys = new Set((await prisma.eventParticipantField.findMany({ where: { eventId: event.id }, select: { key: true } })).map((f) => f.key));
     return { text: extendVariables(text, resolver, participant.guardians as GuardianIn[], ownFieldKeys), images, imageSizesMm };
   }
@@ -469,7 +471,15 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
     // Fields Manager calculated fields (phase 1; created from phase 3 on): same inputs as a composite.
     else if (f.fieldType === "calculated") {
       const spec = readCalcSpec(f.fieldType, f.options);
-      values[f.key] = spec ? evaluateCalc(spec, { valueOf: (k) => values[k] ?? (k === "participant_name" ? participant.name : undefined), eventStart: event.startDate }) : "";
+      // The person (adult or not, guardians in their order) for the contact calculation; is_adult = Ano / Ne.
+      const adult = adultOf(participant, event);
+      values[f.key] = spec
+        ? evaluateCalc(spec, {
+            valueOf: (k) => values[k] ?? (k === "participant_name" ? participant.name : k === "is_adult" ? (adult ? "Ano" : "Ne") : undefined),
+            eventStart: event.startDate,
+            person: { isAdult: adult, guardians: orderGuardians(participant.guardians as (GuardianIn & { position?: number | null })[]), emailKeys: fields.filter((x) => x.fieldType === "email").map((x) => x.key) },
+          })
+        : "";
     }
   }
   return values;

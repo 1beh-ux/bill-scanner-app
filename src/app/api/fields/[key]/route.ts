@@ -16,6 +16,7 @@ import { fieldsManagerAccess, pickEvent } from "../access";
 
 const SURFACES: Record<string, string[]> = { lists: ["list"], health: ["health_list", "health_detail"], mail: ["mail_list"], email: ["email"], documents: ["documents"], import: ["import"] };
 const ACCESS = ["edit", "approval", "read", "hidden"];
+const PLAIN_TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone"];
 const bad = (error = "invalid") => NextResponse.json({ error }, { status: 400 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ key: string }> }) {
@@ -56,7 +57,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       return bad(err instanceof Error && err.message === "no_template" ? "no_template" : "invalid");
     }
   }
-  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule } = b;
+  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule, choices, fieldType } = b;
+  // 2026-11-24: editing an existing field -- its choices (select / multi) and its type (plain types only; making a
+  // field calculated goes through Úklid, which keeps the values). An organization field changes everywhere it is
+  // used (template + its event copies), an event-only field in this event.
+  if (fieldType !== undefined && !PLAIN_TYPES.includes(fieldType as string)) return bad("invalid_type");
+  const list = Array.isArray(choices) ? [...new Set(choices.filter((o): o is string => typeof o === "string").map((o) => o.trim()).filter(Boolean))].slice(0, 100) : null;
+  if (choices !== undefined && !list?.length) return bad("options_required");
   if (storage !== undefined && storage !== "profile" && storage !== "event") return bad("invalid_storage");
   if (requiredDefault !== undefined && typeof requiredDefault !== "boolean") return bad();
   if (required !== undefined && typeof required !== "boolean") return bad();
@@ -74,6 +81,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   if ((required !== undefined || surface !== undefined || contactRule !== undefined) && !eventField) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (required !== undefined && eventField?.kind !== "custom") return bad();
   if (contactRule !== undefined && eventField?.computedType !== "contact_email") return bad();
+  if ((choices !== undefined || fieldType !== undefined) && (eventField ? eventField.kind !== "custom" : !template)) return bad("fixed_field");
+  const typeAfter = (fieldType as string | undefined) ?? template?.fieldType ?? eventField?.fieldType ?? "";
+  if ((fieldType !== undefined || choices !== undefined) && ["calculated", "composite", "image"].includes(template?.fieldType ?? eventField?.fieldType ?? "")) return bad("invalid_type");
+  if ((typeAfter === "select" || typeAfter === "multi") && fieldType !== undefined && !list && !Array.isArray(template?.options ?? eventField?.options)) return bad("options_required");
+  const plainData = { ...(fieldType !== undefined && { fieldType: fieldType as never }), ...(list && { options: list as Prisma.InputJsonValue }) };
 
   // A calculated field's spec: the same validation as creating one (phase 3b).
   let spec: ReturnType<typeof readCalcSpec> = null;
@@ -99,6 +111,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       if (portalAccess !== undefined) data.portalAccess = portalAccess as never;
       if (level !== undefined) data.level = level as never;
       if (spec) data.options = spec as unknown as Prisma.InputJsonValue;
+      Object.assign(data, plainData);
       if (Object.keys(data).length) {
         for (const k of Object.keys(data)) before[k] = (template as Record<string, unknown>)[k === "requiredInRegistration" ? "requiredInRegistration" : k];
         Object.assign(after, data);
@@ -106,6 +119,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       }
     }
     if (spec) await tx.eventParticipantField.updateMany({ where: { key, fieldType: "calculated", event: { organizationId } }, data: { options: spec as unknown as Prisma.InputJsonValue } });
+    // Choices / type: every event copy of an organization field, else this event's own field.
+    if (Object.keys(plainData).length) {
+      if (template) await tx.eventParticipantField.updateMany({ where: { key, kind: "custom", event: { organizationId } }, data: plainData });
+      else if (eventField) await tx.eventParticipantField.update({ where: { id: eventField.id }, data: plainData });
+      before.fieldType = template?.fieldType ?? eventField?.fieldType;
+      before.options = template?.options ?? eventField?.options;
+      Object.assign(after, plainData);
+    }
     if (eventField) {
       const data: Prisma.EventParticipantFieldUpdateInput = {};
       if (required !== undefined) data.requiredOnRegistration = required as boolean;

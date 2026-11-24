@@ -127,7 +127,7 @@ export default function FieldsOverview({ overview, docs, selected, onSelect, onC
         ))}
       </svg>
       <div className="sticky top-2 self-start space-y-1.5">
-        <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">{t("fieldsManager.sources")}</h3>
+        <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-secondary" title={t("fieldsManager.sourcesHelp")}>{t("fieldsManager.sources")} ⓘ</h3>
         {overview.sources.length === 0 && <p className="text-[12px] text-ink-secondary">{t("fieldsManager.noSources")}</p>}
         {overview.sources.map((s) => (
           <button key={s.id} type="button" data-node={`src:${s.id}`} onClick={(e) => toggle(`src:${s.id}`, e)} className={`${node} border-l-4 border-mist border-l-amber-600 ${dim(`src:${s.id}`)} ${sel(`src:${s.id}`)}`}>

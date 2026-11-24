@@ -94,12 +94,13 @@ export function validateSubmission(
     const values = (r.values && typeof r.values === "object" ? r.values : {}) as Record<string, unknown>;
     for (const [key, v] of Object.entries(values)) {
       const f = fieldsByKey.get(key);
-      if (!f || !appliesTo(f.audience, p.isAdult)) continue;
+      // A calculated field is only shown (worked out from the other answers), never taken from the form.
+      if (!f || f.fieldType === "calculated" || !appliesTo(f.audience, p.isAdult)) continue;
       const value = cleanFieldValue({ ...f, options: optionsFor(f, p.isAdult) }, v);
       if (value === null) errors.push(`p${i}.${key}`);
       else if (value) p.values[key] = value;
     }
-    for (const f of ctx.fields) if (f.required && appliesTo(f.audience, p.isAdult) && !p.values[f.key]) errors.push(`p${i}.${f.key}`);
+    for (const f of ctx.fields) if (f.required && f.fieldType !== "calculated" && appliesTo(f.audience, p.isAdult) && !p.values[f.key]) errors.push(`p${i}.${f.key}`);
 
     if (ctx.rules) {
       const cat = categoryFor(ctx.rules, str(r.category, 40) || null, p.isAdult);

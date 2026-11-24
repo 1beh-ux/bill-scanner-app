@@ -338,7 +338,15 @@ export default function PublicForm({
                       {f.label}
                       {f.required && " *"}
                     </span>
-                    <FieldInput field={{ ...f, options: optionsFor(f, p.isAdult) }} value={p.values[f.key] ?? ""} required={f.required && f.fieldType !== "boolean" && f.fieldType !== "consent"} onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })} yesLabel={t("portal.yes")} />
+                    <FieldInput
+                      field={{ ...f, options: f.fieldType === "calculated" ? f.options : optionsFor(f, p.isAdult) }}
+                      value={p.values[f.key] ?? ""}
+                      required={f.required && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"}
+                      onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })}
+                      yesLabel={t("portal.yes")}
+                      // A calculated field: shown live from this person's answers (names and birth date included).
+                      calc={{ values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" }, eventStart: event.startDate, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }}
+                    />
                   </label>
                   </Fragment>
                 ))}

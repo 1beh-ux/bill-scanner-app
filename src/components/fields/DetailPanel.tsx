@@ -82,8 +82,9 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
     return (
       <div className="space-y-2 rounded-xl border border-mist bg-paper p-4 text-[13px]">
         <h3 className="text-[15px] font-semibold text-ink">🔒 {field.label}</h3>
-        <p className="text-ink-secondary">{t(ticketEvent ? "fieldsManager.formQuestion.ticket" : "fieldsManager.formQuestion.registration")}</p>
-        <Link href={`/events/${overview.eventId}?tab=${ticketEvent ? "vstupenky" : "verejna"}`} className="text-ember hover:underline">{t("fieldsManager.panel.changeThere")} ↗</Link>
+        <div className="font-mono text-[12px] text-ink-secondary">{`{{${field.key}}}`}</div>
+        <p className="text-ink-secondary">{t(field.key === "is_adult" ? "fieldsManager.formQuestion.isAdult" : ticketEvent ? "fieldsManager.formQuestion.ticket" : "fieldsManager.formQuestion.registration")}</p>
+        <Link href={field.key === "is_adult" ? "/children" : `/events/${overview.eventId}?tab=${ticketEvent ? "vstupenky" : "verejna"}`} className="text-ember hover:underline">{t("fieldsManager.panel.changeThere")} ↗</Link>
       </div>
     );
   // An organization field this event doesn't use (yet).
@@ -138,6 +139,7 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         ) : (
           <p className="text-ink-secondary">{t("fieldsManager.panel.fixedLabel")}</p>
         )}
+        {custom && !field.calculated && field.fieldType !== "composite" && field.fieldType !== "image" && <TypeEditor field={field} onPatch={onPatch} />}
         {/* Round 2b: the only place storage shows. Organization fields switch it; a registration value like Skupina is
             shown off, the person's own fixed values (birth date, guardian) on -- both fixed. */}
         {!field.calculated && (
@@ -163,10 +165,11 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         {field.fromTemplate && (
           <>
             <label className="flex items-center gap-2">
-              <input type="checkbox" checked={!!field.portalAccess && field.portalAccess !== "hidden"} onChange={(e) => onPatch(field.key, { portalAccess: e.target.checked ? "edit" : "hidden" }, { portalAccess: field.portalAccess ?? "hidden" })} />
-              {t("fieldsManager.panel.inPortal")}
+              {/* A calculated field is shown read-only (worked out live from the other answers); others can be edited. */}
+              <input type="checkbox" checked={!!field.portalAccess && field.portalAccess !== "hidden"} onChange={(e) => onPatch(field.key, { portalAccess: e.target.checked ? (field.calculated ? "read" : "edit") : "hidden" }, { portalAccess: field.portalAccess ?? "hidden" })} />
+              {t(field.calculated ? "fieldsManager.panel.showCalc" : "fieldsManager.panel.inPortal")}
             </label>
-            {field.portalAccess && field.portalAccess !== "hidden" && (
+            {!field.calculated && field.portalAccess && field.portalAccess !== "hidden" && (
               <div className="flex flex-wrap items-center gap-2 pl-6">
                 <label>
                   {t("fieldsManager.panel.whoChanges")}{" "}
@@ -237,6 +240,13 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
         <section className={box}>
           <h4 className="font-semibold">{t("fieldsManager.panel.definition")}</h4>
           <p>{t(`fieldsManager.builtin.${field.computedType}`)}</p>
+          {Array.isArray(field.options) && field.options.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {(field.options as string[]).map((o) => (
+                <span key={o} className="rounded-full border border-mist px-2 py-0.5 text-[12px]">{o}</span>
+              ))}
+            </div>
+          )}
           {field.computedType === "contact_email" ? (
             <ContactRuleEditor field={field} overview={overview} onPatch={onPatch} />
           ) : (
@@ -520,5 +530,40 @@ function TemplatePills({ overview, docs, onOpenTab, onChanged }: { overview: FmO
         );
       })}
     </section>
+  );
+}
+
+const PLAIN_TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone"] as const;
+/** 2026-11-24: an existing field's type and choices -- an organization field everywhere, an event field here. */
+function TypeEditor({ field, onPatch }: { field: OvField; onPatch: Props["onPatch"] }) {
+  const { t } = useTranslations();
+  const current = Array.isArray(field.options) ? (field.options as unknown[]).filter((o): o is string => typeof o === "string") : [];
+  const [type, setType] = useState(field.fieldType);
+  const [choices, setChoices] = useState(current.join("\n"));
+  const choice = type === "select" || type === "multi";
+  const list = choices.split("\n").map((x) => x.trim()).filter(Boolean);
+  const changed = type !== field.fieldType || (choice && list.join("\n") !== current.join("\n"));
+  return (
+    <details className="rounded-lg border border-mist p-2" open={field.fieldType === "select" || field.fieldType === "multi"}>
+      <summary className="cursor-pointer font-medium">{t("fieldsManager.panel.typeAndOptions")}: {t(`fieldsManager.type.${field.fieldType}`)}{current.length ? ` (${current.length})` : ""}</summary>
+      <div className="mt-2 space-y-2">
+        <select value={type} onChange={(e) => setType(e.target.value)} className={input}>
+          {PLAIN_TYPES.map((x) => (
+            <option key={x} value={x}>{t(`fieldsManager.type.${x}`)}</option>
+          ))}
+        </select>
+        {choice && <textarea rows={5} value={choices} onChange={(e) => setChoices(e.target.value)} placeholder={t("fieldsManager.optionsOnePerLine")} className={`${input} w-full`} />}
+        <p className="text-[12px] text-ink-secondary">{t(field.fromTemplate ? "fieldsManager.panel.typeOrgWide" : "fieldsManager.panel.typeEventOnly")}</p>
+        {type !== field.fieldType && <p className="text-[12px] text-amber-800">{t("fieldsManager.panel.typeChangeWarn")}</p>}
+        <button
+          type="button"
+          disabled={!changed || (choice && !list.length)}
+          onClick={() => onPatch(field.key, { ...(type !== field.fieldType && { fieldType: type }), ...(choice && { choices: list }) }, { fieldType: field.fieldType, ...(current.length && { choices: current }) })}
+          className="rounded border border-mist px-2 py-0.5 hover:bg-paper-2 disabled:opacity-40"
+        >
+          {t("fieldsManager.save")}
+        </button>
+      </div>
+    </details>
   );
 }
