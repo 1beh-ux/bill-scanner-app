@@ -52,6 +52,7 @@ E-mails are `…@example.invalid`; on staging every e-mail goes to you anyway (r
 | 1 | admin | Pole → Nástroje → **Import** (event *TEST Členství 2026*) | Paste / upload `clenove-2026.csv` | Columns map by themselves (15 of 16; *Registrační list (soubor)* stays "nepřevádět"). Plan: **10 nových**, no problems |
 | 2 | admin | Import → Lidé → Import | Import | 10 participants in *TEST Členství 2026*; 10 people in **Lidé** (with guardians) |
 | 3 | admin | Seznam účastníků (*TEST Členství 2026*) | Select all → **Přijmout** | 10 × přijato (needed: the 2027 portal offer is for **accepted** 2026 members) |
+| 3b | admin | Lidé → **Rodiny** | Accept the suggested families (Nováček: P01+P02; Dubský: P06+P07) | Imported people start without a family – without this step each child gets its **own** portal link and the parent registers them one by one |
 | 4 | admin | Lidé → each person → Dokumenty | Upload the person's PDF as **Registrační list (TEST)** (P04: nothing) | 9 people with the document "platí trvale" |
 | 5 | admin | Seznam účastníků (*TEST Registrace 2027*) | (look) | Empty – nobody registered yet |
 | 6 | admin | Pošta (*TEST Členství 2026*) | E-mail to all with `{{portal_link}}` ("Registrace na rok 2027 je otevřená…") | 10 e-mails (to you on staging), each with a portal link |
@@ -84,9 +85,10 @@ E-mails are `…@example.invalid`; on staging every e-mail goes to you anyway (r
 2. **Column guessing (fixed on staging):** in the new import, "Oddíl / členství ve skupině" used to be guessed as the
    built-in *Skupina* and "Kontaktní email dítěte" as **guardian 2's e-mail**. Now a column named exactly like a field
    goes to that field (the old import page keeps its old guessing).
-3. **Siblings (P01, P02):** check they end up in **one family** with one portal link (same guardian e-mail).
-4. **Adult members (P06, P08):** the "Pohlaví" options are *Dívka / Chlapec*; the CSV leaves it empty for adults
-   — check the form doesn't require it for adults.
+3. **Families:** imported people get **no family**; Lidé → Rodiny suggests the families (same guardian) → step 3b.
+   Without it the portal links are per child.
+4. **Adult members (P06, P08):** *Pohlaví* is required and has its own options for adults (*Žena / Muž*); the CSV
+   leaves it empty for them, so they choose it when registering. *Zdravotní pojišťovna* is asked of children only.
 5. **Uploading 9 PDFs by hand** (step 4) is slow for the real list. The app can match a Drive folder of PDFs to people
    by name (bulk document import); to test that on staging the PDFs would have to go into the staging Drive folder —
    **needs your yes** (it creates files in Google Drive).
