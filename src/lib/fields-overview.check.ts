@@ -110,4 +110,10 @@ assert.deepEqual(noForm.fields[0].sources, []);
   const two = buildOverview({ templates: [T("d", { level: "detailed" })], eventFields: [E("d", { requiredOnRegistration: true })], syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: true, detailsAfterAcceptance: true });
   assert.ok(!two.fields[0].uses.includes("form"));
 }
+// Rethink: a question's own settings decide, both ways (not asked although a basic portal field; asked though hidden).
+{
+  const ov3 = buildOverview({ templates: [T("a"), T("b", { portalAccess: "hidden" })], eventFields: [E("a", { formConfig: { ask: false } }), E("b", { formConfig: { ask: true, required: true } })], syncs: [], aliases: [], profileSections: [], profileCounts: new Map(), registrationCounts: new Map(), publicRegistration: true });
+  assert.ok(!ov3.fields.find((x) => x.key === "a")!.uses.includes("form"));
+  assert.ok(ov3.fields.find((x) => x.key === "b")!.uses.includes("form"));
+}
 console.log("fields-overview: ok");

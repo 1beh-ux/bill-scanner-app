@@ -1,6 +1,7 @@
 // Fields Manager overview (phase 2, docs/fields-manager-design/design.md §2): sources -> fields -> uses for one
 // event, built from rows the API has already loaded. Pure, so fields-overview.check.ts runs without a database.
 import { calcDeps, readCalcSpec } from "@/lib/field-calc";
+import { readFormConfig } from "@/lib/form-config";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 
 export type OvTemplate = {
@@ -27,6 +28,7 @@ export type OvEventField = {
   active: boolean;
   requiredOnRegistration: boolean;
   sortOrder: number | null;
+  formConfig?: unknown;
 };
 export type OvSync = { id: string; name: string; autoSync: boolean; everyHours: number; mapping: Record<string, string> };
 
@@ -158,7 +160,10 @@ export function buildOverview(input: {
     // (or when marked "Vyžadovat při přihlášce" -- after acceptance on a two-step event), an event question when marked.
     const inPortal = !!t && t.portalAccess !== "hidden";
     const askedTemplate = inPortal && f.active && (t!.level === "basic" || (f.requiredOnRegistration && (t!.portalAccess === "edit" || t!.portalAccess === "approval") && !(input.detailsAfterAcceptance && t!.level === "detailed")));
-    const asked = system || askedBuiltin || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && (t ? askedTemplate : f.requiredOnRegistration && f.active));
+    // A question with its own settings (Pole -> Formulář) is asked as set; else today's rules.
+    const cfg = readFormConfig(f.formConfig);
+    const legacyAsked = input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && (t ? askedTemplate : f.requiredOnRegistration && f.active);
+    const asked = system || askedBuiltin || (cfg && !input.ticketForm ? cfg.ask && f.active : legacyAsked);
     const uses = new Set<UseId>(f.surfaces.map((s) => USE_BY_SURFACE[s]).filter((u): u is UseId => !!u));
     if (portal) uses.add("portal");
     if (asked) uses.add("form");

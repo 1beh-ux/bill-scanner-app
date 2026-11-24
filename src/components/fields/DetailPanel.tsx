@@ -438,7 +438,7 @@ function PlacePanel({ overview, docs, use, onOpenTab, onPatch, onChanged }: Prop
 
 /** The parent portal's fields by level (základní / podrobné): drag between them, change who may change a value, add a
  * field. The same block from Zdroje → Rodičovský portál and from Kde se používá → Rodičovský portál. */
-function PortalLevels({ overview, onPatch, onChanged }: { overview: FmOverview; onPatch: Props["onPatch"]; onChanged: () => void }) {
+export function PortalLevels({ overview, onPatch, onChanged }: { overview: FmOverview; onPatch: Props["onPatch"]; onChanged: () => void }) {
   const { t } = useTranslations();
   const [drag, setDrag] = useState<string | null>(null);
   const inPortal = overview.fields.filter((f) => f.fromTemplate && f.portalAccess && f.portalAccess !== "hidden");

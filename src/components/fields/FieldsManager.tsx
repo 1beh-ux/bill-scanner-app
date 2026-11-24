@@ -6,7 +6,8 @@ import { useTranslations } from "@/lib/i18n";
 import FieldsOverview from "./FieldsOverview";
 import FieldsList from "./FieldsList";
 import FieldsTable from "./FieldsTable";
-import DetailPanel from "./DetailPanel";
+import DetailPanel, { PortalLevels } from "./DetailPanel";
+import FormView from "./FormView";
 import ImportWizard from "./ImportWizard";
 import ReviewQueue from "./ReviewQueue";
 import DocumentEditor from "./DocumentEditor";
@@ -17,8 +18,13 @@ import type { FmDocTemplate, FmOverview } from "./types";
 // (?tab=&event=&key=) so links and the back button work. Behind the organization flag "fields_manager".
 // Redesign R7: Přehled and Pole are one screen ("overview", diagram or list view); ?tab=list still opens it.
 // Round 2: "Kde se používá" is the list view itself (an editable table); ?tab=usage opens it.
-const TABS = ["overview", "documents", "import", "review", "cleanup"] as const;
+// Rethink (2026-11-24): Formulář (the form as the applicant sees it) · Portál (what parents see) · Údaje (the data
+// table, map on demand) · Nástroje (import, review queue, documents, clean-up). Older ?tab= links still land right.
+const TABS = ["form", "portal", "data", "tools"] as const;
 type Tab = (typeof TABS)[number];
+const TOOLS = ["import", "review", "documents", "cleanup"] as const;
+type Tool = (typeof TOOLS)[number];
+const OLD_TAB: Record<string, [Tab, Tool?]> = { overview: ["data"], list: ["data"], usage: ["data"], documents: ["tools", "documents"], import: ["tools", "import"], review: ["tools", "review"], cleanup: ["tools", "cleanup"] };
 const SURFACE_USES = new Set(["lists", "health", "mail", "email", "documents"]);
 
 export default function FieldsManager() {
@@ -26,8 +32,11 @@ export default function FieldsManager() {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const tab: Tab = (TABS as readonly string[]).includes(params.get("tab") ?? "") ? (params.get("tab") as Tab) : "overview";
-  const view = params.get("view") === "list" || params.get("tab") === "list" || params.get("tab") === "usage" ? "list" : "diagram";
+  const rawTab = params.get("tab") ?? "";
+  const tab: Tab = (TABS as readonly string[]).includes(rawTab) ? (rawTab as Tab) : (OLD_TAB[rawTab]?.[0] ?? "form");
+  const tool: Tool = (TOOLS as readonly string[]).includes(params.get("tool") ?? "") ? (params.get("tool") as Tool) : (OLD_TAB[rawTab]?.[1] ?? "import");
+  // Údaje: the table by default, the map (diagram) on demand.
+  const view = params.get("view") === "map" ? "diagram" : "list";
   const eventParam = params.get("event");
   const key = params.get("key");
 
@@ -117,7 +126,8 @@ export default function FieldsManager() {
     }
     setToast({ text: t("fieldsManager.ctrlNotPossible") });
   };
-  const openTab = (x: string, extra: Record<string, string> = {}) => setParams({ tab: x, ...extra });
+  const openTab = (x: string, extra: Record<string, string> = {}) => (OLD_TAB[x]?.[1] ? setParams({ tab: "tools", tool: OLD_TAB[x][1]!, ...extra }) : setParams({ tab: OLD_TAB[x]?.[0] ?? x, ...extra }));
+  const ticketEvent = data.variables.some((v) => v.category === "order");
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-8">
@@ -153,10 +163,20 @@ export default function FieldsManager() {
         {TABS.map((x) => (
           <button key={x} type="button" onClick={() => setParams({ tab: x })} className={`-mb-px border-b-2 px-3 py-2 text-[13px] ${tab === x ? "border-ember font-medium text-ink" : "border-transparent text-ink-secondary hover:text-ink"}`}>
             {t(`fieldsManager.tab.${x}`)}
-            {x === "review" && !!data.reviewCount && <span className="ml-1 rounded-full bg-ember px-1.5 text-[11px] text-white">{data.reviewCount}</span>}
+            {x === "tools" && !!data.reviewCount && <span className="ml-1 rounded-full bg-ember px-1.5 text-[11px] text-white">{data.reviewCount}</span>}
           </button>
         ))}
       </nav>
+      {tab === "tools" && (
+        <nav className="mb-3 flex flex-wrap gap-1">
+          {TOOLS.map((x) => (
+            <button key={x} type="button" onClick={() => setParams({ tool: x })} className={`rounded-full border px-3 py-1 text-[12px] ${tool === x ? "border-ember bg-paper-2 font-medium" : "border-mist"}`}>
+              {t(`fieldsManager.tab.${x}`)}
+              {x === "review" && !!data.reviewCount && <span className="ml-1 rounded-full bg-ember px-1.5 text-[11px] text-white">{data.reviewCount}</span>}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {toast && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-pine bg-pine-bg px-3 py-2 text-[13px]">
@@ -165,15 +185,25 @@ export default function FieldsManager() {
           <button type="button" onClick={() => setToast(null)} aria-label="×" className="px-1">×</button>
         </div>
       )}
-      {tab === "overview" && (
+      {tab === "form" && data.eventId && <FormView key={data.eventId} eventId={data.eventId} overview={data} onChanged={refresh} />}
+      {tab === "portal" &&
+        (ticketEvent ? (
+          <p className="rounded-xl border border-mist bg-paper p-4 text-[13px] text-ink-secondary">{t("fieldsManager.portalView.ticket")}</p>
+        ) : (
+          <div className="space-y-3 text-[13px]">
+            <p className="text-ink-secondary">{t("fieldsManager.portalView.intro")}</p>
+            <div className="grid gap-3 md:grid-cols-2">
+              <PortalLevels overview={data} onPatch={patchField} onChanged={refresh} />
+            </div>
+          </div>
+        ))}
+      {tab === "data" && (
         <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              {(["diagram", "list"] as const).map((v) => (
-                <button key={v} type="button" onClick={() => setParams({ view: v === "list" ? "list" : null, tab: null })} className={`rounded-full border px-3 py-1 text-[12px] ${view === v ? "border-ember bg-paper-2 font-medium" : "border-mist"}`}>
-                  {t(`fieldsManager.view.${v}`)}
-                </button>
-              ))}
+              <button type="button" onClick={() => setParams({ view: view === "diagram" ? null : "map" })} className={`rounded-full border px-3 py-1 text-[12px] ${view === "diagram" ? "border-ember bg-paper-2 font-medium" : "border-mist"}`}>
+                {t(view === "diagram" ? "fieldsManager.view.list" : "fieldsManager.view.map")}
+              </button>
               <span className="text-[12px] text-ink-secondary">{t("fieldsManager.ctrlHelp")}</span>
               <button type="button" onClick={() => setCreating(true)} className="ml-auto rounded-lg bg-ember px-3 py-1.5 text-[13px] text-white">+ {t("fieldsManager.newField")}</button>
             </div>
@@ -191,10 +221,10 @@ export default function FieldsManager() {
           </div>
         </div>
       )}
-      {tab === "cleanup" && <CleanupPanel overview={data} onChanged={refresh} />}
-      {tab === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} />}
-      {tab === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
-      {tab === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
+      {tab === "tools" && tool === "cleanup" && <CleanupPanel overview={data} onChanged={refresh} />}
+      {tab === "tools" && tool === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} />}
+      {tab === "tools" && tool === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
+      {tab === "tools" && tool === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
     </div>
   );
 }
