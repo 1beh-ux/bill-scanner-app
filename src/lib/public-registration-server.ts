@@ -109,7 +109,7 @@ export async function linkOfferedRegistration(token: unknown, organizationId: st
 /**
  * A valid submission -> Family (needsReview) + people + pending participants.
  * Returns the participant ids, and the family's new portal token when the
- * event auto-sends (slice 4 #10: the confirmation screen then shows the link).
+ * event accepts automatically (slice 4 #10: the confirmation screen then shows the link).
  */
 export async function createPublicRegistration(event: PublicEvent, data: CleanSubmission, fields: FormField[]): Promise<{ ids: string[]; portalToken: string | null }> {
   // Event questions (slice 5 #3) go onto the registration only, never into the profile.
@@ -143,7 +143,8 @@ export async function createPublicRegistration(event: PublicEvent, data: CleanSu
     return { ids, portalToken: null };
   }
   const first = data.persons[0];
-  const portalToken = event.autoAccept === "accept_send" ? newPortalToken() : null;
+  // Accepted automatically (with or without the e-mail): the confirmation screen shows the family's portal link.
+  const portalToken = event.autoAccept !== "manual" ? newPortalToken() : null;
   const family = await prisma.family.create({ data: { name: first.lastName || first.firstName, needsReview: true, portalToken, organizationId: event.organizationId } });
   const ids: string[] = [];
   for (const p of data.persons) {

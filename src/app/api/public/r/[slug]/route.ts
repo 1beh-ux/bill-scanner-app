@@ -31,7 +31,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   await linkOfferedRegistration(body?.offer, event.organizationId, ids);
   // Inline, not after(): Cloud Run's request-based CPU would throttle work after the response.
   await autoAcceptRegistrations(event.id, ids, "public");
-  // accept_send events show the family's portal link on the confirmation screen (slice 4 #10).
+  // Auto-accepting events show the family's portal link on the confirmation screen (slice 4 #10).
   // R4-2 (audit2): a reference to quote (searchable in Účastníci), and whether any e-mail can go out at all.
   return NextResponse.json(
     { ok: true, portalLink: portalToken ? await portalUrl(portalToken) : null, reference: ids[0] ? `R-${ids[0].slice(0, 8).toUpperCase()}` : null, mailPossible: !!(await eventSender(event)) },

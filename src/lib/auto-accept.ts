@@ -13,6 +13,20 @@ import { resolveEmailTemplate } from "@/lib/email-template";
 import { REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendBulkParticipantEmail } from "@/lib/participant-bulk-email";
 import { eventTemplateKey } from "@/lib/email-kinds";
+import { ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol } from "@/lib/document-variables";
+import { withMembers } from "@/lib/children";
+
+/** Registration number + the accepted price / variable symbol, as the acceptance e-mail records them. */
+export async function freezeAcceptedPayment(eventId: string, participantIds: string[]) {
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
+  const priced = await withMembers(event);
+  for (const id of participantIds) {
+    await ensureRegistrationNumber(id, eventId);
+    const p = await prisma.participant.findUniqueOrThrow({ where: { id }, include: { guardians: true } });
+    const merge = { ...p, customFieldValues: p.customFieldValues as Record<string, string> | null };
+    await prisma.participant.update({ where: { id }, data: { acceptedPriceCzk: effectivePriceCzk(merge, priced), acceptedVariableSymbol: buildVariableSymbol(merge, priced) || null } });
+  }
+}
 
 export type AutoAcceptMode = "manual" | "accept" | "accept_send";
 export type RegistrationSource = "portal" | "public" | "import" | "manual";
@@ -66,5 +80,12 @@ export async function autoAcceptRegistrations(eventId: string, participantIds: s
   }
   // accept, the no-sender fallback, or a send that threw before marking.
   await prisma.participant.updateMany({ where: { id: { in: participantIds } }, data: { registrationStatus: "accepted" } });
+  // Without an e-mail nothing else assigns the variable symbol: the portal's payment block (account, QR) and the
+  // bank check need it, as after "Přijmout a odeslat".
+  try {
+    await freezeAcceptedPayment(eventId, participantIds);
+  } catch (err) {
+    console.log(`[auto-accept] variable symbol failed for event ${eventId}:`, String(err));
+  }
   return "accepted";
 }
