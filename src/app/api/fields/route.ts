@@ -21,8 +21,14 @@ export async function POST(req: NextRequest) {
   const fieldType = (TYPES as readonly unknown[]).includes(b.fieldType) ? (b.fieldType as NewType) : null;
   if (!label || !fieldType) return NextResponse.json({ error: "invalid" }, { status: 400 });
   if (!FIELD_KEY.test(key)) return NextResponse.json({ error: "invalid_key" }, { status: 400 });
-  if (await renameBlocker(prisma, organizationId, "", key)) return NextResponse.json({ error: "key_taken" }, { status: 409 });
   const { selected } = await pickEvent(organizationId, typeof b.event === "string" ? b.event : null);
+  // Ticket events (2026-11-24): their fields belong to the event only -- no organization template, never in people.
+  // The same key may then exist in another ticket event (Ples 2027 and Ples 2028 both have "stul").
+  const eventOnly = selected?.kind === "public_event";
+  const taken = eventOnly
+    ? (await prisma.participantFieldTemplate.findFirst({ where: { organizationId, key }, select: { id: true } })) || (await prisma.eventParticipantField.findFirst({ where: { eventId: selected!.id, key }, select: { id: true } }))
+    : await renameBlocker(prisma, organizationId, "", key);
+  if (taken) return NextResponse.json({ error: "key_taken" }, { status: 409 });
 
   let options: unknown = undefined;
   if (fieldType === "select" || fieldType === "multi") {
@@ -41,11 +47,11 @@ export async function POST(req: NextRequest) {
     if (calcDeps(spec).some((d) => d === key || !known.has(d))) return NextResponse.json({ error: "invalid_calc_dependency" }, { status: 400 });
     options = spec;
   }
-  const surfaces = fieldType === "calculated" ? ["list", "documents", "email"] : ["list", "documents", "email", "import"];
+  const surfaces = eventOnly ? ["email"] : fieldType === "calculated" ? ["list", "documents", "email"] : ["list", "documents", "email", "import"];
 
   await prisma.$transaction([
-    prisma.participantFieldTemplate.create({ data: { organizationId, key, label, fieldType, options: options as Prisma.InputJsonValue, defaultSurfaces: surfaces as Prisma.ParticipantFieldTemplateCreateInput["defaultSurfaces"], portalAccess: "hidden" } }),
-    ...(selected ? [prisma.eventParticipantField.create({ data: { eventId: selected.id, key, label, fieldType, options: options as Prisma.InputJsonValue, surfaces: surfaces as Prisma.EventParticipantFieldCreateInput["surfaces"], isFromTemplate: true } })] : []),
+    ...(eventOnly ? [] : [prisma.participantFieldTemplate.create({ data: { organizationId, key, label, fieldType, options: options as Prisma.InputJsonValue, defaultSurfaces: surfaces as Prisma.ParticipantFieldTemplateCreateInput["defaultSurfaces"], portalAccess: "hidden" } })]),
+    ...(selected ? [prisma.eventParticipantField.create({ data: { eventId: selected.id, key, label, fieldType, options: options as Prisma.InputJsonValue, surfaces: surfaces as Prisma.EventParticipantFieldCreateInput["surfaces"], isFromTemplate: !eventOnly } })] : []),
     prisma.fieldChangeLog.create({ data: { organizationId, action: "create", byId: userId, after: { key, label, fieldType, options: options as Prisma.InputJsonValue, eventId: selected?.id ?? null } } }),
   ]);
   invalidateResolverContext();

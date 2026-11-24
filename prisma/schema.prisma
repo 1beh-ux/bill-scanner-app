@@ -2333,6 +2333,9 @@ model TicketOrder {
   cancelledAt    DateTime?         @map("cancelled_at")
   cancelledById  String?           @map("cancelled_by_id")
   note           String?
+  // Fields Manager (2026-11-24): answers to the event's own fields asked on the ticket form, by field key. Never
+  // copied to people (Lidé); used in the order e-mails, on the ticket and in the orders list.
+  fieldValues    Json?             @map("field_values")
   createdAt      DateTime          @default(now()) @map("created_at")
 
   event         Event          @relation(fields: [eventId], references: [id])

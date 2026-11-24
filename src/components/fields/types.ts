@@ -3,7 +3,7 @@ import type { OvField, OvGroup, OvSource, UseId } from "@/lib/fields-overview";
 
 export type { OvField, OvGroup, OvSource, UseId };
 
-export type FmVariable = { key: string; label: string; kind: "code" | "linked" | "calculated" | "free"; source: string; value: string | null; aliases: string[]; category: "event" | "participant" | "sentence" | "free"; edit: "inline" | "link" | "sentence" | null; href?: string; raw?: string };
+export type FmVariable = { key: string; label: string; kind: "code" | "linked" | "calculated" | "free"; source: string; value: string | null; aliases: string[]; category: "event" | "participant" | "sentence" | "free" | "order"; edit: "inline" | "link" | "sentence" | null; href?: string; raw?: string };
 export type FmAlias = { alias: string; targetKey: string; targetKind: string; reason: string };
 export type FmEvent = { id: string; name: string; startDate: string; kind: string; status: string };
 

@@ -10,7 +10,7 @@ const SUGGESTED = [
   { key: "contact_phone", labelKey: "fieldsManager.var.contact_phone" },
   { key: "payment_deadline", labelKey: "fieldsManager.var.payment_deadline" },
 ];
-const CATEGORIES = ["event", "participant", "sentence", "free"] as const;
+const CATEGORIES = ["order", "event", "participant", "sentence", "free"] as const;
 
 // The list view of the Fields screen (redesign R7: Přehled and Pole are one screen -- this is its left column in
 // list form; the details are in the shared right panel). Fields by group, then the variables by kind (R10).
@@ -56,6 +56,8 @@ export default function FieldsList({ overview, selected, onSelect, onChanged, va
         })}
         {CATEGORIES.map((c) => {
           const list = overview.variables.filter((v) => v.category === c && match(v.label, v.key));
+          // Own variables don't reach a ticket event's e-mails (they print the order values): not offered there.
+          if (c === "free" && overview.variables.some((v) => v.category === "order")) return null;
           if (!list.length && c !== "free") return null;
           return (
             <div key={c}>

@@ -14,6 +14,14 @@ import { contactEmail, readContactRule } from "@/lib/contact-email";
 import { resolveContactEmail } from "@/lib/document-variables";
 import { fieldsManagerAccess, pickEvent } from "../access";
 
+const TICKET_VARIABLES: [string, string][] = [
+  ["event_name", "Název akce"], ["event_date", "Termín akce"], ["event_place", "Místo"], ["buyer_name", "Jméno kupujícího"],
+  ["order_number", "Číslo objednávky"], ["order_items", "Objednané vstupenky"], ["order_total", "Celkem"], ["ticket_count", "Počet vstupenek"],
+  ["variable_symbol", "Variabilní symbol"], ["payment_details", "Platební údaje"], ["payment_qr", "QR platba"],
+  ["ticket_code", "Kód vstupenky"], ["ticket_no", "Číslo vstupenky"], ["price_type", "Druh vstupenky"], ["ticket_qr", "QR vstupenky"],
+  ["sender_email", "E-mail odesílatele"], ["signature", "Podpis"], ["organization_name", "Název organizace"],
+];
+
 // Redesign R8/R10: what kind of variable it is and where it is changed -- in the panel ("inline", with the raw
 // value for the input) or at its own place ("link").
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
@@ -59,7 +67,8 @@ export async function GET(req: NextRequest) {
     profileCounts: countValues(children.map((c) => c.fieldValues as Record<string, unknown> | null)),
     registrationCounts: countValues(participants.map((p) => p.customFieldValues as Record<string, unknown> | null)),
     publicRegistration: event.publicRegistration,
-    systemKeys: SYSTEM_KEYS,
+    systemKeys: event.kind === "public_event" ? new Set() : SYSTEM_KEYS,
+    ticketForm: event.kind === "public_event",
     lockedKeys: await lockedKeys(organizationId),
   });
 
@@ -74,7 +83,9 @@ export async function GET(req: NextRequest) {
     registration_deadline: formatEventDate(event.registrationDeadline),
     organization_name: org.name,
   };
-  const variables = [
+  // Ticket events (2026-11-24): the order / ticket values their e-mails and tickets print (fixed, explained).
+  const ticketVariables = TICKET_VARIABLES.map(([key, label]) => ({ key, label, kind: "code" as const, source: "ticket order", value: null, aliases: [], category: "order" as const, edit: "link" as const, href: `/events/${selected.id}?tab=vstupenky` }));
+  const variables = event.kind === "public_event" ? ticketVariables : [
     ...CODE_VARIABLES.map((v) => ({ ...v, value: v.key in plain ? plain[v.key] : null })),
     ...LINKED_VARIABLES.map((v) => ({ ...v, value: resolver.linked[v.key] ?? "" })),
     ...Object.entries(resolver.free).map(([key, value]) => ({ key, label: freeLabels.get(key) ?? key, kind: "free" as const, source: "manager", value })),

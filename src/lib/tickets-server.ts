@@ -2,6 +2,8 @@
 // e-mails, payment (bank check / by hand), cancelling and the door check-in. The pure rules are
 // in src/lib/tickets.ts.
 import crypto from "crypto";
+import { cleanTicketAnswers, ticketFieldVars } from "@/lib/ticket-fields";
+import { ticketFormFields } from "@/lib/ticket-fields-server";
 import QRCode from "qrcode";
 import { prisma } from "@/lib/prisma";
 import type { Event, TicketOrder, Ticket } from "@/generated/prisma";
@@ -50,10 +52,13 @@ export async function createTicketOrder(event: Event, body: unknown, source: "pu
   const { types, settings } = eventSaleSetup(event);
   // R4-10 (audit2): a paid order needs somewhere to pay to and a mailbox to send the details from.
   const ready = await saleReadiness(event);
+  // The event's own fields on the ticket form (once per order); never copied to people.
+  const answers = cleanTicketAnswers(await ticketFormFields(event.id), (body as { fields?: unknown } | null)?.fields);
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM events WHERE id = ${event.id} FOR UPDATE`;
     const checked = validateOrder(body, { types, settings, sold: await soldCounts(event.id, tx) });
-    if (!checked.ok) return checked;
+    if (!checked.ok) return { ...checked, errors: [...checked.errors, ...answers.errors] };
+    if (answers.errors.length) return { ok: false as const, errors: answers.errors };
     if (checked.data.totalCzk > 0 && !(ready.account && ready.sender)) return { ok: false as const, errors: ["payment_not_ready"] };
     const last = await tx.ticketOrder.aggregate({ where: { eventId: event.id }, _max: { number: true } });
     const number = (last._max.number ?? 0) + 1;
@@ -68,6 +73,7 @@ export async function createTicketOrder(event: Event, body: unknown, source: "pu
         email: buyer.email,
         phone: buyer.phone,
         note: buyer.note || null,
+        ...(Object.keys(answers.values).length && { fieldValues: answers.values }),
         items,
         totalCzk: buyer.totalCzk,
         source,
@@ -108,6 +114,8 @@ async function orderContext(orderId: string) {
   const signature = senderIdentity(user, order.event.organization.name).signature;
   const pay = paymentInfo(order.event, order);
   const vars: Record<string, string> = {
+    // The event's own ticket-form fields first: the fixed order values below win on a clash.
+    ...ticketFieldVars(await ticketFormFields(order.eventId), order.fieldValues as Record<string, unknown> | null),
     event_name: order.event.name,
     event_date: dateRange(order.event.startDate, order.event.endDate),
     event_place: order.event.location ?? "",

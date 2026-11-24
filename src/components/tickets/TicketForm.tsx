@@ -1,6 +1,8 @@
 "use client";
 
 import { pluralForm } from "@/lib/plural";
+import FieldInput from "@/components/registration/FieldInput";
+import type { TicketField } from "@/lib/ticket-fields";
 import { useEffect, useState } from "react";
 import { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import { postScrollTop } from "@/components/embed/embed-client";
@@ -31,6 +33,7 @@ export default function TicketForm({
   fetcher = fetch,
   texts,
   showLeft = true,
+  fields = [],
   t: tBase,
 }: {
   types: SaleType[];
@@ -44,12 +47,15 @@ export default function TicketForm({
   // The event's own wording (Nastavení akce -> Vstupenky -> Texty na webu) and the "zbývá N" switch.
   texts?: Record<string, string>;
   showLeft?: boolean;
+  // The event's own fields (Pole), asked once per order; answers stay with the order.
+  fields?: TicketField[];
   t: T;
 }) {
   const t = withTicketTexts(tBase, texts);
   const [counts, setCounts] = useState<Record<string, number>>(() => (types.length === 1 ? { [types[0].key]: 1 } : {}));
   const [buyer, setBuyer] = useState(prefill ?? { buyerName: "", email: "", phone: "" });
   const [note, setNote] = useState("");
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[] | null>(null);
@@ -92,7 +98,7 @@ export default function TicketForm({
     const res = await fetcher(submitUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...extraBody, ...buyer, note, website, counts }),
+      body: JSON.stringify({ ...extraBody, ...buyer, note, website, counts, fields: answers }),
     }).catch(() => null);
     setBusy(false);
     const d = res ? await res.json().catch(() => ({})) : {};
@@ -105,7 +111,7 @@ export default function TicketForm({
       res?.status === 429
         ? [t("ticketForm.throttled")]
         : Array.isArray(d.fields)
-          ? d.fields.map((c: string) => (c.startsWith("sold_out.") ? t("ticketForm.err.soldOutType", { type: types.find((ty) => `sold_out.${ty.key}` === c)?.label ?? "" }) : t(`ticketForm.err.${c}`, { max: String(maxPerOrder) })))
+          ? d.fields.map((c: string) => c.startsWith("f.") ? t("ticketForm.err.field", { field: fields.find((f) => `f.${f.key}` === c)?.label ?? "" }) : (c.startsWith("sold_out.") ? t("ticketForm.err.soldOutType", { type: types.find((ty) => `sold_out.${ty.key}` === c)?.label ?? "" }) : t(`ticketForm.err.${c}`, { max: String(maxPerOrder) })))
           : [t("ticketForm.failed")]
     );
   }
@@ -201,6 +207,15 @@ export default function TicketForm({
           {t("ticketForm.phone")}
           <input type="tel" value={buyer.phone} onChange={(e) => setBuyer((b) => ({ ...b, phone: e.target.value }))} autoComplete="tel" className={inputClass + " mt-1"} />
         </label>
+        {fields.map((f) => (
+          <label key={f.key} className={`text-[13px] text-ink-secondary ${f.fieldType === "longtext" || f.fieldType === "multi" ? "sm:col-span-2" : ""}`}>
+            {f.label}
+            {f.required ? " *" : ""}
+            <div className="mt-1">
+              <FieldInput field={f} value={answers[f.key] ?? ""} onChange={(v) => setAnswers((a) => ({ ...a, [f.key]: v }))} yesLabel={t("ticketForm.yes")} required={f.required} />
+            </div>
+          </label>
+        ))}
         <label className="text-[13px] text-ink-secondary sm:col-span-2">
           {t("ticketForm.note")}
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className={inputClass + " mt-1"} />

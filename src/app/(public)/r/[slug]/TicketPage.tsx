@@ -5,6 +5,7 @@ import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
+import type { TicketField } from "@/lib/ticket-fields";
 import { withTicketTexts } from "@/lib/tickets";
 
 // /r/<slug> of a public event (docs/public-event-tickets-spec.md): the event info + the ticket form.
@@ -17,6 +18,7 @@ export default function TicketPage({
   maxPerOrder,
   texts,
   showLeft,
+  fields,
   org,
   embed,
   strings,
@@ -27,6 +29,7 @@ export default function TicketPage({
   maxPerOrder: number;
   texts: Record<string, string>;
   showLeft: boolean;
+  fields?: TicketField[];
   org: PublicOrg;
   embed: boolean;
   strings: Record<string, string>;
@@ -58,7 +61,7 @@ export default function TicketPage({
         </>
       )}
       {event.landingContent && <MarkdownText text={event.landingContent} className="mb-6 rounded-lg border border-mist bg-paper p-4 text-[15px] leading-relaxed text-ink" />}
-      <TicketForm types={types} maxPerOrder={maxPerOrder} submitUrl={`/api/public/r/${slug}/tickets`} embed={embed} showLeft={showLeft} t={t} />
+      <TicketForm fields={fields} types={types} maxPerOrder={maxPerOrder} submitUrl={`/api/public/r/${slug}/tickets`} embed={embed} showLeft={showLeft} t={t} />
       <OrgFooter org={org} label={t("portal.contact")} />
     </div>
   );

@@ -67,7 +67,7 @@ export default function FieldCard({ field, overview, docs, onShowInGraph, onChan
             <dd>{t(`fieldsManager.portalAccess.${field.portalAccess}`)}</dd>
           </>
         )}
-        {field.requiredDefault !== null && (
+        {(field.requiredDefault !== null || field.kind === "custom") && (
           <>
             <dt className="text-ink-secondary">{t("fieldsManager.requiredHere")}</dt>
             <dd>
@@ -81,8 +81,8 @@ export default function FieldCard({ field, overview, docs, onShowInGraph, onChan
               ) : (
                 t("fieldsManager.no")
               )}
-              <span className="text-ink-secondary"> · {t("fieldsManager.requiredDefault")}: {field.requiredDefault ? t("fieldsManager.yes") : t("fieldsManager.no")}</span>
-              {editable && field.requiredDefault !== field.required && (
+              {field.requiredDefault !== null && <span className="text-ink-secondary"> · {t("fieldsManager.requiredDefault")}: {field.requiredDefault ? t("fieldsManager.yes") : t("fieldsManager.no")}</span>}
+              {editable && field.requiredDefault !== null && field.requiredDefault !== field.required && (
                 <button type="button" disabled={busy} onClick={() => patch({ requiredDefault: field.required })} className="ml-2 rounded border border-mist px-1.5 text-[11px] hover:bg-paper-2">
                   {t("fieldsManager.setAsDefault")}
                 </button>

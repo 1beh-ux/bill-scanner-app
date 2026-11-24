@@ -1,5 +1,6 @@
 // Parent portal, server side (docs/registration-portal-spec.md G, slice 3 B):
 import { detailsDocuments } from "@/lib/details-documents";
+import { ticketFormFields } from "@/lib/ticket-fields-server";
 // resolving the token + birth-date cookie, what the portal shows, and the
 // portal registration. A token is either a child's (that child only) or a
 // family's (every member). The portal only mirrors: it shows only what the
@@ -676,6 +677,7 @@ async function portalTicketEvents(scope: PortalScope) {
         maxPerOrder: orderCap(settings.maxPerOrder, left.total),
         texts: settings.texts,
         showLeft: settings.showLeft,
+        fields: await ticketFormFields(e.id),
         types: types.map((ty) => ({ key: ty.key, label: ty.label, priceCzk: ty.priceCzk, left: left.perType[ty.key] })),
         prefill: { buyerName: adult.name, email: adult.guardians[0]?.email ?? "", phone: adult.guardians[0]?.phone ?? "" },
       };

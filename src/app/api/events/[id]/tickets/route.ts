@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ticketFieldVars } from "@/lib/ticket-fields";
+import { ticketFormFields } from "@/lib/ticket-fields-server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireModuleAccess } from "@/lib/module-access";
@@ -18,6 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId } });
   const { types, settings } = eventSaleSetup(event);
+  const fields = await ticketFormFields(eventId);
   const [orders, sold, door, paidTickets, sender] = await Promise.all([
     prisma.ticketOrder.findMany({
       where: { eventId },
@@ -52,7 +55,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     totalLeft: left.total,
     door,
     // publicToken is the buyer's own status link -- not shown here.
-    orders: orders.map(({ tickets, ...o }) => ({ ...o, publicToken: undefined, ticketCount: tickets.length, usedCount: tickets.filter((t) => t.usedAt).length, scans: tickets.filter((t) => t.usedAt).map((t) => ({ seq: t.seq, priceLabel: t.priceLabel, usedAt: t.usedAt!.toISOString() })) })),
+    // The event's own ticket-form fields (Pole): labels + each order's answers as text.
+    fields: fields.map((f) => ({ key: f.key, label: f.label })),
+    orders: orders.map(({ tickets, ...o }) => ({ ...o, fieldValues: ticketFieldVars(fields, o.fieldValues as Record<string, unknown> | null), publicToken: undefined, ticketCount: tickets.length, usedCount: tickets.filter((t) => t.usedAt).length, scans: tickets.filter((t) => t.usedAt).map((t) => ({ seq: t.seq, priceLabel: t.priceLabel, usedAt: t.usedAt!.toISOString() })) })),
     review: review.map((m) => ({ ...m, amount: Number(m.amount) })),
   });
 }

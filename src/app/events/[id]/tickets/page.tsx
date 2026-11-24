@@ -28,6 +28,7 @@ type Order = {
   ticketsSentAt: string | null;
   sendError: string | null;
   note: string | null;
+  fieldValues?: Record<string, string>;
   ticketCount: number;
   usedCount: number;
   scans: { seq: number; priceLabel: string; usedAt: string }[];
@@ -41,6 +42,7 @@ type Data = {
   totalLeft: number | null;
   door: { paid: number; used: number };
   orders: Order[];
+  fields?: { key: string; label: string }[];
   review: { id: string; bookedAt: string; amount: number; variableSymbol: string | null; counterName: string | null; message: string | null; reason: string | null; ticketOrderId: string | null }[];
 };
 
@@ -252,6 +254,11 @@ export default function TicketOrdersPage({ params }: { params: Promise<{ id: str
                       {o.phone && ` · ${o.phone}`}
                     </div>
                     {o.note && <div className="text-[12px] italic text-ink-secondary">{o.note}</div>}
+                    {(data?.fields ?? []).filter((f) => o.fieldValues?.[f.key]).map((f) => (
+                      <div key={f.key} className="text-[12px] text-ink-secondary">
+                        {f.label}: <span className="text-ink">{o.fieldValues![f.key]}</span>
+                      </div>
+                    ))}
                   </td>
                   <td className="p-2 text-[13px] text-ink">{itemsLine(o.items)}</td>
                   <td className="whitespace-nowrap p-2 text-ink">

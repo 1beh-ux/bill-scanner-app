@@ -96,6 +96,8 @@ export function buildOverview(input: {
   publicRegistration: boolean;
   systemKeys?: Set<string>;
   lockedKeys?: Set<string>;
+  /** A ticket event (2026-11-24): its fields are asked on the ticket form; no parent portal. */
+  ticketForm?: boolean;
 }): Overview {
   const systemKeys = input.systemKeys ?? new Set<string>();
   const lockedKeys = input.lockedKeys ?? new Set<string>();
@@ -143,12 +145,12 @@ export function buildOverview(input: {
             : "event";
     const portal = !!t && t.portalAccess !== "hidden";
     // System fields are always asked by the form.
-    const asked = system || (f.kind === "custom" && f.requiredOnRegistration && (!t || t.portalAccess === "edit" || t.portalAccess === "approval"));
+    const asked = system || (input.ticketForm ? f.kind === "custom" && f.active : f.kind === "custom" && f.requiredOnRegistration && (!t || t.portalAccess === "edit" || t.portalAccess === "approval"));
     const uses = new Set<UseId>(f.surfaces.map((s) => USE_BY_SURFACE[s]).filter((u): u is UseId => !!u));
     if (portal) uses.add("portal");
     if (asked) uses.add("form");
     const src = [...(syncTargets.get(f.key) ?? [])];
-    if (asked && input.publicRegistration) src.push("form");
+    if (asked && (input.publicRegistration || input.ticketForm)) src.push("form");
     if (t && (t.portalAccess === "edit" || t.portalAccess === "approval")) src.push("portal");
     fields.push({
       key: f.key,
@@ -177,9 +179,11 @@ export function buildOverview(input: {
     });
   }
 
-  if (input.publicRegistration) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceForm" });
-  // Round 2: the parent portal is always a source (even with no field in it yet -- fields are added from its panel).
-  sources.push({ id: "portal", kind: "portal", label: null, labelKey: "fieldsManager.sourcePortal" });
+  if (input.ticketForm) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceTicketForm" });
+  else if (input.publicRegistration) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceForm" });
+  // Round 2: the parent portal is always a source (even with no field in it yet -- fields are added from its panel);
+  // not for ticket events, which have no profiles.
+  if (!input.ticketForm) sources.push({ id: "portal", kind: "portal", label: null, labelKey: "fieldsManager.sourcePortal" });
 
   // Groups in a fixed order; custom profile sections in the organization's order; empty groups dropped.
   const groupOrder: OvGroup[] = [

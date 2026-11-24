@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ticketFormFields } from "@/lib/ticket-fields-server";
 import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
@@ -56,10 +57,11 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
   // Veřejná akce: the ticket form instead of the family registration (docs/public-event-tickets-spec.md).
   if (event.kind === "public_event") {
     const { types, settings } = eventSaleSetup(event);
-    const [rows, org, sold] = await Promise.all([
+    const [rows, org, sold, fields] = await Promise.all([
       prisma.translation.findMany({ where: { OR: [{ key: { startsWith: "ticketForm." } }, { key: { startsWith: "portal." } }] }, select: { key: true, cs: true } }),
       publicOrg(event.organizationId),
       soldCounts(event.id),
+      ticketFormFields(event.id),
     ]);
     const left = remaining(types, settings, sold);
     return (
@@ -71,6 +73,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
           maxPerOrder={orderCap(settings.maxPerOrder, left.total)}
           texts={settings.texts}
           showLeft={settings.showLeft}
+          fields={fields}
           org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}
           embed={embed}
           strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}

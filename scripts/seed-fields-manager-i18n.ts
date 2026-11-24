@@ -229,6 +229,12 @@ const rows: Row[] = [
   r("fieldsManager.import.showAll", "Zobrazit všech {n}", "Show all {n}"),
   r("fieldsManager.import.saveSettings", "Uložit nastavení", "Save settings"),
   // Round 2 (2026-11-23)
+  // Ticket events (2026-11-24): the event's own fields on the ticket form
+  r("fieldsManager.sourceTicketForm", "Formulář vstupenek", "Ticket form"),
+  r("fieldsManager.varCategory.order", "Objednávka a vstupenka", "Order and ticket"),
+  r("fieldsManager.varHelp.order", "Hodnota objednávky nebo vstupenky – tiskne se v e-mailech k objednávce a na vstupence. Nastavení najdete ve Vstupenkách.", "A value of the order or ticket – printed in the order e-mails and on the ticket. Set up under Tickets."),
+  r("ticketForm.err.field", "Vyplňte prosím správně: {field}", "Please fill in correctly: {field}"),
+  r("ticketForm.yes", "Ano", "Yes"),
   r("fieldsManager.groupFixed", "Pevná pole", "Fixed fields"),
   r("fieldsManager.panel.type", "Typ", "Type"),
   r("fieldsManager.panel.toProfile", "Ukládat i do profilu", "Also save to the profile"),

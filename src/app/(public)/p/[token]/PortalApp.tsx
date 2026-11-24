@@ -15,6 +15,7 @@ import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-
 import { appliesTo, optionsFor } from "@/lib/registration-fields";
 import type { FormField } from "@/lib/public-registration";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
+import type { TicketField } from "@/lib/ticket-fields";
 import PortalHelp from "@/components/registration/PortalHelp";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
@@ -86,7 +87,7 @@ type Data = {
   // "Přidat člena rodiny" (slice 8 #1): family links only.
   addMember: { fields: FormField[] } | null;
   // Veřejné akce with tickets on sale (adults' links only).
-  tickets: { id: string; name: string; startDate: string; endDate: string; location: string | null; info: string | null; maxPerOrder: number; texts: Record<string, string>; showLeft: boolean; types: SaleType[]; prefill: { buyerName: string; email: string; phone: string } }[];
+  tickets: { id: string; name: string; startDate: string; endDate: string; location: string | null; info: string | null; maxPerOrder: number; texts: Record<string, string>; showLeft: boolean; fields?: TicketField[]; types: SaleType[]; prefill: { buyerName: string; email: string; phone: string } }[];
 };
 type T = (key: string, vars?: Record<string, string>) => string;
 
@@ -272,7 +273,7 @@ export default function PortalApp({
                       </summary>
                       <div className="mt-3 flex flex-col gap-3">
                         {e.info && <EventInfo text={e.info} t={t} />}
-                        <TicketForm types={e.types} maxPerOrder={e.maxPerOrder} texts={e.texts} showLeft={e.showLeft} submitUrl={`${api}/tickets`} extraBody={{ eventId: e.id }} prefill={e.prefill} embed={embed} fetcher={portalApiFetch} t={t} />
+                        <TicketForm fields={e.fields} types={e.types} maxPerOrder={e.maxPerOrder} texts={e.texts} showLeft={e.showLeft} submitUrl={`${api}/tickets`} extraBody={{ eventId: e.id }} prefill={e.prefill} embed={embed} fetcher={portalApiFetch} t={t} />
                       </div>
                     </details>
                   ))}
