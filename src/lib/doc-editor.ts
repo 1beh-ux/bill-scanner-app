@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { getDocsClient, getDriveClient, toDriveError } from "@/lib/drive";
 import { extractGoogleDocId } from "@/lib/document-merge";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
-import { classifyKey, loadResolverContext } from "@/lib/field-resolver";
+import { classifyKey, GUARDIAN_PROPS, invalidateResolverContext, loadResolverContext } from "@/lib/field-resolver";
+import { BUILTIN_EVENT_VARIABLES } from "@/lib/event-variables";
 import { EVENT_KEYS } from "@/lib/template-check";
 import { brokenPlaceholders, buildRequests, docParagraphs, editKey, findPlaceholders, textOccurrences, type DocEdit } from "@/lib/doc-edits";
 
@@ -48,7 +49,7 @@ export async function analyzeTemplate(eventId: string, organizationId: string, d
   const paras = docParagraphs(doc);
   const [ctx, fields, users, edits] = await Promise.all([
     loadResolverContext(eventId),
-    prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true } }),
+    prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true, label: true, active: true }, orderBy: { sortOrder: "asc" } }),
     usedBy(organizationId, found.docId),
     pendingEdits(organizationId, found.docId),
   ]);
@@ -78,7 +79,31 @@ export async function analyzeTemplate(eventId: string, organizationId: string, d
     typed,
     sharedWith: users.filter((u) => u.eventId !== eventId).length,
     edits: edits.map((e) => ({ id: e.id, edit: e.request as DocEdit, reason: e.reason, createdAt: e.createdAt })),
+    // What an unresolved placeholder can be connected to (alias or rename): the event's fields, guardian slots, event variables.
+    targets: [
+      ...fields.filter((f) => f.active).map((f) => ({ key: f.key, label: f.label, group: "field" as const })),
+      ...Array.from({ length: ctx.slots }, (_, i) => GUARDIAN_PROPS.filter((p) => p !== "mail").map((p) => ({ key: `guardian${i + 1}_${p}`, label: `${i + 1}|${p}`, group: "guardian" as const }))).flat(),
+      ...BUILTIN_EVENT_VARIABLES.map((v) => ({ key: v.key, label: v.label, group: "event" as const })),
+      ...Object.keys(ctx.free).map((k) => ({ key: k, label: k, group: "event" as const })),
+    ],
   };
+}
+
+/**
+ * Connects an unresolved placeholder to an existing key by an organization alias (the Doc stays as it is; documents
+ * print the target's value under the old name). Only for a key that means nothing today, to a key that resolves.
+ */
+export async function addAlias(eventId: string, organizationId: string, userId: string, alias: string, target: string) {
+  if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(alias) || alias === target) return { error: "invalid" as const };
+  const ctx = await loadResolverContext(eventId);
+  const fieldKeys = new Set((await prisma.eventParticipantField.findMany({ where: { eventId }, select: { key: true } })).map((f) => f.key));
+  if (EVENT_KEYS.has(alias) || classifyKey(alias, ctx, fieldKeys).kind !== "unresolved" || fieldKeys.has(alias)) return { error: "alias_taken" as const };
+  const t = classifyKey(target, ctx, fieldKeys);
+  if (t.kind === "unresolved" || t.viaAlias) return { error: "invalid" as const };
+  const targetKind = t.kind === "event_variable" ? "event_variable" : t.kind === "guardian" ? "guardian" : "field";
+  const row = await prisma.fieldAlias.create({ data: { organizationId, alias, targetKind, targetKey: target, reason: "document", createdById: userId } });
+  invalidateResolverContext(eventId);
+  return { id: row.id };
 }
 
 export async function queueEdit(eventId: string, organizationId: string, docTypeId: string, userId: string, edit: DocEdit, reason: string) {

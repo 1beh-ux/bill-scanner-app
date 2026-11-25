@@ -2,10 +2,11 @@
 //   GET  ?event=&docType=                                  -> placeholders (classified), typed text, pending edits
 //   POST {event, docType, action: "queue", edit, reason}   -> a pending edit (nothing touches the Doc yet)
 //   POST {event, docType, action: "discard", editId}
+//   POST {event, action: "alias", alias, target}           -> an organization alias for a placeholder (Doc unchanged)
 //   POST {event, docType, action: "save", copy?}           -> all pending edits in one guarded batchUpdate
 import { NextRequest, NextResponse } from "next/server";
 import { DriveError } from "@/lib/drive-errors";
-import { analyzeTemplate, discardEdit, queueEdit, saveEdits } from "@/lib/doc-editor";
+import { addAlias, analyzeTemplate, discardEdit, queueEdit, saveEdits } from "@/lib/doc-editor";
 import { readEdit } from "@/lib/doc-edits";
 import { fieldsManagerAccess, pickEvent } from "../access";
 
@@ -45,6 +46,10 @@ export async function POST(req: NextRequest) {
     const reason = typeof b.reason === "string" ? b.reason.slice(0, 40) : edit.type;
     const r = await queueEdit(s.eventId, s.organizationId, docTypeId, s.userId, edit, reason);
     return r ? NextResponse.json({ id: r.id }) : NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+  if (b.action === "alias" && typeof b.alias === "string" && typeof b.target === "string") {
+    const r = await addAlias(s.eventId, s.organizationId, s.userId, b.alias, b.target);
+    return NextResponse.json(r, { status: "error" in r ? 400 : 200 });
   }
   if (b.action === "discard" && typeof b.editId === "string") {
     await discardEdit(s.organizationId, b.editId);

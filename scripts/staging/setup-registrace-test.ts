@@ -34,6 +34,10 @@ async function main() {
 
   const y2026 = await event("TEST Členství 2026", "2026-01-01", "2026-12-31", { peopleLinkMode: "all", status: "active" });
   await docType(y2026.event.id, "test_registracni_list", "Registrační list (TEST)");
+  // The owner's old registration form (Google Doc in "Táborník STAGING / Registrace 2027 – test", old variable names)
+  // to try connecting its variables in Pole → Nástroje → Dokumenty.
+  const form = await docType(y2026.event.id, "test_registracni_formular", "Registrační list – formulář 2027 (TEST)");
+  await prisma.eventListItem.update({ where: { id: form.id }, data: { data: { templateGoogleDocId: "1gEs9tbvNWfViuT407vV75tF4Jbp_LyHg6mBqlIypiYM" } } });
 
   const y2027 = await event("TEST Registrace 2027", "2027-01-01", "2027-12-31", {
     portalOpen: true,

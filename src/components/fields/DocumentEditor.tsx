@@ -19,7 +19,9 @@ type Analysis = {
   typed: { key: string; text: string; count: number }[];
   sharedWith: number;
   edits: { id: string; edit: Edit; reason: string }[];
+  targets: Target[];
 };
+type Target = { key: string; label: string; group: "field" | "guardian" | "event" };
 const COLOR: Record<Status, string> = {
   current: "bg-emerald-100 text-emerald-900",
   alias: "bg-amber-100 text-amber-900",
@@ -155,9 +157,18 @@ export default function DocumentEditor({ eventId, docs, initialDoc }: { eventId:
 
             {(unique("unresolved").length > 0 || data.broken.length > 0) && (
               <section className="space-y-1 rounded-xl border border-red-200 p-3">
-                <h3 className="font-semibold text-red-800">{t("fieldsManager.doc.fixInGoogle")}</h3>
+                <h3 className="font-semibold text-red-800">{t("fieldsManager.doc.connectTitle")}</h3>
+                <p className="text-[12px] text-ink-secondary">{t("fieldsManager.doc.connectHint")}</p>
                 {unique("unresolved").map((p) => (
-                  <div key={p.raw} className="font-mono">{p.raw}</div>
+                  <Connect
+                    key={p.raw}
+                    phKey={p.key}
+                    targets={data.targets}
+                    busy={busy}
+                    renamed={(data.edits ?? []).some((e) => e.edit.type === "rename" && e.edit.from === p.key)}
+                    onAlias={async (target) => { const r = await post({ action: "alias", alias: p.key, target }); if (r) setMsg(t("fieldsManager.doc.aliasSaved", { from: p.key, to: target })); }}
+                    onRename={(target) => queue({ type: "rename", from: p.key, to: target }, "connect")}
+                  />
                 ))}
                 {data.broken.map((b, i) => (
                   <div key={i} className="font-mono">{b} <span className="font-sans text-ink-secondary">({t("fieldsManager.doc.brokenHint")})</span></div>
@@ -202,6 +213,42 @@ function Row({ left, done, onClick, label, busy }: { left: string; done: boolean
       <button type="button" disabled={busy || done} onClick={onClick} className="ml-auto rounded border border-mist px-2 py-0.5 text-[12px] hover:bg-paper-2 disabled:opacity-40">
         {done ? "✓" : label}
       </button>
+    </div>
+  );
+}
+
+function Connect({ phKey, targets, busy, renamed, onAlias, onRename }: { phKey: string; targets: Target[]; busy: boolean; renamed: boolean; onAlias: (target: string) => void; onRename: (target: string) => void }) {
+  const { t } = useTranslations();
+  const [target, setTarget] = useState("");
+  const label = (x: Target) => {
+    if (x.group !== "guardian") return x.label === x.key ? x.key : `${x.label} ({{${x.key}}})`;
+    const [n, prop] = x.label.split("|");
+    return `${t("fieldsManager.doc.guardianSlot", { n })} – ${t(`fieldsManager.doc.gprop.${prop}`)}`;
+  };
+  const groups = (["field", "guardian", "event"] as const).map((g) => [g, targets.filter((x) => x.group === g)] as const);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 border-t border-red-100 pt-1.5 first:border-0">
+      <span className="min-w-[90px] font-mono text-[12px]">{`{{${phKey}}}`}</span>
+      <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={renamed} className="min-w-0 flex-1 rounded border border-mist bg-paper px-1.5 py-0.5 text-[12px]">
+        <option value="">{t("fieldsManager.doc.connectPick")}</option>
+        {groups.map(([g, list]) => list.length > 0 && (
+          <optgroup key={g} label={t(`fieldsManager.doc.targetGroup.${g}`)}>
+            {list.map((x) => <option key={x.key} value={x.key}>{label(x)}</option>)}
+          </optgroup>
+        ))}
+      </select>
+      {renamed ? (
+        <span className="text-[12px] text-ink-secondary">{t("fieldsManager.doc.connectQueued")}</span>
+      ) : (
+        <>
+          <button type="button" disabled={busy || !target} onClick={() => onAlias(target)} className="rounded border border-mist px-2 py-0.5 text-[12px] hover:bg-paper-2 disabled:opacity-40" title={t("fieldsManager.doc.asAliasHint")}>
+            {t("fieldsManager.doc.asAlias")}
+          </button>
+          <button type="button" disabled={busy || !target} onClick={() => onRename(target)} className="rounded border border-mist px-2 py-0.5 text-[12px] hover:bg-paper-2 disabled:opacity-40" title={t("fieldsManager.doc.renameInDocHint")}>
+            {t("fieldsManager.doc.renameInDoc")}
+          </button>
+        </>
+      )}
     </div>
   );
 }
