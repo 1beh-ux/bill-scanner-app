@@ -33,11 +33,12 @@ function calcState(spec: unknown): CalcState {
 }
 
 /** New field, or (with `edit`) the calculation of an existing calculated field. */
-export function NewFieldForm({ overview, onDone, edit }: { overview: FmOverview; onDone: (key: string | null) => void; edit?: { key: string; spec: unknown } }) {
+export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview: FmOverview; onDone: (key: string | null) => void; edit?: { key: string; spec: unknown }; initialKey?: string }) {
   const { t } = useTranslations();
   const [label, setLabel] = useState("");
-  const [key, setKey] = useState("");
-  const [keyTouched, setKeyTouched] = useState(false);
+  // initialKey: a document's variable the new field is made for (Dokumenty) -- kept unless changed by hand.
+  const [key, setKey] = useState(initialKey ?? "");
+  const [keyTouched, setKeyTouched] = useState(!!initialKey);
   const [type, setType] = useState<(typeof TYPES)[number]>(edit ? "calculated" : "text");
   const [options, setOptions] = useState("");
   const [calc, setCalc] = useState<CalcState>(edit ? calcState(edit.spec) : EMPTY_CALC);

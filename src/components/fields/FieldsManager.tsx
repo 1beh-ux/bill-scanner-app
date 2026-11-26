@@ -222,7 +222,7 @@ export default function FieldsManager() {
         </div>
       )}
       {tab === "tools" && tool === "cleanup" && <CleanupPanel overview={data} onChanged={refresh} />}
-      {tab === "tools" && tool === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} />}
+      {tab === "tools" && tool === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} overview={data} onChanged={refresh} />}
       {tab === "tools" && tool === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
       {tab === "tools" && tool === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
     </div>

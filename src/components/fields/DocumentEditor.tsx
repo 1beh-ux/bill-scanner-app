@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { editKey } from "@/lib/doc-edits";
-import type { FmDocTemplate } from "./types";
+import { NewFieldForm } from "./FieldEditors";
+import type { FmDocTemplate, FmOverview } from "./types";
 
 // Fields Manager phase 6 (design §11, screens 18–19): a document type's Google Doc with its placeholders coloured
 // (green current, amber old name, blue event variable, red can't be resolved / has spaces), suggested fixes queued
@@ -30,7 +31,7 @@ const COLOR: Record<Status, string> = {
   unresolved: "bg-red-100 text-red-800",
 };
 
-export default function DocumentEditor({ eventId, docs, initialDoc }: { eventId: string; docs: FmDocTemplate[] | null; initialDoc?: string | null }) {
+export default function DocumentEditor({ eventId, docs, initialDoc, overview, onChanged }: { eventId: string; docs: FmDocTemplate[] | null; initialDoc?: string | null; overview: FmOverview; onChanged: () => void }) {
   const { t } = useTranslations();
   const usable = (docs ?? []).filter((d) => !d.error);
   const [docType, setDocType] = useState<string>(initialDoc ?? "");
@@ -168,6 +169,14 @@ export default function DocumentEditor({ eventId, docs, initialDoc }: { eventId:
                     renamed={(data.edits ?? []).some((e) => e.edit.type === "rename" && e.edit.from === p.key)}
                     onAlias={async (target) => { const r = await post({ action: "alias", alias: p.key, target }); if (r) setMsg(t("fieldsManager.doc.aliasSaved", { from: p.key, to: target })); }}
                     onRename={(target) => queue({ type: "rename", from: p.key, to: target }, "connect")}
+                    overview={overview}
+                    onCreated={async (k) => {
+                      // A different key than the document uses: the document is renamed to it on save.
+                      if (k !== p.key) await queue({ type: "rename", from: p.key, to: k }, "connect");
+                      else setReload((n) => n + 1);
+                      setMsg(t("fieldsManager.doc.fieldCreated", { key: k }));
+                      onChanged();
+                    }}
                   />
                 ))}
                 {data.broken.map((b, i) => (
@@ -217,9 +226,17 @@ function Row({ left, done, onClick, label, busy }: { left: string; done: boolean
   );
 }
 
-function Connect({ phKey, targets, busy, renamed, onAlias, onRename }: { phKey: string; targets: Target[]; busy: boolean; renamed: boolean; onAlias: (target: string) => void; onRename: (target: string) => void }) {
+function Connect({ phKey, targets, busy, renamed, onAlias, onRename, overview, onCreated }: { phKey: string; targets: Target[]; busy: boolean; renamed: boolean; onAlias: (target: string) => void; onRename: (target: string) => void; overview: FmOverview; onCreated: (key: string) => void }) {
   const { t } = useTranslations();
   const [target, setTarget] = useState("");
+  const [creating, setCreating] = useState(false);
+  if (creating)
+    return (
+      <div className="border-t border-red-100 pt-1.5">
+        <NewFieldForm overview={overview} initialKey={phKey} onDone={(k) => { setCreating(false); if (k) onCreated(k); }} />
+        <button type="button" onClick={() => setCreating(false)} className="mt-1 text-[12px] text-ink-secondary hover:text-ink">{t("fieldsManager.cancel")}</button>
+      </div>
+    );
   const label = (x: Target) => {
     if (x.group !== "guardian") return x.label === x.key ? x.key : `${x.label} ({{${x.key}}})`;
     const [n, prop] = x.label.split("|");
@@ -246,6 +263,9 @@ function Connect({ phKey, targets, busy, renamed, onAlias, onRename }: { phKey: 
           </button>
           <button type="button" disabled={busy || !target} onClick={() => onRename(target)} className="rounded border border-mist px-2 py-0.5 text-[12px] hover:bg-paper-2 disabled:opacity-40" title={t("fieldsManager.doc.renameInDocHint")}>
             {t("fieldsManager.doc.renameInDoc")}
+          </button>
+          <button type="button" disabled={busy} onClick={() => setCreating(true)} className="rounded border border-dashed border-ember/60 px-2 py-0.5 text-[12px] hover:bg-paper-2 disabled:opacity-40" title={t("fieldsManager.doc.newFieldHint")}>
+            + {t("fieldsManager.doc.newField")}
           </button>
         </>
       )}
