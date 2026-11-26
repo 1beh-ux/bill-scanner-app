@@ -40,16 +40,17 @@ async function main() {
     // 2. Organization default of a question asked here: the event follows while it had the old default.
     const q = rows.find((r): r is Extract<typeof r, { kind: "question" }> => r.kind === "question" && r.requiredDefault !== null);
     if (!q) throw new Error("no organization question asked on this form");
-    await fs.changeQuestion(event.id, q.key, { required: q.requiredDefault }); // converted, same as the organization
-    await fs.setOrgRequired(orgId, q.key, !q.requiredDefault);
+    const def = q.requiredDefault!;
+    await fs.changeQuestion(event.id, q.key, { required: def }); // converted, same as the organization
+    await fs.setOrgRequired(orgId, q.key, !def);
     f = await fs.formStructure(event.id);
     const q2 = f.sections.flatMap((s) => s.rows).find((r) => r.kind === "question" && r.key === q.key) as typeof q;
-    ok("orgDefaultFollowed", q2.cfg.required === !q.requiredDefault && q2.requiredDefault === !q.requiredDefault);
-    await fs.changeQuestion(event.id, q.key, { required: q.requiredDefault }); // set by hand -> differs
-    await fs.setOrgRequired(orgId, q.key, q.requiredDefault); // back: equals the event again
-    await fs.setOrgRequired(orgId, q.key, !q.requiredDefault); // this event was the old default -> follows
+    ok("orgDefaultFollowed", q2.cfg.required === !def && q2.requiredDefault === !def);
+    await fs.changeQuestion(event.id, q.key, { required: def }); // set by hand -> differs
+    await fs.setOrgRequired(orgId, q.key, def); // back: equals the event again
+    await fs.setOrgRequired(orgId, q.key, !def); // this event was the old default -> follows
     f = await fs.formStructure(event.id);
-    ok("orgDefaultFollowedAgain", (f.sections.flatMap((s) => s.rows).find((r) => r.kind === "question" && r.key === q.key) as typeof q).cfg.required === !q.requiredDefault);
+    ok("orgDefaultFollowedAgain", (f.sections.flatMap((s) => s.rows).find((r) => r.kind === "question" && r.key === q.key) as typeof q).cfg.required === !def);
 
     // 3. Moved to Osoba and ordered: on the Formulář screen and in the public form context.
     const qs = f.sections.find((s) => s.id === "questions")!.rows.filter((r) => r.kind === "question").map((r) => (r as typeof q).key);
