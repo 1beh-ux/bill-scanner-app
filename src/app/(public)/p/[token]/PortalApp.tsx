@@ -453,7 +453,7 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
                   </span>
                   {f.fieldType === "calculated" ? (
                     // A calculated field: read-only, worked out from the profile's values as they are edited here.
-                    <FieldInput field={f} value="" onChange={() => {}} yesLabel={t("portal.yes")} calc={{ values: { ...values, is_adult: member.isAdult ? "Ano" : "Ne" }, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }} />
+                    <FieldInput field={f} value="" onChange={() => {}} yesLabel={t("portal.yes")} calc={{ values: { ...values, is_adult: member.isAdult ? "Ano" : "Ne" }, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k, person: { isAdult: member.isAdult, guardians: member.profile.guardians, emailKeys: fields.filter((x) => x.fieldType === "email").map((x) => x.key) } }} />
                   ) : editable ? (
                     <FieldInput field={f} value={values[f.key] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.key]: v }))} yesLabel={t("portal.yes")} />
                   ) : (

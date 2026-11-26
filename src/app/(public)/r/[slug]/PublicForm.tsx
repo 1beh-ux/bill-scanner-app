@@ -98,7 +98,9 @@ export default function PublicForm({
   );
   // Starts with a child (the main case); adults only as the event allows (Event.publicAudience).
   const audience = event.audience ?? "any";
-  const [persons, setPersons] = useState<Person[]>([newPerson(false)]);
+  // 2026-11-26: a form open to children and adults starts empty with "Registruji primárně: Dítě / Dospělý";
+  // children only (or adults only with a child) starts with a child as before.
+  const [persons, setPersons] = useState<Person[]>(audience === "any" ? [] : [newPerson(false)]);
   const [guardians, setGuardians] = useState<Guardian[]>([]);
   const [note, setNote] = useState("");
   const [website, setWebsite] = useState("");
@@ -163,7 +165,18 @@ export default function PublicForm({
           onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })}
           yesLabel={t("portal.yes")}
           // A calculated field: shown live from this person's answers (names and birth date included).
-          calc={{ values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" }, eventStart: event.startDate, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }}
+          calc={{
+            values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" },
+            eventStart: event.startDate,
+            missingLabel: t("portal.calcMissing"),
+            labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k,
+            // The contact e-mail as the registration will have it: an adult's own, a child's guardians (adults ticked first).
+            person: {
+              isAdult: p.isAdult,
+              guardians: (p.isAdult ? [p.email] : [...persons.filter((x) => x.isAdult && x.guardianOfChildren).map((x) => x.email), ...guardians.map((g) => g.email)]).filter(Boolean).map((email) => ({ email, receivesCommunications: true })),
+              emailKeys: fields.filter((x) => x.fieldType === "email").map((x) => x.key),
+            },
+          }}
         />
       </FieldShell>
     </Fragment>
@@ -325,6 +338,20 @@ export default function PublicForm({
         {/* Honeypot: invisible to people, bots fill it in. */}
         <input type="text" name="website" value={website} onChange={(e) => setWebsite(e.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" className="absolute -left-[9999px] h-0 w-0 opacity-0" />
 
+        {persons.length === 0 && (
+          <section className={card + " flex flex-col gap-3"}>
+            <h3 className="text-[16px] font-semibold text-ink">{t("public.primaryTitle")}</h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => setPersons([newPerson(false)])} className={btn + " py-4 text-[16px] font-medium"}>
+                {t("public.primaryChild")}
+              </button>
+              <button type="button" onClick={() => setPersons([newPerson(true)])} className={btn + " py-4 text-[16px] font-medium"}>
+                {t("public.primaryAdult")}
+              </button>
+            </div>
+            <p className="text-[13px] text-ink-secondary">{t("public.primaryHint")}</p>
+          </section>
+        )}
         {persons.map((p, i) => (
           <section key={i} className={card + " flex flex-col gap-3"}>
             <div className="flex items-center justify-between gap-2">
@@ -394,7 +421,7 @@ export default function PublicForm({
           </section>
         ))}
 
-        {persons.length < MAX_PERSONS && (
+        {persons.length > 0 && persons.length < MAX_PERSONS && (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setPersons((x) => [...x, newPerson(false)])} className={btn}>
               + {t("public.addChild")}
@@ -434,6 +461,7 @@ export default function PublicForm({
           </section>
         )}
 
+        {persons.length > 0 && (<>
         <label className="text-[13px] text-ink-secondary">
           {t("portal.note")}
           <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} className={inputClass + " mt-1"} />
@@ -455,6 +483,7 @@ export default function PublicForm({
             {busy ? t("portal.loading") : t("public.submit")}
           </button>
         </div>
+        </>)}
       </form>
       <OrgFooter org={org} label={t("portal.contact")} />
     </div>

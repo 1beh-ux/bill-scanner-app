@@ -24,14 +24,15 @@ export default function FieldInput({
   yesLabel: string;
   required?: boolean;
   // 2026-11-24: a calculated field shown read-only, worked out live from the other answers on the screen.
-  calc?: { values: Record<string, string>; eventStart?: string | null; missingLabel: string; labelOf?: (key: string) => string };
+  // person: who the form is about (adult or not, the e-mails of the guardians / their own) -- the contact calculation.
+  calc?: { values: Record<string, string>; eventStart?: string | null; missingLabel: string; labelOf?: (key: string) => string; person?: { isAdult: boolean; guardians: { email: string; receivesCommunications: boolean }[]; emailKeys: string[] } };
 }) {
   if (field.fieldType === "calculated") {
     const spec = readCalcSpec("calculated", field.options);
     if (!spec) return null;
     const valueOf = (k: string) => calc?.values[k];
     const missing = calcDeps(spec).filter((k) => !valueOf(k)?.trim());
-    const shown = evaluateCalc(spec, { valueOf, eventStart: calc?.eventStart ? new Date(calc.eventStart) : null, today: new Date() });
+    const shown = evaluateCalc(spec, { valueOf, eventStart: calc?.eventStart ? new Date(calc.eventStart) : null, today: new Date(), person: calc?.person });
     return (
       <div className="rounded-lg border border-dashed border-mist bg-paper px-3 py-2.5 text-[15px] text-ink">
         {shown || "—"}
