@@ -45,7 +45,8 @@ export async function saveGeneratedParticipantDocument(opts: {
   eventListItemId: string;
   buffer: Buffer;
   filename: string;
-  generatedByUserId: string;
+  // null: created by the system (auto-accept without e-mail).
+  generatedByUserId: string | null;
 }): Promise<{ id: string; previousDriveFileId: string | null }> {
   const hash = crypto.createHash("sha256").update(opts.buffer).digest("hex").slice(0, 16);
   const gcsPath = `events/${opts.eventId}/mail/documents/${opts.participantId}/${hash}-${sanitizeFilename(opts.filename)}`;

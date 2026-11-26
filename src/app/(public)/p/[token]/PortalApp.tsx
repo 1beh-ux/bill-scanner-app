@@ -48,7 +48,7 @@ export type Registration = {
   // bankCheck: the event confirms payments from its Fio account; paidViaBank = when (docs/bank-payments-design.md).
   payment: { priceCzk: number | null; account: string | null; variableSymbol: string; qrDataUrl: string | null; paid: boolean | null; bankCheck?: boolean; paidViaBank?: string | null } | null;
   // fromProfile: received through the person's permanent document (slice 6 #4).
-  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromDetails?: boolean; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean }[];
+  documents: { typeId: string; name: string; sent: DocFile; received: DocFile; fromDetails?: boolean; fromProfile: { event: string | null } | null; review: "pending" | "rejected" | null; reviewNote: string | null; canUpload: boolean; canGenerate?: boolean }[];
   resend: { left: number } | null;
   sections: CardSection[];
   // Two-step events, after acceptance: the rest of the event's fields ("Doplňte údaje").
@@ -991,6 +991,20 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
     if (res?.ok) onChanged();
   }
 
+  // "Stáhnout": the document created from its template for this registration, saved as a file.
+  async function generate(typeId: string) {
+    setBusy(true);
+    const res = await portalApiFetch(`${api}/generate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ participantId: r.participantId, typeId }) }).catch(() => null);
+    setBusy(false);
+    if (!res?.ok) return alert(t("portal.docGenerateFailed"));
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${r.documents.find((x) => x.typeId === typeId)?.name ?? "dokument"}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    onChanged();
+  }
   const fileLink = (f: DocFile, label: string) =>
     f &&
     (f.id ? (
@@ -1031,6 +1045,12 @@ export function RegistrationCard({ api, r, who, t, evName, onChanged }: { api: s
               <div key={d.typeId} className="flex flex-col gap-1 rounded-lg border border-mist p-2">
                 <span className="text-ink">{d.name}</span>
                 <span className="flex flex-wrap gap-x-3 gap-y-1 text-[13px]">
+                  {/* Not sent yet (e.g. accepted without an e-mail): created from the template on download. */}
+                  {!d.sent && d.canGenerate && !d.received && (
+                    <button type="button" onClick={() => generate(d.typeId)} disabled={busy} className="text-ember underline disabled:opacity-50">
+                      {busy ? t("portal.loading") : t("portal.docGenerate")}
+                    </button>
+                  )}
                   {fileLink(d.sent, t("portal.docSent"))}
                   {d.fromDetails && !d.received?.id ? (
                     <span className="text-pine">{t("portal.docFromDetails")}</span>

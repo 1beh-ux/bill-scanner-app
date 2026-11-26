@@ -82,4 +82,10 @@ assert.ok(good.ok && good.data.persons[0].guardians[0].extra?.souhlas === "true"
 const adult = validateSubmission({ persons: [{ ...child, firstName: "Petr", birthDate: "1980-01-01", isAdult: true, email: "p@example.invalid", phone: "777", guardianOfChildren: true, guardianExtra: { souhlas: "true" } }, child] }, ctx);
 assert.ok(adult.ok && adult.data.persons[1].guardians[0].extra?.souhlas === "true", JSON.stringify(adult));
 
+// Two different guardians with one e-mail: refused, not dropped; the same person twice is merged.
+const twins = validateSubmission({ persons: [child], guardians: [{ name: "A", email: "x@example.invalid", phone: "777", extra: { souhlas: "true" } }, { name: "B", email: "X@example.invalid", phone: "777", extra: { souhlas: "true" } }] }, ctx);
+assert.ok(!twins.ok && twins.errors.includes("g1.email_duplicate"));
+const same = validateSubmission({ persons: [child], guardians: [{ name: "A", email: "x@example.invalid", phone: "777", extra: { souhlas: "true" } }, { name: "a", email: "x@example.invalid", phone: "777", extra: { souhlas: "true" } }] }, ctx);
+assert.ok(same.ok);
+
 console.log("guardian-fields ok");

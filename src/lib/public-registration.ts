@@ -148,7 +148,13 @@ export function validateSubmission(
     else if (g.name) extra.push(g);
   });
   const childGuardians: GuardianIn[] = [];
-  for (const g of [...adultGuardians, ...extra]) if (!childGuardians.some((x) => x.email.toLowerCase() === g.email.toLowerCase())) childGuardians.push(g);
+  const sameName = (a: string | null, b: string | null) => (a ?? "").trim().toLowerCase() === (b ?? "").trim().toLowerCase();
+  for (const g of [...adultGuardians, ...extra]) {
+    const twin = childGuardians.find((x) => x.email.toLowerCase() === g.email.toLowerCase());
+    if (!twin) childGuardians.push(g);
+    // The same e-mail for two different people: each guardian needs their own (it identifies them) -- never dropped silently.
+    else if (!sameName(twin.name, g.name)) errors.push(`g${extra.indexOf(g)}.email_duplicate`);
+  }
   if (persons.some((p) => !p.isAdult) && childGuardians.length === 0) errors.push("guardians");
   // The event's "Koho lze přihlásit" (Event.publicAudience).
   if (ctx.audience === "children" && persons.some((p) => p.isAdult)) errors.push("audience_children");

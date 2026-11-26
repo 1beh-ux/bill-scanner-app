@@ -58,7 +58,7 @@ async function buildAutoAttachDocuments(
     driveExportFolderId: string | null;
   },
   allowedDocumentTypeIds: string[] | undefined,
-  generatedByUserId: string,
+  generatedByUserId: string | null,
   // Fixed attachments exported once per send, shared by every participant.
   staticPdfs: Map<string, Promise<Buffer>>
 ): Promise<{
@@ -180,7 +180,7 @@ export async function documentAttachmentsFor(
   participantId: string,
   event: Parameters<typeof buildAutoAttachDocuments>[1],
   documentTypeIds: string[],
-  generatedByUserId: string,
+  generatedByUserId: string | null,
   staticPdfs: Map<string, Promise<Buffer>>
 ) {
   if (!documentTypeIds.length) return { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };

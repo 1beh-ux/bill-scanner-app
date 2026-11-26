@@ -87,5 +87,6 @@ export async function autoAcceptRegistrations(eventId: string, participantIds: s
   } catch (err) {
     console.log(`[auto-accept] variable symbol failed for event ${eventId}:`, String(err));
   }
+  // The documents aren't created here: the parent downloads them in the portal (created on demand, portal generate).
   return "accepted";
 }

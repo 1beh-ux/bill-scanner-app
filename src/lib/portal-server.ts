@@ -529,6 +529,8 @@ export async function registrationCard(
         reviewNote: state.note,
         // Documents are asked for once the registration is accepted.
         canUpload: accepted && !!data?.allowPortalUpload && !profile && !data?.fromDetails,
+        // "Stáhnout" (2026-11-26): an accepted registration's document with a template, created when downloaded.
+        canGenerate: accepted && !!data?.templateGoogleDocId && !data?.staticAttachment,
       };
     }),
     // Re-send the acceptance e-mail (needs the event's sending account).
