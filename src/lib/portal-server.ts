@@ -249,7 +249,8 @@ export async function portalData(scope: PortalScope) {
     const requiredBy = new Map<string, string>();
     for (const p of current) {
       for (const f of askedFields(eventFields.filter((x) => x.eventId === p.eventId), rules, child.isAdult)) {
-        if (f.source === "profile" && !requiredBy.has(f.key)) requiredBy.set(f.key, p.event.name);
+        // Only a REQUIRED question (an optional one -- Formulář "Povinné" off -- or a calculated one is never "needed").
+        if (f.source === "profile" && f.required !== false && f.fieldType !== "calculated" && !requiredBy.has(f.key)) requiredBy.set(f.key, p.event.name);
       }
     }
     // section: basic / detailed / an organization section key; summary: on the family overview.
