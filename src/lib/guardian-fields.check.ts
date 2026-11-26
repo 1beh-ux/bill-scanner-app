@@ -104,5 +104,8 @@ import("@/lib/participant-fields").then(({ choiceAnswer, choiceText }) => {
   assert.ok(!off.ok);
   const s2 = readGuardianSettings({ fields: [{ key: "souhlas", label: "S", fieldType: "consent", required: true, settings: { prefill: true } }] });
   assert.deepEqual(cleanGuardianExtra(s2.fields, {}), { souhlas: "true" });
+  // An adult alone (not a guardian) answers the own guardian questions for their own contact, stored on their row.
+  const alone = validateSubmission({ persons: [{ firstName: "Petr", lastName: "Sám", birthDate: "1980-01-01", isAdult: true, email: "p@example.invalid", guardianOfChildren: false }] }, { ...ctx, guardians: guardianQuestions(s2, null, { phone: "", relationship: "" }) });
+  assert.ok(alone.ok && alone.data.persons[0].guardians[0].extra?.souhlas === "true", JSON.stringify(alone));
   console.log("guardian-fields ok");
 });

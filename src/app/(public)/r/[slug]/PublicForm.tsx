@@ -395,7 +395,8 @@ export default function PublicForm({
                     <input type="checkbox" checked={p.guardianOfChildren} onChange={(e) => setPerson(i, { guardianOfChildren: e.target.checked })} />
                     {t("public.isGuardian")}
                   </label>
-                  {p.guardianOfChildren && hasChildren && guardianInputs(p.guardianExtra, (guardianExtra) => setPerson(i, { guardianExtra }))}
+                  {/* The organization's own guardian questions (e.g. consent to mail): every adult, for their own contact. */}
+                  {guardianInputs(p.guardianExtra, (guardianExtra) => setPerson(i, { guardianExtra }))}
                 </>
               )}
               {/* Questions placed with the person on the Formulář screen (e.g. the child's own phone). */}

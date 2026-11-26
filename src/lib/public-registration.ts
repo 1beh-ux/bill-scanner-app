@@ -77,6 +77,7 @@ export function validateSubmission(
 
   const persons: PersonIn[] = [];
   const adultGuardians: GuardianIn[] = [];
+  const ownExtra = new Map<number, Record<string, string>>();
   // The guardian questions: own fields' values cleaned by type, required ones checked (phone / relationship too).
   const gq = ctx.guardians ?? [];
   const own = gq.filter((q) => !q.fixed).map((q) => ({ key: q.key, label: q.label, fieldType: q.fieldType as GuardianFieldDef["fieldType"], options: q.options, required: q.required }));
@@ -142,10 +143,13 @@ export function validateSubmission(
         }
       }
     }
-    if (p.isAdult && r.guardianOfChildren === true && p.email) {
-      // An adult ticked as a guardian answers the guardian questions too (not the relationship: they are themselves).
-      const extra = guardianCheck(r.guardianExtra, { phone: p.phone, relationship: "-" }, (k) => `p${i}.guardian_${k}`);
-      adultGuardians.push({ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email, phone: p.phone, relationship: null, extra });
+    // An adult answers the organization's own guardian questions for their own contact (2026-11-26: e.g. consent to
+    // mail -- every adult, not only one ticked as a guardian); phone / relationship are required only of a guardian.
+    if (p.isAdult) {
+      const guardian = r.guardianOfChildren === true && !!p.email;
+      const extra = guardianCheck(r.guardianExtra, { phone: guardian ? p.phone : "-", relationship: "-" }, (k) => `p${i}.guardian_${k}`);
+      ownExtra.set(i, extra);
+      if (guardian) adultGuardians.push({ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email!, phone: p.phone, relationship: null, extra });
     }
     persons.push(p);
   });
@@ -178,10 +182,10 @@ export function validateSubmission(
   return {
     ok: true,
     data: {
-      persons: persons.map((p) => ({
+      persons: persons.map((p, i) => ({
         ...p,
         // An adult's own row keeps the guardian answers they gave when ticked as a guardian.
-        guardians: p.isAdult ? [{ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email!, phone: p.phone, relationship: null, extra: adultGuardians.find((g) => g.email === p.email)?.extra }] : childGuardians,
+        guardians: p.isAdult ? [{ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email!, phone: p.phone, relationship: null, extra: ownExtra.get(i) }] : childGuardians,
       })),
       note: str(o.note, 2000),
     },
