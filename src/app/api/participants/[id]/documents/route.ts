@@ -67,6 +67,8 @@ export async function GET(
             ? { event: profile.sourceEvent?.name ?? null, url: `/api/children/${profile.childId}/documents/${profile.id}?event=${participant.eventId}&inline=1` }
             : null,
           driveUrl: latest?.driveFileId ? `https://drive.google.com/file/d/${latest.driveFileId}/view` : null,
+          // "Vytvořit" (2026-11-26): the type has a Google Doc template to generate this participant's document from.
+          canGenerate: !!(type.data as DocumentTypeData | null)?.templateGoogleDocId && !(type.data as DocumentTypeData | null)?.staticAttachment,
         };
       })
     );

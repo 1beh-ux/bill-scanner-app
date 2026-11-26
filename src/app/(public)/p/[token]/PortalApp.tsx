@@ -18,6 +18,7 @@ import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
 import type { TicketField } from "@/lib/ticket-fields";
 import PortalHelp from "@/components/registration/PortalHelp";
 import GuardianExtraInputs from "@/components/registration/GuardianExtraInputs";
+import FieldShell, { fieldProblem } from "@/components/registration/FieldShell";
 import type { GuardianFieldDef } from "@/lib/guardian-fields";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
@@ -446,6 +447,8 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
                 <div key={f.key} className={"flex flex-col gap-1 " + (missing(f) ? "rounded-lg border border-amber-500/70 bg-amber-500/10 p-2" : "")}>
                   <span className="text-[13px] text-ink-secondary">
                     {f.label}
+                    {/* Required by an event the person is registered to: "*", else "nepovinné" (editable fields only). */}
+                    {editable && f.fieldType !== "calculated" && (f.requiredBy ? <span className="text-ember"> *</span> : <span className="ml-1 text-[11.5px] italic">({t("portal.fieldOptional")})</span>)}
                     {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
                   </span>
                   {f.fieldType === "calculated" ? (
@@ -458,6 +461,7 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
                   )}
                   {f.pending !== null && <span className="text-[12.5px] text-amber-700">{t("portal.pendingApproval", { value: showValue(f, f.pending, t), old: showValue(f, f.value, t) })}</span>}
                   {missing(f) && <span className="text-[12.5px] text-amber-700">{t("portal.requiredBy", { event: f.requiredBy! })}</span>}
+                  {editable && fieldProblem({ ...f, required: false }, values[f.key], false) === "invalid" && <span role="alert" className="text-[12.5px] font-medium text-red-700">{t("portal.fieldInvalid")}</span>}
                 </div>
               );
             })}
@@ -724,6 +728,8 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The answers the server refused, per person (marked on the fields).
+  const [refused, setRefused] = useState<Record<string, string[]>>({});
   const memberOf = (id: string) => data.members.find((m) => m.id === id)!;
   const value = (m: Member, key: string) => m.profile.fields.find((f) => f.key === key)?.value || "";
 
@@ -736,6 +742,12 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
     if (res?.status === 400) {
       // Which answers were refused ("<memberId>.<key>"): missing, or filled with a value of the wrong format.
       const body = (await res.json().catch(() => ({}))) as { fields?: string[] };
+      const byMember: Record<string, string[]> = {};
+      for (const code of body.fields ?? []) {
+        const at = code.indexOf(".");
+        (byMember[code.slice(0, at)] ??= []).push(code.slice(at + 1));
+      }
+      setRefused(byMember);
       const ev = data.available.find((a) => a.id === eventId);
       const problems = (body.fields ?? []).map((code) => {
         const [memberId, key] = [code.slice(0, code.indexOf(".")), code.slice(code.indexOf(".") + 1)];
@@ -768,8 +780,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
         // tick; optional and calculated ones may stay empty) and the "údaje aktuální" tick where needed.
         const stepDone = picked.every((id) => {
           const step = e.steps[id];
-          const filled = (f: (typeof step.fields)[number]) =>
-            f.required === false || f.fieldType === "calculated" || f.fieldType === "boolean" || (f.fieldType === "consent" ? answers[id]?.[f.key] === "true" : !!answers[id]?.[f.key]?.trim());
+          const filled = (f: (typeof step.fields)[number]) => fieldProblem(f, answers[id]?.[f.key], true) === null;
           return !step || (step.fields.every(filled) && (!step.reviewTick || reviewed[id]));
         });
         return (
@@ -836,6 +847,7 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                           reviewed={!!reviewed[id]}
                           onReviewed={(v) => setReviewed((r) => ({ ...r, [id]: v }))}
                           t={t}
+                          refused={refused[id]}
                         />
                       )}
                     </div>
@@ -847,6 +859,8 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                   <textarea value={note} onChange={(ev) => setNote(ev.target.value)} rows={3} maxLength={2000} className={inputClass + " mt-1"} />
                 </label>
                 {error && <p className="text-[14px] text-red-600">{error}</p>}
+                {/* Why the button waits: the marked fields above. */}
+                {!stepDone && picked.length > 0 && <p className="text-[13px] text-red-700">{t("portal.stepFixMarked")}</p>}
                 <div className="flex flex-wrap gap-2">
                   <button onClick={() => register(e.id)} disabled={busy || picked.length === 0 || !stepDone} className={btnPrimary}>
                     {t("portal.registerConfirm")}
@@ -867,21 +881,28 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
 // The event's required fields for one person (slice 5 #3): profile fields
 // pre-filled (saved back to the profile by their rule), event questions empty,
 // and "Údaje jsou aktuální" when detailed data came pre-filled.
-function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t }: { step: Step; values: Record<string, string>; onChange: (key: string, v: string) => void; reviewed: boolean; onReviewed: (v: boolean) => void; t: T }) {
+function RegistrationStep({ step, values, onChange, reviewed, onReviewed, t, refused }: { step: Step; values: Record<string, string>; onChange: (key: string, v: string) => void; reviewed: boolean; onReviewed: (v: boolean) => void; t: T; refused?: string[] }) {
+  const texts = { optional: t("portal.fieldOptional"), invalid: t("portal.fieldInvalid"), missing: t("portal.fieldMissing") };
   return (
     <div className="flex flex-col gap-2 border-t border-mist pt-2">
       <p className="text-[13px] font-medium text-ink">{t("portal.stepTitle")}</p>
-      {step.fields.map((f) => (
-        <label key={f.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary">
-          <span>
-            {f.label}
-            {f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated" && " *"}
-            {f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
-          </span>
-          {f.hint && <span className="text-[12px] text-ink-secondary">{f.hint}</span>}
-          <FieldInput field={f} value={values[f.key] ?? ""} required={f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} calc={{ values, missingLabel: t("portal.calcMissing"), labelOf: (k) => step.fields.find((x) => x.key === k)?.label ?? k }} />
-        </label>
-      ))}
+      {step.fields.map((f) => {
+        // Marked at once (the answers come pre-filled): a wrong format, an empty required answer, or one the server refused.
+        const problem = fieldProblem(f, values[f.key], true) ?? (refused?.includes(f.key) ? (values[f.key]?.trim() ? "invalid" : "missing") : null);
+        return (
+          <FieldShell
+            key={f.key}
+            label={f.label}
+            required={f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "calculated"}
+            hint={f.hint}
+            problem={problem}
+            texts={texts}
+            extra={f.access === "approval" && <span className="ml-1.5 text-[11.5px]">({t("portal.needsApproval")})</span>}
+          >
+            <FieldInput field={f} value={values[f.key] ?? ""} required={f.required !== false && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"} onChange={(v) => onChange(f.key, v)} yesLabel={t("portal.yes")} calc={{ values, missingLabel: t("portal.calcMissing"), labelOf: (k) => step.fields.find((x) => x.key === k)?.label ?? k }} />
+          </FieldShell>
+        );
+      })}
       {step.fields.some((f) => f.source === "profile") && <p className="text-[12px] text-ink-secondary">{t("portal.stepSavedToProfile")}</p>}
       {step.reviewTick && (
         <label className="flex items-start gap-2 text-[14px] text-ink">

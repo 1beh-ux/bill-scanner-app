@@ -6,6 +6,7 @@ import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/Or
 import ThemeToggle from "@/components/registration/ThemeToggle";
 import { postScrollTop } from "@/components/embed/embed-client";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
+import FieldShell, { fieldProblem } from "@/components/registration/FieldShell";
 import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
@@ -103,6 +104,9 @@ export default function PublicForm({
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<string[] | null>(null);
+  // After the first click on "Odeslat": empty required answers are marked on the fields themselves.
+  const [tried, setTried] = useState(false);
+  const shellTexts = { optional: t("portal.fieldOptional"), invalid: t("portal.fieldInvalid"), missing: t("portal.fieldMissing") };
   const [done, setDone] = useState(false);
   const [receipt, setReceipt] = useState<{ reference: string | null; mailPossible: boolean }>({ reference: null, mailPossible: true });
   // Embedded (?embed=1): bring the frame into view after a submit or an error.
@@ -136,26 +140,22 @@ export default function PublicForm({
   const ownGuardianQs = guardianQs.filter((q) => !q.fixed);
   const guardianInputs = (extra: Record<string, string> | undefined, onExtra: (e: Record<string, string>) => void) =>
     ownGuardianQs.map((q) => (
-      <label key={q.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary sm:col-span-2">
-        <span>
-          {gLabel(q)}
-          {q.required && " *"}
-        </span>
-        {q.hint && <span className="text-[12px]">{q.hint}</span>}
+      <FieldShell key={q.key} className="sm:col-span-2" label={gLabel(q)} required={q.required && q.fieldType !== "boolean"} hint={q.hint} problem={fieldProblem({ ...q, required: q.required }, extra?.[q.key], tried)} texts={shellTexts}>
         <FieldInput field={q} value={extra?.[q.key] ?? ""} required={q.required && q.fieldType !== "boolean" && q.fieldType !== "consent"} onChange={(v) => onExtra({ ...(extra ?? {}), [q.key]: v })} yesLabel={t("portal.yes")} />
-      </label>
+      </FieldShell>
     ));
   // One question of a person (both places of the form use it).
   const fieldInput = (p: Person, i: number, f: FormField, j: number, list: FormField[]) => (
     <Fragment key={f.key}>
       {/* A heading where the organization's own profile part starts (e.g. "Adresa"). */}
       {f.group && f.group !== list[j - 1]?.group && <h4 className="mt-2 text-[14px] font-semibold text-ink sm:col-span-2">{f.group}</h4>}
-      <label className="flex flex-col gap-1 text-[13px] text-ink-secondary">
-        <span>
-          {f.label}
-          {f.required && " *"}
-        </span>
-        {f.hint && <span className="text-[12px]">{f.hint}</span>}
+      <FieldShell
+        label={f.label}
+        required={f.required && f.fieldType !== "boolean" && f.fieldType !== "calculated"}
+        hint={f.hint}
+        problem={fieldProblem({ ...f, options: optionsFor(f, p.isAdult) }, p.values[f.key], tried)}
+        texts={shellTexts}
+      >
         <FieldInput
           field={{ ...f, options: f.fieldType === "calculated" ? f.options : optionsFor(f, p.isAdult) }}
           value={p.values[f.key] ?? ""}
@@ -165,7 +165,7 @@ export default function PublicForm({
           // A calculated field: shown live from this person's answers (names and birth date included).
           calc={{ values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" }, eventStart: event.startDate, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }}
         />
-      </label>
+      </FieldShell>
     </Fragment>
   );
   // "Vyplnit stejné údaje jako osoba 1" (2026-10-27): copies the first person's answers into this person's
@@ -449,9 +449,9 @@ export default function PublicForm({
             </ul>
           </div>
         )}
-        <p className="text-[12px] text-ink-secondary">{t("public.submitHint")}</p>
+        <p className="text-[12px] text-ink-secondary">{t("portal.requiredLegend")} {t("public.submitHint")}</p>
         <div>
-          <button type="submit" disabled={busy} className={btnPrimary}>
+          <button type="submit" disabled={busy} onClick={() => setTried(true)} className={btnPrimary}>
             {busy ? t("portal.loading") : t("public.submit")}
           </button>
         </div>

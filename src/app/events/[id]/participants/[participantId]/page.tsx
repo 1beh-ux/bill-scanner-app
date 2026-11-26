@@ -45,6 +45,7 @@ type DocStatus = {
   // Received through the person's permanent document (slice 6 #4); `event` = where it came from.
   fromProfile: { event: string | null; url: string } | null;
   fromDetails?: boolean;
+  canGenerate?: boolean;
   // Portal uploads waiting for review / rejected (slice 4 #6-7).
   review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
 };
@@ -126,6 +127,23 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
       .catch(() => {});
 
   // "Nahrát soubor" (slice 6 #3): a file the parent handed over, received right away.
+  // "Vytvořit": the document from its template, opened as a PDF in a new tab (stored as generated, not received).
+  async function generateDoc(d: DocStatus) {
+    setTogglingDoc(d.docTypeId);
+    setError(null);
+    const win = window.open("", "_blank");
+    const res = await fetch(`/api/events/${eventId}/participants/${participantId}/documents/${d.docTypeId}/generate`, { method: "POST" }).catch(() => null);
+    setTogglingDoc(null);
+    if (!res?.ok) {
+      win?.close();
+      setError(t("participantDetail.generateDocFailed"));
+      return;
+    }
+    const url = URL.createObjectURL(await res.blob());
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
+  }
+
   async function uploadDoc(d: DocStatus, file: File | undefined) {
     if (!file) return;
     setTogglingDoc(d.docTypeId);
@@ -466,6 +484,11 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
               <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">
                 Drive ↗
               </a>
+            )}
+            {d.canGenerate && (
+              <button type="button" onClick={() => generateDoc(d)} disabled={togglingDoc === d.docTypeId} title={t("participantDetail.generateDocHint")} className="text-ember hover:underline disabled:opacity-50">
+                {togglingDoc === d.docTypeId ? t("common.loading") : t("participantDetail.generateDoc")}
+              </button>
             )}
             <label className={"cursor-pointer text-ember hover:underline " + (togglingDoc === d.docTypeId ? "pointer-events-none opacity-50" : "")}>
               {t("personDocs.upload")}

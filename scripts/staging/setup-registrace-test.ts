@@ -63,6 +63,14 @@ async function main() {
     for (const m of modules)
       await prisma.eventModule.upsert({ where: { eventId_moduleKey: { eventId: id, moduleKey: m.moduleKey } }, update: { enabled: m.enabled }, create: { eventId: id, moduleKey: m.moduleKey, enabled: m.enabled } });
 
+  // 2026-11-26: the registration list can also be CREATED (Vytvořit on the participant detail) from the owner's form
+  // template -- the signed file handed back is still what counts as received.
+  const FORM_DOC = "1gEs9tbvNWfViuT407vV75tF4Jbp_LyHg6mBqlIypiYM";
+  for (const id of [y2026.event.id, y2027.event.id]) {
+    const item = await prisma.eventListItem.findFirst({ where: { eventId: id, kind: "document", key: "test_registracni_list" } });
+    if (item) await prisma.eventListItem.update({ where: { id: item.id }, data: { data: { ...((item.data as object | null) ?? {}), templateGoogleDocId: FORM_DOC } } });
+  }
+
   const count = async (id: string) => ({
     fields: await prisma.eventParticipantField.count({ where: { eventId: id } }),
     documentTypes: await prisma.eventListItem.count({ where: { eventId: id, kind: "document", active: true } }),
