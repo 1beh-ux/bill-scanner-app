@@ -85,6 +85,8 @@ export async function GET(
   void _child;
   const scoped = {
     ...rest,
+    // Adult: the person's flag when linked (Lidé decides), else the registration's.
+    isAdult: participant.child ? participant.child.isAdult : !!participant.isAdult,
     pricing,
     customFieldValues: Object.fromEntries(
       Object.entries((participant.customFieldValues as Record<string, string> | null) ?? {}).filter(([key]) =>

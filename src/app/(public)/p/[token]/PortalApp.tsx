@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, Upload } from "lucide-react";
 import { MarkdownText } from "@/components/registration/Markdown";
 import { OrgFooter, OrgName, type PublicOrg } from "@/components/registration/OrgBrand";
@@ -475,7 +475,8 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
       ))}
 
       <section className={card + " flex flex-col gap-3"}>
-        <h3 className="text-[16px] font-semibold text-ink">{t("portal.guardians")}</h3>
+        {/* An adult (2026-11-26): the first row is their own e-mail and phone -- "Kontakt", not a guardian. */}
+        <h3 className="text-[16px] font-semibold text-ink">{t(member.isAdult ? "portal.ownContactTitle" : "portal.guardians")}</h3>
         <p className="text-[13px] text-ink-secondary">
           {member.profile.guardiansPending
             ? t("portal.guardiansPending", { current: member.profile.guardians.map((g) => g.email).join(", ") || "—" })
@@ -483,11 +484,14 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
         </p>
         {guardians.map((g, i) => {
           const set = (p: Partial<Guardian>) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, ...p } : x)));
+          const own = member.isAdult && i === 0;
           return (
-            <div key={i} className="flex flex-col gap-2 rounded-lg border border-mist p-3">
-              <input placeholder={t("portal.guardianName")} value={g.name ?? ""} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
-              <input type="email" placeholder={t("portal.guardianEmail")} value={g.email} onChange={(e) => set({ email: e.target.value })} className={inputClass} />
-              <input placeholder={t("portal.guardianRelationship")} value={g.relationship ?? ""} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />
+            <Fragment key={i}>
+            {member.isAdult && i === 1 && <p className="text-[13px] font-semibold text-ink-secondary">{t("portal.adultGuardiansTitle")}</p>}
+            <div className="flex flex-col gap-2 rounded-lg border border-mist p-3">
+              {!own && <input placeholder={t("portal.guardianName")} value={g.name ?? ""} onChange={(e) => set({ name: e.target.value })} className={inputClass} />}
+              <input type="email" placeholder={t(own ? "portal.ownEmail" : "portal.guardianEmail")} value={g.email} onChange={(e) => set({ email: e.target.value, ...(own && !g.name && { name: member.name }) })} className={inputClass} />
+              {!own && <input placeholder={t("portal.guardianRelationship")} value={g.relationship ?? ""} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />}
               <input type="tel" placeholder={t("portal.guardianPhone")} value={g.phone ?? ""} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />
               <GuardianExtraInputs fields={member.profile.guardianFields ?? []} value={g.extra} onChange={(extra) => set({ extra })} yesLabel={t("portal.yes")} />
               <div className="flex items-center justify-between gap-2">
@@ -495,13 +499,14 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
                   <input type="checkbox" checked={g.receivesCommunications} onChange={(e) => set({ receivesCommunications: e.target.checked })} />
                   {t("portal.guardianReceives")}
                 </label>
-                {guardians.length > 1 && (
+                {guardians.length > 1 && !own && (
                   <button type="button" onClick={() => setGuardians((prev) => prev.filter((_, j) => j !== i))} className="text-[14px] text-red-600">
                     {t("portal.remove")}
                   </button>
                 )}
               </div>
             </div>
+            </Fragment>
           );
         })}
         <button type="button" onClick={() => setGuardians((p) => [...p, { name: "", email: "", relationship: "", phone: "", receivesCommunications: true }])} className="self-start text-[13px] text-ember hover:underline">

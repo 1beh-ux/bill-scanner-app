@@ -1,7 +1,7 @@
 "use client";
 import AdultFoodCard from "@/components/adults/AdultFoodCard";
 
-import { use, useEffect, useState } from "react";
+import { Fragment, use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "@/lib/i18n";
@@ -278,13 +278,30 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex flex-col gap-8">
             <section className="flex flex-col gap-2">
               <h2 className={sectionTitle}>
-                {t("participantDetail.guardiansTitle")}
+                {/* An adult's first contact row is their own e-mail and phone (2026-11-26), not a guardian. */}
+                {t(data.isAdult ? "person.ownContactTitle" : "participantDetail.guardiansTitle")}
                 {accessBadge("edit")}
               </h2>
               {guardians.map((g, i) => {
                 const patch = (p: Partial<Guardian>) => setGuardians((prev) => prev.map((x, j) => (j === i ? { ...x, ...p } : x)));
+                if (data.isAdult && i === 0)
+                  return (
+                    <div key={i} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patch({ email: e.target.value, name: g.name || data.name })} className={inputClass} />
+                        <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patch({ phone: e.target.value, name: g.name || data.name })} className={inputClass} />
+                        <GuardianExtraInputs fields={guardianFields} value={g.extra} onChange={(extra) => patch({ extra })} yesLabel={t("portal.yes")} compact />
+                      </div>
+                      <label className="flex items-center gap-2 text-[13px] text-ink">
+                        <input type="checkbox" checked={g.receivesCommunications} onChange={(e) => patch({ receivesCommunications: e.target.checked })} />
+                        {t("participantDetail.guardianReceivesLabel")}
+                      </label>
+                    </div>
+                  );
                 return (
-                  <div key={i} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+                  <Fragment key={i}>
+                  {data.isAdult && i === 1 && <h3 className="mt-2 text-[13px] font-semibold text-ink-secondary">{t("person.adultGuardiansTitle")}</h3>}
+                  <div className="flex flex-col gap-2 rounded-lg border border-mist p-2">
                     <div className="grid gap-2 sm:grid-cols-2">
                       <input placeholder={t("common.name")} value={g.name} onChange={(e) => patch({ name: e.target.value })} className={inputClass} />
                       <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patch({ email: e.target.value })} className={inputClass} />
@@ -302,21 +319,22 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                       </button>
                     </div>
                   </div>
+                  </Fragment>
                 );
               })}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setGuardians((prev) => [...prev, { name: "", email: "", relationship: "", phone: "", receivesCommunications: true }])}
+                  onClick={() => setGuardians((prev) => [...prev, { name: data.isAdult && prev.length === 0 ? data.name : "", email: "", relationship: "", phone: "", receivesCommunications: true }])}
                   className={btn}
                 >
-                  {t("participantDetail.addGuardianButton")}
+                  {t(data.isAdult && guardians.length === 0 ? "person.addOwnContact" : "participantDetail.addGuardianButton")}
                 </button>
                 <button type="button" onClick={saveGuardians} disabled={saving} className={btn}>
                   {t("childProfile.saveGuardians")}
                 </button>
               </div>
-              <p className="text-[11.5px] text-ink-secondary">{t("childProfile.guardiansHint")}</p>
+              <p className="text-[11.5px] text-ink-secondary">{t(data.isAdult ? "person.ownContactHint" : "childProfile.guardiansHint")}</p>
             </section>
 
             <PersonDocuments childId={id} />

@@ -22,7 +22,7 @@ export const slugKey = (s: string) =>
     .replace(/^(?=[0-9_])/, "f_");
 
 type CalcState = { kind: (typeof CALC_KINDS)[number]; parts: string[]; separator: string; text: string; source: string; then: string; else: string; test: string; adult: string; guardians: string };
-const EMPTY_CALC: CalcState = { kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled", adult: "auto", guardians: "first" };
+const EMPTY_CALC: CalcState = { kind: "join", parts: [], separator: " ", text: "", source: "", then: "", else: "", test: "filled", adult: "self", guardians: "first" };
 /** A saved spec -> the editor's state (redesign R7: a calculated field is edited with the same editor). */
 function calcState(spec: unknown): CalcState {
   const o = (spec ?? {}) as Record<string, unknown>;
@@ -156,6 +156,7 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
               <label className="block">
                 {t("fieldsManager.contact.adults")}{" "}
                 <select value={calc.adult} onChange={(e) => setCalc({ ...calc, adult: e.target.value })} className={input}>
+                  <option value="self">{t("fieldsManager.contact.adultsSelf")}</option>
                   <option value="">{t("fieldsManager.contact.adultsGuardian")}</option>
                   <option value="auto">{t("fieldsManager.contact.adultsAuto")}</option>
                   {overview.fields.filter((f) => f.fieldType === "email").map((f) => (

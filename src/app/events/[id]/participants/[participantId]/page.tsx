@@ -1,7 +1,7 @@
 "use client";
 import ParentQuestions from "@/components/health/ParentQuestions";
 
-import { use, useEffect, useMemo, useState } from "react";
+import { Fragment, use, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -57,6 +57,7 @@ type Core = {
   groupName: string | null;
   dateOfBirth: string | null;
   registrationStatus: "pending" | "accepted";
+  isAdult?: boolean;
   customFieldValues: Record<string, string>;
   guardians: { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; extra?: Record<string, string> | null }[];
   // Membership confirmed by the membership event (registration-connected events).
@@ -423,12 +424,15 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   );
   const guardiansBody = (
     <>
-      {guardians.map((g) => (
-        <div key={g.id} className="flex flex-col gap-2 rounded-lg border border-mist p-2">
+      {guardians.map((g, i) => (
+        <Fragment key={g.id}>
+        {/* An adult: the first row is their own e-mail and phone, others (rare) are guardians. */}
+        {core?.isAdult && i === 1 && <h3 className="mt-2 text-[13px] font-semibold text-ink-secondary">{t("person.adultGuardiansTitle")}</h3>}
+        <div className="flex flex-col gap-2 rounded-lg border border-mist p-2">
           <div className="grid gap-2 sm:grid-cols-2">
-            <input placeholder={t("common.name")} value={g.name} onChange={(e) => patchGuardian(g.id, { name: e.target.value })} className={inputClass} />
+            {!(core?.isAdult && i === 0) && <input placeholder={t("common.name")} value={g.name} onChange={(e) => patchGuardian(g.id, { name: e.target.value })} className={inputClass} />}
             <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patchGuardian(g.id, { email: e.target.value })} className={inputClass} />
-            <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patchGuardian(g.id, { relationship: e.target.value })} className={inputClass} />
+            {!(core?.isAdult && i === 0) && <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patchGuardian(g.id, { relationship: e.target.value })} className={inputClass} />}
             <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patchGuardian(g.id, { phone: e.target.value })} className={inputClass} />
             <GuardianExtraInputs fields={guardianFields} value={g.extra} onChange={(extra) => patchGuardian(g.id, { extra })} yesLabel={t("portal.yes")} compact />
           </div>
@@ -447,6 +451,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
             </div>
           </div>
         </div>
+        </Fragment>
       ))}
       <div className="grid gap-2 rounded-lg border border-dashed border-mist p-2 sm:grid-cols-[1fr_1fr_auto]">
         <input placeholder={t("common.name")} value={newGuardian.name} onChange={(e) => setNewGuardian((d) => ({ ...d, name: e.target.value }))} className={inputClass} />
@@ -537,7 +542,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
     s.kind === "basics"
       ? t("participantDetail.sectionBasics")
       : s.kind === "guardians"
-        ? t("participantDetail.guardiansTitle")
+        ? t(core?.isAdult ? "person.ownContactTitle" : "participantDetail.guardiansTitle")
         : s.kind === "documents"
           ? t("participantsPage.colDocuments")
           : s.kind === "health"

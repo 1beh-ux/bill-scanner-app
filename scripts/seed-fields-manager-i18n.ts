@@ -306,6 +306,7 @@ const rows: Row[] = [
   r("fieldsManager.choice.docFormat", "V dokumentu:", "In documents:"),
   r("fieldsManager.choice.docText", "Ano / Ne", "Yes / No (Ano / Ne)"),
   r("fieldsManager.choice.docCrossed", "ANO / NE – nevybrané přeškrtnuté", "ANO / NE – the one not chosen crossed out"),
+  r("fieldsManager.contact.adultsSelf", "vlastní kontakt dospělého (jeho e-mail z přihlášky)", "the adult's own contact (their e-mail from the registration)"),
   r("fieldsManager.form.drag", "Přetažením změníte pořadí", "Drag to change the order"),
   r("fieldsManager.form.fills", "Plní pole", "Fills the field"),
   r("fieldsManager.form.requiredHere", "Povinné v této akci", "Required in this event"),

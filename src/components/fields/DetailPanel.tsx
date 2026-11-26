@@ -292,6 +292,7 @@ function ContactRuleEditor({ field, overview, onPatch }: { field: OvField; overv
           <label className="block">
             {t("fieldsManager.contact.adults")}{" "}
             <select value={rule.adultSelfField ?? ""} onChange={(e) => set({ adultSelfField: e.target.value || null })} className={input}>
+              <option value="self">{t("fieldsManager.contact.adultsSelf")}</option>
               <option value="">{t("fieldsManager.contact.adultsGuardian")}</option>
               <option value="auto">{t("fieldsManager.contact.adultsAuto")}</option>
               {emailFields.map((f) => (
@@ -307,7 +308,7 @@ function ContactRuleEditor({ field, overview, onPatch }: { field: OvField; overv
               ))}
             </select>
           </label>
-          {emailFields.length === 0 && rule.adultSelfField && <p className="text-[12px] text-amber-800">{t("fieldsManager.contact.noEmailField")}</p>}
+          {emailFields.length === 0 && rule.adultSelfField && rule.adultSelfField !== "self" && <p className="text-[12px] text-amber-800">{t("fieldsManager.contact.noEmailField")}</p>}
           <p className="text-[12px] text-ink-secondary">{t("fieldsManager.contact.noPeopleDb")}</p>
         </>
       )}
