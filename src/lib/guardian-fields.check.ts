@@ -89,7 +89,7 @@ const same = validateSubmission({ persons: [child], guardians: [{ name: "A", ema
 assert.ok(same.ok);
 
 // Ano/Ne settings: prefill (an untouched box = Ano), the crossed-out document format.
-import("@/lib/participant-fields").then(({ choiceAnswer, choiceText }) => {
+import("@/lib/participant-fields").then(async ({ choiceAnswer, choiceText }) => {
   const pre = { fieldType: "consent", options: { prefill: true, docFormat: "crossed" } };
   assert.equal(choiceAnswer(pre, ""), "true");
   assert.equal(choiceAnswer(pre, "false"), "false");
@@ -107,5 +107,14 @@ import("@/lib/participant-fields").then(({ choiceAnswer, choiceText }) => {
   // An adult alone (not a guardian) answers the own guardian questions for their own contact, stored on their row.
   const alone = validateSubmission({ persons: [{ firstName: "Petr", lastName: "Sám", birthDate: "1980-01-01", isAdult: true, email: "p@example.invalid", guardianOfChildren: false }] }, { ...ctx, guardians: guardianQuestions(s2, null, { phone: "", relationship: "" }) });
   assert.ok(alone.ok && alone.data.persons[0].guardians[0].extra?.souhlas === "true", JSON.stringify(alone));
+  // Age groups' options (2026-11-26): Muž for a child -> Chlapec, Dívka for an adult -> Žena; fitting values unchanged.
+  const { ageOptionSwap } = await import("@/lib/registration-fields");
+  const sex = { options: ["Dívka", "Chlapec"], adultOptions: ["Žena", "Muž"] };
+  assert.equal(ageOptionSwap(sex, "Muž", false), "Chlapec");
+  assert.equal(ageOptionSwap(sex, "Žena", false), "Dívka");
+  assert.equal(ageOptionSwap(sex, "Dívka", true), "Žena");
+  assert.equal(ageOptionSwap(sex, "Chlapec", false), null);
+  assert.equal(ageOptionSwap(sex, "jiné", false), null);
+  assert.equal(ageOptionSwap({ options: ["A"] }, "A", true), null);
   console.log("guardian-fields ok");
 });

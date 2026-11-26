@@ -4,6 +4,7 @@
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { writeTargets } from "@/lib/field-write-targets";
+import { ageOptionSwap } from "@/lib/registration-fields";
 import { deleteParticipantCascade } from "@/lib/participant-delete";
 import { fieldMode, type ImportPolicy } from "@/lib/participant-sync";
 import type { ImportWrite } from "@/lib/participant-sync-run";
@@ -23,6 +24,55 @@ export function restoreKey(map: Values | null, key: string, before: unknown, aft
  * writeTargets says so (template field stored on the profile). keep = only an empty profile value is filled.
  */
 export async function writeProfileValues(organizationId: string, writes: ImportWrite[], policy: ImportPolicy): Promise<ImportWrite[]> {
+  const out = await writeProfileValuesRaw(organizationId, writes, policy);
+  // 2026-11-26: a value of the other age group's options (Muž for a child, Chlapec for an adult) -> this person's.
+  const ids = [...new Set(writes.filter((w) => w.table === "participant").map((w) => w.id))];
+  await fixAgeOptions(organizationId, ids);
+  return out;
+}
+
+/**
+ * Select fields with separate options for children and adults: on the given participants and their people, a value
+ * of the other group's list becomes the option at the same position in theirs (registration-fields.ts ageOptionSwap).
+ */
+export async function fixAgeOptions(organizationId: string, participantIds: string[]): Promise<number> {
+  if (!participantIds.length) return 0;
+  const split = (await prisma.participantFieldTemplate.findMany({ where: { organizationId }, select: { key: true, options: true, adultOptions: true } })).filter(
+    (t) => Array.isArray(t.adultOptions) && t.adultOptions.length > 0,
+  );
+  if (!split.length) return 0;
+  const fix = (values: Values, isAdult: boolean) => {
+    let changed = false;
+    const next = { ...values };
+    for (const t of split) {
+      const v = next[t.key];
+      const swapped = typeof v === "string" ? ageOptionSwap(t, v, isAdult) : null;
+      if (swapped) {
+        next[t.key] = swapped;
+        changed = true;
+      }
+    }
+    return changed ? next : null;
+  };
+  let n = 0;
+  const ps = await prisma.participant.findMany({ where: { id: { in: participantIds } }, select: { id: true, isAdult: true, customFieldValues: true, child: { select: { id: true, isAdult: true, fieldValues: true } } } });
+  for (const p of ps) {
+    const adult = p.child?.isAdult ?? !!p.isAdult;
+    const reg = fix((p.customFieldValues as Values | null) ?? {}, adult);
+    if (reg) {
+      await prisma.participant.update({ where: { id: p.id }, data: { customFieldValues: reg as Prisma.InputJsonValue } });
+      n++;
+    }
+    const prof = p.child && fix((p.child.fieldValues as Values | null) ?? {}, adult);
+    if (p.child && prof) {
+      await prisma.child.update({ where: { id: p.child.id }, data: { fieldValues: prof as Prisma.InputJsonValue } });
+      n++;
+    }
+  }
+  return n;
+}
+
+async function writeProfileValuesRaw(organizationId: string, writes: ImportWrite[], policy: ImportPolicy): Promise<ImportWrite[]> {
   const created = new Set(writes.filter((w) => w.table === "participant" && !w.key).map((w) => w.id));
   const changed = new Map<string, Set<string>>();
   for (const w of writes) if (w.table === "participant" && w.key?.startsWith("cf:")) changed.set(w.id, (changed.get(w.id) ?? new Set()).add(w.key.slice(3)));

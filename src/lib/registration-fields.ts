@@ -29,6 +29,21 @@ export function optionsFor(f: { options: unknown; adultOptions?: unknown }, isAd
   return [...new Set([...list(f.options), ...adult])];
 }
 
+/**
+ * A value of the OTHER age group's options (2026-11-26: "Muž" for a child, "Chlapec" for an adult) -> the option at
+ * the same position in this person's list ("Chlapec" / "Muž"); null = nothing to change (fits, unknown, no split).
+ */
+export function ageOptionSwap(f: { options: unknown; adultOptions?: unknown }, value: string, isAdult: boolean): string | null {
+  const list = (o: unknown) => (Array.isArray(o) ? o.filter((x): x is string => typeof x === "string") : []);
+  const kids = list(f.options), adults = list(f.adultOptions);
+  if (!kids.length || !adults.length) return null;
+  const [mine, other] = isAdult ? [adults, kids] : [kids, adults];
+  const v = value.trim();
+  if (!v || mine.includes(v)) return null;
+  const i = other.indexOf(v);
+  return i >= 0 && i < mine.length ? mine[i] : null;
+}
+
 // --- Asked at registration (spec 2-3) --------------------------------------
 
 export type TemplateRule = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; portalAccess: PortalAccessLevel; audience: FieldAudience; level: FieldLevel; storage?: string };
