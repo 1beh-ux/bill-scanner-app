@@ -69,7 +69,8 @@ export function calcDeps(spec: CalcSpec): string[] {
     case "builtin":
       return [];
     case "contact":
-      return spec.adult && spec.adult !== "auto" ? [spec.adult] : [];
+      // "auto" / "self" (the adult's own contact row) are rules, not fields.
+      return spec.adult && spec.adult !== "auto" && spec.adult !== "self" ? [spec.adult] : [];
   }
 }
 
@@ -128,7 +129,7 @@ export function evaluateCalc(spec: CalcSpec, ctx: CalcContext): string {
       return ctx.builtin?.(spec.id) ?? "";
     case "contact": {
       if (!ctx.person) return "";
-      const values = Object.fromEntries(ctx.person.emailKeys.concat(spec.adult && spec.adult !== "auto" ? [spec.adult] : []).map((k) => [k, ctx.valueOf(k) ?? ""]));
+      const values = Object.fromEntries(ctx.person.emailKeys.concat(calcDeps(spec)).map((k) => [k, ctx.valueOf(k) ?? ""]));
       return contactEmail({ adultSelfField: spec.adult, guardians: spec.guardians }, { guardians: ctx.person.guardians, customFieldValues: values }, ctx.person.isAdult, ctx.person.emailKeys);
     }
   }

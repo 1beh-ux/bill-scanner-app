@@ -80,5 +80,6 @@ assert.deepEqual(calcDeps(b), []);
   assert.equal(evaluateCalc(spec, ctx(true, "")), "g2@x.cz"); // adult without own: guardian 1 has none -> 2
   assert.equal(evaluateCalc(spec, ctx(false, "me@x.cz")), "g2@x.cz"); // child: guardians
   assert.deepEqual(calcDeps(readCalcSpec("calculated", { kind: "contact", adult: "email_x" })!), ["email_x"]);
+  assert.deepEqual(calcDeps(readCalcSpec("calculated", { kind: "contact", adult: "self" })!), []); // a rule, not a field
 }
 console.log("field-calc: ok");
