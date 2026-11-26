@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { profileDocuments } from "@/lib/person-documents";
+import { detailsDocuments } from "@/lib/details-documents";
+import { countsAsReceived } from "@/lib/registration-status";
 import { resolveEmailTemplate, senderIdentity, substituteVariables } from "@/lib/email-template";
 import { REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
@@ -107,10 +110,14 @@ async function buildAutoAttachDocuments(
     });
   }
 
+  // "Jen když ho ještě nemá": what this person already has (received here, from the profile, by the details).
+  const has = documentTypes.some((d) => (d.data as DocumentTypeData | null)?.attachOnlyIfMissing) ? await alreadyHas(participant) : new Set<string>();
+
   for (const docType of documentTypes) {
     const data = docType.data as DocumentTypeData | null;
     if (!data?.templateGoogleDocId) continue;
     if (!willGenerate(docType.id, data, allowedDocumentTypeIds)) continue;
+    if (data.attachOnlyIfMissing && has.has(docType.id)) continue;
 
     if (data?.staticAttachment) {
       try {
@@ -185,6 +192,20 @@ export async function documentAttachmentsFor(
 ) {
   if (!documentTypeIds.length) return { attachments: [], failedDocuments: [] as string[], generatedCount: 0, attachedDocumentNames: [] as string[] };
   return buildAutoAttachDocuments(await loadParticipant(participantId), event, documentTypeIds, generatedByUserId, staticPdfs);
+}
+
+/** Document types this participant already has: received here, covered by a permanent document or the details. */
+export async function alreadyHas(p: { id: string; eventId: string; childId: string | null }): Promise<Set<string>> {
+  const [docs, profile, details] = await Promise.all([
+    prisma.participantDocument.findMany({ where: { participantId: p.id }, select: { eventListItemId: true, receivedVia: true, reviewStatus: true } }),
+    profileDocuments([p]),
+    detailsDocuments([p.id]),
+  ]);
+  return new Set([
+    ...docs.filter(countsAsReceived).map((d) => d.eventListItemId),
+    ...(profile.get(p.id) ?? []).map((d) => d.eventListItemId),
+    ...(details.get(p.id) ?? []).map((d) => d.eventListItemId),
+  ]);
 }
 
 // The send dialog's ticked documents decide; autoAttachOnAccept is only the
