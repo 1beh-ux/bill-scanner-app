@@ -27,6 +27,7 @@ type DocumentData = {
   filenameSuffix?: string;
   templateGoogleDocId?: string;
   autoAttachOnAccept?: boolean;
+  attachOnlyIfMissing?: boolean;
   staticAttachment?: boolean;
   allowPortalUpload?: boolean;
   // Received once every detailed field the event asks of the person is filled (2026-10-27).
@@ -91,6 +92,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
   const [filenameSuffix, setFilenameSuffix] = useState("");
   const [templateGoogleDocId, setTemplateGoogleDocId] = useState("");
   const [autoAttachOnAccept, setAutoAttachOnAccept] = useState(true);
+  const [attachOnlyIfMissing, setAttachOnlyIfMissing] = useState(false);
   const [staticAttachment, setStaticAttachment] = useState(false);
   const [allowPortalUpload, setAllowPortalUpload] = useState(false);
   const [fromDetails, setFromDetails] = useState(false);
@@ -219,6 +221,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
     setFilenameSuffix((item.data as DocumentData | null)?.filenameSuffix ?? "");
     setTemplateGoogleDocId((item.data as DocumentData | null)?.templateGoogleDocId ?? "");
     setAutoAttachOnAccept((item.data as DocumentData | null)?.autoAttachOnAccept ?? true);
+    setAttachOnlyIfMissing(!!(item.data as DocumentData | null)?.attachOnlyIfMissing);
     setStaticAttachment((item.data as DocumentData | null)?.staticAttachment ?? false);
     setAllowPortalUpload((item.data as DocumentData | null)?.allowPortalUpload ?? false);
     setFromDetails((item.data as DocumentData | null)?.fromDetails ?? false);
@@ -255,6 +258,7 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
           filenameSuffix: filenameSuffix.trim() || undefined,
           templateGoogleDocId: scope === "event" ? templateGoogleDocId.trim() || undefined : undefined,
           autoAttachOnAccept: scope === "event" ? autoAttachOnAccept : undefined,
+          attachOnlyIfMissing: scope === "event" && attachOnlyIfMissing ? true : undefined,
           staticAttachment: scope === "event" && staticAttachment ? true : undefined,
           allowPortalUpload: scope === "event" && allowPortalUpload && !staticAttachment && !fromDetails ? true : undefined,
           fromDetails: !staticAttachment && fromDetails ? true : undefined,
@@ -519,6 +523,13 @@ export default function ListTemplateAdmin({ kind, scope, eventId, label, categor
                       onChange={(e) => setAutoAttachOnAccept(e.target.checked)}
                     />
                     {t("listTemplateAdmin.autoAttachOnAcceptLabel")}
+                  </label>
+                  <label className="flex items-start gap-2 pl-5 text-[13px] text-ink-secondary">
+                    <input type="checkbox" className="mt-0.5" checked={attachOnlyIfMissing} onChange={(e) => setAttachOnlyIfMissing(e.target.checked)} />
+                    <span>
+                      {t("listTemplateAdmin.attachOnlyIfMissing")}
+                      <span className="block text-[11.5px]">{t("listTemplateAdmin.attachOnlyIfMissingHint")}</span>
+                    </span>
                   </label>
                   <label className="flex items-start gap-2 text-[13px] text-ink-secondary">
                     <input type="checkbox" className="mt-0.5" checked={staticAttachment} onChange={(e) => setStaticAttachment(e.target.checked)} />

@@ -14,6 +14,9 @@ export type DocumentTypeData = {
   // Fields Manager round 2 (2026-11-23): fields switched off for this template only -- printed empty here.
   disabledFields?: string[];
   autoAttachOnAccept?: boolean;
+  // 2026-11-26: attach it (on acceptance and when ticked in a send) only to someone who doesn't have it yet --
+  // not received for this registration, not covered by the person's permanent document or the filled-in details.
+  attachOnlyIfMissing?: boolean;
   // The same PDF for everyone (e.g. "Pokyny"): the Google Doc is exported as
   // is -- no merge, no per-participant copy -- and it is not a tracked
   // document (no received/missing status, not in checklists).
