@@ -4,7 +4,8 @@ import { REGISTRATION_ACCEPTANCE_PAGE_PURPOSE_KEY, REGISTRATION_ACCEPTANCE_PURPO
 import { sendEmailWithOptionalAttachment } from "@/lib/mail";
 import { templateFiles } from "@/lib/email-files";
 import { eventTemplateKey } from "@/lib/email-kinds";
-import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink } from "@/lib/document-variables";
+import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink, resolvePaymentQrImage } from "@/lib/document-variables";
+import { inlineMark, type InlineImage } from "@/lib/mail-mime";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
@@ -349,6 +350,15 @@ export async function sendBulkParticipantEmail(opts: {
     // Re-read: the acceptance send may just have assigned the registration number.
     const fresh = (await loadParticipant(participantId)) ?? participant;
     const vars = await participantEmailVars(fresh, event, sender, [...generated.attachedDocumentNames, ...files.map((f) => f.filename)], usesPortalLink(text.subject, text.body));
+    // {{payment_qr}} / {{picture}} (2026-11-26): the payment QR right in the text, like the ticket e-mails -- this
+    // person's amount and variable symbol; empty when there's nothing to pay.
+    let inline: InlineImage[] = [];
+    if (/\{\{\s*(payment_qr|picture)\s*\}\}/.test(text.body)) {
+      priced ??= await withMembers(event);
+      const qr = await resolvePaymentQrImage({ ...fresh, customFieldValues: fresh.customFieldValues as Record<string, string> | null }, priced).catch(() => null);
+      vars.payment_qr = vars.picture = qr ? inlineMark("payment_qr") : "";
+      if (qr) inline = [{ cid: "payment_qr", buffer: qr, mimeType: "image/png", alt: "QR platba" }];
+    }
     const subject = substituteVariables(text.subject, vars);
     const body = substituteVariables(text.body, vars);
 
@@ -383,6 +393,7 @@ export async function sendBulkParticipantEmail(opts: {
           subject,
           body,
           attachments,
+          inline,
         });
         await prisma.parentEmailLog.create({
           data: { participantId, guardianId: guardian.id, purposeKey: opts.purposeKey, status: "sent", sentByUserId: opts.sentByUserId, subject },
