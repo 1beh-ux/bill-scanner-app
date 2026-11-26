@@ -28,6 +28,9 @@ async function main() {
     { key: "portal.stepTitle", cs: "Údaje pro přihlášku", en: "Details for the registration" },
     { key: "portal.stepSavedToProfile", cs: "Údaje z profilu se po odeslání uloží i do profilu (pole „se schválením“ až po schválení).", en: "Profile details are also saved to the profile (fields “with approval” once approved)." },
     { key: "portal.stepReviewed", cs: "Údaje jsou aktuální — zkontroloval(a) jsem je.", en: "The details are up to date — I've checked them." },
+    { key: "portal.stepCheck", cs: "Zkontrolujte prosím:", en: "Please check:" },
+    { key: "portal.stepInvalidValue", cs: "hodnota má špatný formát (opravte ji, nebo ji smažte, pokud není povinná)", en: "the value has the wrong format (fix it, or clear it if it isn't required)" },
+    { key: "portal.stepMissingValue", cs: "chybí", en: "missing" },
     { key: "portal.stepIncomplete", cs: "Vyplňte prosím všechna povinná pole a potvrďte, že jsou údaje aktuální.", en: "Please fill in all required fields and confirm the details are up to date." },
     // 4. profile: basic + detailed
     { key: "portal.basicTitle", cs: "Základní údaje", en: "Basic details" },

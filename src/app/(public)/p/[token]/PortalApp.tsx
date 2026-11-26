@@ -733,7 +733,20 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
     const picks = picked.map((memberId) => ({ memberId, priceCategory: choice[memberId]?.category, oddil: choice[memberId]?.oddil, answers: answers[memberId], reviewed: reviewed[memberId] }));
     const res = await portalApiFetch(`${api}/register`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ eventId, picks, note }) }).catch(() => null);
     setBusy(false);
-    if (!res?.ok) return setError(t(res?.status === 400 ? "portal.stepIncomplete" : "portal.registerFailed"));
+    if (res?.status === 400) {
+      // Which answers were refused ("<memberId>.<key>"): missing, or filled with a value of the wrong format.
+      const body = (await res.json().catch(() => ({}))) as { fields?: string[] };
+      const ev = data.available.find((a) => a.id === eventId);
+      const problems = (body.fields ?? []).map((code) => {
+        const [memberId, key] = [code.slice(0, code.indexOf(".")), code.slice(code.indexOf(".") + 1)];
+        if (key === "reviewed") return null;
+        const f = ev?.steps[memberId]?.fields.find((x) => x.key === key);
+        const filled = !!answers[memberId]?.[key]?.trim();
+        return `${memberOf(memberId)?.name ?? ""}: ${f?.label ?? key} – ${t(filled ? "portal.stepInvalidValue" : "portal.stepMissingValue")}`;
+      }).filter(Boolean);
+      return setError(problems.length ? `${t("portal.stepCheck")} ${problems.join("; ")}` : t("portal.stepIncomplete"));
+    }
+    if (!res?.ok) return setError(t("portal.registerFailed"));
     // The parent already has this link: only the status (slice 4 #10).
     const { outcome } = await res.json().catch(() => ({ outcome: null }));
     setOpenId(null);
@@ -751,10 +764,13 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
         );
         const total = prices.reduce<number>((s, p) => s + (p ?? 0), 0);
         const renew = e.kind === "membership" && data.members.some((m) => m.history.some((h) => h.kind === "membership"));
-        // Every picked person's required fields filled (an Ano/Ne box is always an answer) and the tick where needed.
+        // Every picked person's REQUIRED fields filled (an Ano/Ne box is always an answer, a required consent needs its
+        // tick; optional and calculated ones may stay empty) and the "údaje aktuální" tick where needed.
         const stepDone = picked.every((id) => {
           const step = e.steps[id];
-          return !step || (step.fields.every((f) => f.fieldType === "boolean" || f.fieldType === "consent" || answers[id]?.[f.key]?.trim()) && (!step.reviewTick || reviewed[id]));
+          const filled = (f: (typeof step.fields)[number]) =>
+            f.required === false || f.fieldType === "calculated" || f.fieldType === "boolean" || (f.fieldType === "consent" ? answers[id]?.[f.key] === "true" : !!answers[id]?.[f.key]?.trim());
+          return !step || (step.fields.every(filled) && (!step.reviewTick || reviewed[id]));
         });
         return (
           <li key={e.id} className={eventCard + " flex flex-col gap-3"}>
