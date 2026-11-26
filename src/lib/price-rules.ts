@@ -32,6 +32,10 @@ export type PriceRules = {
   householdMinMembers: number;
   // Key of a select participant field ("Oddíl") asked for categories with asksOddil.
   oddilFieldKey?: string;
+  // 2026-11-26: the category follows the answer to that field -- option -> category key (no category choice for the
+  // person); categoryShow: the category shown read-only with its price, or not at all.
+  categoryMap?: Record<string, string>;
+  categoryShow?: "readonly" | "hidden";
 };
 
 export const DEFAULT_SCHOOL_YEAR_FROM = "09-01";
@@ -79,7 +83,25 @@ export function readPriceRules(raw: unknown): PriceRules | null {
   const rules: PriceRules = { categories, schoolYearFrom: from, householdMinMembers: min };
   const oddil = text(o.oddilFieldKey, 100);
   if (oddil) rules.oddilFieldKey = oddil;
+  if (oddil && o.categoryMap && typeof o.categoryMap === "object" && !Array.isArray(o.categoryMap)) {
+    const map = Object.fromEntries(
+      Object.entries(o.categoryMap as Record<string, unknown>).filter(([opt, cat]) => opt.trim() && typeof cat === "string" && categories.some((c) => c.key === cat)).slice(0, 100),
+    ) as Record<string, string>;
+    if (Object.keys(map).length) {
+      rules.categoryMap = map;
+      rules.categoryShow = o.categoryShow === "hidden" ? "hidden" : "readonly";
+    }
+  }
   return rules;
+}
+
+/** The category follows the answer to the Oddíl field (no choice for the person). */
+export const derivesCategory = (rules: PriceRules | null): rules is PriceRules & { oddilFieldKey: string; categoryMap: Record<string, string> } =>
+  !!rules?.oddilFieldKey && !!rules.categoryMap && Object.keys(rules.categoryMap).length > 0;
+
+/** The category of a person by their answer: the mapped one when it's open to them, else their first allowed. */
+export function categoryFromAnswer(rules: PriceRules, answer: string | null | undefined, isAdult: boolean): PriceCategory | null {
+  return categoryFor(rules, answer ? rules.categoryMap?.[answer.trim()] : null, isAdult);
 }
 
 /** Categories open to this person (adult / child). */

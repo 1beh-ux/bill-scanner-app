@@ -8,7 +8,7 @@ import { postScrollTop } from "@/components/embed/embed-client";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import FieldShell, { fieldProblem } from "@/components/registration/FieldShell";
 import PersonPrice from "@/components/registration/PersonPrice";
-import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
+import { allowedCategories, categoryFromAnswer, derivesCategory, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
 import { appliesTo, optionsFor } from "@/lib/registration-fields";
 import { inputOptions, type GuardianQuestion } from "@/lib/guardian-fields";
@@ -134,6 +134,9 @@ export default function PublicForm({
   const title = event.kind === "membership" ? t("portal.membership", { year: String(event.membershipYear ?? "") }) : event.name;
   const setPerson = (i: number, patch: Partial<Person>) => setPersons((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
   const categoriesOf = (p: Person) => (rules ? allowedCategories(rules, p.isAdult).map((c) => ({ key: c.key, label: c.label, asksOddil: !!c.asksOddil })) : []);
+  // The category: by the Oddíl answer when the event says so (2026-11-26), else the person's choice / the first one.
+  const categoryOf = (p: Person) =>
+    derivesCategory(rules) ? categoryFromAnswer(rules, p.values[rules.oddilFieldKey] || p.oddil, p.isAdult)?.key : (p.category ?? categoriesOf(p)[0]?.key);
   // Only the fields for this person (slice 5 #1: children / adults / both).
   const fieldsOf = (p: Person) => fields.filter((f) => appliesTo(f.audience, p.isAdult));
   const gq = (key: string) => guardianQs.find((q) => q.key === key);
@@ -199,7 +202,7 @@ export default function PublicForm({
   };
   const prices = previewPrices(
     { rules, memberPriceCzk: event.memberPriceCzk, nonMemberPriceCzk: event.nonMemberPriceCzk, eventStart: new Date(event.startDate), alreadyRegistered: 0, inFamily: true },
-    persons.map((p) => ({ category: p.category ?? categoriesOf(p)[0]?.key, isAdult: p.isAdult, isMember: false }))
+    persons.map((p) => ({ category: categoryOf(p), isAdult: p.isAdult, isMember: false }))
   );
   const total = prices.reduce<number>((s, p) => s + (p ?? 0), 0);
   const hasChildren = persons.some((p) => !p.isAdult);
@@ -213,7 +216,7 @@ export default function PublicForm({
       note,
       guardians,
       offer,
-      persons: persons.map((p) => ({ ...p, category: p.category ?? categoriesOf(p)[0]?.key })),
+      persons: persons.map((p) => ({ ...p, category: categoryOf(p) })),
     };
     const res = await fetch(`/api/public/r/${slug}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     setBusy(false);
@@ -410,7 +413,8 @@ export default function PublicForm({
             )}
             <PersonPrice
               categories={categoriesOf(p)}
-              category={p.category}
+              derived={derivesCategory(rules) ? { show: rules.categoryShow ?? "readonly", askOddil: !fields.some((f) => f.key === rules.oddilFieldKey) } : undefined}
+              category={categoryOf(p)}
               onCategory={(category) => setPerson(i, { category })}
               oddil={oddil}
               oddilValue={p.oddil}

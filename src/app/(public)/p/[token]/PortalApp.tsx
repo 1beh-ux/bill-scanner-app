@@ -8,7 +8,7 @@ import ThemeToggle from "@/components/registration/ThemeToggle";
 import { useEmbed } from "@/components/embed/PublicFrame";
 import { apiToken, portalApiFetch, postScrollTop, storeGate } from "@/components/embed/embed-client";
 import { toBoolean } from "@/lib/participant-fields";
-import { previewPrices, type PriceRules } from "@/lib/price-rules";
+import { categoryFromAnswer, derivesCategory, previewPrices, type PriceRules } from "@/lib/price-rules";
 import FieldInput, { portalInputClass as inputClass } from "@/components/registration/FieldInput";
 import PersonPrice, { type CategoryOption, type OddilField } from "@/components/registration/PersonPrice";
 import { REGISTRATION_STATES, type RegistrationState } from "@/lib/registration-status";
@@ -775,9 +775,13 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
     <ul className="flex flex-col gap-3">
       {data.available.map((e) => {
         const pm = (id: string) => e.pricing.members.find((x) => x.id === id)!;
+        // The category by the Oddíl answer (step answer, profile value, or the price block's choice) when the event says so.
+        const derived = derivesCategory(e.pricing.rules) ? e.pricing.rules : null;
+        const oddilOf = (id: string) => (derived ? answers[id]?.[derived.oddilFieldKey] || value(memberOf(id), derived.oddilFieldKey) || choice[id]?.oddil || "" : "");
+        const catOf = (id: string) => (derived ? categoryFromAnswer(derived, oddilOf(id), pm(id)?.isAdult ?? false)?.key : (choice[id]?.category ?? pm(id)?.categories[0]?.key));
         const prices = previewPrices(
           { ...e.pricing, eventStart: new Date(e.pricing.eventStart) },
-          picked.map((id) => ({ category: choice[id]?.category ?? pm(id)?.categories[0]?.key, isAdult: pm(id)?.isAdult ?? false, isMember: pm(id)?.isMember ?? false }))
+          picked.map((id) => ({ category: catOf(id), isAdult: pm(id)?.isAdult ?? false, isMember: pm(id)?.isMember ?? false }))
         );
         const total = prices.reduce<number>((s, p) => s + (p ?? 0), 0);
         const renew = e.kind === "membership" && data.members.some((m) => m.history.some((h) => h.kind === "membership"));
@@ -835,7 +839,8 @@ function Available({ api, data, t, evName, onRegistered }: { api: string; data: 
                       {on && (
                         <PersonPrice
                           categories={pm(id).categories}
-                          category={choice[id]?.category}
+                          category={catOf(id)}
+                          derived={derived ? { show: derived.categoryShow ?? "readonly", askOddil: !e.steps[id]?.fields.some((f) => f.key === derived.oddilFieldKey) && !value(memberOf(id), derived.oddilFieldKey) } : undefined}
                           onCategory={(category) => setChoice((c) => ({ ...c, [id]: { ...c[id], category } }))}
                           oddil={e.pricing.oddil}
                           oddilValue={choice[id]?.oddil}

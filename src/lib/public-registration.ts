@@ -3,7 +3,7 @@
 // (scripts/test-registration-slice3.ts) and the form itself can use it.
 // The server never trusts the client: everything is re-checked here.
 import { isIsoDate } from "@/lib/portal-rules";
-import { categoryFor, type PriceRules } from "@/lib/price-rules";
+import { categoryFor, categoryFromAnswer, derivesCategory, type PriceRules } from "@/lib/price-rules";
 import { appliesTo, cleanFieldValue, optionsFor, type FieldAudience } from "@/lib/registration-fields";
 import { choiceAnswer } from "@/lib/participant-fields";
 import { cleanGuardianExtra, missingGuardianAnswers, type GuardianFieldDef, type GuardianQuestion } from "@/lib/guardian-fields";
@@ -119,7 +119,18 @@ export function validateSubmission(
     for (const f of ctx.fields) if (!p.values[f.key] && appliesTo(f.audience, p.isAdult) && choiceAnswer(f, "")) p.values[f.key] = "true";
     for (const f of ctx.fields) if (f.required && f.fieldType !== "calculated" && appliesTo(f.audience, p.isAdult) && (f.fieldType === "consent" ? p.values[f.key] !== "true" : !p.values[f.key])) errors.push(`p${i}.${f.key}`);
 
-    if (ctx.rules) {
+    if (derivesCategory(ctx.rules)) {
+      // The category follows the Oddíl answer (a question of the form, or the price block's own Oddíl choice).
+      const key = ctx.rules.oddilFieldKey;
+      const given = str(r.oddil, 200);
+      if (!p.values[key] && given) {
+        if (ctx.oddil && !ctx.oddil.options.includes(given)) errors.push(`p${i}.oddil`);
+        else p.values[key] = given;
+      }
+      const cat = categoryFromAnswer(ctx.rules, p.values[key], p.isAdult);
+      if (!cat) errors.push(`p${i}.category`);
+      else p.category = cat.key;
+    } else if (ctx.rules) {
       const cat = categoryFor(ctx.rules, str(r.category, 40) || null, p.isAdult);
       if (!cat) errors.push(`p${i}.category`);
       else {

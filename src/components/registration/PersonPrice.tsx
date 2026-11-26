@@ -19,6 +19,7 @@ export default function PersonPrice({
   onOddil,
   price,
   t,
+  derived,
 }: {
   categories: CategoryOption[];
   category: string | undefined;
@@ -28,8 +29,35 @@ export default function PersonPrice({
   onOddil: (v: string) => void;
   price: number | null;
   t: (key: string, vars?: Record<string, string>) => string;
+  // 2026-11-26: the category follows the Oddíl answer -- no choice; shown read-only or not at all. askOddil: the
+  // Oddíl field isn't a question of the form, so it's asked here.
+  derived?: { show: "readonly" | "hidden"; askOddil: boolean };
 }) {
   const current = categories.find((c) => c.key === category) ?? categories[0];
+  if (derived)
+    return (
+      <div className="flex flex-col gap-2">
+        {derived.askOddil && oddil && (
+          <label className="text-[13px] text-ink-secondary">
+            {oddil.label} *
+            <select value={oddilValue ?? ""} onChange={(e) => onOddil(e.target.value)} className={selectClass + " mt-1"}>
+              <option value="">—</option>
+              {oddil.options.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {derived.show === "readonly" && current && (
+          <span className="text-[13px] text-ink-secondary">
+            {t("portal.priceCategory")}: <span className="text-ink">{current.label}</span>
+          </span>
+        )}
+        {price != null && <span className="text-[14px] font-medium text-ink">{t("portal.price", { price: String(price) })}</span>}
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2">
       {categories.length > 1 && (

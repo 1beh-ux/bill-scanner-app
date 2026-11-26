@@ -26,7 +26,7 @@ import { eligibilityFacts, profileFieldLabels, proposeChange, updateProfile } fr
 import { buildVariableSymbol, effectivePriceCzk, fieldTextValues, isMember, resolvePaymentQrImage } from "@/lib/document-variables";
 import { readParticipantLayout, resolvePortalLayout } from "@/lib/participant-layout";
 import { eventSender } from "@/lib/auto-accept";
-import { allowedCategories, categoryFor, readPriceRules, type PriceRules } from "@/lib/price-rules";
+import { allowedCategories, categoryFor, categoryFromAnswer, derivesCategory, readPriceRules, type PriceRules } from "@/lib/price-rules";
 import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
@@ -408,9 +408,21 @@ async function registrationPricing(
 export type RegistrationPick = { memberId: string; priceCategory?: unknown; oddil?: unknown; answers?: unknown; reviewed?: unknown };
 
 /** A pick's category (null without rules) + the Oddíl value when its category asks for it (null = invalid pick). */
-export async function pickExtras(eventId: string, priceRules: unknown, isAdult: boolean, pick: { priceCategory?: unknown; oddil?: unknown }) {
+export async function pickExtras(eventId: string, priceRules: unknown, isAdult: boolean, pick: { priceCategory?: unknown; oddil?: unknown }, known: Record<string, string> = {}) {
   const rules = readPriceRules(priceRules);
   if (!rules) return { priceCategory: null, values: {} };
+  if (derivesCategory(rules)) {
+    // The category follows the Oddíl answer (2026-11-26): the step's answer or the profile's value, else the price
+    // block's own Oddíl choice (then also saved as the answer).
+    const own = known[rules.oddilFieldKey]?.trim();
+    const given = typeof pick.oddil === "string" ? pick.oddil.trim() : "";
+    if (!own && given) {
+      const oddil = await oddilField(eventId, rules);
+      if (oddil && !oddil.options.includes(given)) return null;
+    }
+    const cat = categoryFromAnswer(rules, own || given, isAdult);
+    return cat ? { priceCategory: cat.key, values: !own && given ? { [rules.oddilFieldKey]: given } : {} } : null;
+  }
   const cat = categoryFor(rules, typeof pick.priceCategory === "string" ? pick.priceCategory : null, isAdult);
   if (!cat) return null;
   const oddil = cat.asksOddil ? await oddilField(eventId, rules) : null;
@@ -610,9 +622,11 @@ export async function registerFromPortal(
   for (const m of scope.members) {
     const pick = picks.find((p) => p.memberId === m.id);
     if (!pick || !open.memberIds.includes(m.id)) continue;
-    const extras = await pickExtras(eventId, open.event.priceRules, m.isAdult, pick);
-    if (!extras) return { error: "not_available" };
     const shown = shownValues(m, pending);
+    const answered = pick.answers && typeof pick.answers === "object" && !Array.isArray(pick.answers) ? (pick.answers as Record<string, unknown>) : {};
+    const known = { ...shown, ...Object.fromEntries(Object.entries(answered).filter(([, v]) => typeof v === "string" && v.trim()) as [string, string][]) };
+    const extras = await pickExtras(eventId, open.event.priceRules, m.isAdult, pick, known);
+    if (!extras) return { error: "not_available" };
     const { asked } = registrationStep(eventFields, rules, m, shown, open.event.detailsAfterAcceptance);
     const checked = checkAnswers(asked, pick.answers, { prefill: shown, reviewed: pick.reviewed === true });
     if (!checked.ok) errors.push(...checked.errors.map((e) => `${m.id}.${e}`));

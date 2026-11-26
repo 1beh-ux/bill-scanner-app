@@ -7,7 +7,7 @@ import { MEMBERSHIP_PRESET, readPriceRules, rulePrice, schoolYearStart, type Pri
 // today's member / non-member price (the fields above, Event.priceRules null);
 // rules mode = price categories, school-year date, household minimum, the
 // "Oddíl" field, a one-click preset and a preview of example combinations.
-type FieldOption = { key: string; label: string; fieldType: string };
+type FieldOption = { key: string; label: string; fieldType: string; options?: unknown };
 
 const inputClass =
   "w-full rounded-lg border border-mist bg-paper-2 px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-1 focus:ring-ember";
@@ -174,6 +174,50 @@ export default function PriceSettings({
               </select>
             </label>
           </div>
+          {/* 2026-11-26: the category follows the Oddíl answer -- each option goes to a category; no choice for the person. */}
+          {rules.oddilFieldKey && (() => {
+            const f = fields.find((x) => x.key === rules.oddilFieldKey);
+            const options = Array.isArray(f?.options) ? (f!.options as unknown[]).filter((o): o is string => typeof o === "string") : [];
+            const on = !!rules.categoryMap;
+            return (
+              <div className="flex flex-col gap-2 rounded-lg border border-mist p-3 text-[13px]">
+                <label className="flex items-center gap-2 text-ink">
+                  <input type="checkbox" checked={on} onChange={(e) => setRules((r) => ({ ...r, categoryMap: e.target.checked ? {} : undefined, categoryShow: e.target.checked ? (r.categoryShow ?? "readonly") : undefined }))} />
+                  {t("priceRules.byAnswer", { field: f?.label ?? rules.oddilFieldKey })}
+                </label>
+                {on && (
+                  <>
+                    <p className="text-[12px] text-ink-secondary">{t("priceRules.byAnswerHint")}</p>
+                    <table className="w-full border-collapse">
+                      <tbody>
+                        {options.map((o) => (
+                          <tr key={o} className="border-b border-mist/60">
+                            <td className="p-1.5 text-ink">{o}</td>
+                            <td className="p-1.5">
+                              <select value={rules.categoryMap?.[o] ?? ""} onChange={(e) => setRules((r) => { const m = { ...(r.categoryMap ?? {}) }; if (e.target.value) m[o] = e.target.value; else delete m[o]; return { ...r, categoryMap: m }; })} className={inputClass}>
+                                <option value="">{t("priceRules.byAnswerFirst")}</option>
+                                {rules.categories.map((c) => (
+                                  <option key={c.key} value={c.key}>{c.label}</option>
+                                ))}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <label className="text-[12px] text-ink-secondary">
+                      {t("priceRules.categoryShow")}{" "}
+                      <select value={rules.categoryShow ?? "readonly"} onChange={(e) => setRules((r) => ({ ...r, categoryShow: e.target.value as "readonly" | "hidden" }))} className="rounded border border-mist bg-paper-2 px-1.5 py-0.5">
+                        <option value="readonly">{t("priceRules.showReadonly")}</option>
+                        <option value="hidden">{t("priceRules.showHidden")}</option>
+                      </select>
+                    </label>
+                    {Object.keys(rules.categoryMap ?? {}).length === 0 && <p className="text-[12px] text-amber-800">{t("priceRules.byAnswerEmpty")}</p>}
+                  </>
+                )}
+              </div>
+            );
+          })()}
           {preview.length > 0 && (
             <table className="w-full border-collapse text-[13px]">
               <caption className="mb-1 text-left text-[12px] font-medium text-ink-secondary">{t("priceRules.previewTitle")}</caption>
