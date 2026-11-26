@@ -5,11 +5,14 @@
 //   audience   for whom: children / adults / both
 //   when       "registration" (on the form) or "after" (two-step event: after acceptance, in the portal)
 //   label      the question's own wording (default: the field's name); hint = a line under it
+//   place      2026-11-26: where on the form -- "person" (with name and birth date) or "questions" (default)
+//   order      its position within its place (null = the organization's order, Pole → Portál)
 // formConfig null = today's rules (asked = a basic portal field, or "Vyžadovat při přihlášce" which also makes it
 // required). The first change on the Formulář screen converts the whole event: every field gets the settings that
 // reproduce exactly what the form asked before, then the change is applied. Pure.
 export type Audience = "children" | "adults" | "both";
-export type FormConfig = { ask: boolean; required: boolean; audience: Audience | null; when: "registration" | "after"; label: string | null; hint: string | null };
+export type FormPlace = "person" | "questions";
+export type FormConfig = { ask: boolean; required: boolean; audience: Audience | null; when: "registration" | "after"; label: string | null; hint: string | null; place?: FormPlace; order?: number | null };
 
 const AUD = ["children", "adults", "both"];
 export function readFormConfig(v: unknown): FormConfig | null {
@@ -23,6 +26,9 @@ export function readFormConfig(v: unknown): FormConfig | null {
     when: o.when === "after" ? "after" : "registration",
     label: text(o.label, 300),
     hint: text(o.hint, 500),
+    // Only when used, so settings without them stay exactly as before.
+    ...(o.place === "person" && { place: "person" as const }),
+    ...(typeof o.order === "number" && Number.isFinite(o.order) && { order: Math.round(o.order) }),
   };
 }
 
@@ -63,6 +69,10 @@ export function applyFormChange(c: FormConfig, change: Record<string, unknown>):
   if (change.when === "registration" || change.when === "after") next.when = change.when;
   if (change.label !== undefined) next.label = typeof change.label === "string" && change.label.trim() ? change.label.trim().slice(0, 300) : null;
   if (change.hint !== undefined) next.hint = typeof change.hint === "string" && change.hint.trim() ? change.hint.trim().slice(0, 500) : null;
+  if (change.place === "person") next.place = "person";
+  if (change.place === "questions") delete next.place;
+  if (change.order === null) delete next.order;
+  else if (typeof change.order === "number" && Number.isFinite(change.order)) next.order = Math.round(change.order);
   if (!next.ask) next.required = false;
   return next;
 }

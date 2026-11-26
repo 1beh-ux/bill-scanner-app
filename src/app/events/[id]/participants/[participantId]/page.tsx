@@ -27,11 +27,12 @@ import {
   type Section,
 } from "@/lib/participant-layout";
 import { AddFieldSelect, DropZone, FieldRow, Inert, LayoutEditorBar, SectionCard, type LayoutDrag } from "@/components/participants/LayoutEditor";
+import GuardianExtraInputs, { useGuardianFields } from "@/components/registration/GuardianExtraInputs";
 
 // Participant detail/edit (Seznam účastníků -> row). Was a modal on the list;
 // basics + guardians on the left, the event's own fields on the right.
 type GuardianDraft = { name: string; email: string; relationship: string; phone: string };
-type EditGuardian = GuardianDraft & { id: string; receivesCommunications: boolean };
+type EditGuardian = GuardianDraft & { id: string; receivesCommunications: boolean; extra?: Record<string, string> };
 type DocStatus = {
   docTypeId: string;
   name: string;
@@ -56,7 +57,7 @@ type Core = {
   dateOfBirth: string | null;
   registrationStatus: "pending" | "accepted";
   customFieldValues: Record<string, string>;
-  guardians: { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
+  guardians: { id: string; name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; extra?: Record<string, string> | null }[];
   // Membership confirmed by the membership event (registration-connected events).
   confirmedMembership: { key: string; year: number } | null;
   portalNote: string | null;
@@ -88,6 +89,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
   const [values, setValues] = useState<Record<string, string>>({});
   const [guardians, setGuardians] = useState<EditGuardian[]>([]);
   const [newGuardian, setNewGuardian] = useState<GuardianDraft>(emptyGuardian());
+  const guardianFields = useGuardianFields();
   const [savingGuardianId, setSavingGuardianId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -173,6 +175,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
             relationship: g.relationship ?? "",
             phone: g.phone ?? "",
             receivesCommunications: g.receivesCommunications,
+            extra: g.extra ?? {},
           }))
         );
       })
@@ -327,6 +330,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         relationship: g.relationship.trim() || null,
         phone: g.phone.trim() || null,
         receivesCommunications: g.receivesCommunications,
+        extra: g.extra ?? {},
       }),
     });
     setSavingGuardianId(null);
@@ -358,7 +362,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
     const c = await res.json();
     setGuardians((prev) => [
       ...prev,
-      { id: c.id, name: c.name ?? "", email: c.email, relationship: c.relationship ?? "", phone: c.phone ?? "", receivesCommunications: c.receivesCommunications },
+      { id: c.id, name: c.name ?? "", email: c.email, relationship: c.relationship ?? "", phone: c.phone ?? "", receivesCommunications: c.receivesCommunications, extra: {} },
     ]);
     setNewGuardian(emptyGuardian());
   }
@@ -408,6 +412,7 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
             <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patchGuardian(g.id, { email: e.target.value })} className={inputClass} />
             <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patchGuardian(g.id, { relationship: e.target.value })} className={inputClass} />
             <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patchGuardian(g.id, { phone: e.target.value })} className={inputClass} />
+            <GuardianExtraInputs fields={guardianFields} value={g.extra} onChange={(extra) => patchGuardian(g.id, { extra })} yesLabel={t("portal.yes")} compact />
           </div>
           <div className="flex items-center justify-between gap-2">
             <label className="flex items-center gap-2 text-[13px] text-ink">

@@ -35,7 +35,7 @@ type Sync = { id: string; name: string; sheetId: string; tab?: string; autoSync?
 type Person = { id: string; name: string; dateOfBirth: string | null };
 type Run = { id: string; createdAt: string; undoneAt: string | null; writes: number };
 type PlanRow = { rowNumber: number; rowKey: string; cells: string[]; status: string; errors: string[]; warnings?: string[]; merged?: boolean; participant: { id: string; name: string } | null; changes: { field: string; from: string; to: string }[] };
-type Data = { syncs: Sync[]; fields: Field[]; participants: Person[]; runs: Run[]; docTypes: { id: string; name: string }[]; guardianSlots: number };
+type Data = { syncs: Sync[]; fields: Field[]; participants: Person[]; runs: Run[]; docTypes: { id: string; name: string }[]; guardianSlots: number; guardianFields?: { key: string; label: string }[] };
 type Conn = { name: string; autoSync: boolean; everyHours: number; markDocumentId: string; sheetId: string; tab?: string };
 
 const STEPS = ["source", "columns", "values", "people", "apply"] as const;
@@ -157,7 +157,11 @@ export default function ImportWizard({ eventId }: { eventId: string }) {
   const targets = [
     ...data.fields.filter((f) => isWritableField(f) && f.kind !== "guardian").map((f) => ({ key: f.key, label: f.label })),
     ...Array.from({ length: data.guardianSlots }, (_, i) =>
-      ["name", "email", "phone", "relation"].map((p) => ({ key: `guardian${i + 1}_${p}`, label: t(`fieldsManager.import.guardian.${p}`, { n: String(i + 1) }) })),
+      [
+        ...["name", "email", "phone", "relation"].map((p) => ({ key: `guardian${i + 1}_${p}`, label: t(`fieldsManager.import.guardian.${p}`, { n: String(i + 1) }) })),
+        // The organization's own guardian fields, e.g. "Zástupce 1 – Souhlas".
+        ...(data.guardianFields ?? []).map((g) => ({ key: `guardian${i + 1}_${g.key}`, label: `${t("fieldsManager.doc.guardianSlot", { n: String(i + 1) })} – ${g.label}` })),
+      ],
     ).flat(),
     // Match-only targets (as on the old page): the registration number, computed fields like the variable symbol.
     { key: REGNUM_TARGET, label: `${t("participantSync.regNumber")} (${t("participantSync.matchOnly")})` },

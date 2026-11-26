@@ -13,6 +13,7 @@ import { calcDeps, readCalcSpec } from "@/lib/field-calc";
 import { readContactRule } from "@/lib/contact-email";
 import { lockBlocker, setLocked, SYSTEM_KEYS } from "@/lib/org-locked";
 import { fieldsManagerAccess, orgSectionKeys, pickEvent } from "../access";
+import { propagateOrgRequired } from "@/lib/form-structure";
 
 const SURFACES: Record<string, string[]> = { lists: ["list"], health: ["health_list", "health_detail"], mail: ["mail_list"], email: ["email"], documents: ["documents"], import: ["import"] };
 const ACCESS = ["edit", "approval", "read", "hidden"];
@@ -151,6 +152,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
     }
     await tx.fieldChangeLog.create({ data: { organizationId, action: "edit", byId: userId, before: JSON.parse(JSON.stringify(before)), after: JSON.parse(JSON.stringify(after)) } });
   });
+  // A changed organization default reaches the events that still had the old one (Formulář, 2026-11-26).
+  if (template && requiredDefault !== undefined) await propagateOrgRequired(organizationId, key, template.requiredInRegistration, requiredDefault as boolean);
   invalidateResolverContext();
   return NextResponse.json({ ok: true });
 }

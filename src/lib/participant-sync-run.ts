@@ -12,6 +12,7 @@ import { fieldTextValues } from "@/lib/document-variables";
 import { linkChildrenIfConnected, withMembers } from "@/lib/children";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
 import { eventHasFeature } from "@/lib/org-features";
+import { guardianExtra } from "@/lib/guardian-fields";
 import { resultRows,
   policyOf,
   GUARDIAN_SLOT_TARGET,
@@ -103,7 +104,7 @@ async function loadExisting(eventId: string): Promise<ExistingParticipant[]> {
     dateOfBirth: p.dateOfBirth ? p.dateOfBirth.toISOString().slice(0, 10) : null,
     registrationNumber: p.registrationNumber,
     customFieldValues: (p.customFieldValues as Record<string, string> | null) ?? {},
-    guardians: p.guardians.map((g) => ({ id: g.id, email: g.email, name: g.name, phone: g.phone, relationship: g.relationship })),
+    guardians: p.guardians.map((g) => ({ id: g.id, email: g.email, name: g.name, phone: g.phone, relationship: g.relationship, extra: guardianExtra(g.extra) })),
   }));
 }
 
@@ -154,7 +155,7 @@ export async function applyPlan(
             dateOfBirth: c.dateOfBirthIso ? new Date(c.dateOfBirthIso) : null,
             customFieldValues: c.customFieldValues,
             guardians: {
-              create: c.guardians.map((g) => ({ email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position })),
+              create: c.guardians.map((g) => ({ email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position, extra: g.extra })),
             },
           },
         });
@@ -194,12 +195,12 @@ export async function applyPlan(
           });
           for (const g of patch.guardiansAdd) {
             const made = await tx.participantGuardian.create({
-              data: { participantId: id, email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position },
+              data: { participantId: id, email: g.email.trim(), name: nullIfEmpty(g.name), phone: nullIfEmpty(g.phone), relationship: nullIfEmpty(g.relationship), position: g.position, extra: g.extra },
             });
             rowWrites.push({ table: "guardian", id: made.id });
           }
           for (const { id: guardianId, ...data } of patch.guardiansUpdate) {
-            const before = await tx.participantGuardian.findUniqueOrThrow({ where: { id: guardianId }, select: { name: true, phone: true, relationship: true } });
+            const before = await tx.participantGuardian.findUniqueOrThrow({ where: { id: guardianId }, select: { name: true, phone: true, relationship: true, extra: true } });
             await tx.participantGuardian.update({ where: { id: guardianId }, data });
             for (const [k, v] of Object.entries(data)) rowWrites.push({ table: "guardian", id: guardianId, key: k, before: before[k as keyof typeof before], after: v });
           }

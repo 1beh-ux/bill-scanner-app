@@ -5,6 +5,7 @@
 import { isIsoDate } from "@/lib/portal-rules";
 import { categoryFor, type PriceRules } from "@/lib/price-rules";
 import { appliesTo, cleanFieldValue, optionsFor, type FieldAudience } from "@/lib/registration-fields";
+import { cleanGuardianExtra, missingGuardianAnswers, type GuardianFieldDef, type GuardianQuestion } from "@/lib/guardian-fields";
 
 export const MAX_PERSONS = 10;
 export const SUBMIT_LIMIT_PER_HOUR = 5;
@@ -18,8 +19,9 @@ export const PUBLIC_AUDIENCES: PublicAudience[] = ["children", "children_adults"
 export const readAudience = (v: unknown): PublicAudience => (PUBLIC_AUDIENCES as unknown[]).includes(v) ? (v as PublicAudience) : "any";
 
 // group: the profile part's name (Šablony -> Účastníci), shown as a heading when a form has several.
-export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; group?: string; required: boolean; audience?: FieldAudience; eventOnly?: boolean; hint?: string };
-export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null };
+export type FormField = { key: string; label: string; fieldType: string; options: unknown; adultOptions?: unknown; group?: string; required: boolean; audience?: FieldAudience; eventOnly?: boolean; hint?: string; place?: "person" };
+// extra: the organization's own guardian fields (src/lib/guardian-fields.ts).
+export type GuardianIn = { name: string | null; email: string; phone: string | null; relationship: string | null; extra?: Record<string, string> };
 export type PersonIn = {
   firstName: string;
   lastName: string;
@@ -63,7 +65,7 @@ export const isSpam = (body: unknown) => !!body && typeof body === "object" && s
  */
 export function validateSubmission(
   body: unknown,
-  ctx: { fields: FormField[]; rules: PriceRules | null; oddil: { key: string; options: string[] } | null; today: Date; audience?: PublicAudience }
+  ctx: { fields: FormField[]; rules: PriceRules | null; oddil: { key: string; options: string[] } | null; today: Date; audience?: PublicAudience; guardians?: GuardianQuestion[] }
 ): { ok: true; data: CleanSubmission } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
@@ -74,6 +76,18 @@ export function validateSubmission(
 
   const persons: PersonIn[] = [];
   const adultGuardians: GuardianIn[] = [];
+  // The guardian questions: own fields' values cleaned by type, required ones checked (phone / relationship too).
+  const gq = ctx.guardians ?? [];
+  const own = gq.filter((q) => !q.fixed).map((q) => ({ key: q.key, label: q.label, fieldType: q.fieldType as GuardianFieldDef["fieldType"], options: q.options, required: q.required }));
+  const guardianCheck = (raw: unknown, g: { phone: string | null; relationship: string | null }, code: (k: string) => string): Record<string, string> => {
+    const extra = cleanGuardianExtra(own, raw);
+    if (extra === null) {
+      errors.push(code("extra"));
+      return {};
+    }
+    for (const k of missingGuardianAnswers(gq, { ...g, extra })) errors.push(code(k));
+    return extra;
+  };
   rawPersons.forEach((raw, i) => {
     const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
     const p: PersonIn = {
@@ -115,7 +129,9 @@ export function validateSubmission(
       }
     }
     if (p.isAdult && r.guardianOfChildren === true && p.email) {
-      adultGuardians.push({ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email, phone: p.phone, relationship: null });
+      // An adult ticked as a guardian answers the guardian questions too (not the relationship: they are themselves).
+      const extra = guardianCheck(r.guardianExtra, { phone: p.phone, relationship: "-" }, (k) => `p${i}.guardian_${k}`);
+      adultGuardians.push({ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email, phone: p.phone, relationship: null, extra });
     }
     persons.push(p);
   });
@@ -123,8 +139,9 @@ export function validateSubmission(
   const extra: GuardianIn[] = [];
   (Array.isArray(o.guardians) ? o.guardians.slice(0, 10) : []).forEach((raw, i) => {
     const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-    const g = { name: str(r.name) || null, email: str(r.email), phone: str(r.phone, 50) || null, relationship: str(r.relationship, 100) || null };
+    const g: GuardianIn = { name: str(r.name) || null, email: str(r.email), phone: str(r.phone, 50) || null, relationship: str(r.relationship, 100) || null };
     if (!g.email && !g.name && !g.phone) return; // an empty row the parent didn't fill
+    g.extra = guardianCheck(r.extra, g, (k) => `g${i}.${k}`);
     // R4-3 (audit2): a guardian needs a name, not only an e-mail.
     if (!g.name) errors.push(`g${i}.name`);
     if (!isEmail(g.email)) errors.push(`g${i}.email`);
@@ -143,7 +160,8 @@ export function validateSubmission(
     data: {
       persons: persons.map((p) => ({
         ...p,
-        guardians: p.isAdult ? [{ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email!, phone: p.phone, relationship: null }] : childGuardians,
+        // An adult's own row keeps the guardian answers they gave when ticked as a guardian.
+        guardians: p.isAdult ? [{ name: `${p.firstName} ${p.lastName}`.trim(), email: p.email!, phone: p.phone, relationship: null, extra: adultGuardians.find((g) => g.email === p.email)?.extra }] : childGuardians,
       })),
       note: str(o.note, 2000),
     },

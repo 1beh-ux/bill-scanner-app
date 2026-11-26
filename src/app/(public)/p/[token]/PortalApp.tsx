@@ -17,6 +17,8 @@ import type { FormField } from "@/lib/public-registration";
 import TicketForm, { type SaleType } from "@/components/tickets/TicketForm";
 import type { TicketField } from "@/lib/ticket-fields";
 import PortalHelp from "@/components/registration/PortalHelp";
+import GuardianExtraInputs from "@/components/registration/GuardianExtraInputs";
+import type { GuardianFieldDef } from "@/lib/guardian-fields";
 
 // The parent portal UI (docs/registration-portal-spec.md G, portal v2:
 // docs/registration-slice3-spec.md F). Two columns on desktop -- the person /
@@ -28,7 +30,7 @@ type Access = "edit" | "approval" | "read" | "hidden";
 // organization's own (Data.profileSections); summary: shown on the family overview card.
 // requiredBy: the name of an upcoming registration's event that requires this field.
 type Field = { key: string; label: string; access: Access; fieldType: string; options: unknown; value: string; pending: string | null; level: "basic" | "detailed"; section: string; summary: boolean; requiredBy: string | null };
-type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean };
+type Guardian = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; extra?: Record<string, string> };
 export type EventRef = { name: string; startDate: string; endDate: string; kind: "event" | "membership"; membershipYear: number | null };
 type DocFile = { id: string | null; date: string; person?: boolean } | null;
 // top: a field block shown at the top of the card (values only, e.g. "Člen Záře, nižší cena 3 000 Kč").
@@ -59,7 +61,7 @@ type Member = {
   // "Už nebude chodit" (slice 8 #2): inactive since (null = active).
   leftAt: string | null;
   leftNote: string | null;
-  profile: { fields: Field[]; guardians: Guardian[]; guardiansPending: Guardian[] | null };
+  profile: { fields: Field[]; guardians: Guardian[]; guardiansPending: Guardian[] | null; guardianFields?: GuardianFieldDef[] };
   registrations: Registration[];
   history: (EventRef & { id: string; status: "pending" | "accepted" })[];
 };
@@ -483,6 +485,7 @@ function ProfilePage({ api, member, sections, t, onSaved, onBack }: { api: strin
               <input type="email" placeholder={t("portal.guardianEmail")} value={g.email} onChange={(e) => set({ email: e.target.value })} className={inputClass} />
               <input placeholder={t("portal.guardianRelationship")} value={g.relationship ?? ""} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />
               <input type="tel" placeholder={t("portal.guardianPhone")} value={g.phone ?? ""} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />
+              <GuardianExtraInputs fields={member.profile.guardianFields ?? []} value={g.extra} onChange={(extra) => set({ extra })} yesLabel={t("portal.yes")} />
               <div className="flex items-center justify-between gap-2">
                 <label className="flex items-center gap-2 text-[14px] text-ink">
                   <input type="checkbox" checked={g.receivesCommunications} onChange={(e) => set({ receivesCommunications: e.target.checked })} />

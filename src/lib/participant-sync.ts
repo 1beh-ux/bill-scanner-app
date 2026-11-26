@@ -55,7 +55,8 @@ export type ImportPolicy = {
 /** mergeInto value: "this row is a new person" (decided in the review queue). */
 export const NEW_PERSON = "__new";
 /** guardian<N>_<prop> import targets: explicit guardian slots (the old guardian columns pair by position). */
-export const GUARDIAN_SLOT_TARGET = /^guardian([1-9])_(name|email|phone|relation)$/;
+// 2026-11-26: also the organization's own guardian fields (guardian<N>_<key>, src/lib/guardian-fields.ts) -> extra.
+export const GUARDIAN_SLOT_TARGET = /^guardian([1-9])_([a-z][a-z0-9_]{0,39})$/;
 export const SYNC_INTERVALS = [1, 3, 6, 12, 24];
 
 /** Everything that decides the plan (the connection's settings minus scheduling/bookkeeping). */
@@ -110,12 +111,12 @@ export type ExistingParticipant = {
   dateOfBirth: string | null; // YYYY-MM-DD
   registrationNumber: number | null;
   customFieldValues: Record<string, string>;
-  guardians: { id: string; email: string; name: string | null; phone: string | null; relationship: string | null }[];
+  guardians: { id: string; email: string; name: string | null; phone: string | null; relationship: string | null; extra?: Record<string, string> }[];
   // Every field's text value (incl. computed: variable symbol, price, composite) -- for matching.
   values?: Record<string, string>;
 };
 
-export type GuardianRow = { name: string; email: string; relationship: string; phone: string; position?: number };
+export type GuardianRow = { name: string; email: string; relationship: string; phone: string; position?: number; extra?: Record<string, string> };
 export type ParsedRow = {
   name: string;
   firstName: string;
@@ -151,7 +152,7 @@ export type ParticipantPatch = {
   dateOfBirth?: string;
   customFieldValues?: Record<string, string>; // only the changed keys (merged server-side)
   guardiansAdd: GuardianRow[];
-  guardiansUpdate: { id: string; name?: string; phone?: string; relationship?: string }[];
+  guardiansUpdate: { id: string; name?: string; phone?: string; relationship?: string; extra?: Record<string, string> }[];
 };
 
 export type PlanRow = {
@@ -322,8 +323,13 @@ function parseRow(cells: string[], headers: string[], targets: string[], fields:
     const v = (cells[i] ?? "").trim();
     if (!m || !v) return;
     const g = slots.get(Number(m[1])) ?? { name: "", email: "", relationship: "", phone: "", position: Number(m[1]) };
-    const prop = m[2] === "relation" ? "relationship" : (m[2] as "name" | "email" | "phone");
-    g[prop] = g[prop] ? `${g[prop]} ${v}` : v;
+    if (["name", "email", "phone", "relation"].includes(m[2])) {
+      const prop = m[2] === "relation" ? "relationship" : (m[2] as "name" | "email" | "phone");
+      g[prop] = g[prop] ? `${g[prop]} ${v}` : v;
+    } else {
+      const extra = (g.extra ??= {});
+      extra[m[2]] = extra[m[2]] ? `${extra[m[2]]} ${v}` : v;
+    }
     slots.set(Number(m[1]), g);
   });
   const slotted = [...slots.values()].sort((a, b) => a.position! - b.position!);
@@ -445,9 +451,11 @@ function diff(row: ParsedRow, p: ExistingParticipant, modeOf: (field: string) =>
     if (take(existing.name, g.name, "guardian")) upd.name = g.name;
     if (take(existing.phone, g.phone, "guardian")) upd.phone = g.phone;
     if (take(existing.relationship, g.relationship, "guardian")) upd.relationship = g.relationship;
+    const extra = Object.fromEntries(Object.entries(g.extra ?? {}).filter(([k, v]) => take(existing.extra?.[k], v, "guardian")));
+    if (Object.keys(extra).length) upd.extra = { ...(existing.extra ?? {}), ...extra };
     if (Object.keys(upd).length > 1) {
       patch.guardiansUpdate.push(upd);
-      changes.push({ field: "guardian", from: g.email, to: [upd.name, upd.phone, upd.relationship].filter(Boolean).join(", ") });
+      changes.push({ field: "guardian", from: g.email, to: [upd.name, upd.phone, upd.relationship, ...Object.values(extra)].filter(Boolean).join(", ") });
     }
   }
   return { patch, changes };

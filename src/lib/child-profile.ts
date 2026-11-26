@@ -8,10 +8,12 @@
 // events never read profiles at all.
 import { prisma } from "@/lib/prisma";
 import { fullNameFrom } from "@/lib/participant-name";
+import { guardianExtra } from "@/lib/guardian-fields";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { GUARDIANS_CHANGE_KEY, isActivePerson, isIsoDate, isProfileBuiltin, profileValues, pushPatch, type EligibilityFacts } from "@/lib/portal-rules";
 
-export type GuardianInput = { name?: string | null; email: string; relationship?: string | null; phone?: string | null; receivesCommunications?: boolean };
+// extra: the organization's own guardian fields (src/lib/guardian-fields.ts), { key: value }.
+export type GuardianInput = { name?: string | null; email: string; relationship?: string | null; phone?: string | null; receivesCommunications?: boolean; extra?: Record<string, string> };
 
 /** Cleans a guardians list from a request: trimmed, e-mail required, max 10. Null = malformed. */
 export function readGuardians(raw: unknown): GuardianInput[] | null {
@@ -23,15 +25,19 @@ export function readGuardians(raw: unknown): GuardianInput[] | null {
     const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim().slice(0, 200) : null);
     const email = str(o.email);
     if (!email || !email.includes("@")) return null;
-    out.push({ name: str(o.name), email, relationship: str(o.relationship), phone: str(o.phone), receivesCommunications: o.receivesCommunications !== false });
+    const extra = o.extra && typeof o.extra === "object" ? Object.fromEntries(Object.entries(o.extra as Record<string, unknown>).filter(([k, v]) => /^[a-z][a-z0-9_]{0,39}$/.test(k) && typeof v === "string" && v.trim()).slice(0, 50).map(([k, v]) => [k, (v as string).trim().slice(0, 2000)])) : {};
+    out.push({ name: str(o.name), email, relationship: str(o.relationship), phone: str(o.phone), receivesCommunications: o.receivesCommunications !== false, extra });
   }
   return out;
 }
 
 /** Guardians as the stable JSON a pending guardians change stores (same shape -> same string). */
-export function guardiansJson(guardians: GuardianInput[]): string {
+export function guardiansJson(guardians: (Omit<GuardianInput, "extra"> & { extra?: unknown })[]): string {
   return JSON.stringify(
-    guardians.map((g) => ({ name: g.name ?? null, email: g.email, relationship: g.relationship ?? null, phone: g.phone ?? null, receivesCommunications: g.receivesCommunications ?? true }))
+    guardians.map((g) => {
+      const extra = guardianExtra(g.extra);
+      return { name: g.name ?? null, email: g.email, relationship: g.relationship ?? null, phone: g.phone ?? null, receivesCommunications: g.receivesCommunications ?? true, ...(Object.keys(extra).length && { extra: Object.fromEntries(Object.entries(extra).sort()) }) };
+    })
   );
 }
 
@@ -88,6 +94,7 @@ export async function setGuardians(childId: string, guardians: GuardianInput[]):
         relationship: g.relationship ?? null,
         phone: g.phone ?? null,
         receivesCommunications: g.receivesCommunications ?? true,
+        extra: g.extra && Object.keys(g.extra).length ? g.extra : undefined,
       })),
     }),
   ]);
@@ -128,7 +135,7 @@ export async function pushProfile(childId: string, changed: Record<string, strin
       });
     }
     for (const g of profileGuardians) {
-      const data = { name: g.name, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications };
+      const data = { name: g.name, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications, extra: g.extra ?? undefined };
       const match = p.guardians.find((pg) => pg.email.trim().toLowerCase() === g.email.trim().toLowerCase());
       if (match) await prisma.participantGuardian.update({ where: { id: match.id }, data });
       else await prisma.participantGuardian.create({ data: { ...data, participantId: p.id, email: g.email } });

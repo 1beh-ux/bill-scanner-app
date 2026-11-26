@@ -10,6 +10,7 @@ import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
 import { appliesTo, optionsFor } from "@/lib/registration-fields";
+import type { GuardianQuestion } from "@/lib/guardian-fields";
 
 // The public new-family form (docs/registration-slice3-spec.md D): 1+ adults
 // and/or children, each with the org fields the portal shows (required ones
@@ -24,11 +25,13 @@ type Person = {
   email: string;
   phone: string;
   guardianOfChildren: boolean;
+  // The guardian questions' answers of an adult ticked as a guardian (own guardian fields).
+  guardianExtra?: Record<string, string>;
   values: Record<string, string>;
   category?: string;
   oddil?: string;
 };
-type Guardian = { name: string; email: string; phone: string; relationship: string };
+type Guardian = { name: string; email: string; phone: string; relationship: string; extra?: Record<string, string> };
 type EventInfo = {
   name: string;
   kind: "event" | "membership";
@@ -70,6 +73,7 @@ export default function PublicForm({
   offer,
   org,
   strings,
+  guardianQs = [],
 }: {
   slug: string;
   org: PublicOrg;
@@ -80,6 +84,8 @@ export default function PublicForm({
   // "Nabídnout členství": the offered registration's token -- pre-fill from it after the birth date.
   offer?: string;
   strings: Record<string, string>;
+  // The guardian questions (src/lib/guardian-fields.ts): phone / relationship + the organization's own fields.
+  guardianQs?: GuardianQuestion[];
 }) {
   const t = useCallback(
     (key: string, vars?: Record<string, string>) => {
@@ -124,6 +130,44 @@ export default function PublicForm({
   const categoriesOf = (p: Person) => (rules ? allowedCategories(rules, p.isAdult).map((c) => ({ key: c.key, label: c.label, asksOddil: !!c.asksOddil })) : []);
   // Only the fields for this person (slice 5 #1: children / adults / both).
   const fieldsOf = (p: Person) => fields.filter((f) => appliesTo(f.audience, p.isAdult));
+  const gq = (key: string) => guardianQs.find((q) => q.key === key);
+  // A guardian question's wording: the form's own, else the app's text (phone / relationship) or the field's name.
+  const gLabel = (q: GuardianQuestion) => (q.ownLabel ? q.label : q.key === "phone" ? t("portal.guardianPhone") : q.key === "relationship" ? t("portal.guardianRelationship") : q.label);
+  const ownGuardianQs = guardianQs.filter((q) => !q.fixed);
+  const guardianInputs = (extra: Record<string, string> | undefined, onExtra: (e: Record<string, string>) => void) =>
+    ownGuardianQs.map((q) => (
+      <label key={q.key} className="flex flex-col gap-1 text-[13px] text-ink-secondary sm:col-span-2">
+        <span>
+          {gLabel(q)}
+          {q.required && " *"}
+        </span>
+        {q.hint && <span className="text-[12px]">{q.hint}</span>}
+        <FieldInput field={q} value={extra?.[q.key] ?? ""} required={q.required && q.fieldType !== "boolean" && q.fieldType !== "consent"} onChange={(v) => onExtra({ ...(extra ?? {}), [q.key]: v })} yesLabel={t("portal.yes")} />
+      </label>
+    ));
+  // One question of a person (both places of the form use it).
+  const fieldInput = (p: Person, i: number, f: FormField, j: number, list: FormField[]) => (
+    <Fragment key={f.key}>
+      {/* A heading where the organization's own profile part starts (e.g. "Adresa"). */}
+      {f.group && f.group !== list[j - 1]?.group && <h4 className="mt-2 text-[14px] font-semibold text-ink sm:col-span-2">{f.group}</h4>}
+      <label className="flex flex-col gap-1 text-[13px] text-ink-secondary">
+        <span>
+          {f.label}
+          {f.required && " *"}
+        </span>
+        {f.hint && <span className="text-[12px]">{f.hint}</span>}
+        <FieldInput
+          field={{ ...f, options: f.fieldType === "calculated" ? f.options : optionsFor(f, p.isAdult) }}
+          value={p.values[f.key] ?? ""}
+          required={f.required && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"}
+          onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })}
+          yesLabel={t("portal.yes")}
+          // A calculated field: shown live from this person's answers (names and birth date included).
+          calc={{ values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" }, eventStart: event.startDate, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }}
+        />
+      </label>
+    </Fragment>
+  );
   // "Vyplnit stejné údaje jako osoba 1" (2026-10-27): copies the first person's answers into this person's
   // empty fields, all still editable -- not a select answer this person can't have (Muž for a child) nor a
   // field with its own adult options (Pohlaví): those are personal.
@@ -174,7 +218,8 @@ export default function PublicForm({
   function describe(code: string): string {
     const m = /^([pg])(\d+)\.(.+)$/.exec(code);
     if (!m) return t(`public.err.${code}`);
-    const what = fields.find((f) => f.key === m[3])?.label ?? (m[3] === oddil?.key ? oddil.label : t(`public.err.${m[3]}`));
+    const gq = guardianQs.find((q) => q.key === m[3] || `guardian_${q.key}` === m[3]);
+    const what = fields.find((f) => f.key === m[3])?.label ?? (m[3] === oddil?.key ? oddil.label : gq ? gLabel(gq) : t(`public.err.${m[3]}`));
     return `${t(m[1] === "p" ? "public.personN" : "public.guardianN", { n: String(Number(m[2]) + 1) })}: ${what}`;
   }
 
@@ -313,44 +358,27 @@ export default function PublicForm({
                   </label>
                   <label className="text-[13px] text-ink-secondary">
                     {t("portal.guardianPhone")}
-                    <input type="tel" value={p.phone} onChange={(e) => setPerson(i, { phone: e.target.value })} className={inputClass + " mt-1"} />
+                    {p.guardianOfChildren && gq("phone")?.required && hasChildren && " *"}
+                    <input type="tel" required={p.guardianOfChildren && !!gq("phone")?.required && hasChildren} value={p.phone} onChange={(e) => setPerson(i, { phone: e.target.value })} className={inputClass + " mt-1"} />
                   </label>
                   <label className="flex items-center gap-2 self-end text-[14px] text-ink">
                     <input type="checkbox" checked={p.guardianOfChildren} onChange={(e) => setPerson(i, { guardianOfChildren: e.target.checked })} />
                     {t("public.isGuardian")}
                   </label>
+                  {p.guardianOfChildren && hasChildren && guardianInputs(p.guardianExtra, (guardianExtra) => setPerson(i, { guardianExtra }))}
                 </>
               )}
+              {/* Questions placed with the person on the Formulář screen (e.g. the child's own phone). */}
+              {fieldsOf(p).filter((f) => f.place === "person").map((f, j, list) => fieldInput(p, i, f, j, list))}
             </div>
             {fieldsOf(p).length > 0 && i > 0 && (
               <button type="button" onClick={() => copyFromFirst(i)} className="self-start text-[14px] text-ember underline hover:no-underline">
                 {t("public.copyFromFirst")}
               </button>
             )}
-            {fieldsOf(p).length > 0 && (
+            {fieldsOf(p).some((f) => f.place !== "person") && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {fieldsOf(p).map((f, j, list) => (
-                  <Fragment key={f.key}>
-                  {/* A heading where the organization's own profile part starts (e.g. "Adresa"). */}
-                  {f.group && f.group !== list[j - 1]?.group && <h4 className="mt-2 text-[14px] font-semibold text-ink sm:col-span-2">{f.group}</h4>}
-                  <label className="flex flex-col gap-1 text-[13px] text-ink-secondary">
-                    <span>
-                      {f.label}
-                      {f.required && " *"}
-                    </span>
-                    {f.hint && <span className="text-[12px]">{f.hint}</span>}
-                    <FieldInput
-                      field={{ ...f, options: f.fieldType === "calculated" ? f.options : optionsFor(f, p.isAdult) }}
-                      value={p.values[f.key] ?? ""}
-                      required={f.required && f.fieldType !== "boolean" && f.fieldType !== "consent" && f.fieldType !== "calculated"}
-                      onChange={(v) => setPerson(i, { values: { ...p.values, [f.key]: v } })}
-                      yesLabel={t("portal.yes")}
-                      // A calculated field: shown live from this person's answers (names and birth date included).
-                      calc={{ values: { ...p.values, participant_first_name: p.firstName, participant_last_name: p.lastName, Name: `${p.firstName} ${p.lastName}`.trim(), datum_narozeni: p.birthDate, is_adult: p.isAdult ? "Ano" : "Ne" }, eventStart: event.startDate, missingLabel: t("portal.calcMissing"), labelOf: (k) => fields.find((x) => x.key === k)?.label ?? k }}
-                    />
-                  </label>
-                  </Fragment>
-                ))}
+                {fieldsOf(p).filter((f) => f.place !== "person").map((f, j, list) => fieldInput(p, i, f, j, list))}
               </div>
             )}
             <PersonPrice
@@ -389,8 +417,9 @@ export default function PublicForm({
                 <div key={i} className="grid gap-2 rounded-lg border border-mist p-3 sm:grid-cols-2">
                   <input required aria-required="true" placeholder={`${t("portal.guardianName")} *`} value={g.name} onChange={(e) => set({ name: e.target.value })} className={inputClass} />
                   <input type="email" required placeholder={t("portal.guardianEmail") + " *"} value={g.email} onChange={(e) => set({ email: e.target.value })} className={inputClass} />
-                  <input placeholder={t("portal.guardianRelationship")} value={g.relationship} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />
-                  <input type="tel" placeholder={t("portal.guardianPhone")} value={g.phone} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />
+                  <input required={!!gq("relationship")?.required} placeholder={gq("relationship") ? `${gLabel(gq("relationship")!)}${gq("relationship")!.required ? " *" : ""}` : t("portal.guardianRelationship")} value={g.relationship} onChange={(e) => set({ relationship: e.target.value })} className={inputClass} />
+                  <input type="tel" required={!!gq("phone")?.required} placeholder={gq("phone") ? `${gLabel(gq("phone")!)}${gq("phone")!.required ? " *" : ""}` : t("portal.guardianPhone")} value={g.phone} onChange={(e) => set({ phone: e.target.value })} className={inputClass} />
+                  {guardianInputs(g.extra, (extra) => set({ extra }))}
                   <button type="button" onClick={() => setGuardians((x) => x.filter((_, j) => j !== i))} className="justify-self-start text-[14px] text-red-600">
                     {t("portal.remove")}
                   </button>

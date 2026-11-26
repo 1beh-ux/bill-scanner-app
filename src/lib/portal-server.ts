@@ -34,6 +34,7 @@ import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/
 import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
 import { memberFormFields, readAudience, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, optionsFor, askedNow, askedLater, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
+import { guardianExtra, readGuardianSettings } from "@/lib/guardian-fields";
 import { orderCap, remaining } from "@/lib/tickets";
 import { eventSaleSetup, soldCounts } from "@/lib/tickets-server";
 
@@ -218,7 +219,7 @@ export async function portalData(scope: PortalScope) {
       orderBy: { event: { startDate: "desc" } },
     }),
     templateRules(scope.organizationId),
-    prisma.organization.findUniqueOrThrow({ where: { id: scope.organizationId }, select: { portalProfileSections: true, profileCategory: true } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: scope.organizationId }, select: { portalProfileSections: true, profileCategory: true, guardianProps: true } }),
   ]);
   // The profile page's own sections after Základní / Podrobné údaje (2026-10-22).
   const sections = readProfileSections(org.portalProfileSections);
@@ -310,10 +311,12 @@ export async function portalData(scope: PortalScope) {
             labels[PROFILE_CATEGORY_KEY] ?? "Cenová kategorie"
           ),
         ],
-        guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
+        guardians: child.guardians.map((g) => ({ name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications, extra: guardianExtra(g.extra) })),
         // The parent's proposed list while it waits for approval (live list above still gets the e-mails).
         guardiansPending: pendingBy.has(GUARDIANS_CHANGE_KEY) ? JSON.parse(pendingBy.get(GUARDIANS_CHANGE_KEY)!) : null,
         guardiansAccess: GUARDIANS_PORTAL_ACCESS,
+        // The organization's own guardian fields (2026-11-26), asked for every guardian.
+        guardianFields: readGuardianSettings(org.guardianProps).fields,
       },
       registrations,
       history: own
@@ -569,6 +572,7 @@ export async function createRegistration(
           relationship: g.relationship,
           phone: g.phone,
           receivesCommunications: g.receivesCommunications,
+          extra: g.extra ?? undefined,
         })),
       },
     },

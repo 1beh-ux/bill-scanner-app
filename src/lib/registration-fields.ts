@@ -54,6 +54,9 @@ export type AskedField = {
   required?: boolean;
   when?: "registration" | "after";
   hint?: string | null;
+  // Where on the form (2026-11-26): "person" = with name and birth date; and the position set on the Formulář screen.
+  place?: "person" | "questions";
+  order?: number | null;
 };
 
 /**
@@ -88,6 +91,8 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
         required: cfg.required,
         when: cfg.when,
         hint: cfg.hint,
+        place: cfg.place,
+        order: cfg.order ?? null,
       });
       continue;
     }
@@ -103,8 +108,12 @@ export function askedFields(eventFields: EventFieldRule[], templates: Map<string
   }
   const rank = new Map([...templates.keys()].map((k, i) => [k, i]));
   const at = (f: AskedField) => (f.source === "event" ? Number.MAX_SAFE_INTEGER : (rank.get(f.key) ?? Number.MAX_SAFE_INTEGER));
-  // Array.sort is stable: event questions keep their event order after the profile fields.
-  return out.sort((a, b) => at(a) - at(b));
+  // Array.sort is stable: event questions keep their event order after the profile fields. An order set on the
+  // Formulář screen (2026-11-26) wins; the rest follow in the organization's order.
+  const sorted = out.sort((a, b) => at(a) - at(b));
+  if (!sorted.some((f) => f.order != null)) return sorted;
+  const pos = new Map(sorted.map((f, i) => [f.key, f.order ?? 100000 + i]));
+  return sorted.sort((a, b) => pos.get(a.key)! - pos.get(b.key)!);
 }
 
 /**

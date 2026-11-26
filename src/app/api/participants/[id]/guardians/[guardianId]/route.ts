@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
+import { cleanGuardianExtra } from "@/lib/guardian-fields";
+import { guardianSettings } from "@/lib/guardian-fields-server";
+import { orgIdOfEvent } from "@/lib/org-owner";
 
 async function loadGuardianWithEvent(guardianId: string) {
   return prisma.participantGuardian.findUnique({
@@ -28,6 +31,9 @@ export async function PATCH(
 
   const body = await req.json();
   const { name, email, relationship, phone, receivesCommunications } = body;
+  // The organization's own guardian fields (2026-11-26), cleaned by their type.
+  const extra = body.extra !== undefined ? cleanGuardianExtra((await guardianSettings(await orgIdOfEvent(guardian.participant.eventId))).fields, body.extra) : undefined;
+  if (extra === null) return NextResponse.json({ error: "invalid_extra" }, { status: 400 });
 
   if (email !== undefined && (typeof email !== "string" || !email.trim())) {
     return NextResponse.json({ error: "guardian_email_required" }, { status: 400 });
@@ -41,6 +47,7 @@ export async function PATCH(
       ...(relationship !== undefined && { relationship: relationship?.trim() || null }),
       ...(phone !== undefined && { phone: phone?.trim() || null }),
       ...(receivesCommunications !== undefined && { receivesCommunications }),
+      ...(extra !== undefined && { extra }),
     },
   });
 

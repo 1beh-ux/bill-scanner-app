@@ -107,6 +107,7 @@ export default async function PublicRegistrationPage({ params, searchParams }: {
       fields={ctx.fields}
       rules={ctx.rules}
       oddil={ctx.oddil}
+      guardianQs={ctx.guardians}
       offer={offer}
       org={{ ...org, contactEmail: event.publicContactEmail ?? org.contactEmail }}
       strings={withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), org.publicTexts, event.publicTexts)}

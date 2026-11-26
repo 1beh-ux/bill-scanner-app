@@ -3,10 +3,16 @@
 //   PATCH {event, key, change: {ask, required, audience, when, label, hint}}   -> one question
 //   PATCH {event, text: {scope, key, value}}              -> wording of one of the form's own texts (this event)
 //   PATCH {event, reset: true}                            -> back to today's rules (portal-derived) for the event
+//   PATCH {event, key, requiredDefault: bool}               -> the organization's default (events that had the old one follow)
+//   PATCH {event, order: {place, keys}}                     -> drag & drop: the questions of one place in this order
+//   PATCH {event, guardian: {key, change}}                  -> a guardian question in this event (ask/required/label/hint)
+//   PATCH {event, guardian: {key, requiredDefault}}          -> its organization default
+//   PATCH {event, guardianField: {action: create|update|delete, ...}} -> the organization's own guardian fields
 // Admins of a flagged organization only; every change logged.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { changeQuestion, formStructure, resetForm, setFormText } from "@/lib/form-structure";
+import { changeQuestion, formStructure, reorderQuestions, resetForm, setFormText, setOrgRequired } from "@/lib/form-structure";
+import { changeGuardianQuestion, createGuardianField, deleteGuardianField, setGuardianRequiredDefault, updateGuardianField } from "@/lib/guardian-fields-server";
 import { isPublicTextKey } from "@/lib/public-texts";
 import { TICKET_TEXT_KEYS } from "@/lib/tickets";
 import { invalidateResolverContext } from "@/lib/field-resolver";
@@ -41,6 +47,28 @@ export async function PATCH(req: NextRequest) {
       if (!ok) return NextResponse.json({ error: "invalid" }, { status: 400 });
       await setFormText(s.eventId, sc as "public" | "ticket", key as string, value as string);
       await log({ text: { key, value } });
+    } else if (typeof b.key === "string" && typeof b.requiredDefault === "boolean") {
+      const n = await setOrgRequired(s.organizationId, b.key, b.requiredDefault);
+      await log({ key: b.key, requiredDefault: b.requiredDefault, eventsChanged: n });
+    } else if (b.order && typeof b.order === "object") {
+      const { place, keys } = b.order as { place?: unknown; keys?: unknown };
+      if ((place !== "person" && place !== "questions") || !Array.isArray(keys) || !keys.every((k) => typeof k === "string") || keys.length > 200) return NextResponse.json({ error: "invalid" }, { status: 400 });
+      await reorderQuestions(s.eventId, place, keys as string[]);
+      await log({ order: { place, keys } });
+    } else if (b.guardian && typeof b.guardian === "object") {
+      const g = b.guardian as { key?: unknown; change?: unknown; requiredDefault?: unknown };
+      if (typeof g.key !== "string") return NextResponse.json({ error: "invalid" }, { status: 400 });
+      if (typeof g.requiredDefault === "boolean") await setGuardianRequiredDefault(s.organizationId, g.key, g.requiredDefault);
+      else if (g.change && typeof g.change === "object") await changeGuardianQuestion(s.eventId, g.key, g.change as Record<string, unknown>);
+      else return NextResponse.json({ error: "invalid" }, { status: 400 });
+      await log({ guardian: g });
+    } else if (b.guardianField && typeof b.guardianField === "object") {
+      const g = b.guardianField as Record<string, unknown>;
+      if (g.action === "create") await createGuardianField(s.organizationId, { key: g.key, label: g.label, fieldType: g.fieldType, options: g.options, required: g.required });
+      else if (g.action === "update" && typeof g.key === "string") await updateGuardianField(s.organizationId, g.key, g);
+      else if (g.action === "delete" && typeof g.key === "string") await deleteGuardianField(s.organizationId, g.key);
+      else return NextResponse.json({ error: "invalid" }, { status: 400 });
+      await log({ guardianField: g });
     } else if (typeof b.key === "string" && b.change && typeof b.change === "object") {
       await changeQuestion(s.eventId, b.key, b.change as Record<string, unknown>);
       await log({ key: b.key, change: b.change });

@@ -443,6 +443,8 @@ model Event {
   // everyone, creating missing people) or `existing` (only to people already
   // in Lidé, never creating one). src/lib/children.ts linkChildren.
   peopleLinkMode                PeopleLinkMode @default(all) @map("people_link_mode")
+  // 2026-11-26: this event's form settings of the guardian questions (src/lib/guardian-fields.ts readGuardianForm).
+  guardianForm                  Json?          @map("guardian_form")
   // Parent portal (docs/registration-portal-spec.md H): "Otevřeno pro přihlášky
   // v portálu" -- only used when the event is connected (or a membership year),
   // hidden after registrationDeadline. eligibility = src/lib/portal-rules.ts

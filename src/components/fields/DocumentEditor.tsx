@@ -240,7 +240,8 @@ function Connect({ phKey, targets, busy, renamed, onAlias, onRename, overview, o
   const label = (x: Target) => {
     if (x.group !== "guardian") return x.label === x.key ? x.key : `${x.label} ({{${x.key}}})`;
     const [n, prop] = x.label.split("|");
-    return `${t("fieldsManager.doc.guardianSlot", { n })} – ${t(`fieldsManager.doc.gprop.${prop}`)}`;
+    // "=<name>": an own guardian field -- its name as is.
+    return `${t("fieldsManager.doc.guardianSlot", { n })} – ${prop.startsWith("=") ? prop.slice(1) : t(`fieldsManager.doc.gprop.${prop}`)}`;
   };
   const groups = (["field", "guardian", "event"] as const).map((g) => [g, targets.filter((x) => x.group === g)] as const);
   return (

@@ -164,6 +164,7 @@ export async function copyProfileFromLatest(childId: string): Promise<boolean> {
         relationship: g.relationship,
         phone: g.phone,
         receivesCommunications: g.receivesCommunications,
+        extra: g.extra ?? undefined,
       })),
     }),
   ]);
@@ -195,7 +196,7 @@ export async function fillMissingGuardians(scope: { childIds: string[] } | { org
     const source = c.participants[0];
     if (!source) continue;
     await prisma.childGuardian.createMany({
-      data: source.guardians.map((g) => ({ childId: c.id, name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications })),
+      data: source.guardians.map((g) => ({ childId: c.id, name: g.name, email: g.email, relationship: g.relationship, phone: g.phone, receivesCommunications: g.receivesCommunications, extra: g.extra ?? undefined })),
     });
     filled++;
   }

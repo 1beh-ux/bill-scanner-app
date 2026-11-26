@@ -11,6 +11,7 @@ import { askedFields, askedNow, type TemplateRule } from "@/lib/registration-fie
 import { readPriceRules } from "@/lib/price-rules";
 import { fullNameFrom } from "@/lib/participant-name";
 import { newPortalToken } from "@/lib/portal-gate";
+import { guardianQuestions, readGuardianForm, readGuardianSettings } from "@/lib/guardian-fields";
 import type { CleanSubmission, FormField } from "@/lib/public-registration";
 import { readProfileSections, sectionOf } from "@/lib/portal-rules";
 import { linkChildren } from "@/lib/children";
@@ -45,7 +46,7 @@ export async function publicFormContext(event: PublicEvent) {
     visibleTemplates(event.organizationId),
     requiredEventFields([event.id]),
     templateRules(event.organizationId),
-    prisma.organization.findUniqueOrThrow({ where: { id: event.organizationId }, select: { portalProfileSections: true } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: event.organizationId }, select: { portalProfileSections: true, guardianProps: true } }),
     prisma.eventParticipantField.findMany({ where: { eventId: event.id, active: true, kind: "custom" }, select: { key: true, formConfig: true } }),
   ]);
   // Only the organization's fields this event has (2026-10-27): one removed from the event isn't asked.
@@ -55,6 +56,8 @@ export async function publicFormContext(event: PublicEvent) {
   const groupOf = (t: { profileSection: string | null; level: "basic" | "detailed" }) => sections.find((s) => s.key === sectionOf(t, sections))?.label;
   // Two-step events: the detailed fields and the event's questions come after acceptance.
   const asked = askedNow(askedFields(eventFields, tplRules), event.detailsAfterAcceptance);
+  // The guardian questions (2026-11-26): phone / relationship and the organization's own guardian fields.
+  const guardians = guardianQuestions(readGuardianSettings(org.guardianProps), readGuardianForm(event.guardianForm), { phone: "", relationship: "" }).filter((q) => q.ask);
   // Pole -> Formulář: an event whose questions have their own settings asks exactly those -- wording, required,
   // for whom, hint -- independent of the portal; a calculated one is shown, worked out live.
   if (own.some((f) => f.formConfig !== null)) {
@@ -72,11 +75,13 @@ export async function publicFormContext(event: PublicEvent) {
           required: f.required !== false && f.fieldType !== "calculated",
           audience: f.audience,
           hint: f.hint ?? undefined,
+          ...(f.place === "person" && { place: "person" as const }),
           ...((f.source === "event" || writeTargets({ fromTemplate: !!t, storage: t?.storage }, { source: "public_form" }).profile === "no") && { eventOnly: true }),
         };
       }),
       rules,
       oddil: await oddilField(event.id, rules),
+      guardians,
     };
   }
   const askedKeys = new Set(asked.filter((f) => f.source === "profile").map((f) => f.key));
@@ -88,7 +93,7 @@ export async function publicFormContext(event: PublicEvent) {
       .map((t) => ({ key: t.key, label: t.label, fieldType: t.fieldType, options: t.options, adultOptions: t.adultOptions ?? undefined, group: groupOf(t), required: t.requiredInRegistration || askedKeys.has(t.key), audience: t.audience, ...(writeTargets({ fromTemplate: true, storage: t.storage }, { source: "public_form" }).profile === "no" && { eventOnly: true }) })),
     ...asked.filter((f) => f.source === "event").map((f) => ({ key: f.key, label: f.label, fieldType: f.fieldType, options: f.options, required: true, eventOnly: true })),
   ];
-  return { fields, rules, oddil: await oddilField(event.id, rules) };
+  return { fields, rules, oddil: await oddilField(event.id, rules), guardians };
 }
 
 /**

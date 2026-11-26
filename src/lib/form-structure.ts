@@ -8,11 +8,19 @@ import { readPublicTexts, withPublicTexts } from "@/lib/public-texts";
 import { readPriceRules } from "@/lib/price-rules";
 import { readTicketSettings } from "@/lib/tickets";
 import { applyFormChange, effectiveFormConfig, readFormConfig, type FormConfig } from "@/lib/form-config";
+import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
+import { guardianQuestions, readGuardianForm, readGuardianSettings } from "@/lib/guardian-fields";
 
+const fixedLabel = (k: string) => FIXED_PARTICIPANT_FIELDS.find((f) => f.key === k)?.label ?? k;
+
+// field: which field a row fills (2026-11-26) -- shown on every row, also when its wording is the form's own.
+export type FieldLink = { key: string; label: string };
 export type FormRow =
-  | { kind: "text"; id: string; label: string; textKey: string; scope: "public" | "ticket"; note?: string; required?: boolean }
+  | { kind: "text"; id: string; label: string; textKey: string; scope: "public" | "ticket"; note?: string; required?: boolean; field?: FieldLink }
   | { kind: "info"; id: string; label: string; note?: string; href?: string }
-  | { kind: "question"; id: string; key: string; name: string; label: string; origin: "org" | "event" | "calculated"; fieldType: string; cfg: FormConfig; inPortal: string | null; profile: boolean };
+  | { kind: "question"; id: string; key: string; name: string; label: string; origin: "org" | "event" | "calculated"; fieldType: string; cfg: FormConfig; inPortal: string | null; profile: boolean; field: FieldLink; requiredDefault: boolean | null }
+  // A guardian question (phone / relationship / the organization's own guardian field), asked of every guardian.
+  | { kind: "guardian"; id: string; key: string; fixed: boolean; name: string; label: string; hint: string | null; fieldType: string; options: string[] | null; ask: boolean; required: boolean; requiredDefault: boolean; field: FieldLink };
 export type FormSection = { id: string; title: string; rows: FormRow[] };
 export type FormStructure = {
   event: { id: string; name: string; kind: string; slug: string | null; publicRegistration: boolean; detailsAfterAcceptance: boolean };
@@ -25,7 +33,7 @@ const SYSTEM_KEYS = ["public.firstName", "public.lastName", "portal.reviewBirth"
 const TICKET_KEYS = ["name", "email", "phone", "note", "ticketsTitle"];
 
 export async function formStructure(eventId: string): Promise<FormStructure> {
-  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { organization: { select: { publicTexts: true } } } });
+  const event = await prisma.event.findUniqueOrThrow({ where: { id: eventId }, include: { organization: { select: { publicTexts: true, guardianProps: true } } } });
   const [fields, templates] = await Promise.all([
     prisma.eventParticipantField.findMany({ where: { eventId, kind: "custom" }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }] }),
     prisma.participantFieldTemplate.findMany({ where: { organizationId: event.organizationId, active: true }, orderBy: [{ portalSortOrder: { sort: "asc", nulls: "last" } }, { label: "asc" }] }),
@@ -43,10 +51,16 @@ export async function formStructure(eventId: string): Promise<FormStructure> {
         : { ask: false, required: false, audience: null, when: "registration" as const, label: null, hint: null };
     const name = f?.label ?? t?.label ?? key;
     const fieldType = t?.fieldType ?? f?.fieldType ?? "text";
-    return { kind: "question", id: `q:${key}`, key, name, label: cfg.label ?? name, origin: fieldType === "calculated" ? "calculated" : t ? "org" : "event", fieldType, cfg, inPortal: t && t.portalAccess !== "hidden" ? t.portalAccess : null, profile: !!t && t.storage !== "event" };
+    return {
+      kind: "question", id: `q:${key}`, key, name, label: cfg.label ?? name, origin: fieldType === "calculated" ? "calculated" : t ? "org" : "event", fieldType, cfg,
+      inPortal: t && t.portalAccess !== "hidden" ? t.portalAccess : null, profile: !!t && t.storage !== "event",
+      field: { key, label: t?.label ?? f?.label ?? key }, requiredDefault: t && fieldType !== "calculated" ? t.requiredInRegistration : null,
+    };
   };
   const all = [...fields.filter((f) => f.active || !ticket).map((f) => question(f.active ? f : { ...f, formConfig: { ...((readFormConfig(f.formConfig) ?? {}) as object), ask: false } }, f.key)), ...(ticket ? [] : templates.filter((t) => !fields.some((f) => f.key === t.key)).map((t) => question(null, t.key)))];
-  const asked = all.filter((q) => q.cfg.ask);
+  // The order set on the Formulář screen first (cfg.order), then the organization's order as listed.
+  const pos = new Map(all.map((q, i) => [q.key, q.cfg.order ?? 100000 + i]));
+  const asked = all.filter((q) => q.cfg.ask).sort((a, b) => pos.get(a.key)! - pos.get(b.key)!);
   const other = all.filter((q) => !q.cfg.ask);
 
   if (ticket) {
@@ -69,20 +83,31 @@ export async function formStructure(eventId: string): Promise<FormStructure> {
 
   const rows = await prisma.translation.findMany({ where: { key: { in: SYSTEM_KEYS } }, select: { key: true, cs: true } });
   const strings = withPublicTexts(Object.fromEntries(rows.map((r) => [r.key, r.cs])), event.organization.publicTexts, event.publicTexts);
-  const t = (k: string, required?: boolean, note?: string): FormRow => ({ kind: "text", id: `t:${k}:${note ?? ""}`, label: strings[k] ?? k, textKey: k, scope: "public", required, note });
+  const t = (k: string, required?: boolean, note?: string, field?: FieldLink): FormRow => ({ kind: "text", id: `t:${k}:${note ?? ""}`, label: strings[k] ?? k, textKey: k, scope: "public", required, note, field });
   const rules = readPriceRules(event.priceRules);
+  const settings = readGuardianSettings(event.organization.guardianProps);
+  const gRows: FormRow[] = guardianQuestions(settings, readGuardianForm(event.guardianForm), { phone: strings["portal.guardianPhone"] ?? "Telefon", relationship: strings["portal.guardianRelationship"] ?? "Vztah" }).map((q) => ({
+    kind: "guardian", id: `g:${q.key}`, key: q.key, fixed: q.fixed, name: q.name, label: q.label, hint: q.hint, fieldType: q.fieldType, options: q.options, ask: q.ask, required: q.required, requiredDefault: q.requiredDefault,
+    field: { key: `guardianN_${q.key === "relationship" ? "relation" : q.key}`, label: `Zástupce N – ${q.name}` },
+  }));
+  const own = (k: string): FieldLink => ({ key: k, label: fixedLabel(k) });
   return {
     event: base,
     converted: fields.some((f) => f.formConfig !== null),
     sections: [
       { id: "person", title: "Osoba", rows: [
         { kind: "info", id: "i:who", label: `${strings["public.addChild"] ?? "Přidat dítě"} / ${strings["public.addAdult"] ?? "Přidat dospělého"}`, note: "dítě nebo dospělý – určuje, které otázky se ukážou" },
-        t("public.firstName", true), t("public.lastName", true), t("portal.reviewBirth", true),
-        t("portal.guardianEmail", true, "jen dospělý"), t("portal.guardianPhone", false, "jen dospělý"),
+        t("public.firstName", true, undefined, own("participant_first_name")), t("public.lastName", true, undefined, own("participant_last_name")), t("portal.reviewBirth", true, undefined, own("datum_narozeni")),
+        t("portal.guardianEmail", true, "jen dospělý", { key: "guardian1_email", label: "vlastní kontakt dospělého (zástupce 1)" }), t("portal.guardianPhone", false, "jen dospělý", { key: "guardian1_phone", label: "vlastní kontakt dospělého (zástupce 1)" }),
+        ...asked.filter((q) => q.cfg.place === "person"),
       ] },
       ...(rules?.categories.length ? [{ id: "price", title: "Cena", rows: [{ kind: "info" as const, id: "i:cat", label: rules.categories.map((c) => c.label).join(" · "), note: "kategorie z cenových pravidel", href: `/events/${eventId}?tab=platba` }] }] : []),
-      { id: "questions", title: "Otázky", rows: asked },
-      { id: "guardians", title: strings["portal.guardians"] ?? "Zákonní zástupci", rows: [t("portal.guardianName", true, "u dětí"), t("portal.guardianEmail", true, "u dětí"), t("portal.guardianPhone", false, "u dětí"), t("portal.guardianRelationship", false, "u dětí")] },
+      { id: "questions", title: "Otázky", rows: asked.filter((q) => q.cfg.place !== "person") },
+      { id: "guardians", title: strings["portal.guardians"] ?? "Zákonní zástupci", rows: [
+        t("portal.guardianName", true, "u dětí", { key: "guardianN_name", label: "Zástupce N – jméno" }),
+        t("portal.guardianEmail", true, "u dětí", { key: "guardianN_email", label: "Zástupce N – e-mail" }),
+        ...gRows,
+      ] },
       { id: "end", title: "Na konec", rows: [t("portal.note")] },
     ],
     other,
@@ -139,4 +164,36 @@ export async function setFormText(eventId: string, scope: "public" | "ticket", k
   if (value.trim()) texts[key] = value.trim().slice(0, 1000);
   else delete texts[key];
   await prisma.event.update({ where: { id: eventId }, data: { ticketSettings: { ...((event.ticketSettings as object | null) ?? {}), texts } as Prisma.InputJsonValue } });
+}
+
+/**
+ * "Výchozí pro organizaci" (2026-11-26): the organization's default of "required" for a field. Every active event
+ * that still had the old default takes the new one; an event set differently by hand keeps its own. Events on
+ * today's rules follow the template anyway.
+ */
+export async function setOrgRequired(organizationId: string, key: string, value: boolean) {
+  const t = await prisma.participantFieldTemplate.findFirst({ where: { organizationId, key } });
+  if (!t) throw new Error("no_template");
+  const old = t.requiredInRegistration;
+  await prisma.participantFieldTemplate.update({ where: { id: t.id }, data: { requiredInRegistration: value } });
+  return propagateOrgRequired(organizationId, key, old, value);
+}
+
+/** The events' side of a changed organization default (also after Pole's own "Povinné – výchozí" switch). */
+export async function propagateOrgRequired(organizationId: string, key: string, old: boolean, value: boolean) {
+  if (old === value) return 0;
+  const rows = await prisma.eventParticipantField.findMany({ where: { key, kind: "custom", event: { organizationId, status: "active" }, NOT: { formConfig: { equals: Prisma.DbNull } } }, select: { id: true, formConfig: true } });
+  let changed = 0;
+  for (const r of rows) {
+    const cfg = readFormConfig(r.formConfig);
+    if (!cfg || !cfg.ask || cfg.required !== old) continue;
+    await prisma.eventParticipantField.update({ where: { id: r.id }, data: { formConfig: { ...(r.formConfig as object), required: value } as Prisma.InputJsonValue } });
+    changed++;
+  }
+  return changed;
+}
+
+/** Drag & drop on the Formulář screen: the questions of one place in this order (the event is converted first). */
+export async function reorderQuestions(eventId: string, place: "person" | "questions", keys: string[]) {
+  for (const [i, key] of keys.entries()) await changeQuestion(eventId, key, { place, order: i + 1 });
 }

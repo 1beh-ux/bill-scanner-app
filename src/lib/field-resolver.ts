@@ -7,21 +7,25 @@
 // always keeps today's value, so every existing template prints byte-for-byte the same.
 import { prisma } from "@/lib/prisma";
 import { featureOn, guardianSlots as clampSlots } from "@/lib/org-features";
+import { readGuardianSettings } from "@/lib/guardian-fields";
 import { BUILTIN_EVENT_KEYS, EVENT_VARIABLE_ALIASES, linkedVariableValues, LINKED_VARIABLES } from "@/lib/event-variables";
 
 // ---- guardian slots (pure) ------------------------------------------------------------------------------------
 
 export const GUARDIAN_PROPS = ["name", "relation", "phone", "email", "mail"] as const;
 export type GuardianProp = (typeof GUARDIAN_PROPS)[number];
-export type GuardianIn = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; position?: number | null };
+export type GuardianIn = { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; position?: number | null; extra?: unknown };
 
-/** guardian<N>_<prop> -> { slot, prop }, else null. Slots 1..maxSlots only. */
-export function parseGuardianKey(key: string, maxSlots: number): { slot: number; prop: GuardianProp } | null {
-  const m = key.match(/^guardian([1-9])_([a-z]+)$/);
+/**
+ * guardian<N>_<prop> -> { slot, prop }, else null. Slots 1..maxSlots only. `ownKeys`: the organization's own guardian
+ * fields (src/lib/guardian-fields.ts), also props.
+ */
+export function parseGuardianKey(key: string, maxSlots: number, ownKeys: readonly string[] = []): { slot: number; prop: string } | null {
+  const m = key.match(/^guardian([1-9])_([a-z][a-z0-9_]*)$/);
   if (!m) return null;
   const slot = Number(m[1]);
-  const prop = m[2] as GuardianProp;
-  return slot <= maxSlots && (GUARDIAN_PROPS as readonly string[]).includes(prop) ? { slot, prop } : null;
+  const prop = m[2];
+  return slot <= maxSlots && ((GUARDIAN_PROPS as readonly string[]).includes(prop) || ownKeys.includes(prop)) ? { slot, prop } : null;
 }
 
 /** Guardians in slot order: explicit position first (ascending), then the rest in their stored order. */
@@ -33,7 +37,7 @@ export function orderGuardians<T extends { position?: number | null }>(guardians
 }
 
 /** Every guardian<N>_<prop> value for N = 1..slots ("" when the slot is empty). mail = Ano / Ne. */
-export function guardianSlotValues(guardians: GuardianIn[], slots: number): Record<string, string> {
+export function guardianSlotValues(guardians: GuardianIn[], slots: number, ownKeys: readonly string[] = []): Record<string, string> {
   const ordered = orderGuardians(guardians);
   const out: Record<string, string> = {};
   for (let n = 1; n <= slots; n++) {
@@ -43,6 +47,9 @@ export function guardianSlotValues(guardians: GuardianIn[], slots: number): Reco
     out[`guardian${n}_phone`] = g?.phone ?? "";
     out[`guardian${n}_email`] = g?.email ?? "";
     out[`guardian${n}_mail`] = g ? (g.receivesCommunications ? "Ano" : "Ne") : "";
+    const extra = (g?.extra && typeof g.extra === "object" ? g.extra : {}) as Record<string, unknown>;
+    // Ano/Ne and consent values print as Ano / Ne, like the participant's own fields in documents.
+    for (const k of ownKeys) out[`guardian${n}_${k}`] = typeof extra[k] === "string" ? (extra[k] === "true" ? "Ano" : extra[k] === "false" ? "Ne" : (extra[k] as string).split("\n").join(", ")) : "";
   }
   return out;
 }
@@ -58,6 +65,8 @@ export type ResolverContext = {
   free: Record<string, string>;
   /** Linked event variables (date_from, place, ...) for this event. */
   linked: Record<string, string>;
+  /** The organization's own guardian field keys (guardian<N>_<key>, src/lib/guardian-fields.ts). */
+  guardianKeys?: string[];
 };
 
 /**
@@ -72,14 +81,14 @@ export function extendVariables(text: Record<string, string>, ctx: ResolverConte
   };
   for (const [k, v] of Object.entries(ctx.linked)) add(k, v);
   for (const [k, v] of Object.entries(ctx.free)) add(k, v);
-  for (const [k, v] of Object.entries(guardianSlotValues(guardians, ctx.slots))) add(k, v);
+  for (const [k, v] of Object.entries(guardianSlotValues(guardians, ctx.slots, ctx.guardianKeys))) add(k, v);
   for (const [alias, target] of Object.entries(ctx.aliases)) if (target in out) add(alias, out[target]);
   return out;
 }
 
 export type KeyStatus =
   | { kind: "event_variable"; canonical: string; viaAlias: boolean }
-  | { kind: "guardian"; canonical: string; slot: number; prop: GuardianProp; viaAlias: boolean }
+  | { kind: "guardian"; canonical: string; slot: number; prop: string; viaAlias: boolean }
   | { kind: "field"; canonical: string; viaAlias: boolean }
   | { kind: "unresolved" };
 
@@ -90,7 +99,7 @@ export type KeyStatus =
 export function classifyKey(key: string, ctx: ResolverContext, fieldKeys: Set<string>): KeyStatus {
   const direct = (k: string, viaAlias: boolean): KeyStatus | null => {
     if (BUILTIN_EVENT_KEYS.has(k) || k in ctx.free) return { kind: "event_variable", canonical: k, viaAlias };
-    const g = parseGuardianKey(k, ctx.slots);
+    const g = parseGuardianKey(k, ctx.slots, ctx.guardianKeys);
     if (g) return { kind: "guardian", canonical: k, ...g, viaAlias };
     if (fieldKeys.has(k)) return { kind: "field", canonical: k, viaAlias };
     return null;
@@ -138,7 +147,7 @@ async function readResolverContext(eventId: string): Promise<ResolverContext> {
       registrationBankCode: true,
       publicContactEmail: true,
       bankAccount: { select: { accountNumber: true, bankCode: true } },
-      organization: { select: { features: true, guardianSlots: true, contactEmail: true } },
+      organization: { select: { features: true, guardianSlots: true, contactEmail: true, guardianProps: true } },
     },
   });
   if (!event || !featureOn(event.organization.features, "fields_manager")) return OFF;
@@ -157,6 +166,7 @@ async function readResolverContext(eventId: string): Promise<ResolverContext> {
     aliases: { ...EVENT_VARIABLE_ALIASES, ...Object.fromEntries(aliasRows.map((a) => [a.alias, a.targetKey])) },
     free,
     linked: linkedVariableValues({ ...event, organizationContactEmail: event.organization.contactEmail }),
+    guardianKeys: readGuardianSettings(event.organization.guardianProps).fields.map((f) => f.key),
   };
 }
 

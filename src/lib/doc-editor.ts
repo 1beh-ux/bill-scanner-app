@@ -9,6 +9,7 @@ import { extractGoogleDocId } from "@/lib/document-merge";
 import type { DocumentTypeData } from "@/lib/mail-reply-template";
 import { classifyKey, GUARDIAN_PROPS, invalidateResolverContext, loadResolverContext } from "@/lib/field-resolver";
 import { BUILTIN_EVENT_VARIABLES } from "@/lib/event-variables";
+import { guardianSettings } from "@/lib/guardian-fields-server";
 import { EVENT_KEYS } from "@/lib/template-check";
 import { brokenPlaceholders, buildRequests, docParagraphs, editKey, findPlaceholders, textOccurrences, type DocEdit } from "@/lib/doc-edits";
 
@@ -54,6 +55,7 @@ export async function analyzeTemplate(eventId: string, organizationId: string, d
     pendingEdits(organizationId, found.docId),
   ]);
   const fieldKeys = new Set(fields.map((f) => f.key));
+  const guardianOwn = (await guardianSettings(organizationId)).fields;
   const status = (key: string, hasSpaces: boolean): { status: PhStatus; canonical?: string } => {
     if (hasSpaces) return { status: "spaces" };
     if (EVENT_KEYS.has(key) && !ctx.aliases[key]) return { status: "current" };
@@ -83,6 +85,8 @@ export async function analyzeTemplate(eventId: string, organizationId: string, d
     targets: [
       ...fields.filter((f) => f.active).map((f) => ({ key: f.key, label: f.label, group: "field" as const })),
       ...Array.from({ length: ctx.slots }, (_, i) => GUARDIAN_PROPS.filter((p) => p !== "mail").map((p) => ({ key: `guardian${i + 1}_${p}`, label: `${i + 1}|${p}`, group: "guardian" as const }))).flat(),
+      // The organization's own guardian fields (2026-11-26): "Zástupce N – <name>".
+      ...Array.from({ length: ctx.slots }, (_, i) => guardianOwn.map((g) => ({ key: `guardian${i + 1}_${g.key}`, label: `${i + 1}|=${g.label}`, group: "guardian" as const }))).flat(),
       ...BUILTIN_EVENT_VARIABLES.map((v) => ({ key: v.key, label: v.label, group: "event" as const })),
       ...Object.keys(ctx.free).map((k) => ({ key: k, label: k, group: "event" as const })),
     ],

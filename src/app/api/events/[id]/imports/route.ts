@@ -7,6 +7,7 @@
 // / health / mail module of the event); fields limited to what the user may see, as there.
 import { NextRequest, NextResponse } from "next/server";
 import { guardianSlots } from "@/lib/org-features";
+import { readGuardianSettings } from "@/lib/guardian-fields";
 import { access } from "./access";
 import { prisma } from "@/lib/prisma";
 import { httpStatusForDriveError } from "@/lib/drive-errors";
@@ -47,13 +48,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // For "merge into": any participant of the event.
     prisma.participant.findMany({ where: { eventId }, orderBy: { name: "asc" }, select: { id: true, name: true, dateOfBirth: true } }),
     prisma.eventListItem.findMany({ where: { eventId, kind: "document", active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-    prisma.organization.findUniqueOrThrow({ where: { id: a.organizationId }, select: { guardianSlots: true } }),
+    prisma.organization.findUniqueOrThrow({ where: { id: a.organizationId }, select: { guardianSlots: true, guardianProps: true } }),
   ]);
   return NextResponse.json({
     syncs: syncs.map(publicSync),
     fields,
     docTypes,
     guardianSlots: guardianSlots(org.guardianSlots),
+    // The organization's own guardian fields (2026-11-26): import targets guardian<N>_<key>.
+    guardianFields: readGuardianSettings(org.guardianProps).fields.map((f) => ({ key: f.key, label: f.label })),
     participants: participants.map((p) => ({ id: p.id, name: p.name, dateOfBirth: p.dateOfBirth?.toISOString().slice(0, 10) ?? null })),
     runs: runs.map(({ writes, ...r }) => ({ ...r, writes: (writes as unknown[]).length })),
   });

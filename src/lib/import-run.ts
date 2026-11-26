@@ -97,6 +97,12 @@ export async function undoImportRun(eventId: string, runId: string): Promise<{ u
     } else if (w.table === "guardian" && !w.key) {
       const used = await prisma.parentEmailLog.count({ where: { guardianId: w.id } });
       count(!used && (await prisma.participantGuardian.deleteMany({ where: { id: w.id } })).count > 0);
+    } else if (w.table === "guardian" && w.key === "extra") {
+      // Own guardian fields (2026-11-26): back to the values before, when nothing changed them since.
+      const now = await prisma.participantGuardian.findUnique({ where: { id: w.id }, select: { extra: true } });
+      const same = now && JSON.stringify(now.extra ?? null) === JSON.stringify(w.after ?? null);
+      if (same) await prisma.participantGuardian.update({ where: { id: w.id }, data: { extra: (w.before ?? undefined) as never } });
+      count(!!same);
     } else if (w.table === "guardian" && w.key && GUARDIAN_PROPS.has(w.key)) {
       count((await prisma.participantGuardian.updateMany({ where: { id: w.id, [w.key]: w.after as string }, data: { [w.key]: w.before as string | null } })).count > 0);
     } else if (w.table === "participant" && !w.key) {

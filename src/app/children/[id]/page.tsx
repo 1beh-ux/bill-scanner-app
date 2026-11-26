@@ -11,13 +11,14 @@ import PendingChanges, { type PendingChange } from "@/components/children/Pendin
 import PersonDocuments from "@/components/children/PersonDocuments";
 import { copyPortalLink, portalComposeHref } from "@/components/children/portal-link";
 import { appliesTo, type FieldAudience, type FieldLevel } from "@/lib/registration-fields";
+import GuardianExtraInputs, { useGuardianFields } from "@/components/registration/GuardianExtraInputs";
 
 // Admin child detail (docs/registration-portal-spec.md B): the whole profile --
 // every org-wide field whatever its portal access -- guardians, linked events,
 // pending parent changes and the portal link tools. Saving pushes the changed
 // values into the child's upcoming registration-connected events.
 type Field = { key: string; label: string; fieldType: string; options: unknown; active: boolean; portalAccess: "edit" | "approval" | "read" | "hidden"; audience: FieldAudience; level: FieldLevel };
-type Guardian = { name: string; email: string; relationship: string; phone: string; receivesCommunications: boolean };
+type Guardian = { name: string; email: string; relationship: string; phone: string; receivesCommunications: boolean; extra?: Record<string, string> };
 type Detail = {
   id: string;
   name: string;
@@ -37,7 +38,7 @@ type Detail = {
   vehicles?: { id: string; label: string }[];
   values: Record<string, string>;
   fields: Field[];
-  guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean }[];
+  guardians: { name: string | null; email: string; relationship: string | null; phone: string | null; receivesCommunications: boolean; extra?: Record<string, string> | null }[];
   participants: {
     id: string;
     registrationStatus: "pending" | "accepted";
@@ -68,6 +69,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
   const [notFound, setNotFound] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [guardians, setGuardians] = useState<Guardian[]>([]);
+  const guardianFields = useGuardianFields();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -82,7 +84,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
     setData(d);
     setValues(d.values);
     setGuardians(
-      d.guardians.map((g) => ({ name: g.name ?? "", email: g.email, relationship: g.relationship ?? "", phone: g.phone ?? "", receivesCommunications: g.receivesCommunications }))
+      d.guardians.map((g) => ({ name: g.name ?? "", email: g.email, relationship: g.relationship ?? "", phone: g.phone ?? "", receivesCommunications: g.receivesCommunications, extra: g.extra ?? {} }))
     );
   }
   useEffect(() => {
@@ -288,6 +290,7 @@ export default function ChildDetailPage({ params }: { params: Promise<{ id: stri
                       <input type="email" placeholder={t("participantDetail.guardianEmailLabel")} value={g.email} onChange={(e) => patch({ email: e.target.value })} className={inputClass} />
                       <input placeholder={t("participantDetail.guardianRelationshipLabel")} value={g.relationship} onChange={(e) => patch({ relationship: e.target.value })} className={inputClass} />
                       <input type="tel" placeholder={t("participantDetail.guardianPhoneLabel")} value={g.phone} onChange={(e) => patch({ phone: e.target.value })} className={inputClass} />
+                      <GuardianExtraInputs fields={guardianFields} value={g.extra} onChange={(extra) => patch({ extra })} yesLabel={t("portal.yes")} compact />
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <label className="flex items-center gap-2 text-[13px] text-ink">
