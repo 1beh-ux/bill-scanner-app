@@ -80,7 +80,7 @@ export function validateSubmission(
   const ownExtra = new Map<number, Record<string, string>>();
   // The guardian questions: own fields' values cleaned by type, required ones checked (phone / relationship too).
   const gq = ctx.guardians ?? [];
-  const own = gq.filter((q) => !q.fixed).map((q) => ({ key: q.key, label: q.label, fieldType: q.fieldType as GuardianFieldDef["fieldType"], options: q.options, required: q.required }));
+  const own = gq.filter((q) => !q.fixed).map((q) => ({ key: q.key, label: q.label, fieldType: q.fieldType as GuardianFieldDef["fieldType"], options: q.options, required: q.required, ...(q.settings && { settings: q.settings }) }));
   const guardianCheck = (raw: unknown, g: { phone: string | null; relationship: string | null }, code: (k: string) => string): Record<string, string> => {
     const extra = cleanGuardianExtra(own, raw);
     if (extra === null) {
