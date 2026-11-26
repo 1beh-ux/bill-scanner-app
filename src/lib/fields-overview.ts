@@ -51,6 +51,8 @@ export type OvField = {
   requiredDefault: boolean | null;
   portalAccess: string | null;
   level: string | null;
+  /** Portal profile section (Organization.portalProfileSections key) of an organization field; null = by level. */
+  profileSection: string | null;
   fromTemplate: boolean;
   aliases: string[];
   values: { profiles: number; registrations: number };
@@ -185,6 +187,7 @@ export function buildOverview(input: {
       requiredDefault: t ? t.requiredInRegistration : null,
       portalAccess: t ? t.portalAccess : null,
       level: t ? t.level : null,
+      profileSection: t && t.profileSection && sectionLabel.has(t.profileSection) ? t.profileSection : null,
       fromTemplate: !!t,
       aliases: aliasesOf.get(f.key) ?? [],
       values: { profiles: input.profileCounts.get(f.key) ?? 0, registrations: input.registrationCounts.get(f.key) ?? 0 },
@@ -207,7 +210,7 @@ export function buildOverview(input: {
         key: t.key, label: t.label, fieldType: t.fieldType, kind: "custom",
         group: lockedKeys.has(t.key) ? "fixed" : calc ? "calculated" : t.section || (t.profileSection && sectionLabel.has(t.profileSection) ? `section:${t.profileSection}` : t.level === "detailed" ? "detailed" : "basic"),
         storage: calc ? "calculated" : t.storage === "event" ? "event" : "profile", calculated: calc, deps: [], surfaces: [], active: false,
-        required: false, requiredDefault: t.requiredInRegistration, portalAccess: t.portalAccess, level: t.level, fromTemplate: true,
+        required: false, requiredDefault: t.requiredInRegistration, portalAccess: t.portalAccess, level: t.level, profileSection: t.profileSection && sectionLabel.has(t.profileSection) ? t.profileSection : null, fromTemplate: true,
         aliases: aliasesOf.get(t.key) ?? [], values: { profiles: input.profileCounts.get(t.key) ?? 0, registrations: 0 },
         sources: [], uses: [], inEvent: false, system: false, locked: lockedKeys.has(t.key), options: null, computedType: null,
       });
@@ -216,7 +219,7 @@ export function buildOverview(input: {
   for (const q of input.formQuestions ?? [])
     fields.unshift({
       key: q.key, label: q.label, fieldType: "text", kind: "form", group: "fixed", storage: "event", calculated: false, deps: [], surfaces: [], active: true,
-      required: true, requiredDefault: null, portalAccess: null, level: null, fromTemplate: false, aliases: [], values: { profiles: 0, registrations: 0 },
+      required: true, requiredDefault: null, portalAccess: null, level: null, profileSection: null, fromTemplate: false, aliases: [], values: { profiles: 0, registrations: 0 },
       sources: input.publicRegistration || input.ticketForm ? ["form"] : [], uses: ["form", "email"], inEvent: true, system: true, locked: false, options: null, computedType: null,
     });
   if (input.ticketForm) sources.push({ id: "form", kind: "form", label: null, labelKey: "fieldsManager.sourceTicketForm" });

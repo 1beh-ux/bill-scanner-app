@@ -80,7 +80,8 @@ function fieldId(isEvent: boolean, field: Field): string {
 type FromEventsField = { key: string; label: string; fieldType: string; events: string[] };
 
 export default function ParticipantFieldAdmin({ scope, eventId, label }: ParticipantFieldAdminProps) {
-  const { t, role } = useTranslations();
+  const { t, role, features } = useTranslations();
+  const fieldsManagerOn = role === "admin" && features.includes("fields_manager");
   const confirm = useConfirm();
   const isEvent = scope === "event";
 
@@ -859,8 +860,15 @@ export default function ParticipantFieldAdmin({ scope, eventId, label }: Partici
 
   return (
     <div>
-      {!isEvent && !appLevel && <ProfileSectionsEditor sections={sections} onSaved={setSections} canEdit={role === "admin"} t={t} />}
-      {!isEvent && !appLevel && role === "admin" && <PortalFieldOrder sections={sections} t={t} />}
+      {/* 2026-11-26: the portal sections and the field order moved to Pole → Portál (where the Fields Manager is on). */}
+      {!isEvent && !appLevel && (fieldsManagerOn ? (
+        <p className="rounded-xl border border-mist p-3 text-[13px] text-ink-secondary">
+          {t("profileSections.movedToFields")} <a href="/fields?tab=portal" className="text-ember underline">{t("profileSections.movedToFieldsLink")}</a>
+        </p>
+      ) : (<>
+        <ProfileSectionsEditor sections={sections} onSaved={setSections} canEdit={role === "admin"} t={t} />
+        {role === "admin" && <PortalFieldOrder sections={sections} t={t} />}
+      </>))}
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[15px] font-semibold text-ink">{label}</h3>
         <div className="flex items-center gap-3">

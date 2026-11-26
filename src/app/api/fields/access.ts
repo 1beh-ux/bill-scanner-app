@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { getActingOrgId, isOrgAdmin } from "@/lib/org-scope";
 import { hasFeature } from "@/lib/org-features";
 import { prisma } from "@/lib/prisma";
+import { readProfileSections } from "@/lib/portal-rules";
 
 export async function fieldsManagerAccess(): Promise<{ error: NextResponse } | { organizationId: string; userId: string }> {
   const user = await getCurrentUser();
@@ -23,4 +24,10 @@ export async function pickEvent(organizationId: string, requested: string | null
   });
   const selected = events.find((e) => e.id === requested) ?? events.find((e) => e.status === "active" && !e.isTest) ?? events[0] ?? null;
   return { events, selected };
+}
+
+/** The organization's portal profile section keys (Organization.portalProfileSections). */
+export async function orgSectionKeys(organizationId: string): Promise<Set<string>> {
+  const org = await prisma.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { portalProfileSections: true } });
+  return new Set(readProfileSections(org.portalProfileSections).map((s) => s.key));
 }

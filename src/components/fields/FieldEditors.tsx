@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useTranslations } from "@/lib/i18n";
 import { SEPARATOR_PRESETS } from "@/lib/field-calc";
-import type { FmOverview, OvField } from "./types";
+import { profileSections, type FmOverview, type OvField } from "./types";
 
 // Phase 3b: a new field (any type, calculated included) and renaming a key with a preview + confirmation.
 const TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone", "calculated"] as const;
@@ -41,6 +41,8 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
   const [keyTouched, setKeyTouched] = useState(!!initialKey);
   const [type, setType] = useState<(typeof TYPES)[number]>(edit ? "calculated" : "text");
   const [options, setOptions] = useState("");
+  const [section, setSection] = useState("");
+  const sections = profileSections(overview);
   const [calc, setCalc] = useState<CalcState>(edit ? calcState(edit.spec) : EMPTY_CALC);
   const [error, setError] = useState<string | null>(null);
   const keys = overview.fields.filter((f) => (f.kind !== "computed" || f.key === "Name") && f.key !== edit?.key).map((f) => f.key);
@@ -61,7 +63,7 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
       const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
       return setError(t(`fieldsManager.err.${code ?? "failed"}`));
     }
-    const body = { event: overview.eventId, label, key, fieldType: type, options: type === "calculated" ? spec() : type === "select" || type === "multi" ? options.split("\n") : undefined };
+    const body = { event: overview.eventId, label, key, fieldType: type, profileSection: section || null, options: type === "calculated" ? spec() : type === "select" || type === "multi" ? options.split("\n") : undefined };
     const res = await fetch("/api/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     if (res?.ok) return onDone(key);
     const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
@@ -88,6 +90,17 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
         ))}
       </div>
       </>)}
+      {!edit && sections.length > 0 && (
+        <label className="block">
+          {t("fieldsManager.panel.section")}
+          <select value={section} onChange={(e) => setSection(e.target.value)} className={input}>
+            <option value="">{t("fieldsManager.sectionByLevel")}</option>
+            {sections.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {(type === "select" || type === "multi") && (
         <label className="block">
           {t("fieldsManager.optionsOnePerLine")}

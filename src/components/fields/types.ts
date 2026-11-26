@@ -23,6 +23,11 @@ export type FmOverview = {
 
 export type FmDocTemplate = { docTypeId: string; name: string; error: string | null; disabled?: string[]; placeholders: { key: string; status: string; hasSpaces: boolean }[] };
 
+/** The organization's portal profile sections, from the overview's groups ("section:<key>"). */
+export function profileSections(o: Pick<FmOverview, "groups">): { key: string; label: string }[] {
+  return o.groups.filter((g) => g.id.startsWith("section:")).map((g) => ({ key: g.id.slice(8), label: g.label ?? g.id.slice(8) }));
+}
+
 /** Document templates that use a field (directly or through one of its aliases). */
 export function docsUsing(field: Pick<OvField, "key" | "aliases">, docs: FmDocTemplate[] | null): FmDocTemplate[] {
   if (!docs) return [];

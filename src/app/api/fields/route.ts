@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { calcDeps, readCalcSpec } from "@/lib/field-calc";
 import { FIELD_KEY, renameBlocker } from "@/lib/field-rename";
 import { invalidateResolverContext } from "@/lib/field-resolver";
-import { fieldsManagerAccess, pickEvent } from "./access";
+import { fieldsManagerAccess, orgSectionKeys, pickEvent } from "./access";
 
 const TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone", "calculated"] as const;
 type NewType = (typeof TYPES)[number];
@@ -15,12 +15,14 @@ export async function POST(req: NextRequest) {
   const access = await fieldsManagerAccess();
   if ("error" in access) return access.error;
   const { organizationId, userId } = access;
-  const b = ((await req.json().catch(() => null)) ?? {}) as { event?: unknown; label?: unknown; key?: unknown; fieldType?: unknown; options?: unknown };
+  const b = ((await req.json().catch(() => null)) ?? {}) as { event?: unknown; label?: unknown; key?: unknown; fieldType?: unknown; options?: unknown; profileSection?: unknown };
   const label = typeof b.label === "string" ? b.label.trim().slice(0, 200) : "";
   const key = typeof b.key === "string" ? b.key.trim() : "";
   const fieldType = (TYPES as readonly unknown[]).includes(b.fieldType) ? (b.fieldType as NewType) : null;
   if (!label || !fieldType) return NextResponse.json({ error: "invalid" }, { status: 400 });
   if (!FIELD_KEY.test(key)) return NextResponse.json({ error: "invalid_key" }, { status: 400 });
+  const profileSection = typeof b.profileSection === "string" && b.profileSection ? b.profileSection : null;
+  if (profileSection && !(await orgSectionKeys(organizationId)).has(profileSection)) return NextResponse.json({ error: "invalid" }, { status: 400 });
   const { selected } = await pickEvent(organizationId, typeof b.event === "string" ? b.event : null);
   // Ticket events (2026-11-24): their fields belong to the event only -- no organization template, never in people.
   // The same key may then exist in another ticket event (Ples 2027 and Ples 2028 both have "stul").
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
   const surfaces = eventOnly ? ["email"] : fieldType === "calculated" ? ["list", "documents", "email"] : ["list", "documents", "email", "import"];
 
   await prisma.$transaction([
-    ...(eventOnly ? [] : [prisma.participantFieldTemplate.create({ data: { organizationId, key, label, fieldType, options: options as Prisma.InputJsonValue, defaultSurfaces: surfaces as Prisma.ParticipantFieldTemplateCreateInput["defaultSurfaces"], portalAccess: "hidden" } })]),
+    ...(eventOnly ? [] : [prisma.participantFieldTemplate.create({ data: { organizationId, key, label, fieldType, options: options as Prisma.InputJsonValue, defaultSurfaces: surfaces as Prisma.ParticipantFieldTemplateCreateInput["defaultSurfaces"], portalAccess: "hidden", profileSection } })]),
     ...(selected ? [prisma.eventParticipantField.create({ data: { eventId: selected.id, key, label, fieldType, options: options as Prisma.InputJsonValue, surfaces: surfaces as Prisma.EventParticipantFieldCreateInput["surfaces"], isFromTemplate: !eventOnly } })] : []),
     prisma.fieldChangeLog.create({ data: { organizationId, action: "create", byId: userId, after: { key, label, fieldType, options: options as Prisma.InputJsonValue, eventId: selected?.id ?? null } } }),
   ]);

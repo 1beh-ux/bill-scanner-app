@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { fieldHints } from "@/lib/field-hints";
 import type { OvField } from "@/lib/fields-overview";
 
-const base: OvField = { key: "alergie", label: "Alergie", fieldType: "text", kind: "custom", group: "basic", storage: "profile", calculated: false, deps: [], surfaces: ["list"], active: true, required: false, requiredDefault: false, portalAccess: "edit", level: "basic", fromTemplate: true, aliases: ["allergies"], values: { profiles: 3, registrations: 2 }, sources: [], uses: ["lists"], options: null, computedType: null, system: false, locked: false, inEvent: true };
+const base: OvField = { key: "alergie", label: "Alergie", fieldType: "text", kind: "custom", group: "basic", storage: "profile", calculated: false, deps: [], surfaces: ["list"], active: true, required: false, requiredDefault: false, portalAccess: "edit", level: "basic", profileSection: null, fromTemplate: true, aliases: ["allergies"], values: { profiles: 3, registrations: 2 }, sources: [], uses: ["lists"], options: null, computedType: null, system: false, locked: false, inEvent: true };
 const ids = (f: OvField, docs = null as never, extra = {}) => fieldHints(f, [f], docs, extra).map((h) => h.id);
 assert.deepEqual(ids(base), []);
 assert.deepEqual(ids({ ...base, required: true, portalAccess: "hidden" }), ["asked_hidden"]);

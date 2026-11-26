@@ -7,7 +7,7 @@ import { fieldHints } from "@/lib/field-hints";
 import { RECOMMENDED_RULE, readContactRule } from "@/lib/contact-email";
 import FieldCard from "./FieldCard";
 import { NewFieldForm } from "./FieldEditors";
-import { docsUsing, type FmDocTemplate, type FmOverview, type FmVariable, type OvField } from "./types";
+import { docsUsing, profileSections, type FmDocTemplate, type FmOverview, type FmVariable, type OvField } from "./types";
 
 // Redesign R7–R14 (2026-11-23): the one right-hand panel of the Fields screen. Whatever is selected -- a field, a
 // variable, a source, a place where fields are used -- shows its details here, every property editable in place or
@@ -186,6 +186,17 @@ function FieldPanel({ overview, docs, field, onChanged, onPatch, onOpenTab, onRe
                     <option value="detailed">{t("fieldsManager.groupDetailed")}</option>
                   </select>
                 </label>
+                {profileSections(overview).length > 0 && (
+                  <label>
+                    {t("fieldsManager.panel.section")}{" "}
+                    <select value={field.profileSection ?? ""} onChange={(e) => onPatch(field.key, { profileSection: e.target.value || null }, { profileSection: field.profileSection })} className={input}>
+                      <option value="">{t("fieldsManager.sectionByLevel")}</option>
+                      {profileSections(overview).map((s) => (
+                        <option key={s.key} value={s.key}>{s.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
               </div>
             )}
           </>

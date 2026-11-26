@@ -11,6 +11,9 @@ import FormView from "./FormView";
 import ImportWizard from "./ImportWizard";
 import ReviewQueue from "./ReviewQueue";
 import DocumentEditor from "./DocumentEditor";
+import ProfileSectionsEditor from "@/components/participants/ProfileSectionsEditor";
+import PortalFieldOrder from "@/components/participants/PortalFieldOrder";
+import type { ProfileSection } from "@/lib/portal-rules";
 import CleanupPanel from "./CleanupPanel";
 import type { FmDocTemplate, FmOverview } from "./types";
 
@@ -195,6 +198,7 @@ export default function FieldsManager() {
             <div className="grid gap-3 md:grid-cols-2">
               <PortalLevels overview={data} onPatch={patchField} onChanged={refresh} />
             </div>
+            <PortalSections onChanged={refresh} />
           </div>
         ))}
       {tab === "data" && (
@@ -225,6 +229,26 @@ export default function FieldsManager() {
       {tab === "tools" && tool === "documents" && data.eventId && <DocumentEditor key={`${data.eventId}|${params.get("doc") ?? ""}`} eventId={data.eventId} docs={docs} initialDoc={params.get("doc")} overview={data} onChanged={refresh} />}
       {tab === "tools" && tool === "review" && data.eventId && <ReviewQueue key={data.eventId} eventId={data.eventId} onChanged={refresh} />}
       {tab === "tools" && tool === "import" && data.eventId && <ImportWizard key={data.eventId} eventId={data.eventId} />}
+    </div>
+  );
+}
+
+/** Moved here from Šablony → Účastníci (2026-11-26): the organization's portal profile sections and the order and
+ * section of the fields in the parent portal (profile page, public form, registration step) -- same components. */
+function PortalSections({ onChanged }: { onChanged: () => void }) {
+  const { t } = useTranslations();
+  const [sections, setSections] = useState<ProfileSection[] | null>(null);
+  useEffect(() => {
+    fetch("/api/organizations/profile-sections")
+      .then((r) => (r.ok ? r.json() : { sections: [] }))
+      .then((d) => setSections(d.sections))
+      .catch(() => setSections([]));
+  }, []);
+  if (!sections) return null;
+  return (
+    <div className="space-y-4 rounded-xl border border-mist bg-paper p-4">
+      <ProfileSectionsEditor sections={sections} onSaved={(s) => (setSections(s), onChanged())} canEdit t={t} />
+      <PortalFieldOrder key={sections.map((s) => s.key + s.label).join("|")} sections={sections} t={t} />
     </div>
   );
 }

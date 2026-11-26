@@ -12,7 +12,7 @@ import { invalidateResolverContext } from "@/lib/field-resolver";
 import { calcDeps, readCalcSpec } from "@/lib/field-calc";
 import { readContactRule } from "@/lib/contact-email";
 import { lockBlocker, setLocked, SYSTEM_KEYS } from "@/lib/org-locked";
-import { fieldsManagerAccess, pickEvent } from "../access";
+import { fieldsManagerAccess, orgSectionKeys, pickEvent } from "../access";
 
 const SURFACES: Record<string, string[]> = { lists: ["list"], health: ["health_list", "health_detail"], mail: ["mail_list"], email: ["email"], documents: ["documents"], import: ["import"] };
 const ACCESS = ["edit", "approval", "read", "hidden"];
@@ -57,7 +57,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       return bad(err instanceof Error && err.message === "no_template" ? "no_template" : "invalid");
     }
   }
-  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule, choices, fieldType } = b;
+  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule, choices, fieldType, profileSection } = b;
   // 2026-11-24: editing an existing field -- its choices (select / multi) and its type (plain types only; making a
   // field calculated goes through Úklid, which keeps the values). An organization field changes everywhere it is
   // used (template + its event copies), an event-only field in this event.
@@ -70,11 +70,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   if (label !== undefined && (typeof label !== "string" || !label.trim() || label.length > 120)) return bad();
   if (portalAccess !== undefined && !ACCESS.includes(portalAccess as string)) return bad();
   if (level !== undefined && level !== "basic" && level !== "detailed") return bad();
+  // Portal profile section: one of the organization's sections, or null (= by level).
+  if (profileSection !== undefined && profileSection !== null && !(await orgSectionKeys(organizationId)).has(profileSection as string)) return bad();
   const use = surface && typeof surface === "object" ? (surface as { use?: unknown; on?: unknown }) : null;
   if (surface !== undefined && (!use || typeof use.use !== "string" || !SURFACES[use.use] || typeof use.on !== "boolean")) return bad();
 
   const template = await prisma.participantFieldTemplate.findFirst({ where: { organizationId, key } });
-  const needsTemplate = storage !== undefined || requiredDefault !== undefined || portalAccess !== undefined || level !== undefined;
+  const needsTemplate = storage !== undefined || requiredDefault !== undefined || portalAccess !== undefined || level !== undefined || profileSection !== undefined;
   if (needsTemplate && !template) return bad("no_template");
   const { selected } = await pickEvent(organizationId, req.nextUrl.searchParams.get("event"));
   const eventField = selected ? await prisma.eventParticipantField.findFirst({ where: { eventId: selected.id, key } }) : null;
@@ -110,6 +112,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       if (label !== undefined) data.label = (label as string).trim();
       if (portalAccess !== undefined) data.portalAccess = portalAccess as never;
       if (level !== undefined) data.level = level as never;
+      if (profileSection !== undefined) data.profileSection = profileSection as string | null;
       if (spec) data.options = spec as unknown as Prisma.InputJsonValue;
       Object.assign(data, plainData);
       if (Object.keys(data).length) {
