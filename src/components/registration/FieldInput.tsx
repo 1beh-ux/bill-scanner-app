@@ -1,6 +1,6 @@
 "use client";
 
-import { toBoolean } from "@/lib/participant-fields";
+import { choiceAnswer, toBoolean } from "@/lib/participant-fields";
 import { calcDeps, evaluateCalc, readCalcSpec } from "@/lib/field-calc";
 
 // One org-wide field as an input, by its type -- the parent portal and the
@@ -42,7 +42,8 @@ export default function FieldInput({
   if (field.fieldType === "boolean" || field.fieldType === "consent") {
     return (
       <label className="flex items-center gap-2 text-[15px] text-ink">
-        <input type="checkbox" checked={toBoolean(value, field.options) === "true"} onChange={(e) => onChange(String(e.target.checked))} />
+        {/* A prefilled box (Pole: "Předvyplněno Ano") starts ticked until the person unticks it. */}
+        <input type="checkbox" checked={toBoolean(choiceAnswer(field, value), field.options) === "true"} onChange={(e) => onChange(String(e.target.checked))} />
         {yesLabel}
       </label>
     );

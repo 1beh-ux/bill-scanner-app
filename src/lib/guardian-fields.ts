@@ -5,10 +5,16 @@
 // Event.guardianForm = { <key | "phone" | "relationship">: { ask?, required?, label?, hint? } }.
 // Pure -- no DB (used by the forms, the portal and the admin screens too).
 import { cleanFieldValue } from "@/lib/registration-fields";
+import { choiceAnswer, readChoiceSettings, type ChoiceSettings } from "@/lib/participant-fields";
 
 export const GUARDIAN_FIELD_TYPES = ["text", "longtext", "number", "date", "boolean", "select", "multi", "consent", "email", "phone"] as const;
 export type GuardianFieldType = (typeof GUARDIAN_FIELD_TYPES)[number];
-export type GuardianFieldDef = { key: string; label: string; fieldType: GuardianFieldType; options: string[] | null; required: boolean };
+// settings: an Ano/Ne or consent field's prefill + document format (participant-fields.ts ChoiceSettings).
+export type GuardianFieldDef = { key: string; label: string; fieldType: GuardianFieldType; options: string[] | null; required: boolean; settings?: ChoiceSettings };
+
+const isChoice = (t: string) => t === "boolean" || t === "consent";
+/** What an input / the value rules get as the field's options: the choices, or an Ano/Ne field's settings. */
+export const inputOptions = (f: { fieldType: string; options: string[] | null; settings?: ChoiceSettings }): unknown => (isChoice(f.fieldType) ? (f.settings ?? null) : f.options);
 export type GuardianSettings = { fixedRequired: { phone: boolean; relationship: boolean }; fields: GuardianFieldDef[] };
 export type GuardianFormCfg = { ask?: boolean; required?: boolean; label?: string; hint?: string };
 export type GuardianForm = Record<string, GuardianFormCfg>;
@@ -32,7 +38,7 @@ export function readGuardianSettings(raw: unknown): GuardianSettings {
     seen.add(key);
     const fieldType = (GUARDIAN_FIELD_TYPES as readonly string[]).includes(r.fieldType as string) ? (r.fieldType as GuardianFieldType) : "text";
     const options = Array.isArray(r.options) ? r.options.filter((x): x is string => typeof x === "string" && !!x.trim()).map((x) => x.trim()) : null;
-    fields.push({ key, label: str(r.label) || key, fieldType, options: fieldType === "select" || fieldType === "multi" ? options ?? [] : null, required: bool(r.required, false) });
+    fields.push({ key, label: str(r.label) || key, fieldType, options: fieldType === "select" || fieldType === "multi" ? options ?? [] : null, required: bool(r.required, false), ...(isChoice(fieldType) && { settings: readChoiceSettings(r.settings) }) });
   }
   return { fixedRequired: { phone: bool(fr.phone, false), relationship: bool(fr.relationship, false) }, fields };
 }
@@ -63,6 +69,7 @@ export type GuardianQuestion = {
   hint: string | null;
   fieldType: string;
   options: string[] | null;
+  settings?: ChoiceSettings;
   ask: boolean;
   required: boolean;
   requiredDefault: boolean; // the organization's default
@@ -77,7 +84,7 @@ export function guardianQuestions(settings: GuardianSettings, form: GuardianForm
   return [
     q("phone", true, names.phone, "phone", null, settings.fixedRequired.phone),
     q("relationship", true, names.relationship, "text", null, settings.fixedRequired.relationship),
-    ...settings.fields.map((f) => q(f.key, false, f.label, f.fieldType, f.options, f.required)),
+    ...settings.fields.map((f) => ({ ...q(f.key, false, f.label, f.fieldType, f.options, f.required), ...(f.settings && { settings: f.settings }) })),
   ];
 }
 
@@ -86,7 +93,9 @@ export function cleanGuardianExtra(fields: GuardianFieldDef[], raw: unknown): Re
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const out: Record<string, string> = {};
   for (const f of fields) {
-    const v = cleanFieldValue(f, o[f.key]);
+    // An untouched prefilled Ano/Ne box counts as Ano.
+    const given = typeof o[f.key] === "string" ? (o[f.key] as string) : "";
+    const v = cleanFieldValue(f, choiceAnswer({ fieldType: f.fieldType, options: inputOptions(f) }, given));
     if (v === null) return null;
     if (v) out[f.key] = v;
   }

@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest) {
       await log({ guardian: g });
     } else if (b.guardianField && typeof b.guardianField === "object") {
       const g = b.guardianField as Record<string, unknown>;
-      if (g.action === "create") await createGuardianField(s.organizationId, { key: g.key, label: g.label, fieldType: g.fieldType, options: g.options, required: g.required });
+      if (g.action === "create") await createGuardianField(s.organizationId, { key: g.key, label: g.label, fieldType: g.fieldType, options: g.options, required: g.required, settings: g.settings });
       else if (g.action === "update" && typeof g.key === "string") await updateGuardianField(s.organizationId, g.key, g);
       else if (g.action === "delete" && typeof g.key === "string") await deleteGuardianField(s.organizationId, g.key);
       else return NextResponse.json({ error: "invalid" }, { status: 400 });

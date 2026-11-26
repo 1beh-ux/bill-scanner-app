@@ -11,7 +11,7 @@ import PersonPrice from "@/components/registration/PersonPrice";
 import { allowedCategories, previewPrices, type PriceRules } from "@/lib/price-rules";
 import { MAX_PERSONS, type FormField } from "@/lib/public-registration";
 import { appliesTo, optionsFor } from "@/lib/registration-fields";
-import type { GuardianQuestion } from "@/lib/guardian-fields";
+import { inputOptions, type GuardianQuestion } from "@/lib/guardian-fields";
 
 // The public new-family form (docs/registration-slice3-spec.md D): 1+ adults
 // and/or children, each with the org fields the portal shows (required ones
@@ -141,7 +141,7 @@ export default function PublicForm({
   const guardianInputs = (extra: Record<string, string> | undefined, onExtra: (e: Record<string, string>) => void) =>
     ownGuardianQs.map((q) => (
       <FieldShell key={q.key} className="sm:col-span-2" label={gLabel(q)} required={q.required && q.fieldType !== "boolean"} hint={q.hint} problem={fieldProblem({ ...q, required: q.required }, extra?.[q.key], tried)} texts={shellTexts}>
-        <FieldInput field={q} value={extra?.[q.key] ?? ""} required={q.required && q.fieldType !== "boolean" && q.fieldType !== "consent"} onChange={(v) => onExtra({ ...(extra ?? {}), [q.key]: v })} yesLabel={t("portal.yes")} />
+        <FieldInput field={{ ...q, options: inputOptions(q) }} value={extra?.[q.key] ?? ""} required={q.required && q.fieldType !== "boolean" && q.fieldType !== "consent"} onChange={(v) => onExtra({ ...(extra ?? {}), [q.key]: v })} yesLabel={t("portal.yes")} />
       </FieldShell>
     ));
   // One question of a person (both places of the form use it).

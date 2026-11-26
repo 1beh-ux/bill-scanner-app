@@ -6,7 +6,8 @@ import { useTranslations } from "@/lib/i18n";
 import { fieldHints } from "@/lib/field-hints";
 import { RECOMMENDED_RULE, readContactRule } from "@/lib/contact-email";
 import FieldCard from "./FieldCard";
-import { NewFieldForm } from "./FieldEditors";
+import { ChoiceSettingsEditor, NewFieldForm } from "./FieldEditors";
+import { readChoiceSettings } from "@/lib/participant-fields";
 import { docsUsing, profileSections, type FmDocTemplate, type FmOverview, type FmVariable, type OvField } from "./types";
 
 // Redesign R7–R14 (2026-11-23): the one right-hand panel of the Fields screen. Whatever is selected -- a field, a
@@ -553,7 +554,11 @@ function TypeEditor({ field, onPatch }: { field: OvField; onPatch: Props["onPatc
   const [choices, setChoices] = useState(current.join("\n"));
   const choice = type === "select" || type === "multi";
   const list = choices.split("\n").map((x) => x.trim()).filter(Boolean);
-  const changed = type !== field.fieldType || (choice && list.join("\n") !== current.join("\n"));
+  const yesNo = type === "boolean" || type === "consent";
+  const savedSet = readChoiceSettings(field.options);
+  const [choiceSet, setChoiceSet] = useState(savedSet);
+  const setChanged = yesNo && (choiceSet.prefill !== savedSet.prefill || choiceSet.docFormat !== savedSet.docFormat);
+  const changed = type !== field.fieldType || (choice && list.join("\n") !== current.join("\n")) || setChanged;
   return (
     <details className="rounded-lg border border-mist p-2" open={field.fieldType === "select" || field.fieldType === "multi"}>
       <summary className="cursor-pointer font-medium">{t("fieldsManager.panel.typeAndOptions")}: {t(`fieldsManager.type.${field.fieldType}`)}{current.length ? ` (${current.length})` : ""}</summary>
@@ -564,12 +569,13 @@ function TypeEditor({ field, onPatch }: { field: OvField; onPatch: Props["onPatc
           ))}
         </select>
         {choice && <textarea rows={5} value={choices} onChange={(e) => setChoices(e.target.value)} placeholder={t("fieldsManager.optionsOnePerLine")} className={`${input} w-full`} />}
+        {yesNo && <ChoiceSettingsEditor value={choiceSet} onChange={setChoiceSet} />}
         <p className="text-[12px] text-ink-secondary">{t(field.fromTemplate ? "fieldsManager.panel.typeOrgWide" : "fieldsManager.panel.typeEventOnly")}</p>
         {type !== field.fieldType && <p className="text-[12px] text-amber-800">{t("fieldsManager.panel.typeChangeWarn")}</p>}
         <button
           type="button"
           disabled={!changed || (choice && !list.length)}
-          onClick={() => onPatch(field.key, { ...(type !== field.fieldType && { fieldType: type }), ...(choice && { choices: list }) }, { fieldType: field.fieldType, ...(current.length && { choices: current }) })}
+          onClick={() => onPatch(field.key, { ...(type !== field.fieldType && { fieldType: type }), ...(choice && { choices: list }), ...(setChanged && { choiceSettings: choiceSet }) }, { fieldType: field.fieldType, ...(current.length && { choices: current }), ...(setChanged && { choiceSettings: savedSet }) })}
           className="rounded border border-mist px-2 py-0.5 hover:bg-paper-2 disabled:opacity-40"
         >
           {t("fieldsManager.save")}

@@ -5,6 +5,7 @@
 import { isIsoDate } from "@/lib/portal-rules";
 import { categoryFor, type PriceRules } from "@/lib/price-rules";
 import { appliesTo, cleanFieldValue, optionsFor, type FieldAudience } from "@/lib/registration-fields";
+import { choiceAnswer } from "@/lib/participant-fields";
 import { cleanGuardianExtra, missingGuardianAnswers, type GuardianFieldDef, type GuardianQuestion } from "@/lib/guardian-fields";
 
 export const MAX_PERSONS = 10;
@@ -114,7 +115,9 @@ export function validateSubmission(
       if (value === null) errors.push(`p${i}.${key}`);
       else if (value) p.values[key] = value;
     }
-    for (const f of ctx.fields) if (f.required && f.fieldType !== "calculated" && appliesTo(f.audience, p.isAdult) && !p.values[f.key]) errors.push(`p${i}.${f.key}`);
+    // An untouched prefilled Ano/Ne box counts as Ano.
+    for (const f of ctx.fields) if (!p.values[f.key] && appliesTo(f.audience, p.isAdult) && choiceAnswer(f, "")) p.values[f.key] = "true";
+    for (const f of ctx.fields) if (f.required && f.fieldType !== "calculated" && appliesTo(f.audience, p.isAdult) && (f.fieldType === "consent" ? p.values[f.key] !== "true" : !p.values[f.key])) errors.push(`p${i}.${f.key}`);
 
     if (ctx.rules) {
       const cat = categoryFor(ctx.rules, str(r.category, 40) || null, p.isAdult);

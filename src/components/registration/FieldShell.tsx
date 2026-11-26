@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cleanFieldValue } from "@/lib/registration-fields";
+import { choiceAnswer } from "@/lib/participant-fields";
 
 // One question of a form for parents (2026-11-26): its label marked required (*) or optional ("nepovinné"), the hint,
 // and -- on the field itself -- what is wrong: a value of the wrong format at once, an empty required answer after the
@@ -11,7 +12,8 @@ export type FieldProblem = "invalid" | "missing" | null;
 /** What is wrong with one answer. `showMissing`: after the first attempt to send. */
 export function fieldProblem(f: { fieldType: string; options: unknown; required?: boolean }, value: string | undefined, showMissing: boolean): FieldProblem {
   if (f.fieldType === "calculated") return null;
-  const v = (value ?? "").trim();
+  // An untouched prefilled Ano/Ne box counts as ticked.
+  const v = choiceAnswer(f, value);
   if (v && cleanFieldValue(f, v) === null) return "invalid";
   const required = f.required !== false;
   if (required && showMissing && (f.fieldType === "consent" ? v !== "true" : f.fieldType === "boolean" ? false : !v)) return "missing";

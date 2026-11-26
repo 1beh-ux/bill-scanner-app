@@ -119,3 +119,31 @@ export function surfacesForCategory(category: ParticipantFieldCategory, showInLi
   if (category === "mail") surfaces.push("mail_list");
   return surfaces;
 }
+
+// ---- Ano/Ne and consent settings (2026-11-26) ------------------------------------------------------------------
+// Stored in the field's options object next to trueValues/falseValues:
+//   prefill    the box starts ticked ("Ano") -- the person unticks it to say no; an untouched answer counts as Ano
+//   docFormat  how documents print it: "text" = Ano / Ne (default), "crossed" = "ANO / NE" with the one not chosen
+//              struck through (Unicode combining stroke, works in a Google Doc without styling)
+export type ChoiceSettings = { prefill: boolean; docFormat: "text" | "crossed" };
+
+export function readChoiceSettings(options: unknown): ChoiceSettings {
+  const o = options && typeof options === "object" && !Array.isArray(options) ? (options as Record<string, unknown>) : {};
+  return { prefill: o.prefill === true, docFormat: o.docFormat === "crossed" ? "crossed" : "text" };
+}
+
+/** An Ano/Ne or consent answer as stored: an untouched one ("") is "true" when the field is prefilled. */
+export function choiceAnswer(f: { fieldType: string; options: unknown }, raw: string | undefined | null): string {
+  const v = (raw ?? "").trim();
+  if (v || (f.fieldType !== "boolean" && f.fieldType !== "consent")) return v;
+  return readChoiceSettings(f.options).prefill ? "true" : "";
+}
+
+const strike = (s: string) => [...s].map((c) => c + "̶").join("");
+
+/** How a document prints an Ano/Ne value ("true" / "false" / null = unknown). */
+export function choiceText(b: "true" | "false" | null, options: unknown): string {
+  if (b === null) return "";
+  if (readChoiceSettings(options).docFormat === "crossed") return b === "true" ? `ANO / ${strike("NE")}` : `${strike("ANO")} / NE`;
+  return b === "true" ? "Ano" : "Ne";
+}

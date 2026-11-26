@@ -3,6 +3,7 @@
 import type { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { invalidateResolverContext } from "@/lib/field-resolver";
+import { readChoiceSettings } from "@/lib/participant-fields";
 import { FIXED_GUARDIAN_KEYS, GUARDIAN_FIELD_TYPES, GUARDIAN_KEY, readGuardianForm, readGuardianSettings, type GuardianFieldType, type GuardianSettings } from "@/lib/guardian-fields";
 
 export async function guardianSettings(organizationId: string): Promise<GuardianSettings> {
@@ -18,7 +19,7 @@ const saveSettings = async (organizationId: string, s: GuardianSettings) => {
 const cleanOptions = (v: unknown) => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === "string").map((x) => x.trim()).filter(Boolean))].slice(0, 100) : []);
 
 /** A new guardian field of the organization. Errors: invalid_key, key_taken, invalid_type, options_required. */
-export async function createGuardianField(organizationId: string, input: { key: unknown; label: unknown; fieldType: unknown; options?: unknown; required?: unknown }) {
+export async function createGuardianField(organizationId: string, input: { key: unknown; label: unknown; fieldType: unknown; options?: unknown; required?: unknown; settings?: unknown }) {
   const key = typeof input.key === "string" ? input.key.trim() : "";
   const label = typeof input.label === "string" ? input.label.trim().slice(0, 200) : "";
   if (!GUARDIAN_KEY.test(key)) throw new Error("invalid_key");
@@ -29,13 +30,13 @@ export async function createGuardianField(organizationId: string, input: { key: 
   const fieldType = input.fieldType as GuardianFieldType;
   const options = fieldType === "select" || fieldType === "multi" ? cleanOptions(input.options) : null;
   if (options && !options.length) throw new Error("options_required");
-  s.fields.push({ key, label, fieldType, options, required: input.required === true });
+  s.fields.push({ key, label, fieldType, options, required: input.required === true, ...((fieldType === "boolean" || fieldType === "consent") && { settings: readChoiceSettings(input.settings) }) });
   await saveSettings(organizationId, s);
   return key;
 }
 
 /** Name, type, options of an own guardian field (organization-wide). */
-export async function updateGuardianField(organizationId: string, key: string, change: { label?: unknown; fieldType?: unknown; options?: unknown }) {
+export async function updateGuardianField(organizationId: string, key: string, change: { label?: unknown; fieldType?: unknown; options?: unknown; settings?: unknown }) {
   const s = await guardianSettings(organizationId);
   const f = s.fields.find((x) => x.key === key);
   if (!f) throw new Error("not_found");
@@ -49,6 +50,9 @@ export async function updateGuardianField(organizationId: string, key: string, c
     if (!options.length) throw new Error("options_required");
     f.options = options;
   } else f.options = null;
+  // Ano/Ne and consent: prefill + document format.
+  if (f.fieldType === "boolean" || f.fieldType === "consent") f.settings = change.settings !== undefined ? readChoiceSettings(change.settings) : (f.settings ?? readChoiceSettings(null));
+  else delete f.settings;
   await saveSettings(organizationId, s);
 }
 

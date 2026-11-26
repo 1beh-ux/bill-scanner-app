@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
       return bad(err instanceof Error && err.message === "no_template" ? "no_template" : "invalid");
     }
   }
-  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule, choices, fieldType, profileSection } = b;
+  const { storage, requiredDefault, required, label, portalAccess, level, calc, surface, contactRule, choices, fieldType, profileSection, choiceSettings } = b;
   // 2026-11-24: editing an existing field -- its choices (select / multi) and its type (plain types only; making a
   // field calculated goes through Úklid, which keeps the values). An organization field changes everywhere it is
   // used (template + its event copies), an event-only field in this event.
@@ -88,7 +88,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ke
   const typeAfter = (fieldType as string | undefined) ?? template?.fieldType ?? eventField?.fieldType ?? "";
   if ((fieldType !== undefined || choices !== undefined) && ["calculated", "composite", "image"].includes(template?.fieldType ?? eventField?.fieldType ?? "")) return bad("invalid_type");
   if ((typeAfter === "select" || typeAfter === "multi") && fieldType !== undefined && !list && !Array.isArray(template?.options ?? eventField?.options)) return bad("options_required");
-  const plainData = { ...(fieldType !== undefined && { fieldType: fieldType as never }), ...(list && { options: list as Prisma.InputJsonValue }) };
+  // Ano/Ne and consent (2026-11-26): prefill + document format, kept in the options object next to the value mapping.
+  const cs = choiceSettings && typeof choiceSettings === "object" ? (choiceSettings as { prefill?: unknown; docFormat?: unknown }) : null;
+  if (choiceSettings !== undefined && (!cs || !["boolean", "consent"].includes(typeAfter))) return bad("invalid_type");
+  const withSettings = (options: unknown) => ({
+    ...(options && typeof options === "object" && !Array.isArray(options) ? (options as object) : {}),
+    ...(typeof cs?.prefill === "boolean" && { prefill: cs.prefill }),
+    ...((cs?.docFormat === "text" || cs?.docFormat === "crossed") && { docFormat: cs.docFormat }),
+  });
+  const plainData = {
+    ...(fieldType !== undefined && { fieldType: fieldType as never }),
+    ...(list && { options: list as Prisma.InputJsonValue }),
+    // Ano/Ne settings: the organization field everywhere (template + its event copies), an event field here.
+    ...(cs && { options: withSettings(template?.options ?? eventField?.options) as Prisma.InputJsonValue }),
+  };
 
   // A calculated field's spec: the same validation as creating one (phase 3b).
   let spec: ReturnType<typeof readCalcSpec> = null;

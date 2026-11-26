@@ -3,6 +3,7 @@
 // the portal, the public form, the admin roster and the self-check
 // (scripts/test-registration-slice5.ts) share it.
 import { writeTargets } from "@/lib/field-write-targets";
+import { choiceAnswer } from "@/lib/participant-fields";
 import { readFormConfig } from "@/lib/form-config";
 import { isIsoDate, type PortalAccessLevel } from "@/lib/portal-rules";
 
@@ -163,7 +164,8 @@ export function checkAnswers(
   const errors: string[] = [];
   for (const f of asked) {
     if (f.fieldType === "calculated") continue; // shown, never answered
-    const v = (f.fieldType === "boolean" || f.fieldType === "consent") && !answers[f.key] ? "false" : cleanFieldValue(f, answers[f.key]);
+    // An untouched Ano/Ne box: "Ano" when the field is prefilled, else "Ne".
+    const v = (f.fieldType === "boolean" || f.fieldType === "consent") && !answers[f.key] ? choiceAnswer(f, "") || "false" : cleanFieldValue(f, answers[f.key]);
     // An optional question (Formulář settings) may stay empty; a consent still needs its tick when required.
     if (!v || (f.fieldType === "consent" && f.required && v !== "true")) {
       if (f.required === false && v !== null) continue;

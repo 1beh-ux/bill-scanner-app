@@ -10,6 +10,7 @@ import { readTicketSettings } from "@/lib/tickets";
 import { applyFormChange, effectiveFormConfig, readFormConfig, type FormConfig } from "@/lib/form-config";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
 import { guardianQuestions, readGuardianForm, readGuardianSettings } from "@/lib/guardian-fields";
+import type { ChoiceSettings } from "@/lib/participant-fields";
 
 const fixedLabel = (k: string) => FIXED_PARTICIPANT_FIELDS.find((f) => f.key === k)?.label ?? k;
 
@@ -20,7 +21,7 @@ export type FormRow =
   | { kind: "info"; id: string; label: string; note?: string; href?: string }
   | { kind: "question"; id: string; key: string; name: string; label: string; origin: "org" | "event" | "calculated"; fieldType: string; cfg: FormConfig; inPortal: string | null; profile: boolean; field: FieldLink; requiredDefault: boolean | null }
   // A guardian question (phone / relationship / the organization's own guardian field), asked of every guardian.
-  | { kind: "guardian"; id: string; key: string; fixed: boolean; name: string; label: string; hint: string | null; fieldType: string; options: string[] | null; ask: boolean; required: boolean; requiredDefault: boolean; field: FieldLink };
+  | { kind: "guardian"; id: string; key: string; fixed: boolean; name: string; label: string; hint: string | null; fieldType: string; options: string[] | null; settings?: ChoiceSettings; ask: boolean; required: boolean; requiredDefault: boolean; field: FieldLink };
 export type FormSection = { id: string; title: string; rows: FormRow[] };
 export type FormStructure = {
   event: { id: string; name: string; kind: string; slug: string | null; publicRegistration: boolean; detailsAfterAcceptance: boolean };
@@ -87,7 +88,7 @@ export async function formStructure(eventId: string): Promise<FormStructure> {
   const rules = readPriceRules(event.priceRules);
   const settings = readGuardianSettings(event.organization.guardianProps);
   const gRows: FormRow[] = guardianQuestions(settings, readGuardianForm(event.guardianForm), { phone: strings["portal.guardianPhone"] ?? "Telefon", relationship: strings["portal.guardianRelationship"] ?? "Vztah" }).map((q) => ({
-    kind: "guardian", id: `g:${q.key}`, key: q.key, fixed: q.fixed, name: q.name, label: q.label, hint: q.hint, fieldType: q.fieldType, options: q.options, ask: q.ask, required: q.required, requiredDefault: q.requiredDefault,
+    kind: "guardian", id: `g:${q.key}`, key: q.key, fixed: q.fixed, name: q.name, label: q.label, hint: q.hint, fieldType: q.fieldType, options: q.options, ...(q.settings && { settings: q.settings }), ask: q.ask, required: q.required, requiredDefault: q.requiredDefault,
     field: { key: `guardianN_${q.key === "relationship" ? "relation" : q.key}`, label: `Zástupce N – ${q.name}` },
   }));
   const own = (k: string): FieldLink => ({ key: k, label: fixedLabel(k) });

@@ -42,6 +42,7 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
   const [type, setType] = useState<(typeof TYPES)[number]>(edit ? "calculated" : "text");
   const [options, setOptions] = useState("");
   const [section, setSection] = useState("");
+  const [choiceSet, setChoiceSet] = useState<{ prefill: boolean; docFormat: "text" | "crossed" }>({ prefill: false, docFormat: "text" });
   const sections = profileSections(overview);
   const [calc, setCalc] = useState<CalcState>(edit ? calcState(edit.spec) : EMPTY_CALC);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
       const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
       return setError(t(`fieldsManager.err.${code ?? "failed"}`));
     }
-    const body = { event: overview.eventId, label, key, fieldType: type, profileSection: section || null, options: type === "calculated" ? spec() : type === "select" || type === "multi" ? options.split("\n") : undefined };
+    const body = { event: overview.eventId, label, key, fieldType: type, profileSection: section || null, options: type === "calculated" ? spec() : type === "select" || type === "multi" ? options.split("\n") : type === "boolean" || type === "consent" ? choiceSet : undefined };
     const res = await fetch("/api/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
     if (res?.ok) return onDone(key);
     const code = res ? ((await res.json().catch(() => ({}))) as { error?: string }).error : null;
@@ -107,6 +108,7 @@ export function NewFieldForm({ overview, onDone, edit, initialKey }: { overview:
           <textarea required rows={4} value={options} onChange={(e) => setOptions(e.target.value)} className={input} />
         </label>
       )}
+      {!edit && (type === "boolean" || type === "consent") && <ChoiceSettingsEditor value={choiceSet} onChange={setChoiceSet} />}
       {type === "calculated" && (
         <div className="space-y-2 rounded-lg border border-dashed border-ember/60 p-2">
           <div className="flex flex-wrap gap-1">
@@ -239,6 +241,27 @@ export function RenameDialog({ field, onDone }: { field: OvField; onDone: (newKe
         </>
       )}
       {error && <p className="text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+/** Ano/Ne and consent (2026-11-26): "Předvyplněno Ano" and how documents print the answer. */
+export function ChoiceSettingsEditor({ value, onChange }: { value: { prefill: boolean; docFormat: "text" | "crossed" }; onChange: (v: { prefill: boolean; docFormat: "text" | "crossed" }) => void }) {
+  const { t } = useTranslations();
+  return (
+    <div className="space-y-1 rounded-lg bg-paper-2 p-2 text-[12.5px]">
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={value.prefill} onChange={(e) => onChange({ ...value, prefill: e.target.checked })} />
+        {t("fieldsManager.choice.prefill")}
+      </label>
+      <p className="pl-5 text-[11.5px] text-ink-secondary">{t("fieldsManager.choice.prefillHint")}</p>
+      <label className="block">
+        {t("fieldsManager.choice.docFormat")}{" "}
+        <select value={value.docFormat} onChange={(e) => onChange({ ...value, docFormat: e.target.value as "text" | "crossed" })} className="rounded border border-mist bg-paper px-1.5 py-0.5">
+          <option value="text">{t("fieldsManager.choice.docText")}</option>
+          <option value="crossed">{t("fieldsManager.choice.docCrossed")}</option>
+        </select>
+      </label>
     </div>
   );
 }

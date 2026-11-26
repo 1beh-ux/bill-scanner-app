@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "@/lib/i18n";
-import { NewFieldForm, slugKey } from "./FieldEditors";
+import { ChoiceSettingsEditor, NewFieldForm, slugKey } from "./FieldEditors";
 import type { FmOverview } from "./types";
 import type { FieldLink, FormRow, FormStructure } from "@/lib/form-structure";
 import { GUARDIAN_FIELD_TYPES } from "@/lib/guardian-fields";
@@ -368,6 +368,9 @@ function GuardianEditor({ row, onPatch, label, setLabel, hint, setHint }: { row:
   const [name, setName] = useState(row.name);
   const [type, setType] = useState(row.fieldType);
   const [options, setOptions] = useState((row.options ?? []).join("\n"));
+  const savedSet = row.settings ?? { prefill: false, docFormat: "text" as const };
+  const [choiceSet, setChoiceSet] = useState(savedSet);
+  const yesNo = type === "boolean" || type === "consent";
   const g = (change: Record<string, unknown>) => void onPatch({ guardian: { key: row.key, change } });
   const box = "space-y-3 rounded-xl border border-mist bg-paper p-4 text-[13px]";
   return (
@@ -410,11 +413,12 @@ function GuardianEditor({ row, onPatch, label, setLabel, hint, setHint }: { row:
               <textarea rows={4} value={options} onChange={(e) => setOptions(e.target.value)} className={input} />
             </label>
           )}
+          {yesNo && <ChoiceSettingsEditor value={choiceSet} onChange={setChoiceSet} />}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={name === row.name && type === row.fieldType && options === (row.options ?? []).join("\n")}
-              onClick={() => void onPatch({ guardianField: { action: "update", key: row.key, label: name, fieldType: type, ...(choiceTypes(type) && { options: options.split("\n") }) } })}
+              disabled={name === row.name && type === row.fieldType && options === (row.options ?? []).join("\n") && JSON.stringify(choiceSet) === JSON.stringify(savedSet)}
+              onClick={() => void onPatch({ guardianField: { action: "update", key: row.key, label: name, fieldType: type, ...(choiceTypes(type) && { options: options.split("\n") }), ...(yesNo && { settings: choiceSet }) } })}
               className="rounded border border-mist px-2 py-1 hover:bg-paper-2 disabled:opacity-40"
             >
               {t("fieldsManager.save")}
@@ -443,7 +447,7 @@ function TypePicker({ value, onChange }: { value: string; onChange: (v: string) 
 }
 
 /** "+ Nové pole zástupce": a field every guardian gets (e.g. Souhlas), for the whole organization. */
-function NewGuardianField({ onSave, onCancel }: { onSave: (def: { key: string; label: string; fieldType: string; options?: string[]; required: boolean }) => void; onCancel: () => void }) {
+function NewGuardianField({ onSave, onCancel }: { onSave: (def: { key: string; label: string; fieldType: string; options?: string[]; settings?: object; required: boolean }) => void; onCancel: () => void }) {
   const { t } = useTranslations();
   const [label, setLabel] = useState("");
   const [key, setKey] = useState("");
@@ -451,11 +455,12 @@ function NewGuardianField({ onSave, onCancel }: { onSave: (def: { key: string; l
   const [type, setType] = useState("text");
   const [options, setOptions] = useState("");
   const [required, setRequired] = useState(false);
+  const [choiceSet, setChoiceSet] = useState<{ prefill: boolean; docFormat: "text" | "crossed" }>({ prefill: false, docFormat: "text" });
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSave({ key, label, fieldType: type, ...(choiceTypes(type) && { options: options.split("\n") }), required });
+        onSave({ key, label, fieldType: type, ...(choiceTypes(type) && { options: options.split("\n") }), ...((type === "boolean" || type === "consent") && { settings: choiceSet }), required });
       }}
       className="mt-2 space-y-2 rounded-xl border border-ember/50 bg-paper p-3"
     >
@@ -477,6 +482,7 @@ function NewGuardianField({ onSave, onCancel }: { onSave: (def: { key: string; l
           <textarea required rows={4} value={options} onChange={(e) => setOptions(e.target.value)} className={input} />
         </label>
       )}
+      {(type === "boolean" || type === "consent") && <ChoiceSettingsEditor value={choiceSet} onChange={setChoiceSet} />}
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} /> {t("fieldsManager.form.requiredOrg")}
       </label>

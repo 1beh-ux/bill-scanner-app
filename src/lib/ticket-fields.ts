@@ -2,7 +2,7 @@
 // order (TicketOrder.fieldValues) -- never in people (Lidé) -- and print in the order e-mails and on the ticket as
 // {{key}}. An event field of a ticket event is asked when active; "required" = Vyžadovat (requiredOnRegistration).
 import { cleanFieldValue } from "@/lib/registration-fields";
-import { toBoolean } from "@/lib/participant-fields";
+import { choiceAnswer, choiceText, toBoolean } from "@/lib/participant-fields";
 
 export type TicketField = { key: string; label: string; fieldType: string; options: unknown; required: boolean };
 
@@ -12,7 +12,7 @@ export function cleanTicketAnswers(fields: TicketField[], raw: unknown): { value
   const values: Record<string, string> = {};
   const errors: string[] = [];
   for (const f of fields) {
-    const v = cleanFieldValue(f, given[f.key]);
+    const v = cleanFieldValue(f, choiceAnswer(f, typeof given[f.key] === "string" ? (given[f.key] as string) : ""));
     const empty = v === "" || (f.fieldType === "consent" && v !== "true");
     if (v === null || (f.required && empty)) errors.push(`f.${f.key}`);
     else if (v !== "") values[f.key] = v;
@@ -26,7 +26,7 @@ export function ticketFieldVars(fields: TicketField[], values: Record<string, un
   for (const f of fields) {
     const raw = typeof values?.[f.key] === "string" ? (values![f.key] as string) : "";
     const b = f.fieldType === "boolean" || f.fieldType === "consent" ? toBoolean(raw, f.options) : null;
-    out[f.key] = b === "true" ? "Ano" : b === "false" ? "Ne" : f.fieldType === "multi" ? raw.split("\n").filter(Boolean).join(", ") : raw;
+    out[f.key] = b !== null ? choiceText(b, f.options) : f.fieldType === "multi" ? raw.split("\n").filter(Boolean).join(", ") : raw;
   }
   return out;
 }

@@ -6,7 +6,7 @@ import { applySentences, loadSentences, sentenceValues } from "@/lib/sentences";
 import { czechAccountToIban, buildSpaydString } from "@/lib/qr-platba";
 import QRCode from "qrcode";
 import { FIXED_PARTICIPANT_FIELDS } from "@/lib/fixed-participant-fields";
-import { composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
+import { choiceText, composeValue, readComposite, toBoolean } from "@/lib/participant-fields";
 import { adultAt, withMembers } from "@/lib/children";
 import { defaultHealthNotes, healthNotesText, notesFor, sanitizeHealthNotes } from "@/lib/health-notes";
 import { categoryFor, readPriceRules, rulePrice } from "@/lib/price-rules";
@@ -442,7 +442,8 @@ export function fieldTextValues(participant: ParticipantForMerge, event: EventFo
       // Stored as plain strings; "true"/"false" of boolean fields read Ano/Ne.
       const raw = participant.customFieldValues?.[f.key];
       const b = f.fieldType === "boolean" || f.fieldType === "consent" ? toBoolean(raw, f.options) : null;
-      values[f.key] = b === "true" ? "Ano" : b === "false" ? "Ne" : f.fieldType === "multi" && raw ? raw.split("\n").filter(Boolean).join(", ") : raw ?? "";
+      // Ano / Ne, or "ANO / NE" with the one not chosen struck through (the field's document format).
+      values[f.key] = b !== null ? choiceText(b, f.options) : f.fieldType === "multi" && raw ? raw.split("\n").filter(Boolean).join(", ") : raw ?? "";
     } else if (f.kind === "computed") {
       if (f.computedType === "effective_price") {
         const price = effectivePriceCzk(participant, event);

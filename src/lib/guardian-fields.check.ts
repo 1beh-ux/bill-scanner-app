@@ -88,4 +88,21 @@ assert.ok(!twins.ok && twins.errors.includes("g1.email_duplicate"));
 const same = validateSubmission({ persons: [child], guardians: [{ name: "A", email: "x@example.invalid", phone: "777", extra: { souhlas: "true" } }, { name: "a", email: "x@example.invalid", phone: "777", extra: { souhlas: "true" } }] }, ctx);
 assert.ok(same.ok);
 
-console.log("guardian-fields ok");
+// Ano/Ne settings: prefill (an untouched box = Ano), the crossed-out document format.
+import("@/lib/participant-fields").then(({ choiceAnswer, choiceText }) => {
+  const pre = { fieldType: "consent", options: { prefill: true, docFormat: "crossed" } };
+  assert.equal(choiceAnswer(pre, ""), "true");
+  assert.equal(choiceAnswer(pre, "false"), "false");
+  assert.equal(choiceAnswer({ fieldType: "consent", options: null }, ""), "");
+  assert.equal(choiceText("true", pre.options), "ANO / N\u0336E\u0336");
+  assert.equal(choiceText("false", pre.options), "A\u0336N\u0336O\u0336 / NE");
+  assert.equal(choiceText("true", null), "Ano");
+  const f = { key: "foto", label: "Foto", fieldType: "consent", options: { prefill: true }, required: true };
+  const v = validateSubmission({ persons: [child], guardians: [{ name: "M", email: "m@example.invalid", phone: "777", extra: { souhlas: "true" } }] }, { ...ctx, fields: [f] });
+  assert.ok(v.ok && v.data.persons[0].values.foto === "true", JSON.stringify(v));
+  const off = validateSubmission({ persons: [{ ...child, values: { foto: "false" } }], guardians: [{ name: "M", email: "m@example.invalid", phone: "777", extra: { souhlas: "true" } }] }, { ...ctx, fields: [f] });
+  assert.ok(!off.ok);
+  const s2 = readGuardianSettings({ fields: [{ key: "souhlas", label: "S", fieldType: "consent", required: true, settings: { prefill: true } }] });
+  assert.deepEqual(cleanGuardianExtra(s2.fields, {}), { souhlas: "true" });
+  console.log("guardian-fields ok");
+});

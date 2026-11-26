@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import FieldInput from "@/components/registration/FieldInput";
-import type { GuardianFieldDef } from "@/lib/guardian-fields";
+import { inputOptions, type GuardianFieldDef } from "@/lib/guardian-fields";
 
 // The organization's own guardian fields (2026-11-26, src/lib/guardian-fields.ts) as inputs under a guardian's
 // fixed ones -- the admin screens (Lidé, participant detail) and the portal.
@@ -27,7 +27,7 @@ export default function GuardianExtraInputs({ fields, value, onChange, yesLabel,
             {f.label}
             {f.required && " *"}
           </span>
-          <FieldInput field={f} value={value?.[f.key] ?? ""} onChange={(v) => onChange({ ...(value ?? {}), [f.key]: v })} yesLabel={yesLabel} />
+          <FieldInput field={{ ...f, options: inputOptions(f) }} value={value?.[f.key] ?? ""} onChange={(v) => onChange({ ...(value ?? {}), [f.key]: v })} yesLabel={yesLabel} />
         </label>
       ))}
     </div>

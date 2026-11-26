@@ -37,6 +37,10 @@ export async function POST(req: NextRequest) {
     const list = Array.isArray(b.options) ? [...new Set(b.options.filter((o): o is string => typeof o === "string").map((o) => o.trim()).filter(Boolean))].slice(0, 100) : [];
     if (!list.length) return NextResponse.json({ error: "options_required" }, { status: 400 });
     options = list;
+  } else if ((fieldType === "boolean" || fieldType === "consent") && b.options && typeof b.options === "object" && !Array.isArray(b.options)) {
+    // Ano/Ne and consent (2026-11-26): prefill + document format.
+    const o = b.options as { prefill?: unknown; docFormat?: unknown };
+    options = { ...(o.prefill === true && { prefill: true }), ...(o.docFormat === "crossed" && { docFormat: "crossed" }) };
   } else if (fieldType === "calculated") {
     const spec = readCalcSpec("calculated", b.options);
     if (!spec) return NextResponse.json({ error: "invalid_calc" }, { status: 400 });

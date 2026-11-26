@@ -7,7 +7,8 @@
 // always keeps today's value, so every existing template prints byte-for-byte the same.
 import { prisma } from "@/lib/prisma";
 import { featureOn, guardianSlots as clampSlots } from "@/lib/org-features";
-import { readGuardianSettings } from "@/lib/guardian-fields";
+import { inputOptions, readGuardianSettings } from "@/lib/guardian-fields";
+import { choiceText } from "@/lib/participant-fields";
 import { BUILTIN_EVENT_KEYS, EVENT_VARIABLE_ALIASES, linkedVariableValues, LINKED_VARIABLES } from "@/lib/event-variables";
 
 // ---- guardian slots (pure) ------------------------------------------------------------------------------------
@@ -37,7 +38,7 @@ export function orderGuardians<T extends { position?: number | null }>(guardians
 }
 
 /** Every guardian<N>_<prop> value for N = 1..slots ("" when the slot is empty). mail = Ano / Ne. */
-export function guardianSlotValues(guardians: GuardianIn[], slots: number, ownKeys: readonly string[] = []): Record<string, string> {
+export function guardianSlotValues(guardians: GuardianIn[], slots: number, ownKeys: readonly string[] = [], ownOptions: Record<string, unknown> = {}): Record<string, string> {
   const ordered = orderGuardians(guardians);
   const out: Record<string, string> = {};
   for (let n = 1; n <= slots; n++) {
@@ -49,7 +50,7 @@ export function guardianSlotValues(guardians: GuardianIn[], slots: number, ownKe
     out[`guardian${n}_mail`] = g ? (g.receivesCommunications ? "Ano" : "Ne") : "";
     const extra = (g?.extra && typeof g.extra === "object" ? g.extra : {}) as Record<string, unknown>;
     // Ano/Ne and consent values print as Ano / Ne, like the participant's own fields in documents.
-    for (const k of ownKeys) out[`guardian${n}_${k}`] = typeof extra[k] === "string" ? (extra[k] === "true" ? "Ano" : extra[k] === "false" ? "Ne" : (extra[k] as string).split("\n").join(", ")) : "";
+    for (const k of ownKeys) out[`guardian${n}_${k}`] = typeof extra[k] === "string" ? (extra[k] === "true" || extra[k] === "false" ? choiceText(extra[k] as "true" | "false", ownOptions[k]) : (extra[k] as string).split("\n").join(", ")) : "";
   }
   return out;
 }
@@ -65,8 +66,9 @@ export type ResolverContext = {
   free: Record<string, string>;
   /** Linked event variables (date_from, place, ...) for this event. */
   linked: Record<string, string>;
-  /** The organization's own guardian field keys (guardian<N>_<key>, src/lib/guardian-fields.ts). */
+  /** The organization's own guardian field keys (guardian<N>_<key>, src/lib/guardian-fields.ts) + Ano/Ne settings. */
   guardianKeys?: string[];
+  guardianOptions?: Record<string, unknown>;
 };
 
 /**
@@ -81,7 +83,7 @@ export function extendVariables(text: Record<string, string>, ctx: ResolverConte
   };
   for (const [k, v] of Object.entries(ctx.linked)) add(k, v);
   for (const [k, v] of Object.entries(ctx.free)) add(k, v);
-  for (const [k, v] of Object.entries(guardianSlotValues(guardians, ctx.slots, ctx.guardianKeys))) add(k, v);
+  for (const [k, v] of Object.entries(guardianSlotValues(guardians, ctx.slots, ctx.guardianKeys, ctx.guardianOptions))) add(k, v);
   for (const [alias, target] of Object.entries(ctx.aliases)) if (target in out) add(alias, out[target]);
   return out;
 }
@@ -167,6 +169,7 @@ async function readResolverContext(eventId: string): Promise<ResolverContext> {
     free,
     linked: linkedVariableValues({ ...event, organizationContactEmail: event.organization.contactEmail }),
     guardianKeys: readGuardianSettings(event.organization.guardianProps).fields.map((f) => f.key),
+    guardianOptions: Object.fromEntries(readGuardianSettings(event.organization.guardianProps).fields.map((f) => [f.key, inputOptions(f)])),
   };
 }
 
