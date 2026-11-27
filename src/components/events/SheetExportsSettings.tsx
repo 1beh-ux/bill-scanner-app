@@ -6,7 +6,7 @@ import { conditionLabel, type AutomationView } from "@/components/events/Automat
 // Nastavení akce -> Připojení (2026-11-27, src/lib/sheet-export.ts): Google Sheets kept up to date from the app --
 // participants or bills, the chosen columns in order, on a schedule and/or when participants reach a condition.
 type T = (key: string, vars?: Record<string, string>) => string;
-type Column = { key: string; label: string };
+type Column = { key: string; label: string; used?: boolean };
 type Export = { id: string; name: string; kind: "participants" | "bills"; sheetUrl: string | null; columns: string[]; everyHours: number | null; dailyAt: string | null; conditions: string[]; active: boolean; lastRunAt: string | null; lastError: string | null };
 type View = AutomationView & { exports: Export[]; columns: { participants: Column[]; bills: Column[] } };
 type Draft = { id?: string; name: string; kind: "participants" | "bills"; sheetUrl: string; columns: string[]; schedule: "none" | "hours" | "daily"; everyHours: number; dailyAt: string; conditions: string[]; active: boolean };
@@ -22,6 +22,9 @@ export default function SheetExportsSettings({ eventId, t }: { eventId: string; 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Drag & drop of columns: what is dragged (a chosen column, or one from the right) and where it would land.
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(url)
@@ -48,6 +51,19 @@ export default function SheetExportsSettings({ eventId, t }: { eventId: string; 
   const all = draft ? data.columns[draft.kind] : [];
   const chosen = draft ? (draft.columns.length ? draft.columns : all.map((c) => c.key)) : [];
   const label = (k: string) => all.find((c) => c.key === k)?.label ?? k;
+  // A new export / another kind starts with the columns used in this event (the rest stays on the right).
+  const usedKeys = (kind: Draft["kind"]) => data.columns[kind].filter((c) => c.used).map((c) => c.key);
+  const drop = (at: number) => {
+    if (!draft || !dragKey) return;
+    const without = chosen.filter((k) => k !== dragKey);
+    const from = chosen.indexOf(dragKey);
+    const index = from >= 0 && from < at ? at - 1 : at;
+    without.splice(Math.max(0, Math.min(index, without.length)), 0, dragKey);
+    setDraft({ ...draft, columns: without });
+    setDragKey(null);
+    setDropAt(null);
+  };
+  const sheetLink = draft?.sheetUrl.match(/[-\w]{25,}/)?.[0];
   const move = (i: number, d: -1 | 1) => {
     if (!draft) return;
     const next = [...chosen];
@@ -91,7 +107,7 @@ export default function SheetExportsSettings({ eventId, t }: { eventId: string; 
         </div>
       ))}
       {!draft && (
-        <button type="button" onClick={() => setDraft(empty())} className={btn + " mt-2"}>
+        <button type="button" onClick={() => setDraft({ ...empty(), columns: usedKeys("participants") })} className={btn + " mt-2"}>
           + {t("sheetExports.add")}
         </button>
       )}
@@ -105,35 +121,78 @@ export default function SheetExportsSettings({ eventId, t }: { eventId: string; 
             </label>
             <label className="flex flex-col gap-0.5">
               {t("sheetExports.what")}
-              <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Draft["kind"], columns: [], conditions: [] })} className={input}>
+              <select value={draft.kind} onChange={(e) => setDraft({ ...draft, kind: e.target.value as Draft["kind"], columns: usedKeys(e.target.value as Draft["kind"]), conditions: [] })} className={input}>
                 <option value="participants">{t("sheetExports.kind.participants")}</option>
                 <option value="bills">{t("sheetExports.kind.bills")}</option>
               </select>
             </label>
             <label className="flex min-w-[16rem] flex-1 flex-col gap-0.5">
               {t("sheetExports.sheet")}
-              <input value={draft.sheetUrl} onChange={(e) => setDraft({ ...draft, sheetUrl: e.target.value })} className={input} placeholder={t("sheetExports.sheetPlaceholder")} />
+              <span className="flex items-center gap-2">
+                <input value={draft.sheetUrl} onChange={(e) => setDraft({ ...draft, sheetUrl: e.target.value })} className={input + " flex-1"} placeholder={t("sheetExports.sheetPlaceholder")} />
+                {sheetLink && (
+                  <a href={`https://docs.google.com/spreadsheets/d/${sheetLink}`} target="_blank" rel="noreferrer" className="shrink-0 text-ember hover:underline">
+                    {t("sheetExports.open")} ↗
+                  </a>
+                )}
+              </span>
             </label>
           </div>
 
           <div>
             <p className="mb-1 font-medium text-ink">{t("sheetExports.columns")}</p>
             <p className="mb-1 text-[12px] text-ink-secondary">{t("sheetExports.columnsHint")}</p>
+            <p className="mb-1 text-[12px] text-ink-secondary">{t("sheetExports.howWritten")}</p>
             <div className="grid gap-1 sm:grid-cols-2">
-              <div className="flex flex-col gap-0.5">
+              <div
+                className="flex flex-col gap-0.5"
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dropAt === null) setDropAt(chosen.length);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  drop(dropAt ?? chosen.length);
+                }}
+                onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDropAt(null)}
+              >
                 {chosen.map((k, i) => (
-                  <div key={k} className="flex items-center gap-1 rounded border border-mist bg-paper px-2 py-0.5">
+                  <div key={k}>
+                  {/* Where the dragged column would land. */}
+                  {dragKey && dropAt === i && <div className="my-0.5 h-7 rounded border-2 border-dashed border-ember bg-ember/10" />}
+                  <div
+                    draggable
+                    onDragStart={() => setDragKey(k)}
+                    onDragEnd={() => (setDragKey(null), setDropAt(null))}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      const half = e.currentTarget.getBoundingClientRect();
+                      setDropAt(e.clientY < half.top + half.height / 2 ? i : i + 1);
+                    }}
+                    className={`flex cursor-grab items-center gap-1 rounded border border-mist bg-paper px-2 py-0.5 ${dragKey === k ? "opacity-40" : ""}`}
+                  >
+                    <span aria-hidden className="text-ink-secondary">⠿</span>
                     <span className="w-5 text-right text-[11px] text-ink-secondary">{i + 1}.</span>
                     <span className="flex-1">{label(k)}</span>
                     <button type="button" onClick={() => move(i, -1)} aria-label="↑" className="px-1 text-ink-secondary hover:text-ink">↑</button>
                     <button type="button" onClick={() => move(i, 1)} aria-label="↓" className="px-1 text-ink-secondary hover:text-ink">↓</button>
                     <button type="button" onClick={() => setDraft({ ...draft, columns: chosen.filter((x) => x !== k) })} aria-label="×" className="px-1 text-red-600">×</button>
                   </div>
+                  </div>
                 ))}
+                {dragKey && dropAt === chosen.length && <div className="my-0.5 h-7 rounded border-2 border-dashed border-ember bg-ember/10" />}
               </div>
               <div className="flex flex-col gap-0.5">
                 {all.filter((c) => !chosen.includes(c.key)).map((c) => (
-                  <button key={c.key} type="button" onClick={() => setDraft({ ...draft, columns: [...chosen, c.key] })} className="rounded border border-dashed border-mist px-2 py-0.5 text-left text-ink-secondary hover:bg-paper">
+                  <button
+                    key={c.key}
+                    type="button"
+                    draggable
+                    onDragStart={() => setDragKey(c.key)}
+                    onDragEnd={() => (setDragKey(null), setDropAt(null))}
+                    onClick={() => setDraft({ ...draft, columns: [...chosen, c.key] })}
+                    className="cursor-grab rounded border border-dashed border-mist px-2 py-0.5 text-left text-ink-secondary hover:bg-paper"
+                  >
                     + {c.label}
                   </button>
                 ))}

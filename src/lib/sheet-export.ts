@@ -14,9 +14,12 @@ import { docState } from "@/lib/registration-status";
 import { profileDocuments } from "@/lib/person-documents";
 import { detailsDocuments } from "@/lib/details-documents";
 import { currentConditions } from "@/lib/automation";
+import { requiredEventFields, templateRules } from "@/lib/portal-server";
+import { askedFields } from "@/lib/registration-fields";
 
 export type ExportKind = "participants" | "bills";
-export type ExportColumn = { key: string; label: string };
+// used: worth exporting in this event (2026-11-27) -- a new export starts with these ticked.
+export type ExportColumn = { key: string; label: string; used?: boolean };
 
 const DOC_TEXT = { received: "přijato", pending: "ke kontrole", rejected: "zamítnuto", none: "chybí" } as const;
 const BILL_COLUMNS: ExportColumn[] = [
@@ -37,17 +40,34 @@ const BILL_STATUS: Record<string, string> = { approved: "schváleno", auto_appro
 
 /** The columns an export of this kind can have, in their default order. */
 export async function availableColumns(eventId: string, kind: ExportKind): Promise<ExportColumn[]> {
-  if (kind === "bills") return BILL_COLUMNS;
-  const [fields, docs] = await Promise.all([
-    prisma.eventParticipantField.findMany({ where: { eventId, active: true, NOT: { fieldType: "image" } }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }], select: { key: true, label: true } }),
+  if (kind === "bills") return BILL_COLUMNS.map((c) => ({ ...c, used: true }));
+  const [fields, docs, participants, event, eventFields, rules] = await Promise.all([
+    prisma.eventParticipantField.findMany({ where: { eventId, active: true, NOT: { fieldType: "image" } }, orderBy: [{ sortOrder: "asc" }, { label: "asc" }], select: { key: true, label: true, kind: true, computedType: true } }),
     prisma.eventListItem.findMany({ where: { eventId, kind: "document", active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] }),
+    prisma.participant.findMany({ where: { eventId }, select: { customFieldValues: true, _count: { select: { guardians: true } } } }),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { organizationId: true, memberPriceCzk: true, nonMemberPriceCzk: true, priceRules: true } }),
+    requiredEventFields([eventId]),
+    prisma.event.findUniqueOrThrow({ where: { id: eventId }, select: { organizationId: true } }).then((e) => templateRules(e.organizationId)),
   ]);
+  // Used in this event: asked on its form, filled in for somebody, or one of the always-useful built-in ones.
+  const asked = new Set(askedFields(eventFields, rules).map((f) => f.key));
+  const filled = new Set(participants.flatMap((p) => Object.entries((p.customFieldValues as Record<string, unknown> | null) ?? {}).filter(([, v]) => typeof v === "string" && v.trim()).map(([k]) => k)));
+  const hasGuardians = participants.some((p) => p._count.guardians > 0);
+  const priced = event.memberPriceCzk != null || event.nonMemberPriceCzk != null || !!event.priceRules;
+  const used = (f: (typeof fields)[number]) =>
+    f.kind === "builtin"
+      ? ["Name", "participant_first_name", "participant_last_name", "datum_narozeni"].includes(f.key)
+      : f.kind === "guardian"
+        ? hasGuardians && f.key !== "zak_zast_jmeno"
+        : f.kind === "computed"
+          ? f.computedType === "contact_email" || (priced && (f.computedType === "effective_price" || f.computedType === "variable_symbol"))
+          : asked.has(f.key) || filled.has(f.key);
   return [
-    { key: "status", label: "Přihláška" },
-    { key: "complete", label: "Kompletní" },
-    { key: "registeredAt", label: "Přihlášen(a)" },
-    ...fields.map((f) => ({ key: `f:${f.key}`, label: f.label })),
-    ...docs.filter((d) => !(d.data as DocumentTypeData | null)?.staticAttachment).map((d) => ({ key: `doc:${d.id}`, label: documentDisplayName({ ...d, data: d.data as DocumentTypeData | null }) })),
+    { key: "status", label: "Přihláška", used: true },
+    { key: "complete", label: "Kompletní", used: true },
+    { key: "registeredAt", label: "Přihlášen(a)", used: true },
+    ...fields.map((f) => ({ key: `f:${f.key}`, label: f.label, used: used(f) })),
+    ...docs.filter((d) => !(d.data as DocumentTypeData | null)?.staticAttachment).map((d) => ({ key: `doc:${d.id}`, label: documentDisplayName({ ...d, data: d.data as DocumentTypeData | null }), used: true })),
   ];
 }
 
