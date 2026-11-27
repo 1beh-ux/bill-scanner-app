@@ -43,9 +43,11 @@ type DocStatus = {
   // The newest received file (slice 6 #3), opened via /api/events/<id>/documents/<fileId>.
   fileId: string | null;
   // Received through the person's permanent document (slice 6 #4); `event` = where it came from.
-  fromProfile: { event: string | null; url: string } | null;
+  fromProfile: { event: string | null; url: string | null } | null;
   fromDetails?: boolean;
   canGenerate?: boolean;
+  // Created and sent by the app (acceptance, Vytvořit, portal download) -- not received.
+  sent?: { fileId: string | null; at: string; driveUrl: string | null } | null;
   // Portal uploads waiting for review / rejected (slice 4 #6-7).
   review: { id: string; filename: string | null; receivedAt: string; status: "pending" | "rejected"; note: string | null }[];
 };
@@ -468,11 +470,17 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
         <li key={d.docTypeId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-mist px-3 py-2 text-[14px]">
           <span className="text-ink">{d.name}</span>
           <span className="flex items-center gap-2 text-[12px] text-ink-secondary">
-            {d.fromProfile && (
-              <a href={d.fromProfile.url} target="_blank" rel="noreferrer" className="text-pine hover:underline" title={t("personDocs.fromProfileHint")}>
-                {d.fromProfile.event ? t("personDocs.fromProfileEvent", { event: d.fromProfile.event }) : t("personDocs.fromProfile")}
-              </a>
-            )}
+            {d.fromProfile &&
+              (d.fromProfile.url ? (
+                <a href={d.fromProfile.url} target="_blank" rel="noreferrer" className="text-pine hover:underline" title={t("personDocs.fromProfileHint")}>
+                  {d.fromProfile.event ? t("personDocs.fromProfileEvent", { event: d.fromProfile.event }) : t("personDocs.fromProfile")}
+                </a>
+              ) : (
+                // An earlier event's tick (no file): received, nothing to open.
+                <span className="text-pine" title={t("personDocs.fromProfileNoFileHint")}>
+                  {d.fromProfile.event ? t("personDocs.fromProfileEvent", { event: d.fromProfile.event }) : t("personDocs.fromProfile")}
+                </span>
+              ))}
             {d.fromDetails && !d.receivedVia && <span className="text-pine" title={t("detailsDocs.hint")}>{t("detailsDocs.done")}</span>}
             {d.received && d.receivedAt && !(d.fromProfile && !d.receivedVia) && (
               <span>
@@ -484,6 +492,21 @@ export default function ParticipantDetailPage({ params }: { params: Promise<{ id
               <a href={`/api/events/${eventId}/documents/${d.fileId}?inline=1`} target="_blank" rel="noreferrer" className="text-ember hover:underline">
                 {t("uploadReview.open")}
               </a>
+            )}
+            {d.sent && (
+              <span className="text-ink-secondary">
+                {t("participantDetail.docSent", { date: new Date(d.sent.at).toLocaleDateString("cs-CZ") })}{" "}
+                {d.sent.fileId && (
+                  <a href={`/api/events/${eventId}/documents/${d.sent.fileId}?inline=1`} target="_blank" rel="noreferrer" className="text-ember hover:underline">
+                    {t("uploadReview.open")}
+                  </a>
+                )}
+                {d.sent.driveUrl && (
+                  <a href={d.sent.driveUrl} target="_blank" rel="noreferrer" className="ml-1 text-ember hover:underline">
+                    Drive ↗
+                  </a>
+                )}
+              </span>
             )}
             {d.driveUrl && (
               <a href={d.driveUrl} target="_blank" rel="noreferrer" className="text-ember hover:underline">

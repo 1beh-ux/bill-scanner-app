@@ -39,12 +39,32 @@ export async function profileDocuments(participants: { id: string; eventId: stri
     prisma.eventListItem.findMany({ where: { eventId: { in: [...new Set(linked.map((p) => p.eventId))] }, kind: "document", key: { in: [...keys] } } }),
     currentDocs([...new Set(linked.map((p) => p.childId!))], [...keys]),
   ]);
+  // 2026-11-27: a "platí trvale" document received in another event WITHOUT a file (a tick, e.g. from the Sheet
+  // import of the previous year) covers it too -- shown as received "z profilu (<event>)", with nothing to open.
+  const ticks = await prisma.participantDocument.findMany({
+    where: { ...RECEIVED_WHERE, gcsPath: null, eventListItem: { key: { in: [...keys] } }, participant: { childId: { in: [...new Set(linked.map((p) => p.childId!))] } } },
+    select: { receivedAt: true, eventListItem: { select: { key: true } }, participant: { select: { childId: true, eventId: true, event: { select: { name: true } } } } },
+    orderBy: { receivedAt: "desc" },
+  });
   for (const p of linked) {
-    const rows = profileDocRows(types.filter((t) => t.eventId === p.eventId), keys, docs.filter((d) => d.childId === p.childId));
+    const mine = types.filter((t) => t.eventId === p.eventId);
+    const rows = profileDocRows(mine, keys, docs.filter((d) => d.childId === p.childId));
+    for (const t of mine) {
+      if (!t.key || !keys.has(t.key) || (t.data as { requireNew?: boolean } | null)?.requireNew || rows.some((r) => r.eventListItemId === t.id)) continue;
+      const tick = ticks.find((x) => x.participant.childId === p.childId && x.participant.eventId !== p.eventId && x.eventListItem.key === t.key);
+      if (tick) rows.push({ eventListItemId: t.id, receivedVia: "profile", reviewStatus: null, doc: tickDoc(p.childId!, t.key, tick.receivedAt, tick.participant.event.name) });
+    }
     if (rows.length) out.set(p.id, rows);
   }
   return out;
 }
+
+/** A covering row with no stored file (tickOnly): nothing to download -- the screens show it without a link. */
+const tickDoc = (childId: string, docKey: string, at: Date, eventName: string) =>
+  ({ id: "", childId, docKey, gcsPath: "", sizeBytes: null, contentHash: null, originalFilename: null, sourceParticipantDocumentId: null, sourceEventId: null, sourceEvent: { name: eventName }, createdAt: at, createdByUserId: null, revokedAt: null, revokedByUserId: null, tickOnly: true }) as unknown as Awaited<ReturnType<typeof currentDocs>>[number] & { tickOnly?: true };
+
+/** A profile row without a file (an earlier event's tick). */
+export const isTickOnly = (doc: unknown) => !!(doc as { tickOnly?: boolean } | null)?.tickOnly;
 
 /** Stores a file on the person (people/<childId>/documents/...) as their new current document of `docKey`. */
 export async function savePersonDocument(opts: {

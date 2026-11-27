@@ -31,7 +31,7 @@ import { withMembers } from "@/lib/children";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { fullNameFrom } from "@/lib/participant-name";
 import { countsAsReceived, docState, registrationState, requiredEmpty } from "@/lib/registration-status";
-import { profileDocuments, type ProfileDoc } from "@/lib/person-documents";
+import { profileDocuments, type ProfileDoc, isTickOnly } from "@/lib/person-documents";
 import { memberFormFields, readAudience, validateSubmission } from "@/lib/public-registration";
 import { appliesTo, optionsFor, askedNow, askedLater, askedFields, askedMissing, checkAnswers, needsReviewTick, routeAnswers, type FieldLevel, type TemplateRule } from "@/lib/registration-fields";
 import { guardianExtra, readGuardianSettings } from "@/lib/guardian-fields";
@@ -534,7 +534,8 @@ export async function registrationCard(
         name: documentDisplayName({ ...dt, data }),
         sent: file(mine.find((d) => d.receivedVia === "generated")),
         // A profile document downloads from the person store (portal person-documents route).
-        received: profile ? { id: profile.id, date: profile.createdAt, person: true } : (file(mine.find(countsAsReceived)) ?? (byDetails ? { id: null, date: p.createdAt } : null)),
+        // An earlier event's tick without a file (isTickOnly): received, nothing to download.
+        received: profile ? (isTickOnly(profile) ? { id: null, date: profile.createdAt } : { id: profile.id, date: profile.createdAt, person: true }) : (file(mine.find(countsAsReceived)) ?? (byDetails ? { id: null, date: p.createdAt } : null)),
         // "Splněno vyplněním podrobných údajů": done by the details form, nothing to upload.
         fromDetails: byDetails,
         fromProfile: profile ? { event: profile.sourceEvent?.name ?? null } : null,

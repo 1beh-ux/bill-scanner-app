@@ -6,7 +6,7 @@ import { requireAnyModuleAccess } from "@/lib/module-access";
 import { documentDisplayName, type DocumentTypeData } from "@/lib/mail-reply-template";
 import { getActiveDocumentTypes } from "@/lib/mail-helper-context";
 import { RECEIVED_WHERE } from "@/lib/registration-status";
-import { profileDocuments } from "@/lib/person-documents";
+import { profileDocuments, isTickOnly } from "@/lib/person-documents";
 
 // Part 11-D of the participants/settings/Health/Mail prompt: what the inbox (or a manual
 // mark) saved for this participant, checkable without opening Drive. Excludes `generated`
@@ -37,6 +37,8 @@ export async function GET(
 
   // ?byType=1: one row per tracked document type, received or missing (participant detail page).
   if (new URL(req.url).searchParams.get("byType") === "1") {
+    // The documents the app created and sent (acceptance / Vytvořit / portal download) -- shown as "odesláno".
+    const sentDocs = await prisma.participantDocument.findMany({ where: { participantId, receivedVia: "generated" }, select: { id: true, eventListItemId: true, receivedAt: true, gcsPath: true, driveFileId: true } });
     const [types, inReview, fromProfile] = await Promise.all([
       getActiveDocumentTypes(participant.eventId),
       prisma.participantDocument.findMany({ where: { participantId, reviewStatus: { in: ["pending", "rejected"] } }, orderBy: { receivedAt: "desc" } }),
@@ -64,9 +66,13 @@ export async function GET(
           receivedVia: latest?.receivedVia ?? null,
           fileId: file?.id ?? null,
           fromProfile: profile
-            ? { event: profile.sourceEvent?.name ?? null, url: `/api/children/${profile.childId}/documents/${profile.id}?event=${participant.eventId}&inline=1` }
+            ? { event: profile.sourceEvent?.name ?? null, url: isTickOnly(profile) ? null : `/api/children/${profile.childId}/documents/${profile.id}?event=${participant.eventId}&inline=1` }
             : null,
           driveUrl: latest?.driveFileId ? `https://drive.google.com/file/d/${latest.driveFileId}/view` : null,
+          sent: (() => {
+            const s = sentDocs.find((x) => x.eventListItemId === type.id);
+            return s ? { fileId: s.gcsPath ? s.id : null, at: s.receivedAt, driveUrl: s.driveFileId ? `https://drive.google.com/file/d/${s.driveFileId}/view` : null } : null;
+          })(),
           // "Vytvořit" (2026-11-26): the type has a Google Doc template to generate this participant's document from.
           canGenerate: !!(type.data as DocumentTypeData | null)?.templateGoogleDocId && !(type.data as DocumentTypeData | null)?.staticAttachment,
         };

@@ -344,6 +344,12 @@ export function substituteVariables(text: string, vars: Record<string, string>):
   // TK2 (audit2): an event without a place drops its separator too -- "(15. 3. 2027)", not "(15. 3. 2027, )".
   // Here, not in the templates, because organizations keep their own stored copies of the old wording.
   let out = vars.event_place === "" ? text.replace(/(, | · )\{\{event_place\}\}/g, "") : text;
+  // 2026-11-27: conditional text -- {{#key}}…{{/key}} only when the variable has a value, {{^key}}…{{/key}} only when
+  // it's empty (e.g. {{#attachments_list}}V příloze posíláme…{{/attachments_list}}). An unknown key counts as empty.
+  out = out.replace(/\{\{([#^])\s*([a-zA-Z0-9_]+)\s*\}\}([\s\S]*?)\{\{\/\s*\2\s*\}\}\n?/g, (_, mode: string, key: string, inner: string) => {
+    const filled = !!vars[key]?.trim();
+    return (mode === "#") === filled ? inner : "";
+  });
   for (const [key, value] of Object.entries(vars)) {
     out = out.replaceAll(`{{${key}}}`, value);
   }

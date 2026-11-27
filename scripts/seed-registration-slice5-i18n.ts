@@ -59,6 +59,8 @@ async function main() {
     { key: "priceRules.byAnswerEmpty", cs: "Zatím není přiřazená žádná možnost – dokud nebude, vybírá si kategorii člověk jako dřív.", en: "No option is assigned yet – until one is, people pick the category as before." },
     { key: "listTemplateAdmin.attachOnlyIfMissing", cs: "…jen když ho člověk ještě nemá", en: "…only when the person doesn't have it yet" },
     { key: "listTemplateAdmin.attachOnlyIfMissingHint", cs: "Nový člověk dokument dostane; kdo ho už má (přijatý u této přihlášky, platný trvalý v profilu nebo splněný podrobnými údaji), ho znovu nedostane – nic se mu nevytváří ani neposílá.", en: "A new person gets the document; someone who already has it (received for this registration, a valid permanent one on the profile, or done by the details) doesn't get it again – nothing is created or sent to them." },
+    { key: "personDocs.fromProfileNoFileHint", cs: "Odevzdáno v dřívější akci (zaškrtnuto, bez souboru) – platí trvale, není co otevřít.", en: "Handed in for an earlier event (ticked, no file) – permanent, nothing to open." },
+    { key: "participantDetail.docSent", cs: "odesláno {date}", en: "sent {date}" },
     { key: "portal.stepCheck", cs: "Zkontrolujte prosím:", en: "Please check:" },
     { key: "portal.stepInvalidValue", cs: "hodnota má špatný formát (opravte ji, nebo ji smažte, pokud není povinná)", en: "the value has the wrong format (fix it, or clear it if it isn't required)" },
     { key: "portal.stepMissingValue", cs: "chybí", en: "missing" },
