@@ -7,6 +7,7 @@ import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email
 import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { MarkdownEditor, MarkdownText } from "@/components/registration/Markdown";
 import TemplateAttachments from "@/components/health/TemplateAttachments";
+import { ADULT_CONDITION, docConditionKey, readVariants, writeVariants, type Variants } from "@/lib/email-conditions";
 import EmailFiles from "@/components/health/EmailFiles";
 import { takesAttachments } from "@/lib/email-attachments";
 
@@ -83,7 +84,29 @@ export default function EmailTemplateAdmin({
   }, [scope, eventId]);
 
   const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const [oneBody, setOneBody] = useState("");
+  // Text variants (2026-11-27): two whole texts by a condition (has a document / doesn't, adult / child), edited in
+  // two tabs; stored as conditional blocks (src/lib/email-conditions.ts).
+  const [variants, setVariants] = useState<Variants | null>(null);
+  const [tab, setTab] = useState<"yes" | "no">("yes");
+  const body = variants ? writeVariants(variants) : oneBody;
+  const shown = variants ? variants[tab] : oneBody;
+  const setShown = (v: string) => (variants ? setVariants({ ...variants, [tab]: v }) : setOneBody(v));
+  const setBody = (b: string) => {
+    const v = readVariants(b);
+    setVariants(v);
+    setOneBody(v ? "" : b);
+  };
+  const [docs, setDocs] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    if (scope !== "event") return;
+    fetch(`/api/events/${eventId}/email-attachments`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { allDocuments?: { id: string; name: string }[] } | null) => setDocs(d?.allDocuments ?? []))
+      .catch(() => {});
+  }, [scope, eventId]);
+  const conditions = [...docs.map((d) => ({ key: docConditionKey(d.id), label: d.name, yes: t("emailVariants.has", { doc: d.name }), no: t("emailVariants.hasNot", { doc: d.name }) })), { key: ADULT_CONDITION, label: t("emailVariants.adultLabel"), yes: t("emailVariants.adult"), no: t("emailVariants.child") }];
+  const condition = variants ? conditions.find((c) => c.key === variants.cond) : null;
   const [hasOverride, setHasOverride] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -157,10 +180,10 @@ export default function EmailTemplateAdmin({
       requestAnimationFrame(() => el?.setSelectionRange(start + token.length, start + token.length));
     } else {
       const el = bodyRef.current;
-      const start = el?.selectionStart ?? body.length;
-      const end = el?.selectionEnd ?? body.length;
-      const next = body.slice(0, start) + token + body.slice(end);
-      setBody(next);
+      const start = el?.selectionStart ?? shown.length;
+      const end = el?.selectionEnd ?? shown.length;
+      const next = shown.slice(0, start) + token + shown.slice(end);
+      setShown(next);
       requestAnimationFrame(() => el?.setSelectionRange(start + token.length, start + token.length));
     }
   }
@@ -268,10 +291,59 @@ export default function EmailTemplateAdmin({
         </>
       )}
 
-      <label className="mb-1 block text-[12px] text-ink-secondary">{t("emailTemplateAdmin.bodyLabel")}</label>
+      {/* Text variants: a condition and a whole text for each answer. */}
+      {!bodyOnly && (
+        <div className="mb-2 rounded-lg border border-mist p-2.5">
+          <label className="flex items-center gap-2 text-[13px] text-ink">
+            <input
+              type="checkbox"
+              checked={!!variants}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setVariants({ cond: conditions[0].key, yes: oneBody, no: oneBody });
+                  setTab("yes");
+                } else if (variants && confirm(t("emailVariants.offConfirm", { which: tab === "yes" ? (condition?.yes ?? "") : (condition?.no ?? "") }))) {
+                  setOneBody(variants[tab]);
+                  setVariants(null);
+                }
+              }}
+            />
+            {t("emailVariants.toggle")}
+          </label>
+          <p className="mt-0.5 pl-6 text-[11.5px] text-ink-secondary">{t("emailVariants.hint")}</p>
+          {variants && (
+            <div className="mt-2 flex flex-col gap-2 pl-6">
+              <label className="text-[12.5px] text-ink-secondary">
+                {t("emailVariants.condition")}{" "}
+                <select value={variants.cond} onChange={(e) => setVariants({ ...variants, cond: e.target.value })} className="rounded border border-mist bg-paper px-1.5 py-0.5 text-[12.5px] text-ink">
+                  {conditions.map((c) => (
+                    <option key={c.key} value={c.key}>{c.label}</option>
+                  ))}
+                  {!condition && <option value={variants.cond}>{variants.cond}</option>}
+                </select>
+              </label>
+              <div role="tablist" className="flex flex-wrap items-center gap-1">
+                {(["yes", "no"] as const).map((k) => (
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`rounded-lg border px-3 py-1 text-[13px] ${tab === k ? "border-ember bg-ember/10 font-medium text-ink" : "border-mist text-ink-secondary"}`}>
+                    {k === "yes" ? (condition?.yes ?? t("emailVariants.yes")) : (condition?.no ?? t("emailVariants.no"))}
+                  </button>
+                ))}
+                <button type="button" onClick={() => setVariants({ ...variants, [tab]: variants[tab === "yes" ? "no" : "yes"] })} className="ml-auto text-[12px] text-ember hover:underline">
+                  {t("emailVariants.copyOther")}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <label className="mb-1 block text-[12px] text-ink-secondary">
+        {t("emailTemplateAdmin.bodyLabel")}
+        {variants && <span className="ml-1 font-medium text-ink">– {tab === "yes" ? condition?.yes : condition?.no}</span>}
+      </label>
       {/* Formatted like the public pages' texts; sent as HTML + plain text (src/lib/mail-mime.ts). */}
       <div className="mb-3">
-        <MarkdownEditor value={body} onChange={setBody} textareaRef={bodyRef} onFocus={() => (activeFieldRef.current = "body")} rows={10} className={inputClass} t={t} />
+        <MarkdownEditor value={shown} onChange={setShown} textareaRef={bodyRef} onFocus={() => (activeFieldRef.current = "body")} rows={10} className={inputClass} t={t} />
       </div>
 
       {/* The event's documents this e-mail carries (participant e-mails only; the documents are per event). */}

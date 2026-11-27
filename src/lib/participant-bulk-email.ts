@@ -9,6 +9,7 @@ import { templateFiles } from "@/lib/email-files";
 import { eventTemplateKey } from "@/lib/email-kinds";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink, resolvePaymentQrImage } from "@/lib/document-variables";
 import { inlineMark, type InlineImage } from "@/lib/mail-mime";
+import { ADULT_CONDITION, docConditionKey } from "@/lib/email-conditions";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
@@ -243,7 +244,15 @@ async function participantEmailVars(
     contact_email: resolveContactEmail(participant),
     attachments_list: attachedDocumentNames.join(", "),
     sender_email: event.senderEmail ?? "",
+    // Conditions for the template's text variants (2026-11-27, email-conditions.ts): "ano" or "" (= not).
+    ...(await conditionVars(participant, fieldVars.is_adult === "Ano")),
   };
+}
+
+/** has_doc_<document type> = the person already has that document (received / permanent / by details); je_dospely. */
+async function conditionVars(p: { id: string; eventId: string; childId: string | null }, adult: boolean): Promise<Record<string, string>> {
+  const [types, has] = await Promise.all([prisma.eventListItem.findMany({ where: { eventId: p.eventId, kind: "document" }, select: { id: true } }), alreadyHas(p)]);
+  return { ...Object.fromEntries(types.map((t) => [docConditionKey(t.id), has.has(t.id) ? "ano" : ""])), [ADULT_CONDITION]: adult ? "ano" : "" };
 }
 
 /**
