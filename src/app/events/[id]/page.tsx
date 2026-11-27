@@ -11,6 +11,8 @@ import PlanningEventSettings from "@/components/planning/PlanningEventSettings";
 import KitchenSettings from "@/components/kitchen/KitchenSettings";
 import { SettlementSettings } from "@/components/bills/SettlementLinks";
 import ParticipantFieldAdmin from "@/components/participants/ParticipantFieldAdmin";
+import AutomationSettings from "@/components/events/AutomationSettings";
+import SheetExportsSettings from "@/components/events/SheetExportsSettings";
 import EmailTemplateAdmin from "@/components/health/EmailTemplateAdmin";
 import HealthNotesSettings from "@/components/health/HealthNotesSettings";
 import SenderEmailField from "@/components/health/SenderEmailField";
@@ -600,6 +602,8 @@ export default function EventDetailPage({
                 </p>
               )}
               <DriveSettingsTab eventId={id} event={event} driveConnect={driveConnect} onSaved={load} readOnly={!isAdmin} />
+              {/* Google Sheets kept up to date from the app (2026-11-27, src/lib/sheet-export.ts). */}
+              {isAdmin && <SheetExportsSettings eventId={id} t={t} />}
               {/* One control for both modules now (Part 5: "not repeated elsewhere") -- the
                   gmail.modify scope warning only matters when Mail is enabled (it reads/
                   moves inbound mail; Health only ever sends), so purpose follows that. */}
@@ -759,6 +763,8 @@ export default function EventDetailPage({
           {/* Mail: every e-mail template of the event in one place (each still needs its module). */}
           {tab === "posta" && roster && (
             <div className="flex flex-col gap-6">
+              {/* Automatic e-mails + the CC rule (2026-11-27, src/lib/automation.ts). */}
+              <AutomationSettings eventId={id} t={t} />
               {/* Every e-mail type (src/lib/email-kinds.ts), same order as Poslat e-mail. */}
               {EMAIL_KINDS.filter((k) => !k.noTemplate && (!event || kindForEvent(k, event))).map((k) =>
                 k.orgOnly ? (

@@ -26,5 +26,7 @@ export async function POST(req: NextRequest) {
   // token at most every 10 minutes (claimed per token, shared with the pages' "Zkontrolovat platbu").
   const linkEvents = await prisma.settlementLink.findMany({ where: { createdAt: { gte: new Date(Date.now() - 90 * 864e5) }, event: { status: "active" } }, select: { eventId: true }, distinct: ["eventId"] });
   for (const e of linkEvents) results[`links:${e.eventId}`] = await checkSettlementPayments(e.eventId, 10 * 60 * 1000).catch((err) => ({ error: String(err).slice(0, 100) }));
+  // Automation (src/lib/automation.ts): every 5 minutes -- automatic e-mails, condition and scheduled Sheet exports.
+  if (now.getUTCMinutes() % 5 === 0) results.automation = await (await import("@/lib/automation")).sweepAutomation(now).catch((err) => ({ error: String(err).slice(0, 100) }));
   return NextResponse.json({ ok: true, accounts: accounts.length, checked: due.length, results });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runAutomation } from "@/lib/automation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
@@ -50,6 +51,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (body.action === "approve") {
     const approved = await prisma.participantDocument.update({ where: { id: doc.id }, data: { ...reviewed, reviewStatus: "approved", reviewNote: null, receivedByUserId: user.id } });
     await promoteToPersonDocument(doc.id, user.id);
+    // Approved = received: automatic e-mails / exports (src/lib/automation.ts).
+    await runAutomation(doc.participant.eventId, [doc.participantId]);
     return NextResponse.json(approved);
   }
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 300) : "";

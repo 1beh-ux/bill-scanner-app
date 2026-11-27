@@ -17,12 +17,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       select: {
         id: true, bookedAt: true, amount: true, currency: true, variableSymbol: true, counterName: true, counterAccount: true, message: true,
         status: true, reason: true, participantId: true, participant: { select: { name: true } }, decidedBy: { select: { displayName: true } },
+        bankAccount: { select: { label: true, accountNumber: true, bankCode: true } },
       },
     }),
     prisma.participant.findMany({ where: { eventId: event.id, active: true, registrationStatus: "accepted" }, select: { id: true, name: true, acceptedVariableSymbol: true }, orderBy: { name: "asc" } }),
   ]);
   return NextResponse.json({
-    movements: movements.map((m) => ({ ...m, amount: Number(m.amount), participantName: m.participant?.name ?? null, decidedBy: m.decidedBy?.displayName ?? null, participant: undefined })),
+    movements: movements.map((m) => ({ ...m, amount: Number(m.amount), participantName: m.participant?.name ?? null, decidedBy: m.decidedBy?.displayName ?? null, participant: undefined, account: `${m.bankAccount.label} (${m.bankAccount.accountNumber}/${m.bankAccount.bankCode})`, bankAccount: undefined })),
     participants,
   });
 }

@@ -7,6 +7,7 @@ import { templateVariablesFor, substituteDummyTemplateValues } from "@/lib/email
 import { PARENT_SUMMARY_PURPOSE_KEY } from "@/lib/email-template-purpose-keys";
 import { MarkdownEditor, MarkdownText } from "@/components/registration/Markdown";
 import TemplateAttachments from "@/components/health/TemplateAttachments";
+import { TemplateCcChoice } from "@/components/events/AutomationSettings";
 import { ADULT_CONDITION, docConditionKey, readVariants, writeVariants, type Variants } from "@/lib/email-conditions";
 import EmailFiles from "@/components/health/EmailFiles";
 import { takesAttachments } from "@/lib/email-attachments";
@@ -348,6 +349,8 @@ export default function EmailTemplateAdmin({
 
       {/* The event's documents this e-mail carries (participant e-mails only; the documents are per event). */}
       {scope === "event" && !bodyOnly && takesAttachments(purposeKey) && <TemplateAttachments eventId={eventId!} purposeKey={purposeKey} t={t} />}
+      {/* What the event's CC rule's addresses (e.g. group leaders) get for this e-mail (2026-11-27). */}
+      {scope === "event" && !bodyOnly && takesAttachments(purposeKey) && <TemplateCcChoice eventId={eventId!} purposeKey={purposeKey} t={t} />}
       {!bodyOnly && <EmailFiles eventId={scope === "event" ? eventId : undefined} purposeKey={purposeKey} t={t} />}
 
       <div className="mb-4 rounded-lg border border-mist bg-paper-2 p-3">

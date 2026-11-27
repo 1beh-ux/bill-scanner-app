@@ -20,7 +20,7 @@ type Match = { id: string; amountCzk: number; amountTx: number; confirmedAt: str
 type Tx = {
   id: string; bookingDate: string; amount: number; currency: string; originalAmount: number | null; originalCurrency: string | null;
   counterpartyAccount: string | null; counterpartyBankCode: string | null; counterpartyName: string | null; vs: string | null; message: string | null; note: string | null; bankType: string | null;
-  classification: string; incomeType: string | null; personAuthorId: string | null; person: string | null; reimbursementOf: string | null; noDocumentNeeded: boolean; userNote: string | null; sourceMissing: boolean; matches: Match[];
+  account: string; classification: string; incomeType: string | null; personAuthorId: string | null; person: string | null; reimbursementOf: string | null; noDocumentNeeded: boolean; userNote: string | null; sourceMissing: boolean; matches: Match[];
 };
 type CurrencySum = { currency: string; income: number; expense: number; incomeCount: number; expenseCount: number };
 type Totals = { count: number; byCurrency: CurrencySum[] };
@@ -29,7 +29,7 @@ type Data = { rows: Tx[]; truncated: boolean; counts: Record<string, number>; to
 const TABS = ["todo", "suggested", "paired", "nodoc", "income", "excluded", "all"];
 const CLASSES = ["expense", "income", "cash", "transfer", "fee", "private", "other_event"];
 const INCOME = ["fee", "grant", "donation", "refund", "other"];
-const COLUMNS = ["date", "amount", "counterparty", "vs", "message", "classification", "pairing", "person", "note"];
+const COLUMNS = ["date", "account", "amount", "counterparty", "vs", "message", "classification", "pairing", "person", "note"];
 const REQUIRED = ["date", "amount"];
 // Keyboard triage: key -> classification.
 const KEYS: Record<string, string> = { s: "private", p: "cash", t: "transfer", f: "fee", v: "expense" };
@@ -95,6 +95,7 @@ function BankTransactions({ id }: { id: string }) {
     (col: string, r: Tx): string[] => {
       switch (col) {
         case "date": return [dmy(r.bookingDate)];
+        case "account": return [r.account];
         case "amount": return [money(r.amount, r.currency)];
         case "counterparty": return [r.counterpartyName || dash];
         case "vs": return [r.vs || dash];
@@ -235,6 +236,7 @@ function BankTransactions({ id }: { id: string }) {
       </span>
     ),
     amount: amountCell,
+    account: (r) => <span className="text-[12px] text-ink-secondary [overflow-wrap:anywhere]">{r.account}</span>,
     counterparty: (r) => (
       <span className="[overflow-wrap:anywhere]">
         {r.counterpartyName ?? ""}

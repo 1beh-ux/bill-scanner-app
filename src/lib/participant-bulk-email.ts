@@ -10,6 +10,7 @@ import { eventTemplateKey } from "@/lib/email-kinds";
 import { resolveVariables, resolveContactEmail, ensureRegistrationNumber, effectivePriceCzk, buildVariableSymbol, usesPortalLink, resolvePaymentQrImage } from "@/lib/document-variables";
 import { inlineMark, type InlineImage } from "@/lib/mail-mime";
 import { ADULT_CONDITION, docConditionKey } from "@/lib/email-conditions";
+import { ccAddresses, readCcRule, readEmailCc } from "@/lib/email-cc";
 import { withMembers } from "@/lib/children";
 import { exportGoogleDocPdf, mergeAndExportDocument } from "@/lib/document-merge";
 import { saveGeneratedParticipantDocument } from "@/lib/participant-document-store";
@@ -445,6 +446,24 @@ export async function sendBulkParticipantEmail(opts: {
         results.push({ participantId, guardianId: guardian.id, guardianEmail: guardian.email, status: "failed", errorMessage });
       }
     }
+    // A copy for e.g. the group leader (2026-11-27, email-cc.ts): by the event's CC rule and this template's choice --
+    // the same e-mail, or a short notification. Only when the e-mail went out to the participant's people.
+    // The template's choice: the event's own case of it (e.g. the portal acceptance), else the key as sent.
+    const ccModes = readEmailCc(event.emailCc);
+    const ccMode = sendEmail && senderEmail ? (ccModes[eventTemplateKey(event, opts.purposeKey)] ?? ccModes[opts.purposeKey]) : undefined;
+    if (ccMode && results.some((r) => r.participantId === participantId && r.status === "sent")) {
+      const rule = readCcRule(event.ccRule);
+      const person = fresh.childId ? await prisma.child.findUnique({ where: { id: fresh.childId }, select: { fieldValues: true } }) : null;
+      const values = { ...((person?.fieldValues as Record<string, string> | null) ?? {}), ...((fresh.customFieldValues as Record<string, string> | null) ?? {}) };
+      for (const to of ccAddresses(rule, values)) {
+        const mail =
+          ccMode === "copy"
+            ? { subject: `Kopie: ${subject}`, body, attachments, inline }
+            : { subject: substituteVariables(rule!.noticeSubject, { ...vars, original_subject: subject }), body: substituteVariables(rule!.noticeBody, { ...vars, original_subject: subject }) };
+        await sendEmailWithOptionalAttachment({ to, fromName: sender.name, senderEmail: senderEmail!, ...mail }).catch((err) => console.log(`[cc] participant ${participantId}:`, String(err).slice(0, 200)));
+      }
+    }
+
     // Remember the amount this acceptance e-mail carried, so the roster can flag
     // a live price that changed afterwards (e.g. a sibling's household discount).
     if (opts.markAccepted && results.some((r) => r.participantId === participantId && r.status === "sent")) {
@@ -467,6 +486,9 @@ export async function sendBulkParticipantEmail(opts: {
       where: { id: { in: opts.participantIds } },
       data: { registrationStatus: "accepted" },
     });
+    // Accepted (and maybe complete): automatic e-mails / exports (src/lib/automation.ts).
+    const { runAutomation } = await import("@/lib/automation");
+    await runAutomation(opts.eventId, opts.participantIds);
   }
 
   return { results, documentsGenerated, documentFailures: [...failedDocs] };

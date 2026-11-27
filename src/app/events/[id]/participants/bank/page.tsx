@@ -18,6 +18,8 @@ type Movement = {
   participantId: string | null;
   participantName: string | null;
   decidedBy: string | null;
+  // The organization's account it came to (2026-11-27).
+  account: string;
 };
 type Data = { movements: Movement[]; participants: { id: string; name: string; acceptedVariableSymbol: string | null }[] };
 
@@ -97,7 +99,7 @@ export default function BankPaymentsPage({ params }: { params: Promise<{ id: str
                   {m.currency === "CZK" ? formatCzk(m.amount) : `${m.amount} ${m.currency}`}
                   <span className="ml-2 text-[12.5px] font-normal text-ink-secondary">VS {m.variableSymbol ?? "—"}</span>
                 </span>
-                <span className="text-[12.5px] text-ink-secondary">{date(m.bookedAt)}</span>
+                <span className="text-[12.5px] text-ink-secondary">{date(m.bookedAt)} · {m.account}</span>
               </span>
               <span className="text-[13px] text-ink-secondary [overflow-wrap:anywhere]">
                 {[m.counterName, m.counterAccount, m.message].filter(Boolean).join(" · ") || "—"}

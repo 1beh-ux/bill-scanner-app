@@ -22,6 +22,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: [{ bookingDate: "asc" }, { createdAt: "asc" }],
       take: LIMIT,
       include: {
+        // Which of the organization's accounts the row came from (2026-11-27: the "Účet" column / filter).
+        bankAccount: { select: { label: true, accountNumber: true, bankCode: true } },
         matches: {
           where: { rejectedAt: null },
           orderBy: [{ confirmedAt: "desc" }, { score: "desc" }],
@@ -41,6 +43,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       amount: Number(r.amount),
       originalAmount: r.originalAmount === null ? null : Number(r.originalAmount),
       person: r.personAuthorId ? name.get(r.personAuthorId) ?? null : null,
+      account: `${r.bankAccount.label} (${r.bankAccount.accountNumber}/${r.bankAccount.bankCode})`,
+      bankAccount: undefined,
       reimbursementOf: r.reimbursementAuthorId ? name.get(r.reimbursementAuthorId) ?? null : null,
       matches: r.matches.map((m) => ({ ...m, amountCzk: Number(m.amountCzk), amountTx: Number(m.amountTx ?? m.amountCzk), bill: { ...m.bill, amountCzk: m.bill.amountCzk === null ? null : Number(m.bill.amountCzk), totalAmount: m.bill.totalAmount === null ? null : Number(m.bill.totalAmount) } })),
     })),

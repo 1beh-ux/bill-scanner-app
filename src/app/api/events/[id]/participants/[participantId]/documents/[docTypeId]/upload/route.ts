@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runAutomation } from "@/lib/automation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
@@ -32,5 +33,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { participantId, eventListItemId: docTypeId, ...stored, receivedVia: "manual", receivedByUserId: user.id },
   });
   await promoteToPersonDocument(created.id, user.id);
+  await runAutomation(eventId, [participantId]);
   return NextResponse.json(created, { status: 201 });
 }

@@ -57,6 +57,16 @@ export async function bankCandidates(bankAccountId: string): Promise<Registratio
 
 /** Create the payment document + settle the movement, unless the participant got paid meanwhile. */
 export async function settleMovement(movementRowId: string, participantId: string, paymentDocTypeId: string, decidedByUserId: string | null): Promise<boolean> {
+  const settled = await settleMovementRaw(movementRowId, participantId, paymentDocTypeId, decidedByUserId);
+  // Paid (and maybe complete): automatic e-mails / exports (src/lib/automation.ts).
+  if (settled) {
+    const p = await prisma.participant.findUnique({ where: { id: participantId }, select: { eventId: true } });
+    if (p) await (await import("@/lib/automation")).runAutomation(p.eventId, [participantId]);
+  }
+  return settled;
+}
+
+async function settleMovementRaw(movementRowId: string, participantId: string, paymentDocTypeId: string, decidedByUserId: string | null): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
     const docs = await tx.participantDocument.findMany({ where: { participantId, eventListItemId: paymentDocTypeId } });
     if (docs.some(countsAsReceived)) {

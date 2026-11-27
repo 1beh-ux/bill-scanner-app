@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { runAutomation } from "@/lib/automation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { requireAnyModuleAccess } from "@/lib/module-access";
@@ -60,6 +61,8 @@ export async function POST(
       data: { receivedVia: "manual", receivedByUserId: user.id, receivedAt: new Date() },
     });
     await logToggle(user.id, eventId, participantId, docTypeId, true);
+    // Received (maybe paid / complete): automatic e-mails / exports (src/lib/automation.ts).
+    await runAutomation(eventId, [participantId]);
     return NextResponse.json(updated);
   }
 
@@ -72,6 +75,8 @@ export async function POST(
     },
   });
   await logToggle(user.id, eventId, participantId, docTypeId, true);
+  // Received (maybe paid / complete): automatic e-mails / exports (src/lib/automation.ts).
+  await runAutomation(eventId, [participantId]);
   return NextResponse.json(created, { status: 201 });
 }
 
