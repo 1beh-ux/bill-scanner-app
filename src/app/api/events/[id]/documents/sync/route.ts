@@ -83,6 +83,7 @@ export async function POST(req: Request, ctx: Ctx) {
   if ((all || event.driveDocSyncEnabled) && participantsRootFolderId(event)) {
     await step("drive", async () => String((await syncParticipantDocumentsToDrive(eventId)).synced));
   }
-  if ((all || event.statusExportEnabled) && participantsRootFolderId(event)) await step("statusSheet", async () => void (await syncStatusSheetExport(eventId)));
+  // The status sheet only where it's switched on -- also for "Synchronizovat vše" (2026-11-27: switched off = never created).
+  if (event.statusExportEnabled && participantsRootFolderId(event)) await step("statusSheet", async () => void (await syncStatusSheetExport(eventId)));
   return NextResponse.json({ results, ...(await overview(eventId)) });
 }
